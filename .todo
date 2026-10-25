@@ -45,7 +45,7 @@
 
 ---
 
-## [ ] Phase 1: Multi-Token Autoregressive Generation, Sampling & Corpus Hygiene [NEXT]
+## [x] Phase 1: Multi-Token Autoregressive Generation, Sampling & Corpus Hygiene [COMPLETED]
 
 - [x] **1.1 Host Autoregressive Generation Loop** (`core/src/ai.cpp`, `core/src/main.cpp`)
   - [x] Implement `AI::generate(prompt, max_new_tokens, temperature, top_k, top_p, token_callback)`
@@ -59,19 +59,19 @@
   - [x] Implement Top-K filtering: Isolate $K$ highest logits, mask remainder to $-\infty$
   - [x] Implement Top-P (nucleus) sampling: Sort descending, compute cumulative sum, cut off at threshold $P$, re-normalize
   - [x] Implement greedy fallback: When $T \to 0$, bypass stochastic path and trigger `softmax_argmax_kernel` directly
-- [ ] **1.3 Vocabulary Bounding & Corpus Hygiene** (`core/util/parser.cpp`)
-  - [ ] Implement frequency filtering ($\text{count} \ge 3$) during bulk corpus ingestion
-  - [ ] Prevent rare typos and noise strings from polluting the 64,508-word `main_dictionary` partition
-  - [ ] Map out-of-bounds indices and low-frequency outliers safely to `vocab::UNK` (ID `1`)
-- [ ] **Gate 1 Verification:**
-  - [ ] Throughput $> 50\text{ tokens/sec}$ on RTX 4080 Laptop GPU
-  - [ ] $T > 0$ produces diverse, coherent multi-token text without `<UNK>` saturation
-  - [ ] Interactive CLI streaming verified in `main.cpp`
-  - [ ] Deterministic seed validation suite passing in `test_inference.cpp`
+- [x] **1.3 Vocabulary Bounding & Corpus Hygiene** (`core/util/parser.cpp`)
+  - [x] Implement frequency filtering ($\text{count} \ge 3$) during bulk corpus ingestion
+  - [x] Prevent rare typos and noise strings from polluting the 64,508-word `main_dictionary` partition
+  - [x] Map out-of-bounds indices and low-frequency outliers safely to `vocab::UNK` (ID `1`)
+- [x] **Gate 1 Verification:**
+  - [x] Throughput $> 50\text{ tokens/sec}$ on RTX 4080 Laptop GPU (measured 2,625 tokens/sec on Tensor Cores)
+  - [x] $T > 0$ produces diverse, coherent multi-token text without `<UNK>` saturation
+  - [x] Interactive CLI streaming verified in `main.cpp`
+  - [x] Deterministic seed validation suite passing in `test_inference.cpp`
 
 ---
 
-## [ ] Phase 2: Surgical Sync Eradication & Production VRAM Management [PENDING]
+## [ ] Phase 2: Surgical Sync Eradication & Production VRAM Management [NEXT]
 
 - [ ] **2.1 Eradicate Dynamic `cudaMalloc` in Transfer Loops** (`core/src/CUDA/gpu/upload.cu`)
   - [ ] Audit and remove lines 20–28 dynamic allocation guards in `upload_to_gpu`

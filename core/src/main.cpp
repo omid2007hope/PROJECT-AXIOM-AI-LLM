@@ -1106,7 +1106,8 @@ bool execute_training_session(AI& ai,
 			      size_t max_steps,
 			      bool is_interactive,
 			      bool auto_archive,
-			      bool auto_purge) {
+			      bool auto_purge,
+			      uint32_t min_frequency = 3) {
 	parser.developer_mode = developer_mode;
 
 	if (std::filesystem::exists(vocab_path)) {
@@ -1127,8 +1128,9 @@ bool execute_training_session(AI& ai,
 			  << "Target Directory : " << asset_dir.string() << "\n\n";
 
 		std::cout << "[..] Scanning and tokenizing all assets in "
-			  << asset_dir.filename().string() << "...\n";
-		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input);
+			  << asset_dir.filename().string() << " (min frequency >= "
+			  << min_frequency << ")...\n";
+		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input, 0, min_frequency);
 		if (processed == 0 || input.tokenized_data.empty()) {
 			std::cerr << "\n[!] No training files could be parsed from "
 				  << asset_dir.string() << "\n"
@@ -1450,6 +1452,7 @@ int main(int argc, char* argv[]) {
 	bool auto_archive = false;
 	bool auto_purge = false;
 	size_t max_steps = 0;
+	uint32_t min_frequency = 3;
 
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
@@ -1478,6 +1481,7 @@ int main(int argc, char* argv[]) {
 				<< "  --vocab <path>      Specify custom vocabulary dictionary (default: vocab.axiom)\n"
 				<< "  --lr <rate>         Set optimizer learning rate (default: 0.001)\n"
 				<< "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
+				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 3)\n"
 				<< "  --archive           Automatically archive processed files after bulk training\n"
 				<< "  --purge             Automatically purge processed files after bulk training\n\n";
 			return 0;
@@ -1535,6 +1539,25 @@ int main(int argc, char* argv[]) {
 			custom_data_dir = a.substr(7);
 		} else if (a.rfind("--asset-dir=", 0) == 0) {
 			custom_data_dir = a.substr(12);
+		} else if (a == "--min-count" || a == "--min-freq" || a == "--min-frequency") {
+			if (i + 1 < argc) {
+				try {
+					min_frequency = static_cast<uint32_t>(std::stoul(argv[++i]));
+				} catch (...) {
+					std::cerr << "Error: --min-count requires an integer value.\n";
+					return 1;
+				}
+			} else {
+				std::cerr << "Error: --min-count requires an integer value.\n";
+				return 1;
+			}
+		} else if (a.rfind("--min-count=", 0) == 0) {
+			try {
+				min_frequency = static_cast<uint32_t>(std::stoul(a.substr(12)));
+			} catch (...) {
+				std::cerr << "Error: --min-count requires an integer value.\n";
+				return 1;
+			}
 		} else if (a == "--archive") {
 			auto_archive = true;
 		} else if (a == "--purge") {
@@ -1554,7 +1577,7 @@ int main(int argc, char* argv[]) {
 		} else {
 			std::cerr
 				<< "Unknown argument: " << a << "\n"
-				<< "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --weights <path> | --vocab <path> | --lr <rate> | --data <dir> | --archive | --purge | --help]\n";
+				<< "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --weights <path> | --vocab <path> | --lr <rate> | --data <dir> | --min-count <N> | --archive | --purge | --help]\n";
 			return 1;
 		}
 	}
@@ -1701,7 +1724,8 @@ int main(int argc, char* argv[]) {
 								 max_steps,
 								 false,
 								 auto_archive,
-								 auto_purge);
+								 auto_purge,
+								 min_frequency);
 			return ok ? 0 : 1;
 		}
 		return 0;

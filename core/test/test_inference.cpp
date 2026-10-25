@@ -12,6 +12,7 @@
 //   [7] Hardware Telemetry Bounds & Safe Querying
 // =============================================================================
 
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -19,6 +20,7 @@
 #include <limits>
 #include <stdfloat>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "../include/ai.hpp"
@@ -371,6 +373,40 @@ bool test_inference() {
 		SamplingConfig {1.0f, 10, 0.8f},
 		[&](const std::string& tok) { stochastic_tokens.push_back(tok); });
 	test_check(stoch_ok, "ai.generate() succeeds with stochastic Top-K and Top-P", s_pass, s_fail);
+
+	// ── [9] Gate 1 Verification: Throughput & Multi-Token Quality ───────────────
+	std::cout << "\n[9] Gate 1 Verification: Throughput & Multi-Token Quality\n";
+
+	// 9.1 Autoregressive generation throughput benchmark (> 50 tokens/sec on RTX 4080)
+	std::vector<std::string> bench_tokens;
+	const size_t bench_count = 50;
+	auto start_bench = std::chrono::high_resolution_clock::now();
+	bool bench_ok = ai.generate(
+		"The quick brown fox",
+		parser,
+		input,
+		bench_count,
+		SamplingConfig {0.7f, 40, 0.9f, 424242ULL},
+		[&](const std::string& tok) { bench_tokens.push_back(tok); });
+	auto end_bench = std::chrono::high_resolution_clock::now();
+	double elapsed_sec = std::chrono::duration<double>(end_bench - start_bench).count();
+	double tokens_per_sec = (elapsed_sec > 0.0) ? (bench_tokens.size() / elapsed_sec) : 0.0;
+
+	std::cout << "  [Gate 1] Measured generation throughput: "
+		  << static_cast<int>(tokens_per_sec) << " tokens/sec\n";
+	test_check(bench_ok, "Gate 1: Autoregressive generate benchmark completed successfully", s_pass, s_fail);
+	test_check(tokens_per_sec > 50.0, "Gate 1: Throughput exceeds 50 tokens/sec target", s_pass, s_fail);
+
+	// 9.2 Quality check: multi-token generation diversity (not all identical tokens)
+	std::unordered_set<std::string> unique_tokens;
+	size_t unk_count = 0;
+	for (const auto& tok : bench_tokens) {
+		if (tok == "<UNK>")
+			++unk_count;
+		unique_tokens.insert(tok);
+	}
+	test_check(unique_tokens.size() > 1, "Gate 1: Stochastic sampling produces diverse tokens (unique > 1)", s_pass, s_fail);
+	test_check(unk_count < bench_tokens.size(), "Gate 1: No <UNK> saturation during generation (not 100% UNK)", s_pass, s_fail);
 
 	std::cout << "=== Platinum Inference & System Resilience Test Suite: " << s_pass << " passed, "
 		  << s_fail << " failed ===\n";

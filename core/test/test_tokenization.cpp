@@ -136,6 +136,60 @@ bool test_tokenization() {
 	std::filesystem::remove(trunc_vocab_file, ec);
 	std::filesystem::remove(zero_vocab_file, ec);
 
+	// ── Phase 1.3: Vocabulary Bounding & Frequency Filtering Invariants ────────
+	std::cout << "\n[+] Phase 1.3: Vocabulary Bounding & Frequency Filtering Invariants\n";
+	const std::filesystem::path freq_test_dir = test_core_dir() / "test_sandbox_freq";
+	std::filesystem::create_directories(freq_test_dir, ec);
+	const std::filesystem::path freq_sample_file = freq_test_dir / "frequency_corpus.txt";
+	{
+		std::ofstream freq_out(freq_sample_file);
+		freq_out << "common common common common common\n";
+		freq_out << "frequent frequent frequent\n";
+		freq_out << "rare rare\n";
+		freq_out << "singleton\n";
+	}
+
+	Input freq_input;
+	freq_input.embedding_dim = input.embedding_dim;
+	Parser freq_parser(true, test_embedded_path(), {freq_test_dir});
+	size_t freq_files = freq_parser.bulk_tokenize_directory(freq_test_dir, freq_input, 0, 3);
+
+	test_check_eq(freq_files, static_cast<size_t>(1), "bulk_tokenize_directory processed frequency corpus", s_pass, s_fail);
+	test_check(freq_input.main_dictionary.find("common") != freq_input.main_dictionary.end(), "Frequent word 'common' (count 5) admitted into vocabulary", s_pass, s_fail);
+	test_check(freq_input.main_dictionary.find("frequent") != freq_input.main_dictionary.end(), "Frequent word 'frequent' (count 3) admitted into vocabulary", s_pass, s_fail);
+	test_check(freq_input.main_dictionary.find("rare") == freq_input.main_dictionary.end(), "Rare word 'rare' (count 2) rejected from vocabulary", s_pass, s_fail);
+	test_check(freq_input.main_dictionary.find("singleton") == freq_input.main_dictionary.end(), "Singleton word 'singleton' (count 1) rejected from vocabulary", s_pass, s_fail);
+
+	uint32_t common_id = freq_input.main_dictionary["common"];
+	uint32_t frequent_id = freq_input.main_dictionary["frequent"];
+	test_check(common_id >= vocab::TEXT_START_ID && common_id <= vocab::TEXT_MAX_ID, "'common' token ID in text partition [4, 64511]", s_pass, s_fail);
+	test_check(frequent_id >= vocab::TEXT_START_ID && frequent_id <= vocab::TEXT_MAX_ID, "'frequent' token ID in text partition [4, 64511]", s_pass, s_fail);
+
+	size_t unk_tokens = 0;
+	for (uint32_t id : freq_input.tokenized_data) {
+		if (id == vocab::UNK) {
+			++unk_tokens;
+		}
+	}
+	test_check_eq(unk_tokens, static_cast<size_t>(3), "Sub-threshold words (2 'rare' + 1 'singleton') safely mapped to <UNK> (ID 1)", s_pass, s_fail);
+
+	// Capacity overflow test: when next_text_id exceeds TEXT_MAX_ID, words cleanly map to <UNK>
+	Input full_input;
+	full_input.next_text_id = vocab::TEXT_MAX_ID + 1;
+	freq_parser.bulk_tokenize_directory(freq_test_dir, full_input, 0, 1);
+	bool full_in_bounds = true;
+	for (const auto& [word, id] : full_input.main_dictionary) {
+		if (id > vocab::TEXT_MAX_ID && id != vocab::UNK) {
+			full_in_bounds = false;
+			break;
+		}
+	}
+	test_check(full_in_bounds, "Capacity boundary: Tokens safely map to <UNK> when dictionary partition reaches capacity", s_pass, s_fail);
+
+	// Clean up frequency test folder
+	std::filesystem::remove(freq_sample_file, ec);
+	std::filesystem::remove(freq_test_dir, ec);
+
 	std::cout << "=== Tokenization & Modality Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
 	return s_fail == 0;
 }

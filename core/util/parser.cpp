@@ -552,7 +552,8 @@ static void print_progress_bar(const std::string& filename,
 
 size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				       Input& input,
-				       size_t max_files) {
+				       size_t max_files,
+				       uint32_t min_frequency) {
 	last_bulk_files.clear();
 
 	std::error_code ec;
@@ -591,6 +592,78 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 	std::sort(files.begin(), files.end());
 	std::cout << "\n[+] Discovered " << files.size() << " asset file(s) in "
 		  << dir_path.string() << ":\n";
+
+	// Phase 1.3: Frequency filtering pass (when min_frequency > 1)
+	if (min_frequency > 1) {
+		std::unordered_map<std::string, uint32_t> word_counts;
+		size_t scan_count = 0;
+		for (const auto& fpath : files) {
+			if (max_files > 0 && scan_count >= max_files) {
+				break;
+			}
+			++scan_count;
+			std::string ext = fpath.extension().string();
+			for (char& c : ext) {
+				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			}
+			IdentifiedFile id_file = Identifier::identify(fpath);
+			bool is_text_ext =
+				(ext == ".txt" || ext == ".text" || ext == ".md" || ext == ".markdown" ||
+				 ext == ".json" || ext == ".csv" || ext == ".log" || ext == ".c" ||
+				 ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".cu" ||
+				 ext == ".cuh" || ext == ".py" || ext == ".html" || ext == ".htm" ||
+				 ext == ".xml" || ext == ".yaml" || ext == ".yml" || ext == ".ini" ||
+				 ext == ".cfg" || ext == ".conf" || ext == ".sql" || ext == ".rs" ||
+				 ext == ".go" || ext == ".java" || ext == ".ts" || ext == ".js" ||
+				 ext == ".sh" || ext == ".bat" || ext == ".ps1");
+			bool is_doc = (id_file.modality == ModalityCategory::DOCUMENT || is_text_ext ||
+				       ext == ".pdf" || ext == ".docx");
+			if (is_doc) {
+				std::string extracted_text = DecompressDocument::extract_text(fpath);
+				std::istringstream iss(extracted_text);
+				std::string word;
+				while (iss >> word) {
+					std::string clean = sanitize_word(word);
+					if (!clean.empty()) {
+						word_counts[clean]++;
+					}
+				}
+			}
+		}
+
+		std::vector<std::pair<std::string, uint32_t>> eligible_words;
+		eligible_words.reserve(word_counts.size());
+		for (const auto& [word, count] : word_counts) {
+			if (count >= min_frequency && input.main_dictionary.find(word) == input.main_dictionary.end()) {
+				eligible_words.emplace_back(word, count);
+			}
+		}
+
+		std::sort(eligible_words.begin(), eligible_words.end(),
+			  [](const auto& a, const auto& b) {
+				  if (a.second != b.second)
+					  return a.second > b.second;
+				  return a.first < b.first;
+			  });
+
+		size_t admitted_count = 0;
+		for (const auto& [word, count] : eligible_words) {
+			if (input.next_text_id <= vocab::TEXT_MAX_ID) {
+				input.main_dictionary[word] = input.next_text_id;
+				input.reverse_main_dictionary[input.next_text_id] = word;
+				input.next_text_id += 1;
+				++admitted_count;
+			} else {
+				break;
+			}
+		}
+
+		if (developer_mode || !eligible_words.empty()) {
+			std::cout << "  [+] Frequency Filter (count >= " << min_frequency << "): "
+				  << admitted_count << " terms admitted into vocabulary ("
+				  << (word_counts.size() - admitted_count) << " sub-threshold/overflow mapped to <UNK>)\n";
+		}
+	}
 
 	size_t files_processed = 0;
 	const size_t total_files =
@@ -689,10 +762,19 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			while (iss >> word) {
 				std::string clean = sanitize_word(word);
 				if (!clean.empty()) {
-					add_assign_increase(clean,
-							    input.main_dictionary,
-							    input.next_text_id,
-							    input);
+					if (min_frequency > 1) {
+						auto it = input.main_dictionary.find(clean);
+						if (it != input.main_dictionary.end() && it->second <= vocab::TEXT_MAX_ID) {
+							input.tokenized_data.push_back(it->second);
+						} else {
+							input.tokenized_data.push_back(vocab::UNK);
+						}
+					} else {
+						add_assign_increase(clean,
+								    input.main_dictionary,
+								    input.next_text_id,
+								    input);
+					}
 				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
