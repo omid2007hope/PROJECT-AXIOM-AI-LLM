@@ -37,7 +37,7 @@ _Project Axiom is not a Python wrapper. It is not an abstraction layer. It is a 
 
 ---
 
-[**Manifesto**](#-eliminate-the-knowledge-gatekeepers) • [**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Multimodal Pipeline**](#-the-four-stage-multimodal-ingestion-pipeline) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Run**](#️-build-test--run) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Roadmap**](#-active-engineering-roadmap)
+[**Manifesto**](#-eliminate-the-knowledge-gatekeepers) • [**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Multimodal Pipeline**](#-the-four-stage-multimodal-ingestion-pipeline) • [**Project Spector**](#-sovereign-osint--surveillance-project-spector) • [**Assembly God Blueprint**](#-domain-specialization--the-assembly-god-blueprint) • [**Nuclear Watchdog Scenario**](#-real-time-multimodal-watchdog-nuclear-detection) • [**Core Innovations**](#-core-innovations) • [**Hardware Saturation & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Mathematical Nucleus**](#-mathematical-nucleus) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Documentation Suite**](#-master-documentation-suite) • [**Build & Run**](#️-build-test--run) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Roadmap**](#-active-engineering-roadmap)
 
 ---
 
@@ -215,6 +215,211 @@ Project Axiom eliminates sparse multi-billion offsets, unifying text and numeric
 
 > [!NOTE]
 > Bounding the codebook to a dense 16-bit address space guarantees an ultra-compact ~4.19 MB VRAM footprint for the GPU embedding table, fitting completely inside the Ada Lovelace L2 cache!
+
+---
+
+## 🦅 Sovereign OSINT & Surveillance: Project Spector
+
+> [!IMPORTANT]
+> **The Strategic Cognitive Engine:** Project Axiom was not engineered merely as a standalone local model—it was forged as the closed-loop, zero-API-key cognitive engine powering **[Project Spector](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/Spector/Spector.md)**. By eliminating third-party cloud APIs, Spector becomes a fully sovereign Open-Source Intelligence (OSINT) and legal surveillance platform that ingests raw multi-source intelligence, prevents hallucination drift through hardware-anchored reasoning, and autonomously trains on every new database record.
+
+Project Spector operates across two tightly coupled execution planes:
+
+```text
+====================================================================================================
+                        PROJECT SPECTOR — UNIFIED SYSTEM ARCHITECTURE
+====================================================================================================
+
+  [ PART A: OSINT DATA REFINING & CONTINUOUS LEARNING SYSTEM ]
+
+   ┌──────────┐          Saves (Raw Ingestion Arc)          ┌──────────────────────┐
+   │   Data   ├────────────────────────────────────────────►│                      │
+   └────┬─────┘                                             │      DataBase        │
+        │        ┌──────────────┐       ┌────────────┐      │     (MongoDB)        │
+        ▼        │  MiddleWare  │       │            │◄────►│                      │
+   ┌──────────┐  │   (Auth /    │       │   AI Core  │      └──▲────────▲───────▲──┘
+   │   API    │  │  Validation) │       │  (Project  │         │        │       │
+   │ (OSINT)  │  └──────▲───────┘       │   Axiom)   ├─────────┘        │       │
+   └────┬─────┘         │               └─────▲──────┘  Refines &       │       │
+        │               ▼                     │         Save Again      │       │
+        ▼        ┌──────────────┐             │                         │       │
+   ┌──────────┐  │              ├─────────────┘                         │       │
+   │  Router  │◄─┤    Router    │◄──────────────►┌────────────┐         │       │
+   └──────────┘  │              │                │ Controller │◄───────►│Service│
+                 └──────▲───────┘                └────────────┘         └───────┘
+                        │
+                        ▼
+                 ┌──────────────┐       ┌────────────┐      ┌──────────────┐
+                 │    Server    │◄─────►│ Front End  │◄────►│ Receive/Send │
+                 │(Node/Express)│       │   / APIs   │      │   (Client)   │
+                 └──────────────┘       └────────────┘      └──────────────┘
+
+----------------------------------------------------------------------------------------------------
+
+  [ PART B: AXIOM COGNITIVE EXECUTION & RE-ANCHOR GRAPH ]
+
+                    ┌─────┐   ┌─────┐   ┌─────┐   ┌─────┐
+                    │ ETC │   │ DBs │   │ API │   │ Web │◄─── Trigger targeted query ───┐
+                    └──┬──┘   └──┬──┘   └──┬──┘   └──┬──┘                               │
+                       └─────────┴────┬────┴─────────┘                                  │
+                                      ▼                                                 │
+                               ┌──────────────┐                         ┌───────────────┴───┐
+                        ┌─────►│Research Node │─── Research Output ────►│ Research_req Node │
+                        │      │ (Async Agg)  │───────┐                 │  (Max 2 passes)   │
+                        │      └──────────────┘       │                 └─────────▲─────────┘
+                 Stream 1 ('Cloned_1')                ▼                           │
+  ┌────────────┐   ┌────┴─────┐                ┌──────────────┐            ┌──────┴───────┐
+  │ Input Node ├──►│Clone Node│                │ Think_2 Node │───────────►│  conclusion  ├──┐
+  │ (Prompt /  │   │(I/O Fork)│                │  (Sync Hub)  │            │(Final Deduct)│  │
+  │Constraints)│   └────┬─────┘                └──────▲───────┘            └──────┬───────┘  │
+  └─────┬──────┘ Stream 2 ('Cloned_2')                │                           │          │
+        │               │      ┌──────────────┐       │                    Deduction         │
+        │               └─────►│ Think_1 Node ├───────┘                           ▼          ▼
+        │                      │ (Zero-Shot)  │                            ┌────────────┐ ┌──────┐
+        │                      └──────────────┘                            │  Context   ├─►output│
+        │                                                                  └──────▲─────┘ └──┬───┘
+        │            Context Anchor Path (Immutable Data/Context Lifeline)        │          │
+        └──────────────────────────────────────────────────────────────────►┌─────┴──────┐   │
+                                                                            │Context Node│   │
+                                                                            │(Re-Anchor) │   ▼
+                                                                            └────────────┘ [User]
+====================================================================================================
+```
+
+### 1. The OSINT Data Refining Plane (`Node.js` • `Express` • `MongoDB`)
+- **Direct Raw Archival (`Data` $\xrightarrow{\text{Saves}}$ `MongoDB`):** High-velocity streams of public records, legal filings, and target telemetry are written immediately to persistent storage.
+- **Security Boundary:** All inbound client and surveillance traffic traverses cryptographic `Auth / Validation` middleware before reaching Express controllers.
+- **Autonomous Learning Loop (`Refines` $\to$ `Save Again`):** A MongoDB change-stream listener detects new entries and wakes Project Axiom (`AI Core`). Axiom ingests raw records through its 4-stage pipeline, extracts cross-referenced entity correlations, and executes non-blocking incremental gradient updates via [`backward_pass_adamw_kernel`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu). Updated intelligence summaries and semantic vectors are committed back to MongoDB (`Save Again`) with zero pipeline downtime.
+
+### 2. Dual-Stream Cognitive Execution Graph & Re-Anchor Lifeline
+When evaluating complex surveillance targets or legal discovery briefs, Axiom executes a bounded Directed Acyclic Graph (DAG):
+1. **Input Bifurcation:** The `Input Node` receives prompts and operational constraints, passing an active copy to the `Clone Node` while locking an immutable, read-only copy onto the **`Context Anchor Path`**.
+2. **Parallel Stream Forking (`Clone Node`):**
+   - **Stream 1 (`Cloned_1`):** Routes to `Research Node` for asynchronous multi-source aggregation across internal MongoDB collections (`DBs`), external OSINT APIs (`API`), live scrapers (`Web`), and local file stores (`ETC`).
+   - **Stream 2 (`Cloned_2`):** Routes to `Think_1 Node` for concurrent zero-shot heuristic forward-pass deduction.
+3. **Synchronization Hub (`Think_2 Node`):** Acts as a thread barrier, synthesizing Stream 1 research data against Stream 2 heuristic deductions.
+4. **Context Drift Eradication (`Context Node (Re-Anchor)`):** Small models suffer from context drift during multi-step reasoning. The `Context Node` utilizes the uncorrupted `Context Anchor Path` to continuously re-inject initial constraints into `Think_2 Node` and `conclusion`.
+5. **Bounded Recursive Verification (`Research_req Node`):** If evidentiary gaps are detected, targeted queries re-poll external endpoints. Recursive passes are **strictly capped at a maximum of 2 passes** to prevent infinite query loops and crawler throttling.
+6. **Final Synthesis (`conclusion` $\to$ `output`):** Merges verified deductions with the anchored context state, compiling a sovereign intelligence brief delivered to the client interface.
+
+---
+
+## ⚡ Domain Specialization & The Assembly God Blueprint
+
+> Reference Specifications: [`document/training_structure.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/training_structure.md) • [`document/roadmap_to_first_training_phase.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/roadmap_to_first_training_phase.md) • [`document/efficient_model_training.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/efficient_model_training.md)
+
+### The Desktop Hardware Reality: Rejecting the Generalist Illusion
+Attempting to pre-train an unconstrained multi-billion parameter generalist model on consumer desktop hardware (e.g., an RTX 4080 Laptop GPU with 12 GB VRAM) guarantees Out-Of-Memory crashes or multi-year convergence times. To maximize representational intelligence under desktop hardware constraints, engineering must narrow the model's operational boundary:
+
+| Specialization Domain | Focus Area | Source Material | Target Mastery |
+| :--- | :--- | :--- | :--- |
+| **Option A: The Systems Engineer** | C++23 & Bare-Metal CUDA | CUTLASS, PyTorch ATen, Godot core | RAII lifecycles, warp intrinsics, pointer arithmetic |
+| **Option B: The Ballistics Physicist** | Continuum & Impact Physics | Peer-reviewed journals, impact mechanics | Shock equations of state, penetration depth formulas |
+| **Option C: The Stylistic Author** | Specialized Narrative Fiction | Curated literary series, author corpora | Coherent voice, dialogue mechanics, narrative pacing |
+| **Option D: The Bare-Metal Assembly God** | Direct Silicon Machine Code | x86_64 NASM / NVIDIA PTX repositories | CPU/GPU registers, AVX-512, zero compiler overhead |
+
+### The Assembly God Blueprint (Option D)
+The architectural objective is training a 120M–135M parameter silicon-whisperer that operates directly on CPU registers (`rax`, `rsp`, `xmm0`..`xmm31`) and machine opcodes without runtime compiler layers.
+
+```
++-----------------------------------------------------------------------------------------+
+|                  TRAINING DURATION COMPARISON (100M TOKENS x 5 EPOCHS)                  |
++-----------------------------------------------------------------------------------------+
+| Configuration                  Throughput       1 Epoch (100M tok)    5 Epochs (Full Run)|
++-----------------------------------------------------------------------------------------+
+| Current Unbatched Engine (M=1)  300 tok/s        92.6 hours (3.8 d)    463.0 hours (19.3 d)
+| Target Batched Engine (M=32)  4,000 tok/s         6.9 hours (0.3 d)     34.7 hours (1.4 d) |
++-----------------------------------------------------------------------------------------+
+```
+
+#### The 4 Engineering Gaps & Solutions
+1. **Gap 2: Tokenizer Injection & Pre-Seeding (`vocab.axiom`):** Standard byte tokenizers splinter AVX instructions like `vfmadd231ps` into 8 fragments. Pre-allocating atomic IDs for registers (`rax`, `rsp`, `xmm0`–`xmm31`) and opcodes (`mov`, `lea`, `vfmadd231ps`, `syscall`) in slots `4` to `~500` achieves **~60% context compression**, allowing complete 80–120 line algorithms to fit within the 256-token context window.
+2. **Gap 3: Batched CUDA Dispatch ($M = 32$):** Single-sample forward passes starve Tensor Cores. Upgrading `gather_embeddings_kernel` and CUTLASS EVT to a 2D grid (`blockIdx.y`) elevates training throughput from **300 tok/s $\to$ 4,000 tok/s**.
+3. **Gap 1: Horizon 2 Multi-Head Self-Attention:** Fused $W_{QKV}$ projection ($1024 \times 3072$) and Causal Masking ($M_{\text{causal}}$) enable tokens to track register lifecycles (e.g., matching a `push` to its corresponding `pop`).
+4. **Gap 4: High-Signal Dataset with Semantic Intent Headers:** Annotating 150 MB–300 MB of NASM assembly with structured intent headers binds human logic to register manipulation:
+   ```nasm
+   ; [INTENT] Fast inverse square root calculation (Quake III)
+   ; [VAR] xmm0 = input float (number)
+   ; [VAR] xmm1 = threehalfs constant (1.5)
+   ; [REG] eax  = bit-level integer representation
+   movss   xmm1, dword [rel magic_number]  ; Load 0x5f3759df
+   movd    eax, xmm0                       ; Bit-cast float to int
+   sar     eax, 1                          ; eax >> 1
+   sub     eax, 0x5f3759df                 ; Magic subtract
+   movd    xmm0, eax                       ; Bit-cast back to float
+   ret
+   ```
+
+#### High-Density Control-Token Architecture
+Injecting explicit instruction markers steepens gradient descent, reducing training duration from 48 hours to under 5 hours:
+- `<|concept_start|>` / `<|concept_end|>`: Bounds a logical rule.
+- `<|rule_register|>`: Anchors attention to register allocation.
+- `<|rule_memory|>`: Directs attention to stack pointers and memory offsets.
+- `<|rule_control_flow|>`: Enforces jump, condition, and loop semantics.
+- `<|commentary|>`: Separates functional code from plain-English explanations.
+
+#### Single-Weekend Compute Budget (RTX 4080 Laptop GPU)
+- **Model Size:** 120M–135M parameters ($V=65,536$, $D=1,024$, context $K=256$, batch $M=32$).
+- **Working Set:** **~4.5 GB total VRAM**, leaving **~7.7 GB safe OS headroom** to prevent Windows WDDM driver TDR resets.
+- **Compute Schedule:** 100M tokens $\times$ 5 epochs = 500M processed tokens at 4,000 tok/s $\to$ **34.7 hours total (Single Weekend Run)**.
+
+#### Staged Modal Progression: Crawl, Walk, Run
+- **Stage 1 (Crawl — Priority 1):** Text & Code Foundation. Proves MHA convergence and assembly synthesis.
+- **Stage 2 (Walk — Priority 2):** Acoustic Generation. EnCodec / AudioLM discrete acoustic tokens in `[64,768 .. 65,023]`.
+- **Stage 3 (Run — Priority 3):** Latent Visual Generation. Mandatory VQ-VAE compressing $256 \times 256$ images into $16 \times 16$ discrete latent grids (direct pixel modeling is forbidden to avoid context explosion).
+
+---
+
+## 🛰️ Real-Time Multimodal Watchdog: Nuclear Detection
+
+> Reference Specification: [`document/nuclear_detection_scenario.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/nuclear_detection_scenario.md)
+
+Project Axiom defines an autonomous operational pipeline for detecting underground nuclear detonations and verifying Comprehensive Nuclear-Test-Ban Treaty (CTBT) compliance using open-source geophysical and orbital feeds:
+
+```
++-----------------------------------------------------------------------------------+
+|                        STAGE 1: SEISMIC TRIGGER (IRIS SEED STREAM)                |
+|  - Real-time global seismometer telemetry ingested via zero-copy pinned DMA       |
+|  - CUDA kernel classifies spherical P-wave vs chaotic S-wave shear                |
+|  - Hypersphere moment tensor projection flags explosion signature (99% accuracy)  |
+|  - Automated multi-station triangulation computes precise hypocenter coordinates   |
++-----------------------------------------------------------------------------------+
+                                          │
+                                          ▼
++-----------------------------------------------------------------------------------+
+|                        STAGE 2: VISUAL PROOF (InSAR / SENTINEL-1)                 |
+|  - Autonomous acquisition of Sentinel-1 Synthetic Aperture Radar (SAR) granules   |
+|  - Interferometric phase comparison against pre-event orbital passes              |
+|  - Concentric fringe detection: measures millimeter-level ground subsidence       |
+|  - Physical cavity collapse confirmed over seismic epicenter                      |
++-----------------------------------------------------------------------------------+
+                                          │
+                                          ▼
++-----------------------------------------------------------------------------------+
+|                        STAGE 3: FORENSIC CONTEXT (OPTICAL / SENTINEL-2)           |
+|  - Multi-spectral optical analysis over target coordinates                        |
+|  - Anomaly detection: vehicle tracks, tunnel adit spoil heaps, heavy cabling      |
+|  - Surface thermal differential inspection before and after detonation            |
++-----------------------------------------------------------------------------------+
+                                          │
+                                          ▼
++-----------------------------------------------------------------------------------+
+|                        STAGE 4: AUTONOMOUS OSINT PUBLICATION                      |
+|  - Verified incident report compiled with seismic tensor + InSAR interferogram    |
+|  - Automated alert dispatched to public dashboard and OSINT feeds                |
++-----------------------------------------------------------------------------------+
+```
+
+### 1. Scientific & Mathematical Foundations
+- **2024 ANU / LANL 99% Accuracy Seismic Breakthrough:** Differentiating underground blasts from natural earthquakes previously suffered from source depth ambiguities. Projecting seismic moment tensors onto a multi-dimensional hyperspherical manifold differentiates isotropic expansion (explosions) from double-couple shearing (natural earthquakes) with **99% accuracy**.
+- **Radionuclide Monitoring (PNNL Xenon International):** Atmospheric verification via beta-gamma coincidence counting across noble fission isotopes: $^{131\text{m}}\text{Xe}$, $^{133}\text{Xe}$, $^{133\text{m}}\text{Xe}$, and $^{135}\text{Xe}$.
+- **The Physics Barrier:** Orbital satellites cannot detect underground prompt radiation directly. High-energy gamma photons and neutrons attenuate completely within meters of solid granite or basalt overburdens. Space payloads (e.g., SABRS on GPS) detect only exoatmospheric/optical bursts. Terrestrial fission gas seepage requires days, making seismic and radar interferometry the sole real-time detection vector.
+
+### 2. Multi-Stage Operational Watchdog Pipeline
+1. **Stage 1 (Seismic Waveform Ingestion & Hypersphere Decomposition):** Axiom ingests continuous global miniSEED streams via pinned DMA. Tensor cores compute moment tensor decomposition and multi-station triangulation, flagging hypocenter coordinates within seconds.
+2. **Stage 2 (InSAR Radar Ground Subsidence):** Axiom triggers autonomous ingestion of ESA Sentinel-1 C-band SAR granules. Differential phase comparison renders concentric interference fringes, pinpointing millimeter-scale ground subsidence over the vaporized rock collapse chimney.
+3. **Stage 3 (Optical Precursor Detection):** Copernicus Sentinel-2 multi-spectral passes evaluate surface operational anomalies (heavy instrumentation trenches, drilling adit tailings, security perimeters).
+4. **Stage 4 (Autonomous Publication):** Axiom synthesizes seismic moment tensors, interferograms, and optical imagery into a cryptographic, tamper-proof incident report dispatched to public OSINT dashboards.
 
 ---
 
@@ -518,8 +723,8 @@ PROJECT-AXIOM/
 │   ├── test_harness.py              # Automated 1,000-scenario closed-loop fuzzing script
 │   ├── test_all_interactive_scenarios.py # Interactive CLI integration test suite
 │   └── test_self_learning_loop.py   # Closed-loop C++ codebase self-training verification
-├── document/                        # Complete 14-Part Master Documentation Suite
-│   ├── 00_INDEX.md                  # Master Documentation Table of Contents
+├── document/                        # Complete 15-Chapter Master Documentation Suite
+│   ├── 00_INDEX.md                  # Master Documentation Table of Contents & Asset Index
 │   ├── 01_PROJECT_VISION_AND_PHILOSOPHY.md
 │   ├── 02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md
 │   ├── 03_MEMORY_HIERARCHY_AND_PCIE_DMA.md
@@ -532,18 +737,23 @@ PROJECT-AXIOM/
 │   ├── 10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md
 │   ├── 11_ROADMAP_AND_SCALING_V2.md
 │   ├── 12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md
+│   ├── AI_CONTEXT.md                # Fast AI coding assistant prompt injection & context primer
 │   ├── efficient_model_training.md  # High-density curated training & control token architecture
 │   ├── nuclear_detection_scenario.md # Real-time multimodal watchdog scenario (seismic & InSAR)
-│   ├── roadmap_to_first_training_phase.md # The Bare-Metal Assembly God Blueprint
+│   ├── roadmap_to_first_training_phase.md # The Bare-Metal Assembly God Blueprint (34.7h weekend run)
 │   ├── training_structure.md        # Domain-specific expert training & Crawl-Walk-Run strategy
 │   ├── learning/
 │   │   └── ai.md                    # Deep learning & CUDA systems programming master tutorial
-│   └── plan/
-│       ├── UnifiedMasterEngineeringPlan.md # Authoritative engineering plan & roadmap
-│       ├── Project_Axiom_Plan.md    # Master engineering evaluation & strategic scaling
-│       ├── research.md              # Technical review & forensic scaling report
-│       ├── plan.md                  # Implementation roadmap archive
-│       └── archive_plan_pre_19_oct.md # Pre-October roadmap archive
+│   ├── plan/
+│   │   ├── UnifiedMasterEngineeringPlan.md # Authoritative engineering plan & roadmap
+│   │   ├── Project_Axiom_Plan.md    # Master engineering evaluation & strategic scaling
+│   │   ├── research.md              # Technical review & forensic scaling report
+│   │   ├── plan.md                  # Implementation roadmap archive
+│   │   └── archive_plan_pre_19_oct.md # Pre-October roadmap archive
+│   ├── ref/                         # Visual hardware & architectural reference diagrams (68 assets)
+│   └── Spector/
+│       ├── Spector.md               # Project Spector sovereign OSINT & cognitive DAG specification
+│       └── Spector.jpg              # Official engineering blueprint schematic
 └── other_models/
     └── Qwen3.8-27B-UD-IQ4_XS.gguf   # High-capacity benchmark reference model (14.2 GB)
 ```
@@ -552,11 +762,13 @@ PROJECT-AXIOM/
 
 ## 📚 Master Documentation Suite
 
-Project Axiom features an exhaustive 14-document technical whitepaper suite located in [`document/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/):
+Project Axiom features an exhaustive 15-chapter technical whitepaper suite and engineering reference library located in [`document/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/):
+
+### Core Architecture Chapters (01 – 15)
 
 1. [`00_INDEX.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/00_INDEX.md) — Master navigation hub, document directory, and cross-reference sitemap.
-2. [`01_PROJECT_VISION_AND_PHILOSOPHY.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/01_PROJECT_VISION_AND_PHILOSOPHY.md) — The manifesto: silicon-native architecture, single-model curation, and data hygiene.
-3. [`02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md) — The 4-tier pipeline from NVMe disk to Tensor Cores.
+2. [`01_PROJECT_VISION_AND_PHILOSOPHY.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/01_PROJECT_VISION_AND_PHILOSOPHY.md) — The manifesto: silicon-native architecture, Terry Davis simplicity doctrine, and data hygiene.
+3. [`02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md) — The 4-tier pipeline from NVMe disk to Tensor Cores and Output Codecs.
 4. [`03_MEMORY_HIERARCHY_AND_PCIE_DMA.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/03_MEMORY_HIERARCHY_AND_PCIE_DMA.md) — Write-combining pinned memory, PCIe DMA logistics, and multi-stream double-buffering.
 5. [`04_CUDA_AND_TENSOR_CORES_COMPUTE.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/04_CUDA_AND_TENSOR_CORES_COMPUTE.md) — CUTLASS v4.8.0 templates, Epilogue Visitor Trees (EVT), and Ada Lovelace `sm_89` optimization.
 6. [`05_TRAINING_OPTIMIZER_AND_BACKPROPAGATION.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/05_TRAINING_OPTIMIZER_AND_BACKPROPAGATION.md) — Un-gated SGD backpropagation, master FP32 tables, and AdamW momentum dynamics.
@@ -568,6 +780,27 @@ Project Axiom features an exhaustive 14-document technical whitepaper suite loca
 12. [`11_ROADMAP_AND_SCALING_V2.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/11_ROADMAP_AND_SCALING_V2.md) — Technical roadmap: BFC caching allocators, PagedAttention, and CUDA Graphs.
 13. [`12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md) — Publication-ready copy for LinkedIn, X (Twitter), Hacker News, and technical subreddits.
 14. [`training_structure.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/training_structure.md) — Domain-specific expert training blueprint, Assembly God specialization (x86_64/PTX), and Crawl-Walk-Run strategy.
+15. [`roadmap_to_first_training_phase.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/roadmap_to_first_training_phase.md) — The Assembly God Blueprint: 4 Engineering Gaps, Batched CUDA Dispatch ($M=32$, 4,000 tok/s), and 34.7-hour weekend run.
+16. [`Spector/Spector.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/Spector/Spector.md) — Sovereign OSINT & Legal Surveillance Architecture: Node.js/MongoDB refining plane, autonomous retraining, and dual-stream cognitive execution graph with re-anchor lifeline.
+
+### Specialized Engineering Specifications & Master Plans
+
+- [`AI_CONTEXT.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/AI_CONTEXT.md) — AI Context Injection & System Primer for LLM pair programmers (Claude, GPT, Gemini, Cursor).
+- [`efficient_model_training.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/efficient_model_training.md) — High-Density Curated Training & Control-Token Architecture (`<|concept_start|>`, `<|rule_register|>`).
+- [`nuclear_detection_scenario.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/nuclear_detection_scenario.md) — Real-Time Multimodal Watchdog Scenario: Seismic Hypersphere Moment Tensor Projection & InSAR subsidence detection.
+- [`learning/ai.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/learning/ai.md) — Deep Learning, CUDA Architecture & High-Performance Systems Programming Master Guide.
+- [`plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) — Unified Master Engineering Plan: Authoritative roadmap, 6 execution phases, and locked baseline.
+- [`plan/Project_Axiom_Plan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/Project_Axiom_Plan.md) — Master Engineering Evaluation, Forensic Codebase Audit, and Dying ReLU revival.
+- [`plan/research.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/research.md) — Strategic Technical Review & Forensic Scaling Report.
+- [`plan/plan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/plan.md) — Active Engineering Directive & Strategic Execution Horizons.
+
+### Visual Reference Asset Catalog
+
+All visual reference diagrams and architectural blueprints are archived in [`document/ref/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/ref/):
+- **Hardware Foundations & Limits:** Bitmask layouts (`byte_and_bits_structure.png`), powers-of-two hardware alignment (`powers_of_two_hardware_table.png`), exponential state scaling (`binary_combination_growth_curve.png`), and address space ceilings (`cpu_architecture_32bit_vs_64bit_limits.png`).
+- **CUDA Execution & Memory:** Hardware-to-software mappings (`cuda_software_to_hardware_mapping.png`), 3D thread blocks (`cuda_execution_hierarchy_grids_blocks_threads.png`), SM occupancy (`cuda_sm_occupancy_calculator.png`), pointer safety state machines (`cuda_pointer_lifecycle_and_hazards.png`), and memory pyramids (`gpu_memory_hierarchy_pyramid.jpg`, `memory_hierarchy_latency_tradeoffs.png`).
+- **Neural Computing & Taxonomy:** Artificial neuron models (`artificial_neuron_perceptron_model.jpg`), MLP layers (`neural_network_mlp_layers_diagram.png`), token topologies (`neural_network_token_dimension_topology.png`), hierarchical feature emergence (`hierarchical_feature_representation.jpg`), and deep learning taxonomies (`ai_ml_nn_dl_taxonomy_diagram.png`).
+- **Cognitive & Physics Research:** Cognitive context anchoring (`cognitive_architecture_pipeline.jpg`), The Rewind Test determinism diagram (`the_rewind_test_determinism_vs_randomness.jpg`), and the Project Spector official engineering blueprint ([`document/Spector/Spector.jpg`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/Spector/Spector.jpg)).
 
 ---
 
@@ -873,6 +1106,20 @@ Project Axiom's development is governed by the single source of truth: [`documen
   │ • Output Codecs: Discrete visual/audio token unrolling into valid BMP/MP4 and WAV files│
   └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Unified Verification Gates & Acceptance Protocol
+
+In accordance with [`UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md), every phase adheres to a strict hardware and numerical acceptance gate:
+
+| Phase | Milestone Name | Target Success Metric | Primary Verification Method | Status |
+| :---: | :--- | :--- | :--- | :---: |
+| **0** | **Foundations Locked** | Complete unit & stress verification suite passing | `mingw32-make test` (`test.exe --test`) | **[PASSED]** |
+| **1** | **Multi-Token Streaming & Sampling** | $>50\text{ tokens/sec}$; $T > 0$ produces diverse text without `<UNK>` saturation | Interactive CLI streaming in `main.cpp` & tests in `test_inference.cpp` | **[IN PROGRESS]** |
+| **2** | **Zero Runtime Syncs & Allocations** | Exactly $0$ calls to `cudaMalloc` or `cudaDeviceSynchronize` during active loops | Code audit of `upload.cu`/`download.cu` & Nsight timeline trace | **[PENDING]** |
+| **3** | **Transformer Block Convergence** | Monotonic loss reduction on causal multi-head sequence modeling; Tensor Core backward GEMM active | Multi-step convergence suite in `test_ai.cpp` | **[PENDING]** |
+| **4** | **Zero KV Fragmentation** | $100\%$ block reuse across multi-turn prompts via COW prefix sharing | PagedAttention block allocation unit tests | **[PENDING]** |
+| **5** | **Sub-Microsecond Graph Dispatch** | $<0.05\text{ ms}$ host launch latency per full step; automated tape backprop matches manual gradients | `cudaEventElapsedTime` profiling & autograd parity tests | **[PENDING]** |
+| **6** | **MoE Routing & Multimodal Output** | Top-2 expert activation verified; valid `.bmp` and `.wav` files reconstructed from token streams | Router load-balance test & round-trip codec verification in `test_decompressor.cpp` | **[PENDING]** |
 
 ---
 
