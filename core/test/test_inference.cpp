@@ -400,11 +400,14 @@ bool test_inference() {
 	// 9.2 Quality check: multi-token generation diversity (not all identical tokens)
 	std::unordered_set<std::string> unique_tokens;
 	size_t unk_count = 0;
+	std::cout << "  [DEBUG bench_tokens]: ";
 	for (const auto& tok : bench_tokens) {
+		std::cout << tok << " ";
 		if (tok == "<UNK>")
 			++unk_count;
 		unique_tokens.insert(tok);
 	}
+	std::cout << "\n  [DEBUG unique_tokens count]: " << unique_tokens.size() << "\n";
 	test_check(unique_tokens.size() > 1, "Gate 1: Stochastic sampling produces diverse tokens (unique > 1)", s_pass, s_fail);
 	test_check(unk_count < bench_tokens.size(), "Gate 1: No <UNK> saturation during generation (not 100% UNK)", s_pass, s_fail);
 
