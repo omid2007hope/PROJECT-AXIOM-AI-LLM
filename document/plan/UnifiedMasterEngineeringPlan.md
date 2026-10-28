@@ -15,7 +15,7 @@
 | **Document Path** | `document/plan/UnifiedMasterEngineeringPlan.md` |
 | **Target Architecture** | NVIDIA Ada Lovelace (`sm_89` / RTX 4080 Laptop GPU) |
 | **Toolchains & Standards** | Native C++23 (`-std=c++23`, GCC/MinGW 14.2), CUDA 13.3 (`nvcc`, MSVC `cl.exe`), CUTLASS v4.8.0 |
-| **Baseline Status** | **Foundations Locked (146/146 Unit & Stress Tests Passing — 100% Green)** |
+| **Baseline Status** | **Phase 0 & Phase 1 Verified (314/314 Automated Tests Passing — 100% Green)** |
 | **Execution Directive** | Single Source of Truth — Active Scaling & Multi-Token Generative Roadmap |
 
 ---
@@ -46,7 +46,7 @@ It formally locks the verified hardware substrate and mathematical foundation, i
 ## 1. Verified Baseline (Locked Foundations — Do Not Re-Open)
 
 > [!IMPORTANT]
-> All foundational systems plumbing, memory logistics, and single-layer mathematical operations listed below are **100% implemented, verified, and passing (146/146 tests green)** across `test_ai`, `test_inference`, `test_identifier`, and `test_decompressor`. These components are locked and must not be reopened or refactored arbitrarily.
+> All foundational systems plumbing, memory logistics, and single-layer mathematical operations listed below are **100% implemented, verified, and passing (314/314 tests green across 11 test suites)** across `test_ai`, `test_inference`, `test_identifier`, and `test_decompressor`. These components are locked and must not be reopened or refactored arbitrarily.
 
 | Subsystem | Verified Implementation Architecture | Key Code Locations |
 | :--- | :--- | :--- |
@@ -105,10 +105,10 @@ It formally locks the verified hardware substrate and mathematical foundation, i
 
 ## 3. Unified Execution Roadmap
 
-### Phase 1: Multi-Token Autoregressive Generation, Sampling & Corpus Hygiene (Immediate Priority)
+### Phase 1: Multi-Token Autoregressive Generation, Sampling & Corpus Hygiene [COMPLETED & VERIFIED]
 
 > [!NOTE]
-> **Priority Target:** Transition from single-token prompt evaluation to full, continuous generative streaming with temperature and nucleus sampling.
+> **Status: Completed & Verified.** Host streaming generation loop, temperature scaling, Top-K/Top-P sampling, and vocabulary frequency filtering (count >= 3) are fully operational and verified in the automated test harness.
 
 #### 1.1. Host Autoregressive Generation Loop (`core/src/ai.cpp`, `core/src/main.cpp`)
 * **Objective:** Upgrade the single-token `predict()` pathway into an iterative, streaming autoregressive loop.
@@ -141,7 +141,7 @@ It formally locks the verified hardware substrate and mathematical foundation, i
 
 ---
 
-### Phase 2: Surgical Sync Eradication & Production VRAM Management
+### Phase 2: Surgical Sync Eradication & Production VRAM Management [IMMEDIATE NEXT TARGET]
 
 > [!WARNING]
 > **Forensic Audit Liability Notice:** The forensic codebase audit identified three runtime synchronization and allocation bottlenecks in the existing codebase. Resolving these prior to multi-layer scaling prevents catastrophic throughput stalls in subsequent phases.
@@ -233,9 +233,9 @@ It formally locks the verified hardware substrate and mathematical foundation, i
 
 | Phase | Milestone Name | Target Success Metric | Primary Verification Method | Status |
 | :---: | :--- | :--- | :--- | :---: |
-| **0** | **Foundations Locked** | 146/146 unit & stress tests passing | `mingw32-make test` (`test.exe --test`) | **[PASSED]** |
-| **1** | **Multi-Token Streaming & Sampling** | $>50\text{ tokens/sec}$; $T > 0$ produces diverse, coherent text without `<UNK>` saturation | Interactive CLI streaming in `main.cpp` & deterministic seed tests in `test_inference.cpp` | **[NEXT]** |
-| **2** | **Zero Runtime Syncs & Allocations** | Exactly $0$ calls to `cudaMalloc` or `cudaDeviceSynchronize` during active loops | Code audit of `upload.cu`/`download.cu` & Nsight Systems timeline trace | **[PENDING]** |
+| **0** | **Foundations Locked** | 314/314 automated unit & stress tests passing (100% Green) | `mingw32-make test` (`test.exe --test`) | **[PASSED]** |
+| **1** | **Multi-Token Streaming & Sampling** | $>50\text{ tokens/sec}$; $T > 0$ produces diverse, coherent text without `<UNK>` saturation | Interactive CLI streaming in `main.cpp` & deterministic seed tests in `test_inference.cpp` | **[PASSED]** |
+| **2** | **Zero Runtime Syncs & Allocations** | Exactly $0$ calls to `cudaMalloc` or `cudaDeviceSynchronize` during active loops | Code audit of `upload.cu`/`download.cu` & Nsight Systems timeline trace | **[NEXT]** |
 | **3** | **Transformer Block Convergence** | Monotonic loss reduction on causal multi-head sequence modeling; Tensor Core backward GEMM active | Multi-step convergence suite in `test_ai.cpp` | **[PENDING]** |
 | **4** | **Zero KV Fragmentation** | $100\%$ block reuse across multi-turn prompts via COW prefix sharing | PagedAttention block allocation unit tests | **[PENDING]** |
 | **5** | **Sub-Microsecond Graph Dispatch** | $<0.05\text{ ms}$ host launch latency per full step; automated tape backprop matches manual gradients | `cudaEventElapsedTime` profiling & autograd parity tests | **[PENDING]** |

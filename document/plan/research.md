@@ -396,6 +396,9 @@ This architectural roadmap outlines a rigorous, mathematically sound transition 
 
 Scaling this custom framework to fully saturate an RTX 4080 requires treating the PCIe bus and VRAM as continuous, asynchronous streams rather than discrete, blocking stages.
 
+> [!NOTE]
+> **Active Implementation Directive:** The active engineering sequence is codified in the single authoritative blueprint: [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) and [`document/plan/plan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/plan.md).
+
 Here is the strategic breakdown of the migration path, organized by execution priority:
 
 ### 1. Ingestion & Asynchronous Data Pipeline (Phases I & II) [COMPLETED & VERIFIED]
@@ -415,7 +418,8 @@ Here is the strategic breakdown of the migration path, organized by execution pr
 ### 3. Advanced Engine Modularity & Scaling (Phases V, VI, & VII) [IN PROGRESS]
 
 - **[DONE - KERNELS] GPU Discrete Token Classification & Tied Logits:** Fused GPU Cross-Entropy loss ($L = -\log P_{tgt}$), tied logits projection ($Y \cdot E^T$), and Softmax / ArgMax kernel in VRAM.
-- **[PENDING] Multi-Step Autoregressive Generation:** Host-side iterative token generation loop feeding predicted tokens back into the sliding context window with temperature and top-k sampling.
+- **[DONE] Multi-Step Autoregressive Generation & Sampling:** Host-side iterative token generation loop (`AI::generate`) feeding predicted tokens back into the sliding context window with temperature scaling ($T \in (0.0, 2.0]$), Top-K filtering, Top-P (nucleus) sampling, deterministic seed verification, greedy ArgMax fallback, and bulk frequency filtering ($\text{count} \ge 3$) in `parser.cpp`.
+- **[IMMEDIATE NEXT TARGET] Surgical Sync Eradication & Production VRAM Management:** Eradicate dynamic `cudaMalloc` in `upload.cu` via stream memory pools / userspace BFC allocator; eliminate `cudaDeviceSynchronize` in `download_loss` via pinned slot and `cudaEventQuery`; eliminate polling spin-locks in `optimizer.cpp` via lock-free SPSC ring buffer.
 - **[PENDING] Multi-Head Self-Attention (MHA / GQA):** Partitioning representations into attention heads with Q, K, V projections and causal masking on Tensor Cores.
 - **[PENDING] PagedAttention for KV-Cache:** Partitioning Key/Value caches into fixed physical VRAM blocks with a CPU-side Block Table, eliminating external fragmentation and enabling Copy-On-Write (COW) prompt prefix caching.
 - **[PENDING] CUDA Graphs:** Wrapping static training/inference iterations in `cudaStreamBeginCapture` to create a Directed Acyclic Graph (DAG), reducing CPU launch overhead to zero.

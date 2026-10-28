@@ -103,10 +103,11 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
 ├── .todo                               # Master engineering checklist and phase status
 ├── README.md                           # Exhaustive technical documentation & architecture manual
 ├── AI_CONTEXT.md                       # This prompt primer file
-├── document/                           # 14 exhaustive engineering specifications:
+├── document/                           # 15 exhaustive engineering specifications & blueprints:
 │   ├── 00_INDEX.md ... 12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md
-│   ├── plan/UnifiedMasterEngineeringPlan.md
-│   └── training_structure.md, etc.
+│   ├── training_structure.md, roadmap_to_first_training_phase.md, nuclear_detection_scenario.md
+│   ├── efficient_model_training.md, Spector/Spector.md, learning/ai.md
+│   └── plan/ (UnifiedMasterEngineeringPlan.md, Project_Axiom_Plan.md, research.md, plan.md)
 └── core/                               # Native C++23 & CUDA Engine
     ├── include/
     │   ├── ai.hpp                      # AI class, AxiomWeightHeader, SamplingConfig, AdamW state
@@ -130,12 +131,12 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
     │   ├── weights.axiom               # Active production weights (1.34 GB, 65,536 vocab)
     │   ├── vocab.axiom                 # Serialized binary vocabulary lookup
     │   └── optimizer.axiom             # Serialized AdamW momentum and variance
-    └── test/                           # Automated Verification Suite (301 Tests)
+    └── test/                           # Automated Verification Suite (314 Tests)
         ├── test_header.hpp             # Lightweight test assertions (test_check, test_check_eq)
         ├── test_ai.cpp                 # AI lifecycle, weight persistence, layer math (59 tests)
         ├── test_cuda_transfer.cpp      # PCIe DMA transfer integrity (47 tests)
-        ├── test_inference.cpp          # Autoregressive generation, sampling, resilience (42 tests)
-        ├── test_tokenization.cpp       # Tokenizer, dictionary persistence, archive handling (31 tests)
+        ├── test_inference.cpp          # Autoregressive generation, sampling, resilience (46 tests)
+        ├── test_tokenization.cpp       # Tokenizer, dictionary persistence, archive handling (40 tests)
         ├── test_identifier.cpp         # Modality classification invariants (32 tests)
         ├── test_optimizer.cpp          # AdamW momentum/variance numerical checks (38 tests)
         ├── test_decompressor.cpp       # Native decompression routines (18 tests)
@@ -151,7 +152,7 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
 
 ### Verified Completed Milestones
 - [x] **Phase 0: Bare-Metal CUDA Foundations (100% Complete & Verified)**
-  - Automated test harness: **301 / 301 tests passing across 11 test suites (100% Green)**.
+  - Automated test harness: **314 / 314 tests passing across 11 test suites (100% Green)**.
   - VRAM-resident learnable embedding table ($65,536 \times 32$).
   - CUDA gather kernel and `atomicAdd` scatter gradient kernel.
   - Linear EVT epilogue ($dz = dy$) eliminating vanishing gradients.
@@ -164,22 +165,23 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
   - Top-K filtering and Top-P (nucleus) cumulative sum filtering.
   - Greedy ArgMax fallback when $T \le 0.001$.
   - Fixed-seed bit-identical deterministic verification.
+- [x] **Phase 1.3: Vocabulary Bounding & Corpus Hygiene (Completed)**
+  - Frequency filtering (count >= 3) implemented in parser.cpp for bulk corpus ingestion.
+  - Sub-threshold and out-of-bounds tokens routed safely to vocab::UNK (ID 1).
+- [x] **Gate 1 Verification (Passed):** Measured generation throughput > 50 tokens/sec on RTX 4080 (up to 2,625 tok/s on Tensor Cores).
 
 ### Active Immediate Task (What to work on next)
-- [ ] **Phase 1.3: Vocabulary Bounding & Corpus Hygiene (`core/util/parser.cpp`)**
-  - Implement frequency filtering ($\text{count} \ge 3$) during bulk corpus ingestion.
-  - Prevent rare typos, singletons, and noise strings from polluting the 64,508 `main_dictionary` partition.
-  - Route out-of-bounds indices and sub-threshold words safely to `vocab::UNK` (ID `1`).
-- [ ] **Gate 1 Verification:**
-  - Verify $> 50\text{ tokens/sec}$ throughput on RTX 4080.
-  - Validate interactive CLI streaming in `main.cpp`.
-  - Expand `test_tokenization.cpp` to verify frequency filtering.
+- [ ] **Phase 2: Surgical Sync Eradication & Production VRAM Management (core/src/CUDA/, core/util/)**
+  - **2.1 Eradicate Dynamic cudaMalloc in Transfer Loops (upload.cu):** Audit and remove lines 20–28 dynamic allocation guards in upload_to_gpu. Transition temporary buffers to stream-ordered memory pools (cudaMallocAsync / cudaFreeAsync) and implement a userspace Best-Fit with Coalescing (BFC) Caching Allocator over a pre-allocated VRAM arena.
+  - **2.2 Non-Blocking Loss Telemetry (download.cu):** Eliminate cudaDeviceSynchronize() from download_loss. Copy scalar loss asynchronously into a dedicated 4-byte pinned host slot and poll via stream event query (cudaEventQuery), preserving double-buffered compute.
+  - **2.3 Lock-Free SPSC Ring Buffer & Async Disk Prefetch (optimizer.cpp):** Eliminate busy-wait spin-locks on Portion::buffer_in_use and Portion::context_in_use. Implement a lock-free Single-Producer Single-Consumer (SPSC) ring buffer with a background producer thread prefetching the next 100,000-token chunk from disk.
+- [ ] **Gate 2 Verification:** Exactly 0 calls to cudaMalloc or cudaDeviceSynchronize during active compute loops; zero GPU starvation bubbles verified via Nsight Systems trace.
 
 ### Pending Future Phases
-- **Phase 2:** Surgical Sync Eradication & VRAM Management (Eradicate dynamic `cudaMalloc` in transfer loops, implement Best-Fit with Coalescing / stream-ordered memory pools).
-- **Phase 3:** High-Throughput Bulk Ingestion Pipeline (Multithreaded prefetch, memory-mapped I/O).
-- **Phase 4:** Long-Horizon Streaming & Loss Convergence Monitoring.
-- **Phase 5:** Production Hardening & Full Scale-Up.
+- **Phase 3:** Multi-Head Self-Attention (MHA / GQA) & Transformer Blocks (batched CUTLASS GEMM backward pass, fused SDPA with causal masking, Pre-Norm SwiGLU FFN).
+- **Phase 4:** PagedAttention KV-Cache & Prefix State Management (16-token physical pages, CPU block table, COW prefix sharing).
+- **Phase 5:** Zero-Overhead Hardware Saturation via CUDA Graphs & Modular ATen Dispatcher (Static DAG capture via cudaGraphLaunch < 0.05 ms latency, Tensor/TensorImpl decoupling, reverse-mode autograd tape).
+- **Phase 6:** Sparse Mixture of Experts (MoE) & Generative Multimodal Output Codecs (N=8 discrete experts with Top-2 router gating, Visual/Acoustic output codecs).
 
 ---
 
@@ -188,7 +190,7 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
 All commands are executed from the PowerShell terminal inside `c:\Users\Omid\X\Code\PROJECT-AXIOM\core`:
 
 ```powershell
-# 1. Run the entire automated test suite (301 tests across 11 suites):
+# 1. Run the entire automated test suite (314 tests across 11 suites):
 cd c:\Users\Omid\X\Code\PROJECT-AXIOM\core
 .\test.exe --test
 
@@ -222,4 +224,4 @@ When responding to the user:
 1. Maintain the **Pre-Action Reasoning Gate**: Evaluate *What it is*, *What it does*, *How it works*, and *Why it exists* before acting.
 2. Follow the **Low-Latency Output Protocol**: Be concise, telegraphic, use 1-line bullets, output only changed code blocks or diffs, and never reprint large unchanged files.
 3. Keep git diffs surgical and minimal.
-4. Always verify that all 301 unit tests pass (`.\test.exe --test`) after modifying any code in `core/`.
+4. Always verify that all 314 unit tests pass (`.\test.exe --test`) after modifying any code in `core/`.

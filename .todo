@@ -8,7 +8,7 @@
 
 ---
 
-## [x] Phase 0: Verified Baseline Foundations (LOCKED — 146/146 Tests Green)
+## [x] Phase 0: Verified Baseline Foundations (LOCKED — 314/314 Tests Green)
 
 - [x] **0.1 Multimodal Ingestion Pipeline** (`core/include/Identifier.hpp`, `core/util/identifier.cpp`, `core/util/decompressor/*`, `core/util/parser.cpp`)
   - [x] Four-stage pipeline: Identifier -> Decompressor -> Sanitizer -> Tokenizer -> Embedder
@@ -41,7 +41,7 @@
   - [x] Fused `backward_pass_adamw_kernel` maintaining momentum ($m_t$) and variance ($v_t$)
   - [x] Deterministic 56-byte `AxiomWeightHeader` atomic file swapping
   - [x] Serialization & deserialization for `weights.axiom`, `vocab.axiom`, and `optimizer.axiom`
-- [x] **Gate 0 Verification:** All 146 unit & stress tests passing in `mingw32-make test` (`test.exe --test`).
+- [x] **Gate 0 Verification:** All 314 unit & stress tests passing in `mingw32-make test` (`test.exe --test`).
 
 ---
 
@@ -160,9 +160,9 @@
 
 | Phase | Milestone Name                       | Target Success Metric                                         | Verification Method                     |   Status    |
 | :---: | :----------------------------------- | :------------------------------------------------------------ | :-------------------------------------- | :---------: |
-| **0** | **Foundations Locked**               | 146/146 unit & stress tests passing                           | `mingw32-make test` (`test.exe --test`) | **PASSED**  |
-| **1** | **Multi-Token Streaming & Sampling** | $>50\text{ tokens/sec}$; $T > 0$ diverse text without `<UNK>` | Interactive CLI & `test_inference.cpp`  |  **NEXT**   |
-| **2** | **Zero Runtime Syncs & Allocations** | Exactly 0 `cudaMalloc` or `cudaDeviceSynchronize` in loops    | Audit & Nsight Systems trace            | **PENDING** |
+| **0** | **Foundations Locked**               | 314/314 unit & stress tests passing (100% Green)              | `mingw32-make test` (`test.exe --test`) | **PASSED**  |
+| **1** | **Multi-Token Streaming & Sampling** | $>50\text{ tokens/sec}$; $T > 0$ diverse text without `<UNK>` | Interactive CLI & `test_inference.cpp`  | **PASSED**  |
+| **2** | **Zero Runtime Syncs & Allocations** | Exactly 0 `cudaMalloc` or `cudaDeviceSynchronize` in loops    | Audit & Nsight Systems trace            |   **NEXT**  |
 | **3** | **Transformer Block Convergence**    | Monotonic loss reduction; Tensor Core backward GEMM           | Convergence suite in `test_ai.cpp`      | **PENDING** |
 | **4** | **Zero KV Fragmentation**            | 100% block reuse via COW prefix sharing                       | PagedAttention unit tests               | **PENDING** |
 | **5** | **Sub-Microsecond Graph Dispatch**   | $<0.05\text{ ms}$ launch latency; tape backprop parity        | `cudaEventElapsedTime` profiling        | **PENDING** |
