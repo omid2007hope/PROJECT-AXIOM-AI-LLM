@@ -77,6 +77,11 @@ public:
 	// Milestone 3: Discrete Autoregressive Token Classification
 	uint32_t last_predicted_token_id = 0;
 
+	// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN
+	bool enable_transformer = false;
+	size_t num_heads = 4;
+	size_t ffn_dimension = 64;
+
 	// CPU Memory (High precision float for initialization and updates)
 	std::vector<float> host_weights;
 	std::vector<float> host_bias;
@@ -138,6 +143,17 @@ public:
 		      size_t max_new_tokens = 128,
 		      const SamplingConfig& config = {},
 		      std::function<void(const std::string&)> token_callback = nullptr);
+
+	// Phase 3: Transformer Block Construction and Execution
+	bool build_transformer_block(size_t hidden_dim, size_t heads = 4, size_t ffn_dim = 64);
+
+	bool forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length);
+
+	bool backward_transformer(const std::vector<float>& grad_output,
+				  std::vector<float>& grad_input,
+				  const std::vector<std::bfloat16_t>& hidden_states,
+				  size_t sequence_length,
+				  float learning_rate);
 };
 
 #endif

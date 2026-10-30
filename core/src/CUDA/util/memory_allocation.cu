@@ -96,6 +96,27 @@ extern "C" CUDA_API void free_gpu_weights(GpuWeights* gpu) {
 		cudaFree(gpu->d_bias_v);
 		gpu->d_bias_v = nullptr;
 	}
+
+	// Free Transformer weights
+	void** xform_weights[] = {
+		&gpu->d_query_weights, &gpu->d_key_weights, &gpu->d_value_weights, &gpu->d_output_weights,
+		&gpu->d_gate_weights, &gpu->d_up_weights, &gpu->d_down_weights,
+		&gpu->d_query_master, &gpu->d_key_master, &gpu->d_value_master, &gpu->d_output_master,
+		&gpu->d_gate_master, &gpu->d_up_master, &gpu->d_down_master,
+		&gpu->d_query_m, &gpu->d_query_v, &gpu->d_key_m, &gpu->d_key_v,
+		&gpu->d_value_m, &gpu->d_value_v, &gpu->d_output_m, &gpu->d_output_v,
+		&gpu->d_gate_m, &gpu->d_gate_v, &gpu->d_up_m, &gpu->d_up_v,
+		&gpu->d_down_m, &gpu->d_down_v
+	};
+	for (void** ptr : xform_weights) {
+		if (*ptr) {
+			cudaFree(*ptr);
+			*ptr = nullptr;
+		}
+	}
+
+	gpu->transformer_dim = 0;
+	gpu->transformer_ffn = 0;
 	gpu->weight_elements = 0;
 	gpu->bias_elements = 0;
 	gpu->step_count = 0;
@@ -245,6 +266,20 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 		cudaEventDestroy((cudaEvent_t)gpu->loss_event);
 		gpu->loss_event = nullptr;
 	}
+
+	// Free Transformer intermediate activations
+	void** xform_acts[] = {
+		&gpu->d_query, &gpu->d_key, &gpu->d_value, &gpu->d_attention_output,
+		&gpu->d_intermediate_gate, &gpu->d_intermediate_up, &gpu->d_intermediate_swiglu,
+		&gpu->d_ffn_output, &gpu->d_residual_mid, &gpu->d_residual_out
+	};
+	for (void** ptr : xform_acts) {
+		if (*ptr) {
+			free_vram(*ptr, 0);
+			*ptr = nullptr;
+		}
+	}
+
 	gpu->loss_pending = false;
 	gpu->output_elements = 0;
 	gpu->vocab_elements = 0;
@@ -266,4 +301,90 @@ extern "C" CUDA_API void* pinned_alloc(size_t bytes) {
 extern "C" CUDA_API void pinned_free(void* ptr) {
 	if (ptr)
 		cudaFreeHost(ptr);
+}
+
+
+extern "C" CUDA_API void* allocate_device_memory(size_t bytes) {
+	void* ptr = nullptr;
+	if (cudaMalloc(&ptr, bytes) == cudaSuccess) {
+		return ptr;
+	}
+	return nullptr;
+}
+
+extern "C" CUDA_API void free_device_memory(void* ptr) {
+	if (ptr) {
+		cudaFree(ptr);
+	}
+}
+
+extern "C" CUDA_API bool upload_device_buffer(void* dst, const void* src, size_t bytes) {
+	if (!dst || !src || bytes == 0)
+		return false;
+	return CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyHostToDevice));
+}
+
+extern "C" CUDA_API bool download_device_buffer(void* dst, const void* src, size_t bytes) {
+	if (!dst || !src || bytes == 0)
+		return false;
+	return CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToHost));
+}
+
+extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
+						      size_t hidden_dim,
+						      size_t ffn_dim) {
+	if (!gpu || hidden_dim == 0 || ffn_dim == 0)
+		return false;
+	gpu->transformer_dim = hidden_dim;
+	gpu->transformer_ffn = ffn_dim;
+
+	size_t dd_bytes = hidden_dim * hidden_dim * sizeof(float);
+	size_t df_bytes = hidden_dim * ffn_dim * sizeof(float);
+	size_t dd_bf16 = hidden_dim * hidden_dim * sizeof(__nv_bfloat16);
+	size_t df_bf16 = hidden_dim * ffn_dim * sizeof(__nv_bfloat16);
+
+	std::mt19937 gen(42);
+	float bound = 1.0f / sqrtf(static_cast<float>(hidden_dim));
+	std::uniform_real_distribution<float> dis(-bound, bound);
+
+	auto allocate_and_init = [&](void** d_w, void** d_master, void** d_m, void** d_v,
+				     size_t elements, size_t bf16_bytes, size_t float_bytes) {
+		cudaMalloc(d_w, bf16_bytes);
+		cudaMalloc(d_master, float_bytes);
+		cudaMalloc(d_m, float_bytes);
+		cudaMalloc(d_v, float_bytes);
+		cudaMemset(*d_m, 0, float_bytes);
+		cudaMemset(*d_v, 0, float_bytes);
+
+		std::vector<float> init_w(elements);
+		for (size_t i = 0; i < elements; ++i) {
+			init_w[i] = dis(gen);
+		}
+		cudaMemcpy(*d_master, init_w.data(), float_bytes, cudaMemcpyHostToDevice);
+
+		int threads = 256;
+		int blocks = static_cast<int>((elements + threads - 1) / threads);
+		float_to_bf16_array_kernel<<<blocks, threads>>>(
+			static_cast<const float*>(*d_master),
+			static_cast<__nv_bfloat16*>(*d_w),
+			elements);
+	};
+
+	allocate_and_init(&gpu->d_query_weights, &gpu->d_query_master, &gpu->d_query_m, &gpu->d_query_v,
+			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
+	allocate_and_init(&gpu->d_key_weights, &gpu->d_key_master, &gpu->d_key_m, &gpu->d_key_v,
+			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
+	allocate_and_init(&gpu->d_value_weights, &gpu->d_value_master, &gpu->d_value_m, &gpu->d_value_v,
+			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
+	allocate_and_init(&gpu->d_output_weights, &gpu->d_output_master, &gpu->d_output_m, &gpu->d_output_v,
+			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
+
+	allocate_and_init(&gpu->d_gate_weights, &gpu->d_gate_master, &gpu->d_gate_m, &gpu->d_gate_v,
+			  hidden_dim * ffn_dim, df_bf16, df_bytes);
+	allocate_and_init(&gpu->d_up_weights, &gpu->d_up_master, &gpu->d_up_m, &gpu->d_up_v,
+			  hidden_dim * ffn_dim, df_bf16, df_bytes);
+	allocate_and_init(&gpu->d_down_weights, &gpu->d_down_master, &gpu->d_down_m, &gpu->d_down_v,
+			  ffn_dim * hidden_dim, df_bf16, df_bytes);
+
+	return CUDA_CHECK(cudaGetLastError());
 }

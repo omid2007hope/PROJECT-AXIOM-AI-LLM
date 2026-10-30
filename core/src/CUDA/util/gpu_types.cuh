@@ -75,6 +75,44 @@ struct GpuWeights {
 	size_t weight_elements = 0;
 	size_t bias_elements = 0;
 	uint64_t step_count = 0;
+
+	// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN Weights
+	void* d_query_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
+	void* d_key_weights = nullptr;    // device ptr to __nv_bfloat16 (dim * dim)
+	void* d_value_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
+	void* d_output_weights = nullptr; // device ptr to __nv_bfloat16 (dim * dim)
+
+	void* d_gate_weights = nullptr; // device ptr to __nv_bfloat16 (dim * ffn_dim)
+	void* d_up_weights = nullptr;   // device ptr to __nv_bfloat16 (dim * ffn_dim)
+	void* d_down_weights = nullptr; // device ptr to __nv_bfloat16 (ffn_dim * dim)
+
+	// FP32 Master copies for transformer weights
+	void* d_query_master = nullptr;
+	void* d_key_master = nullptr;
+	void* d_value_master = nullptr;
+	void* d_output_master = nullptr;
+	void* d_gate_master = nullptr;
+	void* d_up_master = nullptr;
+	void* d_down_master = nullptr;
+
+	// AdamW moment buffers for transformer weights
+	void* d_query_m = nullptr;
+	void* d_query_v = nullptr;
+	void* d_key_m = nullptr;
+	void* d_key_v = nullptr;
+	void* d_value_m = nullptr;
+	void* d_value_v = nullptr;
+	void* d_output_m = nullptr;
+	void* d_output_v = nullptr;
+	void* d_gate_m = nullptr;
+	void* d_gate_v = nullptr;
+	void* d_up_m = nullptr;
+	void* d_up_v = nullptr;
+	void* d_down_m = nullptr;
+	void* d_down_v = nullptr;
+
+	size_t transformer_dim = 0;
+	size_t transformer_ffn = 0;
 };
 
 // GPU-side activations buffer
@@ -98,6 +136,18 @@ struct GpuActivations {
 	void* h_pinned_loss = nullptr; // pinned host float slot
 	void* loss_event = nullptr;    // cudaEvent_t for async telemetry
 	bool loss_pending = false;     // async transfer in flight flag
+
+	// Phase 3: Transformer Block Intermediate Activations
+	void* d_query = nullptr;               // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_key = nullptr;                 // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_value = nullptr;               // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_attention_output = nullptr;    // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_intermediate_gate = nullptr;   // device ptr to __nv_bfloat16 (seq * ffn_dim)
+	void* d_intermediate_up = nullptr;     // device ptr to __nv_bfloat16 (seq * ffn_dim)
+	void* d_intermediate_swiglu = nullptr; // device ptr to __nv_bfloat16 (seq * ffn_dim)
+	void* d_ffn_output = nullptr;          // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_residual_mid = nullptr;        // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_residual_out = nullptr;        // device ptr to __nv_bfloat16 (seq * dim)
 };
 
 #ifdef BUILDING_CUDA_DLL

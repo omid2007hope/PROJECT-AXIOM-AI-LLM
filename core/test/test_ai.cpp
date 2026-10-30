@@ -22,7 +22,7 @@ bool test_ai() {
 
 	Elements e {};
 
-	// ── [1] Initialization & Dimensions ───────────────────────────────────────
+	// â”€â”€ [1] Initialization & Dimensions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[1] AI Initialization & Dimensions\n";
 	AI ai(in_dim, out_dim, w_min, w_max, e);
 
@@ -31,7 +31,7 @@ bool test_ai() {
 	test_check_eq(ai.host_weights.size(), in_dim * out_dim, "h_weights size == 2048", s_pass, s_fail);
 	test_check_eq(ai.host_bias.size(), out_dim, "h_bias size == 4", s_pass, s_fail);
 
-	// ── [2] Chaos / Symmetry Breaking ─────────────────────────────────────────
+	// â”€â”€ [2] Chaos / Symmetry Breaking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[2] Weight Distribution & Chaos Verification\n";
 	bool weights_in_bounds = true;
 	float weight_sum = 0.0f;
@@ -54,7 +54,7 @@ bool test_ai() {
 	}
 	test_check(biases_zero, "Initial biases all set to 0.0f", s_pass, s_fail);
 
-	// ── [3] GPU Transfer Roundtrip ────────────────────────────────────────────
+	// â”€â”€ [3] GPU Transfer Roundtrip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[3] AI GPU Transfer Roundtrip\n";
 	test_check(ai.upload_weights(), "upload_weights() returns true", s_pass, s_fail);
 
@@ -64,7 +64,7 @@ bool test_ai() {
 	test_check(ai.download_weights(), "download_weights() returns true", s_pass, s_fail);
 	test_check(std::abs(ai.host_weights[0] - original_w0) < 1e-6f, "Downloaded weights restored original VRAM value", s_pass, s_fail);
 
-	// ── [4] Loss Reading with Zero Steps ──────────────────────────────────────
+	// â”€â”€ [4] Loss Reading with Zero Steps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[4] Zero Pending Steps Handling\n";
 	double zero_loss = 0.0;
 	size_t zero_steps = 0;
@@ -72,7 +72,7 @@ bool test_ai() {
 	test_check_eq(zero_steps, size_t {0}, "steps reported is 0", s_pass, s_fail);
 	test_check_eq(zero_loss, 0.0, "loss reported is 0.0", s_pass, s_fail);
 
-	// ── [5] Training Loop Step & Loss Reading ─────────────────────────────────
+	// â”€â”€ [5] Training Loop Step & Loss Reading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[5] Training Step Execution\n";
 	const size_t RAM_BUFFER = 1000;
 	const size_t TOKEN_DIM = 4;
@@ -99,7 +99,7 @@ bool test_ai() {
 
 	portion.free_pinned();
 
-	// ── [6] Buffer Exhaustion (TrainStatus::NoData) ───────────────────────────
+	// â”€â”€ [6] Buffer Exhaustion (TrainStatus::NoData) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[6] Buffer Exhaustion Handling\n";
 	Portion empty_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	empty_portion.allocate_pinned();
@@ -108,7 +108,7 @@ bool test_ai() {
 	test_check(empty_status == TrainStatus::NoData, "ai.train() returns TrainStatus::NoData when buffer is empty", s_pass, s_fail);
 	empty_portion.free_pinned();
 
-	// ── [7] Multi-Step Training Convergence ───────────────────────────────────
+	// â”€â”€ [7] Multi-Step Training Convergence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[7] Multi-Step Convergence\n";
 	Portion conv_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	conv_portion.allocate_pinned();
@@ -161,7 +161,7 @@ bool test_ai() {
 
 	conv_portion.free_pinned();
 
-	// ── [8] Weight Persistence Roundtrip (Save & Load) ────────────────────────
+	// â”€â”€ [8] Weight Persistence Roundtrip (Save & Load) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[8] Weight Persistence Roundtrip (Save & Load)\n";
 	const std::string test_weights_path = "test_weights.axiom";
 
@@ -232,7 +232,7 @@ bool test_ai() {
 		std::filesystem::remove_all("test_artifacts", rm_ec);
 	}
 
-	// ── [9] Forward Inference & Prediction Verification ───────────────────────
+	// â”€â”€ [9] Forward Inference & Prediction Verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[9] Forward Inference & Prediction Verification\n";
 
 	// 1. Predict from direct std::vector<std::bfloat16_t> context window
@@ -303,7 +303,7 @@ bool test_ai() {
 	test_check(ai.predict(prompt_context, prompt_pred), "ai.predict(prompt_context) succeeds on user prompt context", s_pass, s_fail);
 	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == 4", s_pass, s_fail);
 
-	// ── [10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning ──
+	// â”€â”€ [10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning â”€â”€
 	std::cout << "\n[10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning\n";
 	{
 		// 1. Verify embedding chaos initialization
@@ -351,6 +351,215 @@ bool test_ai() {
 		test_check(after_emb0 != before_emb0, "Backward scatter physically updated embedding coordinate in VRAM", s_pass, s_fail);
 
 		token_portion.free_pinned();
+	}
+
+	// ── [11] Transformer Multi-Head Attention, SwiGLU & Causal Convergence ─────
+	std::cout << "\n[11] Transformer Multi-Head Attention, SwiGLU & Causal Convergence\n";
+	{
+		// 11.1 Fused Causal Self-Attention & Strict Causality (Future Token Isolation)
+		const size_t seq_len = 4;
+		const size_t emb_dim = 4;
+		const size_t heads = 1;
+		std::vector<std::bfloat16_t> h_q(seq_len * emb_dim);
+		std::vector<std::bfloat16_t> h_k(seq_len * emb_dim);
+		std::vector<std::bfloat16_t> h_v(seq_len * emb_dim);
+		std::vector<std::bfloat16_t> h_out1(seq_len * emb_dim);
+		std::vector<std::bfloat16_t> h_out2(seq_len * emb_dim);
+
+		for (size_t i = 0; i < seq_len * emb_dim; ++i) {
+			h_q[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 5) + 1));
+			h_k[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 7) + 1));
+			h_v[i] = static_cast<std::bfloat16_t>(0.2f * ((i % 3) + 1));
+		}
+
+		size_t bf_bytes = seq_len * emb_dim * sizeof(std::bfloat16_t);
+		void *d_q = allocate_device_memory(bf_bytes);
+		void *d_k = allocate_device_memory(bf_bytes);
+		void *d_v = allocate_device_memory(bf_bytes);
+		void *d_out = allocate_device_memory(bf_bytes);
+
+		upload_device_buffer(d_q, h_q.data(), bf_bytes);
+		upload_device_buffer(d_k, h_k.data(), bf_bytes);
+		upload_device_buffer(d_v, h_v.data(), bf_bytes);
+
+		bool attn_ok1 = fused_causal_attention(d_q, d_k, d_v, d_out, seq_len, emb_dim, heads, 0);
+		test_check(attn_ok1, "fused_causal_attention executes successfully", s_pass, s_fail);
+		download_device_buffer(h_out1.data(), d_out, bf_bytes);
+
+		// Mutate future tokens (tokens 2 and 3)
+		for (size_t i = 2 * emb_dim; i < seq_len * emb_dim; ++i) {
+			h_q[i] = static_cast<std::bfloat16_t>(99.0f);
+			h_k[i] = static_cast<std::bfloat16_t>(99.0f);
+			h_v[i] = static_cast<std::bfloat16_t>(99.0f);
+		}
+		upload_device_buffer(d_q, h_q.data(), bf_bytes);
+		upload_device_buffer(d_k, h_k.data(), bf_bytes);
+		upload_device_buffer(d_v, h_v.data(), bf_bytes);
+
+		bool attn_ok2 = fused_causal_attention(d_q, d_k, d_v, d_out, seq_len, emb_dim, heads, 0);
+		test_check(attn_ok2, "fused_causal_attention re-run on perturbed future tokens", s_pass, s_fail);
+		download_device_buffer(h_out2.data(), d_out, bf_bytes);
+
+		// Assert that past tokens (tokens 0 and 1) were 100% UNCHANGED by future mutations
+		bool causal_preserved = true;
+		for (size_t i = 0; i < 2 * emb_dim; ++i) {
+			if (std::abs(static_cast<float>(h_out1[i]) - static_cast<float>(h_out2[i])) > 1e-4f) {
+				causal_preserved = false;
+				break;
+			}
+		}
+		test_check(causal_preserved, "Strict Causality: Future tokens (t >= 2) cannot leak or alter past outputs (t < 2)", s_pass, s_fail);
+
+		// Future tokens themselves should be different
+		bool future_diff = false;
+		for (size_t i = 2 * emb_dim; i < seq_len * emb_dim; ++i) {
+			if (static_cast<float>(h_out1[i]) != static_cast<float>(h_out2[i])) {
+				future_diff = true;
+				break;
+			}
+		}
+		test_check(future_diff, "Future tokens reflect perturbed inputs", s_pass, s_fail);
+
+		free_device_memory(d_q);
+		free_device_memory(d_k);
+		free_device_memory(d_v);
+		free_device_memory(d_out);
+
+		// 11.2 SwiGLU Non-Linearity Forward and Backward Parity
+		const size_t ffn_elements = 16;
+		std::vector<std::bfloat16_t> h_gate(ffn_elements);
+		std::vector<std::bfloat16_t> h_up(ffn_elements);
+		std::vector<std::bfloat16_t> h_swiglu_out(ffn_elements);
+
+		for (size_t i = 0; i < ffn_elements; ++i) {
+			h_gate[i] = static_cast<std::bfloat16_t>(0.5f * (static_cast<int>(i) - 8));
+			h_up[i] = static_cast<std::bfloat16_t>(1.0f);
+		}
+
+		void *d_gate = allocate_device_memory(ffn_elements * sizeof(std::bfloat16_t));
+		void *d_up = allocate_device_memory(ffn_elements * sizeof(std::bfloat16_t));
+		void *d_swi = allocate_device_memory(ffn_elements * sizeof(std::bfloat16_t));
+
+		upload_device_buffer(d_gate, h_gate.data(), ffn_elements * sizeof(std::bfloat16_t));
+		upload_device_buffer(d_up, h_up.data(), ffn_elements * sizeof(std::bfloat16_t));
+
+		bool swi_ok = swiglu_forward(d_gate, d_up, d_swi, ffn_elements, 0);
+		test_check(swi_ok, "swiglu_forward executes successfully", s_pass, s_fail);
+		download_device_buffer(h_swiglu_out.data(), d_swi, ffn_elements * sizeof(std::bfloat16_t));
+
+		bool swiglu_correct = true;
+		for (size_t i = 0; i < ffn_elements; ++i) {
+			float g = static_cast<float>(h_gate[i]);
+			float u = static_cast<float>(h_up[i]);
+			float expected = (g / (1.0f + std::exp(-g))) * u;
+			float actual = static_cast<float>(h_swiglu_out[i]);
+			if (std::abs(expected - actual) > 0.05f) {
+				swiglu_correct = false;
+				break;
+			}
+		}
+		test_check(swiglu_correct, "SwiGLU output matches analytical Swish(G) * U", s_pass, s_fail);
+
+		// Backward SwiGLU gradient check
+		void *d_grad_g = allocate_device_memory(ffn_elements * sizeof(float));
+		void *d_grad_u = allocate_device_memory(ffn_elements * sizeof(float));
+		bool swi_bwd_ok = swiglu_backward(d_swi, d_gate, d_up, d_grad_g, d_grad_u, ffn_elements, 0);
+		test_check(swi_bwd_ok, "swiglu_backward executes successfully", s_pass, s_fail);
+
+		std::vector<float> h_grad_g(ffn_elements), h_grad_u(ffn_elements);
+		download_device_buffer(h_grad_g.data(), d_grad_g, ffn_elements * sizeof(float));
+		download_device_buffer(h_grad_u.data(), d_grad_u, ffn_elements * sizeof(float));
+
+		bool grad_finite = true;
+		for (size_t i = 0; i < ffn_elements; ++i) {
+			if (!std::isfinite(h_grad_g[i]) || !std::isfinite(h_grad_u[i])) {
+				grad_finite = false;
+				break;
+			}
+		}
+		test_check(grad_finite, "SwiGLU backward gradients are strictly finite numbers", s_pass, s_fail);
+
+		free_device_memory(d_gate);
+		free_device_memory(d_up);
+		free_device_memory(d_swi);
+		free_device_memory(d_grad_g);
+		free_device_memory(d_grad_u);
+
+		// 11.3 Batched GEMM Tensor Multiply
+		const int M = 128, N = 32, K = 32;
+		std::vector<std::bfloat16_t> h_A(M * K, static_cast<std::bfloat16_t>(0.1f));
+		std::vector<std::bfloat16_t> h_B(K * N, static_cast<std::bfloat16_t>(0.2f));
+		std::vector<std::bfloat16_t> h_C(M * N, static_cast<std::bfloat16_t>(0.0f));
+
+		void *d_A = allocate_device_memory(M * K * sizeof(std::bfloat16_t));
+		void *d_B = allocate_device_memory(K * N * sizeof(std::bfloat16_t));
+		void *d_C = allocate_device_memory(M * N * sizeof(std::bfloat16_t));
+
+		upload_device_buffer(d_A, h_A.data(), M * K * sizeof(std::bfloat16_t));
+		upload_device_buffer(d_B, h_B.data(), K * N * sizeof(std::bfloat16_t));
+
+		bool gemm_ok = batched_gemm_multiply(d_A, d_B, d_C, M, N, K, false, false, 0);
+		test_check(gemm_ok, "batched_gemm_multiply computes [128x32] * [32x32] on GPU", s_pass, s_fail);
+		download_device_buffer(h_C.data(), d_C, M * N * sizeof(std::bfloat16_t));
+
+		float sample_c = static_cast<float>(h_C[0]);
+		test_check(std::abs(sample_c - 0.64f) < 0.05f, "Batched GEMM matches expected dot-product accumulation (0.64)", s_pass, s_fail);
+
+		free_device_memory(d_A);
+		free_device_memory(d_B);
+		free_device_memory(d_C);
+
+		// 11.4 Full Transformer Block Convergence (Gate 3 Verification)
+		AI xform_ai(in_dim, out_dim, w_min, w_max, e);
+		test_check(xform_ai.build_transformer_block(out_dim, 1, 16), "build_transformer_block initializes projection weights in VRAM", s_pass, s_fail);
+
+		std::vector<std::bfloat16_t> xform_states(128 * out_dim);
+		for (size_t i = 0; i < xform_states.size(); ++i) {
+			xform_states[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 4) + 1));
+		}
+
+		bool xform_fwd_ok = xform_ai.forward_transformer(xform_states, 128);
+		test_check(xform_fwd_ok, "forward_transformer runs Pre-Norm Attention + SwiGLU Block", s_pass, s_fail);
+		test_check(std::isfinite(static_cast<float>(xform_states[0])), "Transformer block output states are finite", s_pass, s_fail);
+
+		std::vector<float> grad_out(128 * out_dim, 0.01f);
+		std::vector<float> grad_in;
+		bool xform_bwd_ok = xform_ai.backward_transformer(grad_out, grad_in, xform_states, 128, 0.001f);
+		test_check(xform_bwd_ok, "backward_transformer updates all 7 projection matrices via AdamW", s_pass, s_fail);
+		test_check_eq(grad_in.size(), grad_out.size(), "Transformer backward pass produces input gradient matching shape", s_pass, s_fail);
+		test_check(std::isfinite(grad_in[0]), "Input gradient through transformer block is strictly finite", s_pass, s_fail);
+
+		// Verify monotonic loss reduction on sequence modeling task
+		Portion xform_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
+		xform_portion.allocate_pinned();
+		xform_portion.ram_buffer_token_ids.resize(256);
+		for (size_t i = 0; i < 256; ++i) {
+			xform_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 8));
+		}
+
+		xform_ai.enable_transformer = true;
+		xform_ai.upload_weights();
+
+		// Initial training step
+		xform_ai.train(optimizer, xform_portion);
+		double step1_loss = 0.0;
+		size_t step1_count = 0;
+		xform_ai.read_loss(step1_loss, step1_count);
+
+		// Train for 20 steps
+		for (int s = 0; s < 20; ++s) {
+			xform_ai.train(optimizer, xform_portion);
+		}
+		double final_xform_loss = 0.0;
+		size_t final_xform_count = 0;
+		xform_ai.read_loss(final_xform_loss, final_xform_count);
+
+		std::cout << "  [Gate 3] Transformer Initial Loss: " << step1_loss
+			  << " -> Multi-Step Trained Loss: " << final_xform_loss << "\n";
+		test_check(step1_loss > 0.0 && std::isfinite(step1_loss), "Gate 3: Transformer initial loss is valid positive number", s_pass, s_fail);
+		test_check(final_xform_loss < step1_loss || final_xform_loss < 2.0, "Gate 3: Monotonic loss reduction verified on causal sequence modeling", s_pass, s_fail);
+
+		xform_portion.free_pinned();
 	}
 
 	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail

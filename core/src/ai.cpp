@@ -714,3 +714,73 @@ bool AI::generate(const std::string& prompt,
 
 	return true;
 }
+
+
+bool AI::build_transformer_block(size_t hidden_dim, size_t heads, size_t ffn_dim) {
+	if (hidden_dim == 0 || heads == 0 || ffn_dim == 0)
+		return false;
+	this->num_heads = heads;
+	this->ffn_dimension = ffn_dim;
+	this->enable_transformer = true;
+
+	return allocate_transformer_weights(&gpu_weights, hidden_dim, ffn_dim);
+}
+
+bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length) {
+	if (hidden_states.empty() || sequence_length == 0 || gpu_weights.d_query_weights == nullptr)
+		return false;
+	size_t hidden_dim = hidden_states.size() / sequence_length;
+
+	size_t bytes = hidden_states.size() * sizeof(std::bfloat16_t);
+	void* d_temp = allocate_device_memory(bytes);
+	if (!d_temp)
+		return false;
+	upload_device_buffer(d_temp, hidden_states.data(), bytes);
+
+	bool ok = transformer_forward_block(d_temp, &gpu_weights, &gpu_activations, sequence_length,
+					    hidden_dim, num_heads, ffn_dimension, 0);
+	if (ok) {
+		download_device_buffer(hidden_states.data(), d_temp, bytes);
+	}
+	free_device_memory(d_temp);
+	return ok;
+}
+
+bool AI::backward_transformer(const std::vector<float>& grad_output,
+			      std::vector<float>& grad_input,
+			      const std::vector<std::bfloat16_t>& hidden_states,
+			      size_t sequence_length,
+			      float learning_rate) {
+	if (grad_output.empty() || sequence_length == 0 || gpu_weights.d_query_weights == nullptr)
+		return false;
+	size_t hidden_dim = grad_output.size() / sequence_length;
+	grad_input.resize(grad_output.size());
+
+	size_t f_bytes = grad_output.size() * sizeof(float);
+	size_t bf_bytes = hidden_states.size() * sizeof(std::bfloat16_t);
+
+	void* d_grad_out = allocate_device_memory(f_bytes);
+	void* d_grad_in = allocate_device_memory(f_bytes);
+	void* d_hidden = allocate_device_memory(bf_bytes);
+
+	if (!d_grad_out || !d_grad_in || !d_hidden) {
+		if (d_grad_out) free_device_memory(d_grad_out);
+		if (d_grad_in) free_device_memory(d_grad_in);
+		if (d_hidden) free_device_memory(d_hidden);
+		return false;
+	}
+
+	upload_device_buffer(d_grad_out, grad_output.data(), f_bytes);
+	upload_device_buffer(d_hidden, hidden_states.data(), bf_bytes);
+
+	bool ok = transformer_backward_block(d_grad_out, d_grad_in, d_hidden, &gpu_weights,
+					     &gpu_activations, sequence_length, hidden_dim,
+					     num_heads, ffn_dimension, learning_rate, 0);
+	if (ok) {
+		download_device_buffer(grad_input.data(), d_grad_in, f_bytes);
+	}
+	free_device_memory(d_grad_out);
+	free_device_memory(d_grad_in);
+	free_device_memory(d_hidden);
+	return ok;
+}

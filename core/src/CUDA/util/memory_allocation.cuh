@@ -18,6 +18,12 @@ CUDA_API bool download_embeddings(float* h_embeddings, const GpuEmbeddings* gpu_
 CUDA_API void* pinned_alloc(size_t bytes);
 CUDA_API void pinned_free(void* ptr);
 
+CUDA_API void* allocate_device_memory(size_t bytes);
+CUDA_API void free_device_memory(void* ptr);
+CUDA_API bool upload_device_buffer(void* dst, const void* src, size_t bytes);
+CUDA_API bool download_device_buffer(void* dst, const void* src, size_t bytes);
+CUDA_API bool allocate_transformer_weights(GpuWeights* gpu, size_t hidden_dim, size_t ffn_dim);
+
 #ifdef __cplusplus
 }
 #endif

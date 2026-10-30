@@ -235,8 +235,8 @@ It formally locks the verified hardware substrate and mathematical foundation, i
 | :---: | :--- | :--- | :--- | :---: |
 | **0** | **Foundations Locked** | 314/314 automated unit & stress tests passing (100% Green) | `mingw32-make test` (`test.exe --test`) | **[PASSED]** |
 | **1** | **Multi-Token Streaming & Sampling** | $>50\text{ tokens/sec}$; $T > 0$ produces diverse, coherent text without `<UNK>` saturation | Interactive CLI streaming in `main.cpp` & deterministic seed tests in `test_inference.cpp` | **[PASSED]** |
-| **2** | **Zero Runtime Syncs & Allocations** | Exactly $0$ calls to `cudaMalloc` or `cudaDeviceSynchronize` during active loops | Code audit of `upload.cu`/`download.cu` & Nsight Systems timeline trace | **[NEXT]** |
-| **3** | **Transformer Block Convergence** | Monotonic loss reduction on causal multi-head sequence modeling; Tensor Core backward GEMM active | Multi-step convergence suite in `test_ai.cpp` | **[PENDING]** |
-| **4** | **Zero KV Fragmentation** | $100\%$ block reuse across multi-turn prompts via COW prefix sharing | PagedAttention block allocation unit tests | **[PENDING]** |
+| **2** | **Zero Runtime Syncs & Allocations** | Exactly $0$ calls to `cudaMalloc` or `cudaDeviceSynchronize` during active loops | Code audit of `upload.cu`/`download.cu` & Nsight Systems timeline trace | **[PASSED]** |
+| **3** | **Transformer Block Convergence** | Monotonic loss reduction on causal multi-head sequence modeling; Tensor Core backward GEMM active | Multi-step convergence suite in `test_ai.cpp` | **[PASSED]** |
+| **4** | **Zero KV Fragmentation** | $100\%$ block reuse across multi-turn prompts via COW prefix sharing | PagedAttention block allocation unit tests | **[NEXT]** |
 | **5** | **Sub-Microsecond Graph Dispatch** | $<0.05\text{ ms}$ host launch latency per full step; automated tape backprop matches manual gradients | `cudaEventElapsedTime` profiling & autograd parity tests | **[PENDING]** |
 | **6** | **MoE Routing & Multimodal Output** | Top-2 expert activation verified; valid `.bmp` and `.wav` files reconstructed from token streams | Router load-balance test & round-trip codec verification in `test_decompressor.cpp` | **[PENDING]** |

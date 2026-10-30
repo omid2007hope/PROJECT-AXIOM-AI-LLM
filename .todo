@@ -91,26 +91,26 @@
 
 ---
 
-## [ ] Phase 3: Multi-Head Self-Attention (MHA / GQA) & Transformer Blocks [NEXT]
+## [x] Phase 3: Multi-Head Self-Attention (MHA / GQA) & Transformer Blocks [COMPLETED]
 
-- [ ] **3.1 Batched Tensor Core Projections & Backward Pass Upgrade** (`core/src/CUDA/kernel/backward_pass.cu`)
-  - [ ] Project hidden states into Query, Key, Value tensors via batched CUTLASS v4.8.0 GEMMs in `__nv_bfloat16` ($Q = X W_Q, K = X W_K, V = X W_V$)
-  - [ ] Replace memory-bound Rank-1 outer product kernel ($M = 1$) with batched CUTLASS GEMM backward passes
-  - [ ] Enable full sequence/batch dimension saturation across Ada Lovelace Tensor Cores
-- [ ] **3.2 Fused Scaled Dot-Product Attention (SDPA) & Causal Masking** (`core/src/CUDA/kernel/forward_pass.cu`)
-  - [ ] Implement fused FlashAttention-style CUDA kernel: $\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{Q K^T}{\sqrt{d_{\text{head}}}} + M\right) V$
-  - [ ] Implement causal masking ($M_{i, j} = 0$ for $j \le i$, $-\infty$ for $j > i$) to prevent future token leakage
-- [ ] **3.3 Transformer Block Composition & SwiGLU FFN**
-  - [ ] Pre-Norm Residual Stream: $X_{\text{mid}} = X + \text{Attention}(\text{RMSNorm}(X))$
-  - [ ] SwiGLU Feed-Forward Network: $\text{FFN}(x) = (\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$
-  - [ ] Block Output: $X_{\text{out}} = X_{\text{mid}} + \text{FFN}(\text{RMSNorm}(X_{\text{mid}}))$
-- [ ] **Gate 3 Verification:**
-  - [ ] Monotonic cross-entropy loss reduction on causal sequence modeling benchmarks
-  - [ ] Tensor Core backward GEMMs active and verified in `test_ai.cpp`
+- [x] **3.1 Batched Tensor Core Projections & Backward Pass Upgrade** (`core/src/CUDA/kernel/backward_pass.cu`)
+  - [x] Project hidden states into Query, Key, Value tensors via batched CUTLASS v4.8.0 GEMMs in `__nv_bfloat16` ($Q = X W_Q, K = X W_K, V = X W_V$)
+  - [x] Replace memory-bound Rank-1 outer product kernel ($M = 1$) with batched CUTLASS GEMM backward passes
+  - [x] Enable full sequence/batch dimension saturation across Ada Lovelace Tensor Cores
+- [x] **3.2 Fused Scaled Dot-Product Attention (SDPA) & Causal Masking** (`core/src/CUDA/kernel/forward_pass.cu`)
+  - [x] Implement fused FlashAttention-style CUDA kernel: $\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{Q K^T}{\sqrt{d_{\text{head}}}} + M\right) V$
+  - [x] Implement causal masking ($M_{i, j} = 0$ for $j \le i$, $-\infty$ for $j > i$) to prevent future token leakage
+- [x] **3.3 Transformer Block Composition & SwiGLU FFN**
+  - [x] Pre-Norm Residual Stream: $X_{\text{mid}} = X + \text{Attention}(\text{RMSNorm}(X))$
+  - [x] SwiGLU Feed-Forward Network: $\text{FFN}(x) = (\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$
+  - [x] Block Output: $X_{\text{out}} = X_{\text{mid}} + \text{FFN}(\text{RMSNorm}(X_{\text{mid}}))$
+- [x] **Gate 3 Verification:**
+  - [x] Monotonic cross-entropy loss reduction on causal sequence modeling benchmarks
+  - [x] Tensor Core backward GEMMs active and verified in `test_ai.cpp`
 
 ---
 
-## [ ] Phase 4: PagedAttention KV-Cache & Prefix State Management [PENDING]
+## [ ] Phase 4: PagedAttention KV-Cache & Prefix State Management [NEXT]
 
 - [ ] **4.1 Fixed-Size Physical KV Blocks**
   - [ ] Partition VRAM Key and Value caches into uniform physical pages (16 tokens per block)
