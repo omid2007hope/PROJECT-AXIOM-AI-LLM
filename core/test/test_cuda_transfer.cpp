@@ -421,6 +421,30 @@ bool test_cuda_transfer() {
 	std::cout << "\n[8] Learnable Embeddings Gather, Scatter & AdamW\n";
 	test_learnable_embeddings_and_adamw();
 
+	std::cout << "\n[9] BFC Caching Allocator & Non-Blocking Telemetry\n";
+	void* block_a = allocate_vram(1024, nullptr);
+	void* block_b = allocate_vram(2048, nullptr);
+	void* block_c = allocate_vram(512, nullptr);
+	check(block_a != nullptr, "BFC Allocator allocates block A (1024 bytes)");
+	check(block_b != nullptr, "BFC Allocator allocates block B (2048 bytes)");
+	check(block_c != nullptr, "BFC Allocator allocates block C (512 bytes)");
+	check(is_vram_allocated(block_a), "Block A is tracked as allocated in VRAM");
+	check(is_vram_allocated(block_b), "Block B is tracked as allocated in VRAM");
+	free_vram(block_b, nullptr);
+	check(!is_vram_allocated(block_b), "Block B freed successfully in BFC arena");
+	free_vram(block_a, nullptr);
+	check(!is_vram_allocated(block_a), "Block A freed and coalesced with neighbor");
+	free_vram(block_c, nullptr);
+	check(!is_vram_allocated(block_c), "Block C freed and coalesced");
+
+	GpuActivations test_act {};
+	float polled_loss = 0.0f;
+	bool telemetry_ready = false;
+	bool poll_ok = poll_loss_telemetry(&test_act, &polled_loss, &telemetry_ready);
+	check(poll_ok, "poll_loss_telemetry executes non-blocking query without device stall");
+	check(telemetry_ready, "poll_loss_telemetry returns ready when no pending loss");
+	free_gpu_activations(&test_act);
+
 	std::cout << "=== CUDA Transfer Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";
 	int fails = s_fail;

@@ -1,6 +1,7 @@
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
 
+#include "../util/caching_allocator.cuh"
 #include "../util/cuda_utils.cuh"
 #include "upload.cuh"
 
@@ -15,19 +16,8 @@ extern "C" CUDA_API bool upload_to_gpu(const void* h_context,
 		return false;
 	}
 
-	// ── Context Window (X) — Allocate both buffers if size changed ──────────────
+	// ── Stream and Event Initialization ─────────────────────────────────────────
 	for (size_t i = 0; i < gpu->context_ptr; ++i) {
-		if (gpu->context_elements != context_elements) {
-			if (gpu->d_context_window[i]) {
-				if (!CUDA_CHECK(cudaFree(gpu->d_context_window[i])))
-					return false;
-				gpu->d_context_window[i] = nullptr;
-			}
-			if (!CUDA_CHECK(cudaMalloc(&gpu->d_context_window[i],
-						   context_elements * sizeof(__nv_bfloat16))))
-				return false;
-		}
-
 		if (gpu->stream[i] == nullptr) {
 			CUDA_CHECK(cudaStreamCreateWithFlags((cudaStream_t*)&gpu->stream[i],
 							     cudaStreamNonBlocking));
@@ -39,7 +29,21 @@ extern "C" CUDA_API bool upload_to_gpu(const void* h_context,
 				return false;
 		}
 	}
-	gpu->context_elements = context_elements;
+
+	// ── Context Window (X) — Userspace BFC Caching Allocator & Stream Memory Pool
+	if (gpu->context_elements != context_elements || !gpu->d_context_window[buffer_index]) {
+		for (size_t i = 0; i < gpu->context_ptr; ++i) {
+			if (gpu->d_context_window[i]) {
+				free_vram(gpu->d_context_window[i], gpu->stream[i]);
+				gpu->d_context_window[i] = nullptr;
+			}
+			gpu->d_context_window[i] =
+				allocate_vram(context_elements * sizeof(__nv_bfloat16), gpu->stream[i]);
+			if (!gpu->d_context_window[i])
+				return false;
+		}
+		gpu->context_elements = context_elements;
+	}
 	gpu->token_ids_active[buffer_index] = false; // float context: nothing to gather
 
 	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_context_window[buffer_index],
@@ -49,20 +53,20 @@ extern "C" CUDA_API bool upload_to_gpu(const void* h_context,
 					(cudaStream_t)gpu->stream[buffer_index])))
 		return false;
 
-	// ── Target (Y) — Allocate both buffers if size changed ────────────────────
-	for (size_t i = 0; i < gpu->target_ptr; ++i) {
-		if (gpu->target_elements != target_elements) {
+	// ── Target (Y) — Userspace BFC Caching Allocator & Stream Memory Pool ───────
+	if (gpu->target_elements != target_elements || !gpu->d_target[buffer_index]) {
+		for (size_t i = 0; i < gpu->target_ptr; ++i) {
 			if (gpu->d_target[i]) {
-				if (!CUDA_CHECK(cudaFree(gpu->d_target[i])))
-					return false;
+				free_vram(gpu->d_target[i], gpu->stream[i]);
 				gpu->d_target[i] = nullptr;
 			}
-			if (!CUDA_CHECK(cudaMalloc(&gpu->d_target[i],
-						   target_elements * sizeof(__nv_bfloat16))))
+			gpu->d_target[i] =
+				allocate_vram(target_elements * sizeof(__nv_bfloat16), gpu->stream[i]);
+			if (!gpu->d_target[i])
 				return false;
 		}
+		gpu->target_elements = target_elements;
 	}
-	gpu->target_elements = target_elements;
 
 	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_target[buffer_index],
 					h_target,
@@ -85,19 +89,8 @@ extern "C" CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
 		return false;
 	}
 
-	// ── Token IDs — Allocate both buffers if size changed ───────────────────────
+	// ── Stream and Event Initialization ─────────────────────────────────────────
 	for (size_t i = 0; i < gpu->context_ptr; ++i) {
-		if (gpu->token_count != token_count) {
-			if (gpu->d_token_ids[i]) {
-				if (!CUDA_CHECK(cudaFree(gpu->d_token_ids[i])))
-					return false;
-				gpu->d_token_ids[i] = nullptr;
-			}
-			if (!CUDA_CHECK(cudaMalloc(&gpu->d_token_ids[i],
-						   token_count * sizeof(uint32_t))))
-				return false;
-		}
-
 		if (gpu->stream[i] == nullptr) {
 			CUDA_CHECK(cudaStreamCreateWithFlags((cudaStream_t*)&gpu->stream[i],
 							     cudaStreamNonBlocking));
@@ -109,7 +102,21 @@ extern "C" CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
 				return false;
 		}
 	}
-	gpu->token_count = token_count;
+
+	// ── Token IDs — Userspace BFC Caching Allocator & Stream Memory Pool ────────
+	if (gpu->token_count != token_count || !gpu->d_token_ids[buffer_index]) {
+		for (size_t i = 0; i < gpu->context_ptr; ++i) {
+			if (gpu->d_token_ids[i]) {
+				free_vram(gpu->d_token_ids[i], gpu->stream[i]);
+				gpu->d_token_ids[i] = nullptr;
+			}
+			gpu->d_token_ids[i] =
+				allocate_vram(token_count * sizeof(uint32_t), gpu->stream[i]);
+			if (!gpu->d_token_ids[i])
+				return false;
+		}
+		gpu->token_count = token_count;
+	}
 	gpu->token_ids_active[buffer_index] = true;
 
 	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_token_ids[buffer_index],
@@ -119,20 +126,20 @@ extern "C" CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
 					(cudaStream_t)gpu->stream[buffer_index])))
 		return false;
 
-	// ── Target (Y) — Allocate both buffers if size changed ────────────────────
-	for (size_t i = 0; i < gpu->target_ptr; ++i) {
-		if (gpu->target_elements != target_elements) {
+	// ── Target (Y) — Userspace BFC Caching Allocator & Stream Memory Pool ───────
+	if (gpu->target_elements != target_elements || !gpu->d_target[buffer_index]) {
+		for (size_t i = 0; i < gpu->target_ptr; ++i) {
 			if (gpu->d_target[i]) {
-				if (!CUDA_CHECK(cudaFree(gpu->d_target[i])))
-					return false;
+				free_vram(gpu->d_target[i], gpu->stream[i]);
 				gpu->d_target[i] = nullptr;
 			}
-			if (!CUDA_CHECK(cudaMalloc(&gpu->d_target[i],
-						   target_elements * sizeof(__nv_bfloat16))))
+			gpu->d_target[i] =
+				allocate_vram(target_elements * sizeof(__nv_bfloat16), gpu->stream[i]);
+			if (!gpu->d_target[i])
 				return false;
 		}
+		gpu->target_elements = target_elements;
 	}
-	gpu->target_elements = target_elements;
 
 	if (!CUDA_CHECK(cudaMemcpyAsync(gpu->d_target[buffer_index],
 					h_target,
@@ -196,6 +203,7 @@ extern "C" CUDA_API bool upload_ai_weights(const float* h_weights,
 
 	int threads = 256;
 	int blocks = static_cast<int>((weight_elements + threads - 1) / threads);
+	cudaGetLastError();
 	float_to_bf16_kernel<<<blocks, threads>>>(static_cast<const float*>(gpu->d_weights_master),
 						  static_cast<__nv_bfloat16*>(gpu->d_weights),
 						  weight_elements);
@@ -226,6 +234,7 @@ extern "C" CUDA_API bool upload_ai_weights(const float* h_weights,
 		return false;
 
 	blocks = static_cast<int>((bias_elements + threads - 1) / threads);
+	cudaGetLastError();
 	float_to_bf16_kernel<<<blocks, threads>>>(static_cast<const float*>(gpu->d_bias_master),
 						  static_cast<__nv_bfloat16*>(gpu->d_bias),
 						  bias_elements);

@@ -18,6 +18,9 @@ CUDA_API bool download_from_gpu(void* h_context,
 // 0.5 * (y - t)^2 over every training step since the previous call.
 CUDA_API bool download_loss(GpuActivations* gpu_activations, float* h_loss_sum);
 
+// Non-blocking query of the loss accumulator into pinned host memory.
+CUDA_API bool poll_loss_telemetry(GpuActivations* gpu_activations, float* h_loss_sum, bool* is_ready);
+
 // Copies the latest forward-pass output (bfloat16) to the host.
 CUDA_API bool download_output(const GpuActivations* gpu_activations,
 			      void* h_output,

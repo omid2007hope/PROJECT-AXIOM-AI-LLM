@@ -1,6 +1,7 @@
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
 
+#include "../util/caching_allocator.cuh"
 #include "../util/cuda_utils.cuh"
 #include "backward_pass.cuh"
 
@@ -280,10 +281,12 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 	if (use_adamw && (!gpu_weights->d_weights_m || !gpu_weights->d_weights_v)) {
 		size_t w_elems = input_dim * output_dim;
 		size_t b_elems = output_dim;
-		if (CUDA_CHECK(cudaMalloc(&gpu_weights->d_weights_m, w_elems * sizeof(float))) &&
-		    CUDA_CHECK(cudaMalloc(&gpu_weights->d_weights_v, w_elems * sizeof(float))) &&
-		    CUDA_CHECK(cudaMalloc(&gpu_weights->d_bias_m, b_elems * sizeof(float))) &&
-		    CUDA_CHECK(cudaMalloc(&gpu_weights->d_bias_v, b_elems * sizeof(float)))) {
+		gpu_weights->d_weights_m = allocate_vram(w_elems * sizeof(float), stream);
+		gpu_weights->d_weights_v = allocate_vram(w_elems * sizeof(float), stream);
+		gpu_weights->d_bias_m = allocate_vram(b_elems * sizeof(float), stream);
+		gpu_weights->d_bias_v = allocate_vram(b_elems * sizeof(float), stream);
+		if (gpu_weights->d_weights_m && gpu_weights->d_weights_v &&
+		    gpu_weights->d_bias_m && gpu_weights->d_bias_v) {
 			cudaMemsetAsync(gpu_weights->d_weights_m, 0, w_elems * sizeof(float), stream);
 			cudaMemsetAsync(gpu_weights->d_weights_v, 0, w_elems * sizeof(float), stream);
 			cudaMemsetAsync(gpu_weights->d_bias_m, 0, b_elems * sizeof(float), stream);
@@ -296,7 +299,8 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 	// Milestone 3: Lazy allocation of dz gradient buffer
 	GpuActivations* non_const_act = const_cast<GpuActivations*>(gpu_activations);
 	if (!non_const_act->d_dz) {
-		if (!CUDA_CHECK(cudaMalloc(&non_const_act->d_dz, output_dim * sizeof(float))))
+		non_const_act->d_dz = allocate_vram(output_dim * sizeof(float), stream);
+		if (!non_const_act->d_dz)
 			return false;
 	}
 
@@ -326,6 +330,16 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 
 	if (!CUDA_CHECK(cudaGetLastError()))
 		return false;
+
+	GpuActivations* non_const_act_event = const_cast<GpuActivations*>(gpu_activations);
+	if (!non_const_act_event->loss_event) {
+		cudaEventCreateWithFlags(
+			(cudaEvent_t*)&non_const_act_event->loss_event,
+			cudaEventDisableTiming);
+	}
+	if (non_const_act_event->loss_event) {
+		cudaEventRecord((cudaEvent_t)non_const_act_event->loss_event, stream);
+	}
 
 	Grid grid(input_dim * output_dim);
 

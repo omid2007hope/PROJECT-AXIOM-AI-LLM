@@ -7,6 +7,7 @@
 #include <random>
 
 #include "cuda_utils.cuh"
+#include "caching_allocator.cuh"
 #include "memory_allocation.cuh"
 
 __global__ static void float_to_bf16_array_kernel(const float* __restrict__ src,
@@ -23,15 +24,15 @@ extern "C" CUDA_API void free_gpu(GpuPortion* gpu) {
 		return;
 	for (size_t i = 0; i < gpu->context_ptr; ++i) {
 		if (gpu->d_context_window[i]) {
-			cudaFree(gpu->d_context_window[i]);
+			free_vram(gpu->d_context_window[i], gpu->stream[i]);
 			gpu->d_context_window[i] = nullptr;
 		}
 		if (gpu->d_token_ids[i]) {
-			cudaFree(gpu->d_token_ids[i]);
+			free_vram(gpu->d_token_ids[i], gpu->stream[i]);
 			gpu->d_token_ids[i] = nullptr;
 		}
 		if (gpu->d_dx[i]) {
-			cudaFree(gpu->d_dx[i]);
+			free_vram(gpu->d_dx[i], gpu->stream[i]);
 			gpu->d_dx[i] = nullptr;
 		}
 	}
@@ -42,7 +43,7 @@ extern "C" CUDA_API void free_gpu(GpuPortion* gpu) {
 
 	for (size_t i = 0; i < gpu->target_ptr; ++i) {
 		if (gpu->d_target[i]) {
-			cudaFree(gpu->d_target[i]);
+			free_vram(gpu->d_target[i], gpu->stream[i]);
 			gpu->d_target[i] = nullptr;
 		}
 	}
@@ -213,29 +214,38 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 	if (!gpu)
 		return;
 	if (gpu->d_output) {
-		cudaFree(gpu->d_output);
+		free_vram(gpu->d_output, 0);
 		gpu->d_output = nullptr;
 	}
 	if (gpu->d_loss) {
-		cudaFree(gpu->d_loss);
+		free_vram(gpu->d_loss, 0);
 		gpu->d_loss = nullptr;
 	}
 	if (gpu->d_inv_rms) {
-		cudaFree(gpu->d_inv_rms);
+		free_vram(gpu->d_inv_rms, 0);
 		gpu->d_inv_rms = nullptr;
 	}
 	if (gpu->d_probs) {
-		cudaFree(gpu->d_probs);
+		free_vram(gpu->d_probs, 0);
 		gpu->d_probs = nullptr;
 	}
 	if (gpu->d_pred_id) {
-		cudaFree(gpu->d_pred_id);
+		free_vram(gpu->d_pred_id, 0);
 		gpu->d_pred_id = nullptr;
 	}
 	if (gpu->d_dz) {
-		cudaFree(gpu->d_dz);
+		free_vram(gpu->d_dz, 0);
 		gpu->d_dz = nullptr;
 	}
+	if (gpu->h_pinned_loss) {
+		pinned_free(gpu->h_pinned_loss);
+		gpu->h_pinned_loss = nullptr;
+	}
+	if (gpu->loss_event) {
+		cudaEventDestroy((cudaEvent_t)gpu->loss_event);
+		gpu->loss_event = nullptr;
+	}
+	gpu->loss_pending = false;
 	gpu->output_elements = 0;
 	gpu->vocab_elements = 0;
 }

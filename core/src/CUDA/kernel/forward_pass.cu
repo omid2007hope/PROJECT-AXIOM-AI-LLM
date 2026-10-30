@@ -1,6 +1,7 @@
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
 
+#include "../util/caching_allocator.cuh"
 #include "../util/cuda_utils.cuh"
 #include "forward_pass.cuh"
 
@@ -349,11 +350,12 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 		if (non_const_gpu->context_elements != input_dim ||
 		    !non_const_gpu->d_context_window[i]) {
 			if (non_const_gpu->d_context_window[i]) {
-				CUDA_CHECK(cudaFree(non_const_gpu->d_context_window[i]));
+				free_vram(non_const_gpu->d_context_window[i], non_const_gpu->stream[i]);
 				non_const_gpu->d_context_window[i] = nullptr;
 			}
-			if (!CUDA_CHECK(cudaMalloc(&non_const_gpu->d_context_window[i],
-						   input_dim * sizeof(__nv_bfloat16))))
+			non_const_gpu->d_context_window[i] =
+				allocate_vram(input_dim * sizeof(__nv_bfloat16), non_const_gpu->stream[i]);
+			if (!non_const_gpu->d_context_window[i])
 				return false;
 		}
 	}
@@ -389,7 +391,8 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 	// Applied only when embeddings are active to protect large context windows from variance explosion
 	if (gpu_embeddings && gpu_embeddings->d_table) {
 		if (!gpu_activations->d_inv_rms) {
-			if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_inv_rms, sizeof(float))))
+			gpu_activations->d_inv_rms = allocate_vram(sizeof(float), stream);
+			if (!gpu_activations->d_inv_rms)
 				return false;
 		}
 		int norm_threads = 1024;
@@ -409,24 +412,25 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 				stream);
 	}
 
-	if (gpu_activations->output_elements != output_dim) {
+	if (gpu_activations->output_elements != output_dim || !gpu_activations->d_output) {
 		if (gpu_activations->d_output) {
-			if (!CUDA_CHECK(cudaFree(gpu_activations->d_output)))
-				return false;
+			free_vram(gpu_activations->d_output, stream);
 			gpu_activations->d_output = nullptr;
 		}
 
-		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_output,
-					   output_dim * sizeof(__nv_bfloat16))))
+		gpu_activations->d_output =
+			allocate_vram(output_dim * sizeof(__nv_bfloat16), stream);
+		if (!gpu_activations->d_output)
 			return false;
 		gpu_activations->output_elements = output_dim;
 	}
 
 	// The loss accumulator is written by the backward pass; it starts at zero
 	if (!gpu_activations->d_loss) {
-		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_loss, sizeof(float))))
+		gpu_activations->d_loss = allocate_vram(sizeof(float), stream);
+		if (!gpu_activations->d_loss)
 			return false;
-		if (!CUDA_CHECK(cudaMemset(gpu_activations->d_loss, 0, sizeof(float))))
+		if (!CUDA_CHECK(cudaMemsetAsync(gpu_activations->d_loss, 0, sizeof(float), stream)))
 			return false;
 	}
 
@@ -502,15 +506,17 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			: output_dim;
 	if (gpu_activations->vocab_elements != vocab_sz || !gpu_activations->d_probs) {
 		if (gpu_activations->d_probs) {
-			CUDA_CHECK(cudaFree(gpu_activations->d_probs));
+			free_vram(gpu_activations->d_probs, stream);
 			gpu_activations->d_probs = nullptr;
 		}
-		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_probs, vocab_sz * sizeof(float))))
+		gpu_activations->d_probs = allocate_vram(vocab_sz * sizeof(float), stream);
+		if (!gpu_activations->d_probs)
 			return false;
 		gpu_activations->vocab_elements = vocab_sz;
 	}
 	if (!gpu_activations->d_pred_id) {
-		if (!CUDA_CHECK(cudaMalloc(&gpu_activations->d_pred_id, sizeof(uint32_t))))
+		gpu_activations->d_pred_id = allocate_vram(sizeof(uint32_t), stream);
+		if (!gpu_activations->d_pred_id)
 			return false;
 	}
 

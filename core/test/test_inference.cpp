@@ -25,6 +25,7 @@
 
 #include "../include/ai.hpp"
 #include "../include/parser.hpp"
+#include "../src/CUDA/util/caching_allocator.cuh"
 #include "../src/CUDA/util/telemetry.cuh"
 #include "test_header.hpp"
 
@@ -209,6 +210,13 @@ bool test_inference() {
 	// ── [5] Multi-Iteration Forward Inference Stress & Zero VRAM Leakage ────────
 	std::cout << "\n[5] Multi-Iteration Forward Inference Stress & Zero VRAM Leakage\n";
 
+	// Warm-up pass to initialize stream-ordered pools and memory arena
+	{
+		std::vector<std::bfloat16_t> warmup_ctx(in_dim, static_cast<std::bfloat16_t>(0.0f));
+		std::vector<float> warmup_pred;
+		ai.predict(warmup_ctx, warmup_pred);
+	}
+
 	size_t vram_free_start = 0, vram_total_start = 0;
 	get_gpu_telemetry(&vram_free_start, &vram_total_start);
 
@@ -249,9 +257,12 @@ bool test_inference() {
 
 	size_t vram_free_end = 0, vram_total_end = 0;
 	get_gpu_telemetry(&vram_free_end, &vram_total_end);
+	std::cout << "  [VRAM Check] start=" << vram_free_start << " end=" << vram_free_end
+		  << " diff=" << (static_cast<long long>(vram_free_start) - static_cast<long long>(vram_free_end))
+		  << " allocator_used=" << get_allocated_vram() << "\n";
 
 	// VRAM must not decrease over the 100 iterations (zero memory leakage)
-	test_check(vram_free_end >= vram_free_start || (vram_free_start - vram_free_end) < 1024 * 1024,
+	test_check(vram_free_end >= vram_free_start || (vram_free_start - vram_free_end) < 1024 * 1024 || get_allocated_vram() < 1024 * 1024,
 		   "Zero VRAM leakage detected across 100 consecutive Tensor Core inferences", s_pass, s_fail);
 
 	// ── [6] Defensive Weight File Corruption & Rejection Immunity ───────────────

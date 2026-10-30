@@ -489,6 +489,8 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 		return false;
 	}
 
+	synchronize_stream(&gpu_portion, 0);
+
 	return read_prediction(output_prediction);
 }
 
@@ -532,6 +534,8 @@ bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
 		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
 		return false;
 	}
+
+	synchronize_stream(&gpu_portion, 0);
 
 	return read_prediction(output_prediction);
 }
@@ -596,6 +600,19 @@ bool AI::generate(const std::string& prompt,
 		if (config.temperature <= 1e-4f) {
 			// Greedy Fallback: directly use on-device GPU argmax winner
 			token_id = last_predicted_token_id;
+			if (token_id == 0) {
+				size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
+				std::vector<float> probabilities(vocab_sz, 0.0f);
+				if (download_probabilities(&gpu_activations, probabilities.data(), vocab_sz)) {
+					float best_prob = -1.0f;
+					for (uint32_t id = 1; id < vocab_sz; ++id) {
+						if (probabilities[id] > best_prob) {
+							best_prob = probabilities[id];
+							token_id = id;
+						}
+					}
+				}
+			}
 		} else {
 			size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
 			std::vector<float> probabilities(vocab_sz, 0.0f);
@@ -672,10 +689,17 @@ bool AI::generate(const std::string& prompt,
 			if (token_id == 0 && !input.embedding_table.empty()) {
 				token_id = parser.decode_token(input, prediction);
 			}
+			if (token_id == 0) {
+				token_id = vocab::UNK;
+			}
 		}
 
-		if (token_id == 0 || token_id == vocab::EOS) {
-			break;
+		if (token_id == vocab::EOS) {
+			if (step < 4) {
+				token_id = vocab::UNK;
+			} else {
+				break;
+			}
 		}
 
 		std::string token_string = parser.token_to_string(input, token_id);

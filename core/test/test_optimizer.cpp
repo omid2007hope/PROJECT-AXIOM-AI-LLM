@@ -160,6 +160,41 @@ bool test_optimizer() {
 	check(portion.context_window_tokens[0] == nullptr, "context_window_tokens freed");
 	check(portion.target_tokens[0] == nullptr, "target_tokens freed");
 
+	// ── [8] Lock-free SPSC Ring Buffer & Async Prefetch ───────────────────────
+	std::cout << "\n[8] Lock-free SPSC Ring Buffer & Async Prefetch\n";
+	{
+		ChunkRingBuffer<4> ring_buffer;
+		check(ring_buffer.can_produce(), "SPSC ring buffer initially can produce");
+		check(!ring_buffer.can_consume(), "SPSC ring buffer initially empty");
+		check_eq(ring_buffer.available_chunks(), size_t {0}, "0 available chunks");
+
+		// Produce 1 chunk
+		ChunkSlot& prod_slot = ring_buffer.get_producer_slot();
+		prod_slot.elements = 100;
+		ring_buffer.push_produced();
+
+		check(ring_buffer.can_consume(), "SPSC ring buffer can consume after push");
+		check_eq(ring_buffer.available_chunks(), size_t {1}, "1 available chunk");
+
+		// Consume chunk
+		ChunkSlot& cons_slot = ring_buffer.get_consumer_slot();
+		check_eq(cons_slot.elements, size_t {100}, "Consumed slot has 100 elements");
+		ring_buffer.pop_consumed();
+
+		check(!ring_buffer.can_consume(), "SPSC ring buffer empty after pop");
+		check_eq(ring_buffer.available_chunks(), size_t {0}, "0 available chunks after pop");
+
+		// Test Optimizer prefetch controls
+		Optimizer prefetch_opt(test_embedded_path(), 0.001f);
+		Portion test_portion(64, TOKEN_DIM, CONTEXT_WINDOW);
+		check(!prefetch_opt.is_prefetch_running(), "Prefetch not running initially");
+		prefetch_opt.start_prefetch(test_portion);
+		check(prefetch_opt.is_prefetch_running(), "Prefetch running after start_prefetch");
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		prefetch_opt.stop_prefetch();
+		check(!prefetch_opt.is_prefetch_running(), "Prefetch stopped after stop_prefetch");
+	}
+
 	std::cout << "\n=== Optimizer Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";
 	int fails = s_fail;

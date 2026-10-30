@@ -2,6 +2,7 @@
 #define include_optimizer
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -9,6 +10,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -173,11 +175,78 @@ struct Portion {
 	}
 };
 
+// -----------------------------------------------------------------------------
+// Lock-free Single-Producer Single-Consumer (SPSC) Chunk Ring Buffer
+// -----------------------------------------------------------------------------
+struct ChunkSlot {
+	std::vector<std::bfloat16_t> tokens {};
+	size_t elements = 0;
+};
+
+template <size_t Capacity = 4>
+class ChunkRingBuffer {
+private:
+	ChunkSlot slots[Capacity];
+	alignas(64) std::atomic<size_t> write_index {0};
+	alignas(64) std::atomic<size_t> read_index {0};
+
+public:
+	bool can_produce() const {
+		size_t w = write_index.load(std::memory_order_relaxed);
+		size_t r = read_index.load(std::memory_order_acquire);
+		return (w - r) < Capacity;
+	}
+
+	bool can_consume() const {
+		size_t w = write_index.load(std::memory_order_acquire);
+		size_t r = read_index.load(std::memory_order_relaxed);
+		return r < w;
+	}
+
+	size_t available_chunks() const {
+		size_t w = write_index.load(std::memory_order_acquire);
+		size_t r = read_index.load(std::memory_order_relaxed);
+		return (w >= r) ? (w - r) : 0;
+	}
+
+	ChunkSlot& get_producer_slot() {
+		size_t w = write_index.load(std::memory_order_relaxed);
+		return slots[w % Capacity];
+	}
+
+	void push_produced() {
+		write_index.fetch_add(1, std::memory_order_release);
+	}
+
+	ChunkSlot& get_consumer_slot() {
+		size_t r = read_index.load(std::memory_order_relaxed);
+		return slots[r % Capacity];
+	}
+
+	void pop_consumed() {
+		read_index.fetch_add(1, std::memory_order_release);
+	}
+
+	void clear() {
+		read_index.store(0, std::memory_order_relaxed);
+		write_index.store(0, std::memory_order_relaxed);
+	}
+};
+
 class Optimizer {
 private:
 	// Kept permanently open: ~8KB OS buffer cost, zero syscall overhead per
 	// chunk.
 	std::ifstream file_stream;
+
+	// Phase 2.3: Lock-free SPSC Ring Buffer & Background Prefetch Producer Thread
+	std::thread prefetch_worker;
+	std::atomic<bool> prefetch_active {false};
+	ChunkRingBuffer<4> chunk_buffer;
+	std::vector<std::bfloat16_t> seam_carry;
+
+	void prefetch_loop(size_t chunk_size, size_t context_size, size_t dim);
+	void read_chunk_into(std::vector<std::bfloat16_t>& buffer, size_t chunk_size, size_t context_size, size_t dim);
 
 public:
 	// Path to the binary embedded data file produced by Parser::embedding().
@@ -191,6 +260,7 @@ public:
 	    : data_path(std::move(data_path)), learning_rate(learning_rate) {}
 
 	~Optimizer() {
+		stop_prefetch();
 		close_stream();
 	}
 
@@ -198,6 +268,15 @@ public:
 		if (file_stream.is_open()) {
 			file_stream.close();
 		}
+	}
+
+	void start_prefetch(const Portion& portion);
+	void stop_prefetch();
+	bool is_prefetch_running() const {
+		return prefetch_active.load(std::memory_order_acquire);
+	}
+	size_t get_prefetched_chunks() const {
+		return chunk_buffer.available_chunks();
 	}
 
 	void disk_to_ram(Portion& portion);

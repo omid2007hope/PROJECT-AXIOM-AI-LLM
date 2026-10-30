@@ -8,6 +8,7 @@
 #include "gpu/upload.cuh"
 #include "kernel/backward_pass.cuh"
 #include "kernel/forward_pass.cuh"
+#include "util/caching_allocator.cuh"
 #include "util/gpu_types.cuh"
 #include "util/memory_allocation.cuh"
 #include "util/telemetry.cuh"

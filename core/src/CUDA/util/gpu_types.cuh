@@ -93,6 +93,11 @@ struct GpuActivations {
 	size_t vocab_elements = 0; // capacity of d_probs
 	void* d_pred_id = nullptr; // device ptr to uint32_t (GPU Argmax winning token ID)
 	void* d_dz = nullptr;	   // device ptr to float (loss gradient dz across output neurons)
+
+	// Phase 2: Non-blocking loss telemetry
+	void* h_pinned_loss = nullptr; // pinned host float slot
+	void* loss_event = nullptr;    // cudaEvent_t for async telemetry
+	bool loss_pending = false;     // async transfer in flight flag
 };
 
 #ifdef BUILDING_CUDA_DLL
