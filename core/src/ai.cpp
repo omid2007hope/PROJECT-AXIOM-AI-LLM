@@ -965,3 +965,66 @@ float AI::benchmark_graph_launch_latency(int iterations) {
 		return -1.0f;
 	return benchmark_graph_latency(&gpu_graph_execution, nullptr, iterations);
 }
+
+bool AI::build_expert_layers(size_t hidden_dim, size_t ffn_dim, size_t num_experts) {
+	if (hidden_dim == 0 || ffn_dim == 0 || num_experts == 0)
+		return false;
+	this->ffn_dimension = ffn_dim;
+	return allocate_expert_weights(&gpu_weights, hidden_dim, ffn_dim, num_experts);
+}
+
+bool AI::forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
+				 size_t sequence_length,
+				 std::vector<int>& routing_histogram) {
+	if (hidden_states.empty() || sequence_length == 0 || gpu_weights.d_router_weights == nullptr)
+		return false;
+
+	size_t hidden_dim = hidden_states.size() / sequence_length;
+	size_t bytes = hidden_states.size() * sizeof(std::bfloat16_t);
+
+	void* d_temp = allocate_device_memory(bytes);
+	if (!d_temp)
+		return false;
+	upload_device_buffer(d_temp, hidden_states.data(), bytes);
+
+	bool ok = ::forward_mixture_experts(d_temp, &gpu_weights, &gpu_activations, sequence_length,
+					    hidden_dim, ffn_dimension, 0);
+	if (ok) {
+		download_device_buffer(hidden_states.data(), d_temp, bytes);
+		routing_histogram.resize(gpu_weights.expert_count, 0);
+		download_expert_counts(&gpu_activations, routing_histogram.data(), gpu_weights.expert_count);
+	}
+	free_device_memory(d_temp);
+	return ok;
+}
+
+bool AI::verify_routing_balance(const std::vector<int>& routing_histogram,
+				size_t total_tokens,
+				size_t num_experts) {
+	if (routing_histogram.size() != num_experts || total_tokens == 0 || num_experts == 0)
+		return false;
+
+	int sum_tokens = 0;
+	int min_tokens = routing_histogram[0];
+	int max_tokens = routing_histogram[0];
+
+	for (int count : routing_histogram) {
+		sum_tokens += count;
+		if (count < min_tokens) min_tokens = count;
+		if (count > max_tokens) max_tokens = count;
+	}
+
+	// Each token is routed to exactly 2 experts
+	if (sum_tokens != static_cast<int>(total_tokens * 2))
+		return false;
+
+	// Zero dead experts allowed
+	if (min_tokens <= 0)
+		return false;
+
+	// Maximum load imbalance ratio must be within reasonable bound (< 3.0x average)
+	float avg_load = static_cast<float>(sum_tokens) / static_cast<float>(num_experts);
+	float max_ratio = static_cast<float>(max_tokens) / avg_load;
+
+	return max_ratio < 3.0f;
+}

@@ -70,6 +70,23 @@ CUDA_API bool transformer_forward_block(void* hidden_states,
 					size_t ffn_dim,
 					void* stream);
 
+// Phase 6: Sparse Mixture of Experts (MoE) Routing & Forward Block
+CUDA_API bool forward_mixture_experts(void* hidden_states,
+				      const GpuWeights* gpu_weights,
+				      GpuActivations* gpu_activations,
+				      size_t sequence_length,
+				      size_t embedding_dim,
+				      size_t ffn_dim,
+				      void* stream);
+
+CUDA_API bool download_expert_counts(const GpuActivations* gpu_activations,
+				     int32_t* h_histogram,
+				     size_t num_experts);
+
+CUDA_API bool reset_expert_histogram(GpuActivations* gpu_activations,
+				     size_t num_experts,
+				     void* stream);
+
 // Phase 4: PagedAttention KV-Cache & Block Management
 CUDA_API bool allocate_paged_cache(GpuPagedCache* cache,
 				   size_t total_blocks,

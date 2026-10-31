@@ -116,6 +116,8 @@ extern "C" CUDA_API void free_gpu_weights(GpuWeights* gpu) {
 		}
 	}
 
+	free_expert_weights(gpu);
+
 	gpu->transformer_dim = 0;
 	gpu->transformer_ffn = 0;
 	gpu->weight_elements = 0;
@@ -272,7 +274,9 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 	void** xform_acts[] = {
 		&gpu->d_query, &gpu->d_key, &gpu->d_value, &gpu->d_attention_output,
 		&gpu->d_intermediate_gate, &gpu->d_intermediate_up, &gpu->d_intermediate_swiglu,
-		&gpu->d_ffn_output, &gpu->d_residual_mid, &gpu->d_residual_out
+		&gpu->d_ffn_output, &gpu->d_residual_mid, &gpu->d_residual_out,
+		&gpu->d_router_logits, &gpu->d_expert_first, &gpu->d_expert_second,
+		&gpu->d_weight_first, &gpu->d_weight_second, &gpu->d_expert_histogram
 	};
 	for (void** ptr : xform_acts) {
 		if (*ptr) {
@@ -388,4 +392,93 @@ extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
 			  ffn_dim * hidden_dim, df_bf16, df_bytes);
 
 	return CUDA_CHECK(cudaGetLastError());
+}
+
+extern "C" CUDA_API bool allocate_expert_weights(GpuWeights* gpu,
+						 size_t hidden_dim,
+						 size_t ffn_dim,
+						 size_t num_experts) {
+	if (!gpu || hidden_dim == 0 || ffn_dim == 0 || num_experts == 0)
+		return false;
+
+	gpu->enable_moe = true;
+	gpu->expert_count = num_experts;
+	gpu->transformer_dim = hidden_dim;
+	gpu->transformer_ffn = ffn_dim;
+
+	size_t router_elements = hidden_dim * num_experts;
+	size_t router_bf16_bytes = router_elements * sizeof(__nv_bfloat16);
+	size_t router_float_bytes = router_elements * sizeof(float);
+
+	size_t gate_elements = num_experts * hidden_dim * ffn_dim;
+	size_t up_elements = num_experts * hidden_dim * ffn_dim;
+	size_t down_elements = num_experts * ffn_dim * hidden_dim;
+
+	size_t gate_bf16 = gate_elements * sizeof(__nv_bfloat16);
+	size_t gate_float = gate_elements * sizeof(float);
+	size_t up_bf16 = up_elements * sizeof(__nv_bfloat16);
+	size_t up_float = up_elements * sizeof(float);
+	size_t down_bf16 = down_elements * sizeof(__nv_bfloat16);
+	size_t down_float = down_elements * sizeof(float);
+
+	std::mt19937 gen(1337);
+	float bound = 1.0f / sqrtf(static_cast<float>(hidden_dim));
+	std::uniform_real_distribution<float> dis(-bound, bound);
+
+	auto allocate_and_init = [&](void** d_w, void** d_master, void** d_m, void** d_v,
+				     size_t elements, size_t bf16_bytes, size_t float_bytes) {
+		cudaMalloc(d_w, bf16_bytes);
+		cudaMalloc(d_master, float_bytes);
+		cudaMalloc(d_m, float_bytes);
+		cudaMalloc(d_v, float_bytes);
+		cudaMemset(*d_m, 0, float_bytes);
+		cudaMemset(*d_v, 0, float_bytes);
+
+		std::vector<float> init_w(elements);
+		for (size_t i = 0; i < elements; ++i) {
+			init_w[i] = dis(gen);
+		}
+		cudaMemcpy(*d_master, init_w.data(), float_bytes, cudaMemcpyHostToDevice);
+
+		int threads = 256;
+		int blocks = static_cast<int>((elements + threads - 1) / threads);
+		float_to_bf16_array_kernel<<<blocks, threads>>>(
+			static_cast<const float*>(*d_master),
+			static_cast<__nv_bfloat16*>(*d_w),
+			elements);
+	};
+
+	allocate_and_init(&gpu->d_router_weights, &gpu->d_router_master, &gpu->d_router_m, &gpu->d_router_v,
+			  router_elements, router_bf16_bytes, router_float_bytes);
+
+	allocate_and_init(&gpu->d_expert_gate, &gpu->d_expert_gate_master, &gpu->d_expert_gate_m, &gpu->d_expert_gate_v,
+			  gate_elements, gate_bf16, gate_float);
+
+	allocate_and_init(&gpu->d_expert_up, &gpu->d_expert_up_master, &gpu->d_expert_up_m, &gpu->d_expert_up_v,
+			  up_elements, up_bf16, up_float);
+
+	allocate_and_init(&gpu->d_expert_down, &gpu->d_expert_down_master, &gpu->d_expert_down_m, &gpu->d_expert_down_v,
+			  down_elements, down_bf16, down_float);
+
+	return CUDA_CHECK(cudaGetLastError());
+}
+
+extern "C" CUDA_API void free_expert_weights(GpuWeights* gpu) {
+	if (!gpu)
+		return;
+
+	void** moe_weights[] = {
+		&gpu->d_router_weights, &gpu->d_router_master, &gpu->d_router_m, &gpu->d_router_v,
+		&gpu->d_expert_gate, &gpu->d_expert_gate_master, &gpu->d_expert_gate_m, &gpu->d_expert_gate_v,
+		&gpu->d_expert_up, &gpu->d_expert_up_master, &gpu->d_expert_up_m, &gpu->d_expert_up_v,
+		&gpu->d_expert_down, &gpu->d_expert_down_master, &gpu->d_expert_down_m, &gpu->d_expert_down_v
+	};
+	for (void** ptr : moe_weights) {
+		if (*ptr) {
+			cudaFree(*ptr);
+			*ptr = nullptr;
+		}
+	}
+	gpu->enable_moe = false;
+	gpu->expert_count = 0;
 }

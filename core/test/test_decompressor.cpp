@@ -8,6 +8,9 @@
 #include "../include/decompressor/decompress_document.hpp"
 #include "../include/decompressor/decompress_image.hpp"
 #include "../include/decompressor/decompress_video.hpp"
+#include "../include/compressor/compress_audio.hpp"
+#include "../include/compressor/compress_image.hpp"
+#include "../include/parser.hpp"
 #include "test_header.hpp"
 
 bool test_decompressor() {
@@ -205,6 +208,85 @@ bool test_decompressor() {
 			test_check(decoded.width > 0 && decoded.height > 0, "Video.mp4 resolution extracted from MP4 atoms", pass_count, fail_count);
 			test_check(!decoded.raw_frames.empty(), "Video.mp4 frame bytes extracted from mdat box", pass_count, fail_count);
 		}
+	}
+
+	// ─── [5] Multimodal Output Codecs (CompressImage & CompressAudio) ────────────
+	std::cout << "\n[5] Multimodal Output Codecs (CompressImage & CompressAudio)\n";
+
+	// 5.1 Image Codec: tokens -> BMP -> DecompressImage bit-accurate roundtrip
+	{
+		int width = 8;
+		int height = 8;
+		std::vector<uint8_t> original_pixels(width * height * 3);
+		for (size_t i = 0; i < original_pixels.size(); ++i) {
+			original_pixels[i] = static_cast<uint8_t>((i * 17 + 31) % 256);
+		}
+
+		// Convert RGB bytes to discrete visual tokens [64,512..64,767]
+		std::vector<uint32_t> visual_tokens = CompressImage::pixels_to_tokens(original_pixels);
+		test_check_eq(visual_tokens.size(), original_pixels.size(), "pixels_to_tokens preserves element count", pass_count, fail_count);
+
+		bool all_tokens_in_vocab = true;
+		for (uint32_t tok : visual_tokens) {
+			if (tok < vocab::VISUAL_START_ID || tok > vocab::VISUAL_END_ID) {
+				all_tokens_in_vocab = false;
+				break;
+			}
+		}
+		test_check(all_tokens_in_vocab, "All visual tokens reside in designated visual range [64512..64767]", pass_count, fail_count);
+
+		std::filesystem::path output_bmp = temp_dir / "encoded_output.bmp";
+		bool encode_ok = CompressImage::tokens_to_bmp(visual_tokens, width, height, output_bmp);
+		test_check(encode_ok, "tokens_to_bmp encodes valid 24-bit uncompressed BMP container", pass_count, fail_count);
+
+		// Read back using DecompressImage and assert 100% bit-accurate pixel match
+		DecodedImage decoded = DecompressImage::decompress_bmp(output_bmp);
+		test_check(decoded.is_valid, "decompress_bmp successfully decodes serialized BMP container", pass_count, fail_count);
+		test_check_eq(decoded.width, width, "Roundtrip image width matches original 8px", pass_count, fail_count);
+		test_check_eq(decoded.height, height, "Roundtrip image height matches original 8px", pass_count, fail_count);
+		test_check_eq(decoded.channels, 3, "Roundtrip image has 3 RGB channels", pass_count, fail_count);
+
+		bool pixels_match = (decoded.pixels == original_pixels);
+		test_check(pixels_match, "Gate 6: Visual token roundtrip achieves 100% bit-accurate pixel reconstruction", pass_count, fail_count);
+	}
+
+	// 5.2 Acoustic Codec: tokens -> WAV -> DecompressAudio bit-accurate roundtrip
+	{
+		int sample_rate = 44100;
+		int channels = 2;
+		int bits_per_sample = 16;
+		size_t sample_count = 256;
+		std::vector<uint8_t> original_pcm(sample_count);
+		for (size_t i = 0; i < sample_count; ++i) {
+			original_pcm[i] = static_cast<uint8_t>((i * 13 + 7) % 256);
+		}
+
+		// Convert linear PCM bytes to discrete acoustic tokens [64,768..65,023]
+		std::vector<uint32_t> acoustic_tokens = CompressAudio::pcm_to_tokens(original_pcm);
+		test_check_eq(acoustic_tokens.size(), original_pcm.size(), "pcm_to_tokens preserves element count", pass_count, fail_count);
+
+		bool all_tokens_in_vocab = true;
+		for (uint32_t tok : acoustic_tokens) {
+			if (tok < vocab::ACOUSTIC_START_ID || tok > vocab::ACOUSTIC_END_ID) {
+				all_tokens_in_vocab = false;
+				break;
+			}
+		}
+		test_check(all_tokens_in_vocab, "All acoustic tokens reside in designated acoustic range [64768..65023]", pass_count, fail_count);
+
+		std::filesystem::path output_wav = temp_dir / "encoded_output.wav";
+		bool encode_ok = CompressAudio::tokens_to_wav(acoustic_tokens, sample_rate, channels, bits_per_sample, output_wav);
+		test_check(encode_ok, "tokens_to_wav encodes valid RIFF/WAVE audio container", pass_count, fail_count);
+
+		// Read back using DecompressAudio and assert 100% bit-accurate PCM sample match
+		DecodedAudio decoded = DecompressAudio::decompress_wav(output_wav);
+		test_check(decoded.is_valid, "decompress_wav successfully decodes serialized WAV container", pass_count, fail_count);
+		test_check_eq(decoded.sample_rate, sample_rate, "Roundtrip audio sample rate matches 44100 Hz", pass_count, fail_count);
+		test_check_eq(decoded.channels, channels, "Roundtrip audio channels match Stereo (2)", pass_count, fail_count);
+		test_check_eq(decoded.bits_per_sample, bits_per_sample, "Roundtrip audio bits per sample matches 16-bit", pass_count, fail_count);
+
+		bool samples_match = (decoded.pcm_bytes == original_pcm);
+		test_check(samples_match, "Gate 6: Acoustic token roundtrip achieves 100% bit-accurate PCM reconstruction", pass_count, fail_count);
 	}
 
 	// Clean up temp directory

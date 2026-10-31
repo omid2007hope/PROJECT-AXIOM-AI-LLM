@@ -23,6 +23,8 @@ CUDA_API void free_device_memory(void* ptr);
 CUDA_API bool upload_device_buffer(void* dst, const void* src, size_t bytes);
 CUDA_API bool download_device_buffer(void* dst, const void* src, size_t bytes);
 CUDA_API bool allocate_transformer_weights(GpuWeights* gpu, size_t hidden_dim, size_t ffn_dim);
+CUDA_API bool allocate_expert_weights(GpuWeights* gpu, size_t hidden_dim, size_t ffn_dim, size_t num_experts);
+CUDA_API void free_expert_weights(GpuWeights* gpu);
 
 #ifdef __cplusplus
 }

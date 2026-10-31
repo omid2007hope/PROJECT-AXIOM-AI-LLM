@@ -177,6 +177,15 @@ public:
 	bool launch_training_graph_step();
 	void free_training_graph_resources();
 	float benchmark_graph_launch_latency(int iterations = 100);
+
+	// Phase 6: Sparse Mixture of Experts (MoE) Routing
+	bool build_expert_layers(size_t hidden_dim, size_t ffn_dim, size_t num_experts = 8);
+	bool forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
+				     size_t sequence_length,
+				     std::vector<int>& routing_histogram);
+	bool verify_routing_balance(const std::vector<int>& routing_histogram,
+				    size_t total_tokens,
+				    size_t num_experts = 8);
 };
 
 #endif

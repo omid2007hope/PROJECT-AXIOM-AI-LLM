@@ -141,18 +141,18 @@
 
 ---
 
-## [ ] Phase 6: Sparse Mixture of Experts (MoE) & Multimodal Output Codecs [NEXT]
+## [x] Phase 6: Sparse Mixture of Experts (MoE) & Multimodal Output Codecs [COMPLETED]
 
-- [ ] **6.1 Sparse Mixture of Experts (MoE) Layers**
-  - [ ] Partition dense SwiGLU FFN layers into $N = 8$ discrete expert weight stacks in contiguous VRAM
-  - [ ] Implement Top-2 gating router: $G(x) = \text{TopK}(\text{Softmax}(x W_g), k=2)$
-  - [ ] Dispatch tokens exclusively to top 2 active experts; idle experts consume zero FLOPs
-- [ ] **6.2 Multimodal Output Codecs** (`core/util/decompressor/` and Compressor Mirrors)
-  - [ ] Visual Codec: Decode discrete visual tokens (`[64,512..64,767]`) to RGB pixel buffers and serialize to valid BMP/MP4 containers
-  - [ ] Acoustic Codec: Decode discrete acoustic tokens (`[64,768..65,023]`) to linear PCM waveforms with valid RIFF `.wav` headers
-- [ ] **Gate 6 Verification:**
-  - [ ] Top-2 expert routing load balancing verified under diverse batches
-  - [ ] Round-trip bit-accurate image (`.bmp`) and audio (`.wav`) reconstructions verified in `test_decom.cpp`
+- [x] **6.1 Sparse Mixture of Experts (MoE) Layers**
+  - [x] Partition dense SwiGLU FFN layers into $N = 8$ discrete expert weight stacks in contiguous VRAM
+  - [x] Implement Top-2 gating router: $G(x) = \text{TopK}(\text{Softmax}(x W_g), k=2)$
+  - [x] Dispatch tokens exclusively to top 2 active experts; idle experts consume zero FLOPs
+- [x] **6.2 Multimodal Output Codecs** (`core/util/decompressor/` and Compressor Mirrors)
+  - [x] Visual Codec: Decode discrete visual tokens (`[64,512..64,767]`) to RGB pixel buffers and serialize to valid BMP/MP4 containers
+  - [x] Acoustic Codec: Decode discrete acoustic tokens (`[64,768..65,023]`) to linear PCM waveforms with valid RIFF `.wav` headers
+- [x] **Gate 6 Verification:**
+  - [x] Top-2 expert routing load balancing verified under diverse batches (all 8 discrete experts active, balanced token distribution)
+  - [x] Round-trip bit-accurate image (`.bmp`) and audio (`.wav`) reconstructions verified in `test_decompressor.cpp`
 
 ---
 
@@ -166,4 +166,4 @@
 | **3** | **Transformer Block Convergence**    | Monotonic loss reduction; Tensor Core backward GEMM           | Convergence suite in `test_ai.cpp`      |  **PASSED** |
 | **4** | **Zero KV Fragmentation**            | 100% block reuse via COW prefix sharing                       | PagedAttention unit tests               |  **PASSED** |
 | **5** | **Sub-Microsecond Graph Dispatch**   | $<0.05\text{ ms}$ launch latency; tape backprop parity        | `cudaEventElapsedTime` profiling        |  **PASSED** |
-| **6** | **MoE Routing & Multimodal Output**  | Top-2 expert routing; valid `.bmp` and `.wav` synthesis       | Router tests & `test_decom.cpp`         |   **NEXT**  |
+| **6** | **MoE Routing & Multimodal Output**  | Top-2 expert routing; valid `.bmp` and `.wav` synthesis       | Router tests & `test_decompressor.cpp`  |  **PASSED** |

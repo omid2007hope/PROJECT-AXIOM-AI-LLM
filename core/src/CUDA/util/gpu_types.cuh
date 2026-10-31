@@ -114,6 +114,29 @@ struct GpuWeights {
 
 	size_t transformer_dim = 0;
 	size_t transformer_ffn = 0;
+
+	// Phase 6: Sparse Mixture of Experts (MoE) Weights
+	bool enable_moe = false;
+	size_t expert_count = 8;
+	void* d_router_weights = nullptr; // device ptr to __nv_bfloat16 (dim * expert_count)
+	void* d_router_master = nullptr;  // device ptr to float (dim * expert_count)
+	void* d_router_m = nullptr;       // device ptr to float (dim * expert_count)
+	void* d_router_v = nullptr;       // device ptr to float (dim * expert_count)
+
+	void* d_expert_gate = nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * ffn_dim)
+	void* d_expert_up = nullptr;   // device ptr to __nv_bfloat16 (expert_count * dim * ffn_dim)
+	void* d_expert_down = nullptr; // device ptr to __nv_bfloat16 (expert_count * ffn_dim * dim)
+
+	void* d_expert_gate_master = nullptr;
+	void* d_expert_up_master = nullptr;
+	void* d_expert_down_master = nullptr;
+
+	void* d_expert_gate_m = nullptr;
+	void* d_expert_gate_v = nullptr;
+	void* d_expert_up_m = nullptr;
+	void* d_expert_up_v = nullptr;
+	void* d_expert_down_m = nullptr;
+	void* d_expert_down_v = nullptr;
 };
 
 // GPU-side activations buffer
@@ -149,6 +172,14 @@ struct GpuActivations {
 	void* d_ffn_output = nullptr;          // device ptr to __nv_bfloat16 (seq * dim)
 	void* d_residual_mid = nullptr;        // device ptr to __nv_bfloat16 (seq * dim)
 	void* d_residual_out = nullptr;        // device ptr to __nv_bfloat16 (seq * dim)
+
+	// Phase 6: Sparse Mixture of Experts Routing State
+	void* d_router_logits = nullptr;    // device ptr to float (seq_len * expert_count)
+	void* d_expert_first = nullptr;     // device ptr to int32_t (seq_len): top-1 expert ID
+	void* d_expert_second = nullptr;    // device ptr to int32_t (seq_len): top-2 expert ID
+	void* d_weight_first = nullptr;     // device ptr to float (seq_len): top-1 normalized weight
+	void* d_weight_second = nullptr;    // device ptr to float (seq_len): top-2 normalized weight
+	void* d_expert_histogram = nullptr; // device ptr to int32_t (expert_count): token load counts
 };
 
 // Phase 4: PagedAttention KV-Cache Physical Page Pool

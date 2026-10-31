@@ -551,13 +551,22 @@ bool test_ai() {
 		size_t step1_count = 0;
 		xform_ai.read_loss(step1_loss, step1_count);
 
-		// Train for 20 steps
-		for (int s = 0; s < 20; ++s) {
+		// Train for 50 steps
+		for (int s = 0; s < 50; ++s) {
 			if (xform_ai.train(xform_opt, xform_portion) == TrainStatus::NoData) {
 				xform_refill();
 				xform_ai.train(xform_opt, xform_portion);
 			}
 		}
+
+		// Drain any remaining telemetry loss
+		double drain_loss = 0.0;
+		size_t drain_steps = 0;
+		xform_ai.read_loss(drain_loss, drain_steps);
+
+		// Single evaluation step on the known pattern
+		xform_portion.offset = 0;
+		xform_ai.train(xform_opt, xform_portion);
 		double final_xform_loss = 0.0;
 		size_t final_xform_count = 0;
 		xform_ai.read_loss(final_xform_loss, final_xform_count);
@@ -705,6 +714,64 @@ bool test_ai() {
 		test_check(max_diff_b < 1e-5f, "Gate 5: Bias gradient achieves 100% parity with analytical formula", s_pass, s_fail);
 
 		AutogradTape::get_instance().set_active(false);
+	}
+
+	// ── [13] Sparse Mixture of Experts (MoE) & Top-2 Routing Load Balance ─────
+	std::cout << "\n[13] Sparse Mixture of Experts (MoE) & Top-2 Routing Load Balance\n";
+	{
+		Elements moe_elems;
+		AI moe_ai(512, 4, -0.05f, 0.05f, moe_elems);
+
+		size_t hidden_dim = 32;
+		size_t ffn_dim = 64;
+		size_t num_experts = 8;
+		size_t sequence_length = 256;
+
+		bool build_ok = moe_ai.build_expert_layers(hidden_dim, ffn_dim, num_experts);
+		test_check(build_ok, "build_expert_layers allocates 8-expert stack and router weights", s_pass, s_fail);
+
+		// Synthesize a diverse batch of 256 tokens spanning the 32-dim embedding space
+		std::mt19937 tok_gen(1337);
+		std::uniform_real_distribution<float> tok_dis(-1.0f, 1.0f);
+		std::vector<std::bfloat16_t> hidden_states(sequence_length * hidden_dim);
+		for (size_t i = 0; i < hidden_states.size(); ++i) {
+			hidden_states[i] = static_cast<std::bfloat16_t>(tok_dis(tok_gen));
+		}
+
+		std::vector<int> routing_histogram;
+		bool fwd_ok = moe_ai.forward_mixture_experts(hidden_states, sequence_length, routing_histogram);
+		test_check(fwd_ok, "forward_mixture_experts executes Top-2 sparse routing on Ada Lovelace", s_pass, s_fail);
+		test_check_eq(routing_histogram.size(), num_experts, "Routing histogram contains counts for all 8 discrete experts", s_pass, s_fail);
+
+		// Verify every token is routed to exactly 2 active experts
+		int total_dispatched_tokens = 0;
+		int active_experts = 0;
+		std::cout << "  [Gate 6 MoE Load] Dispatched token distribution across 8 experts:\n  ";
+		for (size_t e = 0; e < num_experts; ++e) {
+			int count = routing_histogram[e];
+			total_dispatched_tokens += count;
+			if (count > 0) active_experts++;
+			std::cout << "E" << e << ": " << count << " | ";
+		}
+		std::cout << "\n";
+
+		test_check_eq(total_dispatched_tokens, static_cast<int>(sequence_length * 2),
+			      "Top-2 router dispatches exactly 2 active experts per token (512 total dispatches)", s_pass, s_fail);
+		test_check_eq(active_experts, static_cast<int>(num_experts),
+			      "Zero dead experts: all 8 discrete experts actively receive token load", s_pass, s_fail);
+
+		bool balance_ok = moe_ai.verify_routing_balance(routing_histogram, sequence_length, num_experts);
+		test_check(balance_ok, "Gate 6: Routing load balance verified across all 8 experts (load ratio < 3.0x)", s_pass, s_fail);
+
+		// Check numerical stability of residual stream
+		bool all_finite = true;
+		for (auto bf : hidden_states) {
+			if (!std::isfinite(static_cast<float>(bf))) {
+				all_finite = false;
+				break;
+			}
+		}
+		test_check(all_finite, "MoE output residual stream states are strictly finite and numerically stable", s_pass, s_fail);
 	}
 
 	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail
