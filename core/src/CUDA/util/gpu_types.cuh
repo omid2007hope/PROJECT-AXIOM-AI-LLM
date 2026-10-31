@@ -29,6 +29,7 @@ struct GpuPortion {
 	// step's forward pass waits on it, so the shared weights are updated strictly
 	// in order while the PCIe uploads of the two buffers still overlap.
 	void* compute_done[2] = {nullptr, nullptr};
+	bool compute_done_recorded[2] = {false, false};
 
 	// true only while d_token_ids[i] holds the IDs of the step currently uploaded to buffer i
 	bool token_ids_active[2] = {false, false};
@@ -159,6 +160,15 @@ struct GpuPagedCache {
 	size_t block_size = 16;
 	size_t hidden_dimension = 32;
 	size_t num_heads = 4;
+};
+
+// Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
+struct GpuGraphExecution {
+	void* graph = nullptr;      // cudaGraph_t
+	void* graph_exec = nullptr; // cudaGraphExec_t
+	void* stream = nullptr;     // cudaStream_t
+	bool is_instantiated = false;
+	float launch_latency_ms = 0.0f;
 };
 
 #ifdef BUILDING_CUDA_DLL

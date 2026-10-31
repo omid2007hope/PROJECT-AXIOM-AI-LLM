@@ -85,6 +85,7 @@ void AI::reset_weights(Elements& elements) {
 }
 
 AI::~AI() {
+	free_training_graph_resources();
 	free_paged_cache_memory();
 	free_gpu(&gpu_portion);
 	free_gpu_weights(&gpu_weights);
@@ -919,4 +920,48 @@ bool AI::forward_paged_attention(const SequenceContext& sequence,
 		free_device_memory(d_out);
 
 	return ok;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
+// ─────────────────────────────────────────────────────────────────────────────
+
+bool AI::build_training_graph(Optimizer& optimizer, Portion& portion) {
+	if (input_dimension == 0 || output_dimension == 0)
+		return false;
+
+	int buffer_index = portion.buffer_index;
+	synchronize_stream(&gpu_portion, buffer_index);
+	optimizer.load_context_window(portion);
+
+	if (portion.has_token_ids && portion.context_token_ids[buffer_index] != nullptr &&
+	    gpu_embeddings.d_table != nullptr) {
+		upload_tokens_to_gpu(portion.context_token_ids[buffer_index],
+				     portion.context_window_size,
+				     portion.target_tokens[buffer_index],
+				     portion.target_elements,
+				     &gpu_portion,
+				     buffer_index);
+	}
+
+	float lr = optimizer.learning_rate;
+	return capture_training_graph(&gpu_graph_execution, &gpu_portion, &gpu_embeddings,
+				      &gpu_weights, &gpu_activations, input_dimension,
+				      output_dimension, lr, buffer_index);
+}
+
+bool AI::launch_training_graph_step() {
+	if (!gpu_graph_execution.is_instantiated)
+		return false;
+	return launch_training_graph(&gpu_graph_execution, nullptr);
+}
+
+void AI::free_training_graph_resources() {
+	free_training_graph(&gpu_graph_execution);
+}
+
+float AI::benchmark_graph_launch_latency(int iterations) {
+	if (!gpu_graph_execution.is_instantiated)
+		return -1.0f;
+	return benchmark_graph_latency(&gpu_graph_execution, nullptr, iterations);
 }

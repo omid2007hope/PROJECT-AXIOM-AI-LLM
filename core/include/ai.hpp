@@ -97,6 +97,7 @@ public:
 	GpuEmbeddings gpu_embeddings;
 	GpuPagedCache gpu_paged_cache;
 	std::unique_ptr<PagedBlockManager> block_manager;
+	GpuGraphExecution gpu_graph_execution;
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
 	// inside [weight_min, weight_max]
@@ -170,6 +171,12 @@ public:
 				     const std::vector<std::bfloat16_t>& query,
 				     std::vector<std::bfloat16_t>& output,
 				     size_t query_length);
+
+	// Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
+	bool build_training_graph(Optimizer& optimizer, Portion& portion);
+	bool launch_training_graph_step();
+	void free_training_graph_resources();
+	float benchmark_graph_launch_latency(int iterations = 100);
 };
 
 #endif

@@ -409,7 +409,19 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 	}
 
 	// Releases the next step's forward pass (see forward_pass)
-	return CUDA_CHECK(cudaEventRecord((cudaEvent_t)gpu_portion->compute_done[buffer_index], stream));
+	cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
+	if (stream) {
+		cudaError_t cap_err = cudaStreamIsCapturing(stream, &capture_status);
+		if (cap_err != cudaSuccess) {
+			cudaGetLastError();
+			capture_status = cudaStreamCaptureStatusNone;
+		}
+	}
+	if (capture_status == cudaStreamCaptureStatusNone && gpu_portion->compute_done[buffer_index]) {
+		const_cast<GpuPortion*>(gpu_portion)->compute_done_recorded[buffer_index] = true;
+		return CUDA_CHECK(cudaEventRecord((cudaEvent_t)gpu_portion->compute_done[buffer_index], stream));
+	}
+	return true;
 }
 
 extern "C" CUDA_API bool backward_pass(const GpuPortion* gpu_portion,

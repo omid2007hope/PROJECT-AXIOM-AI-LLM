@@ -58,6 +58,7 @@ extern "C" CUDA_API void free_gpu(GpuPortion* gpu) {
 			cudaEventDestroy((cudaEvent_t)gpu->compute_done[i]);
 			gpu->compute_done[i] = nullptr;
 		}
+		gpu->compute_done_recorded[i] = false;
 	}
 }
 

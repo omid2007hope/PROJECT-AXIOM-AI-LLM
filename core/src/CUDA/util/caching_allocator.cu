@@ -114,12 +114,19 @@ public:
 			}
 		}
 
-		// Fallback to stream-ordered asynchronous memory pool
+		// Fallback to stream-ordered asynchronous memory pool or standard cudaMalloc
 		void* async_ptr = nullptr;
 		cudaError_t err = cudaMallocAsync(&async_ptr, aligned_bytes, stream);
 		if (err == cudaSuccess) {
 			return async_ptr;
 		}
+		cudaGetLastError();
+
+		err = cudaMalloc(&async_ptr, aligned_bytes);
+		if (err == cudaSuccess) {
+			return async_ptr;
+		}
+		cudaGetLastError();
 
 		return nullptr;
 	}
@@ -187,6 +194,8 @@ public:
 		cudaError_t free_err = cudaFreeAsync(ptr, stream);
 		if (free_err != cudaSuccess) {
 			cudaGetLastError(); // Clear sticky error if pointer was not from stream pool
+			cudaFree(ptr);
+			cudaGetLastError();
 		}
 	}
 

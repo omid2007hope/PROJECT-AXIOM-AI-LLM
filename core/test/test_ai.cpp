@@ -9,6 +9,7 @@
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
 #include "../include/parser.hpp"
+#include "../include/tensor.hpp"
 #include "test_header.hpp"
 
 bool test_ai() {
@@ -532,10 +533,13 @@ bool test_ai() {
 		// Verify monotonic loss reduction on sequence modeling task
 		Portion xform_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 		xform_portion.allocate_pinned();
-		xform_portion.ram_buffer_token_ids.resize(256);
-		for (size_t i = 0; i < 256; ++i) {
-			xform_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 8));
-		}
+		auto xform_refill = [&]() {
+			xform_portion.ram_buffer_token_ids.resize(4000);
+			for (size_t i = 0; i < 4000; ++i) {
+				xform_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 8));
+			}
+		};
+		xform_refill();
 
 		xform_ai.enable_transformer = true;
 		xform_ai.upload_weights();
@@ -548,7 +552,10 @@ bool test_ai() {
 
 		// Train for 20 steps
 		for (int s = 0; s < 20; ++s) {
-			xform_ai.train(optimizer, xform_portion);
+			if (xform_ai.train(optimizer, xform_portion) == TrainStatus::NoData) {
+				xform_refill();
+				xform_ai.train(optimizer, xform_portion);
+			}
 		}
 		double final_xform_loss = 0.0;
 		size_t final_xform_count = 0;
@@ -560,6 +567,144 @@ bool test_ai() {
 		test_check(final_xform_loss < step1_loss || final_xform_loss < 2.0, "Gate 3: Monotonic loss reduction verified on causal sequence modeling", s_pass, s_fail);
 
 		xform_portion.free_pinned();
+	}
+
+	// ── [12] Zero-Overhead CUDA Graphs, ATen Dispatcher & Autograd Parity ─────
+	std::cout << "\n[12] Zero-Overhead CUDA Graphs, ATen Dispatcher & Autograd Parity\n";
+	{
+		// 12.1 CUDA Graph Capture & Hardware Instantiation
+		Portion graph_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
+		graph_portion.allocate_pinned();
+		graph_portion.ram_buffer_token_ids.resize(2000);
+		for (size_t i = 0; i < 2000; ++i) {
+			graph_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 16));
+		}
+
+		ai.train(optimizer, graph_portion);
+		bool graph_captured = ai.build_training_graph(optimizer, graph_portion);
+		test_check(graph_captured, "build_training_graph captures static DAG into cudaGraph_t", s_pass, s_fail);
+		test_check(ai.gpu_graph_execution.is_instantiated, "CUDA graph successfully instantiated into cudaGraphExec_t", s_pass, s_fail);
+
+		bool graph_step_ok = ai.launch_training_graph_step();
+		test_check(graph_step_ok, "launch_training_graph_step executes hardware DAG", s_pass, s_fail);
+
+		// 12.2 Gate 5 Verification: Host Launch Latency (< 0.05 ms)
+		float avg_launch_latency_ms = ai.benchmark_graph_launch_latency(100);
+		std::cout << "  [Gate 5] Measured Graph Host Launch Latency: "
+			  << (avg_launch_latency_ms * 1000.0f) << " us (" << avg_launch_latency_ms << " ms)\n";
+		test_check(avg_launch_latency_ms >= 0.0f, "Graph launch latency benchmark produced valid measurement", s_pass, s_fail);
+		test_check(avg_launch_latency_ms < 0.05f, "Gate 5: Graph host launch latency is strictly < 0.05 ms (50 us)", s_pass, s_fail);
+
+		ai.free_training_graph_resources();
+		graph_portion.free_pinned();
+
+		// 12.3 Modular ATen Tensor Handle & Strided Zero-Copy Views
+		Tensor t_orig = Tensor::create_tensor({4, 8}, DeviceType::CPU, false);
+		test_check_eq(t_orig.shape().size(), static_cast<size_t>(2), "Tensor shape has 2 dimensions", s_pass, s_fail);
+		test_check_eq(t_orig.shape()[0], static_cast<size_t>(4), "Dimension 0 is 4", s_pass, s_fail);
+		test_check_eq(t_orig.shape()[1], static_cast<size_t>(8), "Dimension 1 is 8", s_pass, s_fail);
+		test_check_eq(t_orig.strides()[0], static_cast<size_t>(8), "Row stride is 8", s_pass, s_fail);
+		test_check_eq(t_orig.strides()[1], static_cast<size_t>(1), "Column stride is 1", s_pass, s_fail);
+
+		Tensor t_view = t_orig.transpose_matrix(0, 1);
+		test_check_eq(t_view.shape()[0], static_cast<size_t>(8), "Transposed dimension 0 is 8", s_pass, s_fail);
+		test_check_eq(t_view.shape()[1], static_cast<size_t>(4), "Transposed dimension 1 is 4", s_pass, s_fail);
+		test_check_eq(t_view.strides()[0], static_cast<size_t>(1), "Transposed row stride is 1", s_pass, s_fail);
+		test_check_eq(t_view.strides()[1], static_cast<size_t>(8), "Transposed col stride is 8", s_pass, s_fail);
+
+		t_orig.data_ptr()[0] = 42.0f;
+		test_check(t_view.data_ptr()[0] == 42.0f, "Zero-copy view shares identical memory with parent", s_pass, s_fail);
+
+		// 12.4 Gate 5 Verification: Autograd Reverse-Mode Computational Tape Parity
+		AutogradTape::get_instance().set_active(true);
+
+		const size_t M = 4;
+		const size_t K = 8;
+		const size_t N = 4;
+
+		std::vector<float> x_vals(M * K);
+		for (size_t i = 0; i < x_vals.size(); ++i) {
+			x_vals[i] = 0.1f * static_cast<float>(i + 1);
+		}
+		std::vector<float> w_vals(K * N);
+		for (size_t i = 0; i < w_vals.size(); ++i) {
+			w_vals[i] = 0.05f * static_cast<float>(i + 1);
+		}
+		std::vector<float> b_vals(N, 0.2f);
+
+		Tensor tensor_x = Tensor::create_from_vector(x_vals, {M, K}, DeviceType::CPU, true);
+		Tensor tensor_w = Tensor::create_from_vector(w_vals, {K, N}, DeviceType::CPU, true);
+		Tensor tensor_b = Tensor::create_from_vector(b_vals, {1, N}, DeviceType::CPU, true);
+
+		Tensor tensor_z = tensor_matmul(tensor_x, tensor_w);
+		Tensor tensor_y = tensor_add(tensor_z, tensor_b);
+
+		std::vector<float> dy_vals(M * N, 0.5f);
+		Tensor tensor_dy = Tensor::create_from_vector(dy_vals, {M, N}, DeviceType::CPU, false);
+		tensor_y.set_gradient(tensor_dy);
+		tensor_y.backward();
+
+		test_check(tensor_w.grad() != nullptr, "Weight gradient computed by reverse-mode tape", s_pass, s_fail);
+		test_check(tensor_x.grad() != nullptr, "Input gradient computed by reverse-mode tape", s_pass, s_fail);
+		test_check(tensor_b.grad() != nullptr, "Bias gradient computed by reverse-mode tape", s_pass, s_fail);
+
+		std::vector<float> dw_manual(K * N, 0.0f);
+		for (size_t k = 0; k < K; ++k) {
+			for (size_t j = 0; j < N; ++j) {
+				float sum = 0.0f;
+				for (size_t i = 0; i < M; ++i) {
+					sum += x_vals[i * K + k] * dy_vals[i * N + j];
+				}
+				dw_manual[k * N + j] = sum;
+			}
+		}
+
+		std::vector<float> dx_manual(M * K, 0.0f);
+		for (size_t i = 0; i < M; ++i) {
+			for (size_t k = 0; k < K; ++k) {
+				float sum = 0.0f;
+				for (size_t j = 0; j < N; ++j) {
+					sum += dy_vals[i * N + j] * w_vals[k * N + j];
+				}
+				dx_manual[i * K + k] = sum;
+			}
+		}
+
+		std::vector<float> db_manual(N, 0.0f);
+		for (size_t j = 0; j < N; ++j) {
+			float sum = 0.0f;
+			for (size_t i = 0; i < M; ++i) {
+				sum += dy_vals[i * N + j];
+			}
+			db_manual[j] = sum;
+		}
+
+		float max_diff_w = 0.0f;
+		const float* tape_dw = tensor_w.grad()->data_as_float();
+		for (size_t i = 0; i < K * N; ++i) {
+			max_diff_w = std::max(max_diff_w, std::abs(tape_dw[i] - dw_manual[i]));
+		}
+
+		float max_diff_x = 0.0f;
+		const float* tape_dx = tensor_x.grad()->data_as_float();
+		for (size_t i = 0; i < M * K; ++i) {
+			max_diff_x = std::max(max_diff_x, std::abs(tape_dx[i] - dx_manual[i]));
+		}
+
+		float max_diff_b = 0.0f;
+		const float* tape_db = tensor_b.grad()->data_as_float();
+		for (size_t i = 0; i < N; ++i) {
+			max_diff_b = std::max(max_diff_b, std::abs(tape_db[i] - db_manual[i]));
+		}
+
+		std::cout << "  [Gate 5 Parity] Max diffs - Weight: " << max_diff_w
+			  << ", Input: " << max_diff_x << ", Bias: " << max_diff_b << "\n";
+
+		test_check(max_diff_w < 1e-5f, "Gate 5: Weight gradient achieves 100% parity with analytical formula", s_pass, s_fail);
+		test_check(max_diff_x < 1e-5f, "Gate 5: Input gradient achieves 100% parity with analytical formula", s_pass, s_fail);
+		test_check(max_diff_b < 1e-5f, "Gate 5: Bias gradient achieves 100% parity with analytical formula", s_pass, s_fail);
+
+		AutogradTape::get_instance().set_active(false);
 	}
 
 	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail
