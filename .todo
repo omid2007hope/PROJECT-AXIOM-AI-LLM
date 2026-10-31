@@ -110,22 +110,22 @@
 
 ---
 
-## [ ] Phase 4: PagedAttention KV-Cache & Prefix State Management [NEXT]
+## [x] Phase 4: PagedAttention KV-Cache & Prefix State Management [COMPLETED]
 
-- [ ] **4.1 Fixed-Size Physical KV Blocks**
-  - [ ] Partition VRAM Key and Value caches into uniform physical pages (16 tokens per block)
-  - [ ] Eradicate internal and external VRAM fragmentation during variable-length autoregressive decoding
-- [ ] **4.2 CPU Block Table & Copy-On-Write (COW) Prefix Caching**
-  - [ ] Maintain CPU-side Block Table mapping logical sequence positions $(0 \dots T-1)$ to physical VRAM block pointers
-  - [ ] Implement Copy-On-Write (COW) semantics for shared system prompts and multi-turn conversations
-  - [ ] Allocate physical pages only upon sequence trajectory divergence
-- [ ] **Gate 4 Verification:**
-  - [ ] 100% block reuse verified across multi-turn prompts via COW prefix sharing
-  - [ ] Zero allocation failures and zero fragmentation under stress tests in `test_inference.cpp`
+- [x] **4.1 Fixed-Size Physical KV Blocks**
+  - [x] Partition VRAM Key and Value caches into uniform physical pages (16 tokens per block)
+  - [x] Eradicate internal and external VRAM fragmentation during variable-length autoregressive decoding
+- [x] **4.2 CPU Block Table & Copy-On-Write (COW) Prefix Caching**
+  - [x] Maintain CPU-side Block Table mapping logical sequence positions $(0 \dots T-1)$ to physical VRAM block pointers
+  - [x] Implement Copy-On-Write (COW) semantics for shared system prompts and multi-turn conversations
+  - [x] Allocate physical pages only upon sequence trajectory divergence
+- [x] **Gate 4 Verification:**
+  - [x] 100% block reuse verified across multi-turn prompts via COW prefix sharing
+  - [x] Zero allocation failures and zero fragmentation under stress tests in `test_inference.cpp`
 
 ---
 
-## [ ] Phase 5: Zero-Overhead Hardware Saturation & ATen Dispatcher [PENDING]
+## [ ] Phase 5: Zero-Overhead Hardware Saturation & ATen Dispatcher [NEXT]
 
 - [ ] **5.1 Static DAG Execution via CUDA Graphs**
   - [ ] Capture complete forward and backward execution pipeline into single hardware Directed Acyclic Graph (`cudaStreamBeginCapture` / `cudaStreamEndCapture`)
