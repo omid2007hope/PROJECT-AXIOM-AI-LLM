@@ -541,20 +541,21 @@ bool test_ai() {
 		};
 		xform_refill();
 
+		Optimizer xform_opt(test_embedded_path(), 0.001f);
 		xform_ai.enable_transformer = true;
 		xform_ai.upload_weights();
 
 		// Initial training step
-		xform_ai.train(optimizer, xform_portion);
+		xform_ai.train(xform_opt, xform_portion);
 		double step1_loss = 0.0;
 		size_t step1_count = 0;
 		xform_ai.read_loss(step1_loss, step1_count);
 
 		// Train for 20 steps
 		for (int s = 0; s < 20; ++s) {
-			if (xform_ai.train(optimizer, xform_portion) == TrainStatus::NoData) {
+			if (xform_ai.train(xform_opt, xform_portion) == TrainStatus::NoData) {
 				xform_refill();
-				xform_ai.train(optimizer, xform_portion);
+				xform_ai.train(xform_opt, xform_portion);
 			}
 		}
 		double final_xform_loss = 0.0;
@@ -580,7 +581,6 @@ bool test_ai() {
 			graph_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 16));
 		}
 
-		ai.train(optimizer, graph_portion);
 		bool graph_captured = ai.build_training_graph(optimizer, graph_portion);
 		test_check(graph_captured, "build_training_graph captures static DAG into cudaGraph_t", s_pass, s_fail);
 		test_check(ai.gpu_graph_execution.is_instantiated, "CUDA graph successfully instantiated into cudaGraphExec_t", s_pass, s_fail);

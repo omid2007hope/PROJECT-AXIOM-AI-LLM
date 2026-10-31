@@ -384,11 +384,7 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 		int threads = 256;
 		int blocks = static_cast<int>((input_dim + threads - 1) / threads);
 
-		cudaError_t pre_err = cudaGetLastError();
-		if (pre_err != cudaSuccess) {
-			fprintf(stderr, "[DEBUG] Pre-gather error detected: %s\n", cudaGetErrorString(pre_err));
-		}
-
+		cudaGetLastError(); // Clear any sticky driver error
 		gather_embeddings_kernel<<<blocks, threads, 0, stream>>>(
 			static_cast<const uint32_t*>(gpu_portion->d_token_ids[buffer_index]),
 			static_cast<const __nv_bfloat16*>(gpu_embeddings->d_table),
