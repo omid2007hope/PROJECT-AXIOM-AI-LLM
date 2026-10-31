@@ -1,0 +1,6262 @@
+<|concept_start|>
+Zeroing 64-bit register rax via XOR.
+<|code|>
+; [INTENT] Reset register rax to zero
+xor rax, rax
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rax against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register rbx via XOR.
+<|code|>
+; [INTENT] Reset register rbx to zero
+xor rbx, rbx
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rbx against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register rcx via XOR.
+<|code|>
+; [INTENT] Reset register rcx to zero
+xor rcx, rcx
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rcx against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register rdx via XOR.
+<|code|>
+; [INTENT] Reset register rdx to zero
+xor rdx, rdx
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rdx against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register rsi via XOR.
+<|code|>
+; [INTENT] Reset register rsi to zero
+xor rsi, rsi
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rsi against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register rdi via XOR.
+<|code|>
+; [INTENT] Reset register rdi to zero
+xor rdi, rdi
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rdi against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register rbp via XOR.
+<|code|>
+; [INTENT] Reset register rbp to zero
+xor rbp, rbp
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rbp against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register rsp via XOR.
+<|code|>
+; [INTENT] Reset register rsp to zero
+xor rsp, rsp
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on rsp against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r8 via XOR.
+<|code|>
+; [INTENT] Reset register r8 to zero
+xor r8, r8
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r8 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r9 via XOR.
+<|code|>
+; [INTENT] Reset register r9 to zero
+xor r9, r9
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r9 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r10 via XOR.
+<|code|>
+; [INTENT] Reset register r10 to zero
+xor r10, r10
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r10 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r11 via XOR.
+<|code|>
+; [INTENT] Reset register r11 to zero
+xor r11, r11
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r11 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r12 via XOR.
+<|code|>
+; [INTENT] Reset register r12 to zero
+xor r12, r12
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r12 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r13 via XOR.
+<|code|>
+; [INTENT] Reset register r13 to zero
+xor r13, r13
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r13 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r14 via XOR.
+<|code|>
+; [INTENT] Reset register r14 to zero
+xor r14, r14
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r14 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zeroing 64-bit register r15 via XOR.
+<|code|>
+; [INTENT] Reset register r15 to zero
+xor r15, r15
+<|rule_register|>
+<|commentary|>
+The XOR instruction executed on r15 against itself clears all 64 bits to zero.
+Microarchitectural register renaming eliminates execution pipeline latency for this zeroing pattern.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register eax.
+<|code|>
+; [INTENT] Clear rax via 32-bit zeroing
+xor eax, eax
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register eax automatically clears the upper 32 bits of rax.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register ebx.
+<|code|>
+; [INTENT] Clear rbx via 32-bit zeroing
+xor ebx, ebx
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register ebx automatically clears the upper 32 bits of rbx.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register ecx.
+<|code|>
+; [INTENT] Clear rcx via 32-bit zeroing
+xor ecx, ecx
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register ecx automatically clears the upper 32 bits of rcx.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register edx.
+<|code|>
+; [INTENT] Clear rdx via 32-bit zeroing
+xor edx, edx
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register edx automatically clears the upper 32 bits of rdx.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register esi.
+<|code|>
+; [INTENT] Clear rsi via 32-bit zeroing
+xor esi, esi
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register esi automatically clears the upper 32 bits of rsi.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register edi.
+<|code|>
+; [INTENT] Clear rdi via 32-bit zeroing
+xor edi, edi
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register edi automatically clears the upper 32 bits of rdi.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register ebp.
+<|code|>
+; [INTENT] Clear rbp via 32-bit zeroing
+xor ebp, ebp
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register ebp automatically clears the upper 32 bits of rbp.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register esp.
+<|code|>
+; [INTENT] Clear rsp via 32-bit zeroing
+xor esp, esp
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register esp automatically clears the upper 32 bits of rsp.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r8d.
+<|code|>
+; [INTENT] Clear r8 via 32-bit zeroing
+xor r8d, r8d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r8d automatically clears the upper 32 bits of r8.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r9d.
+<|code|>
+; [INTENT] Clear r9 via 32-bit zeroing
+xor r9d, r9d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r9d automatically clears the upper 32 bits of r9.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r10d.
+<|code|>
+; [INTENT] Clear r10 via 32-bit zeroing
+xor r10d, r10d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r10d automatically clears the upper 32 bits of r10.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r11d.
+<|code|>
+; [INTENT] Clear r11 via 32-bit zeroing
+xor r11d, r11d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r11d automatically clears the upper 32 bits of r11.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r12d.
+<|code|>
+; [INTENT] Clear r12 via 32-bit zeroing
+xor r12d, r12d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r12d automatically clears the upper 32 bits of r12.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r13d.
+<|code|>
+; [INTENT] Clear r13 via 32-bit zeroing
+xor r13d, r13d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r13d automatically clears the upper 32 bits of r13.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r14d.
+<|code|>
+; [INTENT] Clear r14 via 32-bit zeroing
+xor r14d, r14d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r14d automatically clears the upper 32 bits of r14.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Zero-extension when writing 32-bit register r15d.
+<|code|>
+; [INTENT] Clear r15 via 32-bit zeroing
+xor r15d, r15d
+<|rule_register|>
+<|commentary|>
+Writing to 32-bit register r15d automatically clears the upper 32 bits of r15.
+This produces a compact two-byte encoding while completely clearing the 64-bit register.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rax and rbx.
+<|code|>
+; [INTENT] Add rbx into rax
+add rax, rbx
+<|rule_register|>
+<|commentary|>
+Instruction add adds rbx and destination rax, storing the result in rax.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rbx and rcx.
+<|code|>
+; [INTENT] Add rcx into rbx
+add rbx, rcx
+<|rule_register|>
+<|commentary|>
+Instruction add adds rcx and destination rbx, storing the result in rbx.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rcx and rdx.
+<|code|>
+; [INTENT] Add rdx into rcx
+add rcx, rdx
+<|rule_register|>
+<|commentary|>
+Instruction add adds rdx and destination rcx, storing the result in rcx.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rdx and rsi.
+<|code|>
+; [INTENT] Add rsi into rdx
+add rdx, rsi
+<|rule_register|>
+<|commentary|>
+Instruction add adds rsi and destination rdx, storing the result in rdx.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rsi and rdi.
+<|code|>
+; [INTENT] Add rdi into rsi
+add rsi, rdi
+<|rule_register|>
+<|commentary|>
+Instruction add adds rdi and destination rsi, storing the result in rsi.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rdi and rbp.
+<|code|>
+; [INTENT] Add rbp into rdi
+add rdi, rbp
+<|rule_register|>
+<|commentary|>
+Instruction add adds rbp and destination rdi, storing the result in rdi.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rbp and rsp.
+<|code|>
+; [INTENT] Add rsp into rbp
+add rbp, rsp
+<|rule_register|>
+<|commentary|>
+Instruction add adds rsp and destination rbp, storing the result in rbp.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between rsp and r8.
+<|code|>
+; [INTENT] Add r8 into rsp
+add rsp, r8
+<|rule_register|>
+<|commentary|>
+Instruction add adds r8 and destination rsp, storing the result in rsp.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r8 and r9.
+<|code|>
+; [INTENT] Add r9 into r8
+add r8, r9
+<|rule_register|>
+<|commentary|>
+Instruction add adds r9 and destination r8, storing the result in r8.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r9 and r10.
+<|code|>
+; [INTENT] Add r10 into r9
+add r9, r10
+<|rule_register|>
+<|commentary|>
+Instruction add adds r10 and destination r9, storing the result in r9.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r10 and r11.
+<|code|>
+; [INTENT] Add r11 into r10
+add r10, r11
+<|rule_register|>
+<|commentary|>
+Instruction add adds r11 and destination r10, storing the result in r10.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r11 and r12.
+<|code|>
+; [INTENT] Add r12 into r11
+add r11, r12
+<|rule_register|>
+<|commentary|>
+Instruction add adds r12 and destination r11, storing the result in r11.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r12 and r13.
+<|code|>
+; [INTENT] Add r13 into r12
+add r12, r13
+<|rule_register|>
+<|commentary|>
+Instruction add adds r13 and destination r12, storing the result in r12.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r13 and r14.
+<|code|>
+; [INTENT] Add r14 into r13
+add r13, r14
+<|rule_register|>
+<|commentary|>
+Instruction add adds r14 and destination r13, storing the result in r13.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r14 and r15.
+<|code|>
+; [INTENT] Add r15 into r14
+add r14, r15
+<|rule_register|>
+<|commentary|>
+Instruction add adds r15 and destination r14, storing the result in r14.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing ADD between r15 and rax.
+<|code|>
+; [INTENT] Add rax into r15
+add r15, rax
+<|rule_register|>
+<|commentary|>
+Instruction add adds rax and destination r15, storing the result in r15.
+Updates Zero, Sign, Carry, and Overflow flags based on sum.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rax and rbx.
+<|code|>
+; [INTENT] Sub rbx into rax
+sub rax, rbx
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rbx and destination rax, storing the result in rax.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rbx and rcx.
+<|code|>
+; [INTENT] Sub rcx into rbx
+sub rbx, rcx
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rcx and destination rbx, storing the result in rbx.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rcx and rdx.
+<|code|>
+; [INTENT] Sub rdx into rcx
+sub rcx, rdx
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rdx and destination rcx, storing the result in rcx.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rdx and rsi.
+<|code|>
+; [INTENT] Sub rsi into rdx
+sub rdx, rsi
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rsi and destination rdx, storing the result in rdx.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rsi and rdi.
+<|code|>
+; [INTENT] Sub rdi into rsi
+sub rsi, rdi
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rdi and destination rsi, storing the result in rsi.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rdi and rbp.
+<|code|>
+; [INTENT] Sub rbp into rdi
+sub rdi, rbp
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rbp and destination rdi, storing the result in rdi.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rbp and rsp.
+<|code|>
+; [INTENT] Sub rsp into rbp
+sub rbp, rsp
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rsp and destination rbp, storing the result in rbp.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between rsp and r8.
+<|code|>
+; [INTENT] Sub r8 into rsp
+sub rsp, r8
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r8 and destination rsp, storing the result in rsp.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r8 and r9.
+<|code|>
+; [INTENT] Sub r9 into r8
+sub r8, r9
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r9 and destination r8, storing the result in r8.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r9 and r10.
+<|code|>
+; [INTENT] Sub r10 into r9
+sub r9, r10
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r10 and destination r9, storing the result in r9.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r10 and r11.
+<|code|>
+; [INTENT] Sub r11 into r10
+sub r10, r11
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r11 and destination r10, storing the result in r10.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r11 and r12.
+<|code|>
+; [INTENT] Sub r12 into r11
+sub r11, r12
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r12 and destination r11, storing the result in r11.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r12 and r13.
+<|code|>
+; [INTENT] Sub r13 into r12
+sub r12, r13
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r13 and destination r12, storing the result in r12.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r13 and r14.
+<|code|>
+; [INTENT] Sub r14 into r13
+sub r13, r14
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r14 and destination r13, storing the result in r13.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r14 and r15.
+<|code|>
+; [INTENT] Sub r15 into r14
+sub r14, r15
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts r15 and destination r14, storing the result in r14.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing SUB between r15 and rax.
+<|code|>
+; [INTENT] Sub rax into r15
+sub r15, rax
+<|rule_register|>
+<|commentary|>
+Instruction sub subtracts rax and destination r15, storing the result in r15.
+Updates Zero, Sign, Carry, and Overflow flags based on difference.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rax and rbx.
+<|code|>
+; [INTENT] And rbx into rax
+and rax, rbx
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rbx and destination rax, storing the result in rax.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rbx and rcx.
+<|code|>
+; [INTENT] And rcx into rbx
+and rbx, rcx
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rcx and destination rbx, storing the result in rbx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rcx and rdx.
+<|code|>
+; [INTENT] And rdx into rcx
+and rcx, rdx
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rdx and destination rcx, storing the result in rcx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rdx and rsi.
+<|code|>
+; [INTENT] And rsi into rdx
+and rdx, rsi
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rsi and destination rdx, storing the result in rdx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rsi and rdi.
+<|code|>
+; [INTENT] And rdi into rsi
+and rsi, rdi
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rdi and destination rsi, storing the result in rsi.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rdi and rbp.
+<|code|>
+; [INTENT] And rbp into rdi
+and rdi, rbp
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rbp and destination rdi, storing the result in rdi.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rbp and rsp.
+<|code|>
+; [INTENT] And rsp into rbp
+and rbp, rsp
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rsp and destination rbp, storing the result in rbp.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between rsp and r8.
+<|code|>
+; [INTENT] And r8 into rsp
+and rsp, r8
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r8 and destination rsp, storing the result in rsp.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r8 and r9.
+<|code|>
+; [INTENT] And r9 into r8
+and r8, r9
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r9 and destination r8, storing the result in r8.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r9 and r10.
+<|code|>
+; [INTENT] And r10 into r9
+and r9, r10
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r10 and destination r9, storing the result in r9.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r10 and r11.
+<|code|>
+; [INTENT] And r11 into r10
+and r10, r11
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r11 and destination r10, storing the result in r10.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r11 and r12.
+<|code|>
+; [INTENT] And r12 into r11
+and r11, r12
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r12 and destination r11, storing the result in r11.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r12 and r13.
+<|code|>
+; [INTENT] And r13 into r12
+and r12, r13
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r13 and destination r12, storing the result in r12.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r13 and r14.
+<|code|>
+; [INTENT] And r14 into r13
+and r13, r14
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r14 and destination r13, storing the result in r13.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r14 and r15.
+<|code|>
+; [INTENT] And r15 into r14
+and r14, r15
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on r15 and destination r14, storing the result in r14.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing AND between r15 and rax.
+<|code|>
+; [INTENT] And rax into r15
+and r15, rax
+<|rule_register|>
+<|commentary|>
+Instruction and performs bitwise logical AND on rax and destination r15, storing the result in r15.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rax and rbx.
+<|code|>
+; [INTENT] Or rbx into rax
+or rax, rbx
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rbx and destination rax, storing the result in rax.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rbx and rcx.
+<|code|>
+; [INTENT] Or rcx into rbx
+or rbx, rcx
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rcx and destination rbx, storing the result in rbx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rcx and rdx.
+<|code|>
+; [INTENT] Or rdx into rcx
+or rcx, rdx
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rdx and destination rcx, storing the result in rcx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rdx and rsi.
+<|code|>
+; [INTENT] Or rsi into rdx
+or rdx, rsi
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rsi and destination rdx, storing the result in rdx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rsi and rdi.
+<|code|>
+; [INTENT] Or rdi into rsi
+or rsi, rdi
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rdi and destination rsi, storing the result in rsi.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rdi and rbp.
+<|code|>
+; [INTENT] Or rbp into rdi
+or rdi, rbp
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rbp and destination rdi, storing the result in rdi.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rbp and rsp.
+<|code|>
+; [INTENT] Or rsp into rbp
+or rbp, rsp
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rsp and destination rbp, storing the result in rbp.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between rsp and r8.
+<|code|>
+; [INTENT] Or r8 into rsp
+or rsp, r8
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r8 and destination rsp, storing the result in rsp.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r8 and r9.
+<|code|>
+; [INTENT] Or r9 into r8
+or r8, r9
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r9 and destination r8, storing the result in r8.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r9 and r10.
+<|code|>
+; [INTENT] Or r10 into r9
+or r9, r10
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r10 and destination r9, storing the result in r9.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r10 and r11.
+<|code|>
+; [INTENT] Or r11 into r10
+or r10, r11
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r11 and destination r10, storing the result in r10.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r11 and r12.
+<|code|>
+; [INTENT] Or r12 into r11
+or r11, r12
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r12 and destination r11, storing the result in r11.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r12 and r13.
+<|code|>
+; [INTENT] Or r13 into r12
+or r12, r13
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r13 and destination r12, storing the result in r12.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r13 and r14.
+<|code|>
+; [INTENT] Or r14 into r13
+or r13, r14
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r14 and destination r13, storing the result in r13.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r14 and r15.
+<|code|>
+; [INTENT] Or r15 into r14
+or r14, r15
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on r15 and destination r14, storing the result in r14.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing OR between r15 and rax.
+<|code|>
+; [INTENT] Or rax into r15
+or r15, rax
+<|rule_register|>
+<|commentary|>
+Instruction or performs bitwise logical OR on rax and destination r15, storing the result in r15.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rax and rbx.
+<|code|>
+; [INTENT] Xor rbx into rax
+xor rax, rbx
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rbx and destination rax, storing the result in rax.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rbx and rcx.
+<|code|>
+; [INTENT] Xor rcx into rbx
+xor rbx, rcx
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rcx and destination rbx, storing the result in rbx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rcx and rdx.
+<|code|>
+; [INTENT] Xor rdx into rcx
+xor rcx, rdx
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rdx and destination rcx, storing the result in rcx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rdx and rsi.
+<|code|>
+; [INTENT] Xor rsi into rdx
+xor rdx, rsi
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rsi and destination rdx, storing the result in rdx.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rsi and rdi.
+<|code|>
+; [INTENT] Xor rdi into rsi
+xor rsi, rdi
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rdi and destination rsi, storing the result in rsi.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rdi and rbp.
+<|code|>
+; [INTENT] Xor rbp into rdi
+xor rdi, rbp
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rbp and destination rdi, storing the result in rdi.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rbp and rsp.
+<|code|>
+; [INTENT] Xor rsp into rbp
+xor rbp, rsp
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rsp and destination rbp, storing the result in rbp.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between rsp and r8.
+<|code|>
+; [INTENT] Xor r8 into rsp
+xor rsp, r8
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r8 and destination rsp, storing the result in rsp.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r8 and r9.
+<|code|>
+; [INTENT] Xor r9 into r8
+xor r8, r9
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r9 and destination r8, storing the result in r8.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r9 and r10.
+<|code|>
+; [INTENT] Xor r10 into r9
+xor r9, r10
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r10 and destination r9, storing the result in r9.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r10 and r11.
+<|code|>
+; [INTENT] Xor r11 into r10
+xor r10, r11
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r11 and destination r10, storing the result in r10.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r11 and r12.
+<|code|>
+; [INTENT] Xor r12 into r11
+xor r11, r12
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r12 and destination r11, storing the result in r11.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r12 and r13.
+<|code|>
+; [INTENT] Xor r13 into r12
+xor r12, r13
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r13 and destination r12, storing the result in r12.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r13 and r14.
+<|code|>
+; [INTENT] Xor r14 into r13
+xor r13, r14
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r14 and destination r13, storing the result in r13.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r14 and r15.
+<|code|>
+; [INTENT] Xor r15 into r14
+xor r14, r15
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on r15 and destination r14, storing the result in r14.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Executing XOR between r15 and rax.
+<|code|>
+; [INTENT] Xor rax into r15
+xor r15, rax
+<|rule_register|>
+<|commentary|>
+Instruction xor performs bitwise exclusive OR on rax and destination r15, storing the result in r15.
+Clears Carry and Overflow flags, updates Zero and Sign flags.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register rax.
+<|code|>
+; [INTENT] Load immediate 0 into rax
+mov rax, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register rax.
+<|code|>
+; [INTENT] Load immediate 1 into rax
+mov rax, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register rax.
+<|code|>
+; [INTENT] Load immediate 2 into rax
+mov rax, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register rax.
+<|code|>
+; [INTENT] Load immediate 4 into rax
+mov rax, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register rax.
+<|code|>
+; [INTENT] Load immediate 8 into rax
+mov rax, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register rax.
+<|code|>
+; [INTENT] Load immediate 16 into rax
+mov rax, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register rax.
+<|code|>
+; [INTENT] Load immediate 32 into rax
+mov rax, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register rax.
+<|code|>
+; [INTENT] Load immediate 64 into rax
+mov rax, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register rax.
+<|code|>
+; [INTENT] Load immediate 100 into rax
+mov rax, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register rax.
+<|code|>
+; [INTENT] Load immediate 128 into rax
+mov rax, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register rax.
+<|code|>
+; [INTENT] Load immediate 255 into rax
+mov rax, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register rax.
+<|code|>
+; [INTENT] Load immediate 256 into rax
+mov rax, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register rax.
+<|code|>
+; [INTENT] Load immediate 512 into rax
+mov rax, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register rax.
+<|code|>
+; [INTENT] Load immediate 1024 into rax
+mov rax, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register rax.
+<|code|>
+; [INTENT] Load immediate 4096 into rax
+mov rax, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register rax.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register rcx.
+<|code|>
+; [INTENT] Load immediate 0 into rcx
+mov rcx, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register rcx.
+<|code|>
+; [INTENT] Load immediate 1 into rcx
+mov rcx, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register rcx.
+<|code|>
+; [INTENT] Load immediate 2 into rcx
+mov rcx, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register rcx.
+<|code|>
+; [INTENT] Load immediate 4 into rcx
+mov rcx, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register rcx.
+<|code|>
+; [INTENT] Load immediate 8 into rcx
+mov rcx, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register rcx.
+<|code|>
+; [INTENT] Load immediate 16 into rcx
+mov rcx, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register rcx.
+<|code|>
+; [INTENT] Load immediate 32 into rcx
+mov rcx, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register rcx.
+<|code|>
+; [INTENT] Load immediate 64 into rcx
+mov rcx, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register rcx.
+<|code|>
+; [INTENT] Load immediate 100 into rcx
+mov rcx, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register rcx.
+<|code|>
+; [INTENT] Load immediate 128 into rcx
+mov rcx, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register rcx.
+<|code|>
+; [INTENT] Load immediate 255 into rcx
+mov rcx, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register rcx.
+<|code|>
+; [INTENT] Load immediate 256 into rcx
+mov rcx, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register rcx.
+<|code|>
+; [INTENT] Load immediate 512 into rcx
+mov rcx, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register rcx.
+<|code|>
+; [INTENT] Load immediate 1024 into rcx
+mov rcx, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register rcx.
+<|code|>
+; [INTENT] Load immediate 4096 into rcx
+mov rcx, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register rcx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register rdx.
+<|code|>
+; [INTENT] Load immediate 0 into rdx
+mov rdx, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register rdx.
+<|code|>
+; [INTENT] Load immediate 1 into rdx
+mov rdx, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register rdx.
+<|code|>
+; [INTENT] Load immediate 2 into rdx
+mov rdx, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register rdx.
+<|code|>
+; [INTENT] Load immediate 4 into rdx
+mov rdx, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register rdx.
+<|code|>
+; [INTENT] Load immediate 8 into rdx
+mov rdx, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register rdx.
+<|code|>
+; [INTENT] Load immediate 16 into rdx
+mov rdx, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register rdx.
+<|code|>
+; [INTENT] Load immediate 32 into rdx
+mov rdx, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register rdx.
+<|code|>
+; [INTENT] Load immediate 64 into rdx
+mov rdx, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register rdx.
+<|code|>
+; [INTENT] Load immediate 100 into rdx
+mov rdx, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register rdx.
+<|code|>
+; [INTENT] Load immediate 128 into rdx
+mov rdx, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register rdx.
+<|code|>
+; [INTENT] Load immediate 255 into rdx
+mov rdx, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register rdx.
+<|code|>
+; [INTENT] Load immediate 256 into rdx
+mov rdx, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register rdx.
+<|code|>
+; [INTENT] Load immediate 512 into rdx
+mov rdx, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register rdx.
+<|code|>
+; [INTENT] Load immediate 1024 into rdx
+mov rdx, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register rdx.
+<|code|>
+; [INTENT] Load immediate 4096 into rdx
+mov rdx, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register rdx.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register rsi.
+<|code|>
+; [INTENT] Load immediate 0 into rsi
+mov rsi, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register rsi.
+<|code|>
+; [INTENT] Load immediate 1 into rsi
+mov rsi, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register rsi.
+<|code|>
+; [INTENT] Load immediate 2 into rsi
+mov rsi, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register rsi.
+<|code|>
+; [INTENT] Load immediate 4 into rsi
+mov rsi, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register rsi.
+<|code|>
+; [INTENT] Load immediate 8 into rsi
+mov rsi, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register rsi.
+<|code|>
+; [INTENT] Load immediate 16 into rsi
+mov rsi, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register rsi.
+<|code|>
+; [INTENT] Load immediate 32 into rsi
+mov rsi, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register rsi.
+<|code|>
+; [INTENT] Load immediate 64 into rsi
+mov rsi, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register rsi.
+<|code|>
+; [INTENT] Load immediate 100 into rsi
+mov rsi, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register rsi.
+<|code|>
+; [INTENT] Load immediate 128 into rsi
+mov rsi, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register rsi.
+<|code|>
+; [INTENT] Load immediate 255 into rsi
+mov rsi, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register rsi.
+<|code|>
+; [INTENT] Load immediate 256 into rsi
+mov rsi, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register rsi.
+<|code|>
+; [INTENT] Load immediate 512 into rsi
+mov rsi, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register rsi.
+<|code|>
+; [INTENT] Load immediate 1024 into rsi
+mov rsi, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register rsi.
+<|code|>
+; [INTENT] Load immediate 4096 into rsi
+mov rsi, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register rsi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register rdi.
+<|code|>
+; [INTENT] Load immediate 0 into rdi
+mov rdi, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register rdi.
+<|code|>
+; [INTENT] Load immediate 1 into rdi
+mov rdi, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register rdi.
+<|code|>
+; [INTENT] Load immediate 2 into rdi
+mov rdi, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register rdi.
+<|code|>
+; [INTENT] Load immediate 4 into rdi
+mov rdi, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register rdi.
+<|code|>
+; [INTENT] Load immediate 8 into rdi
+mov rdi, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register rdi.
+<|code|>
+; [INTENT] Load immediate 16 into rdi
+mov rdi, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register rdi.
+<|code|>
+; [INTENT] Load immediate 32 into rdi
+mov rdi, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register rdi.
+<|code|>
+; [INTENT] Load immediate 64 into rdi
+mov rdi, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register rdi.
+<|code|>
+; [INTENT] Load immediate 100 into rdi
+mov rdi, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register rdi.
+<|code|>
+; [INTENT] Load immediate 128 into rdi
+mov rdi, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register rdi.
+<|code|>
+; [INTENT] Load immediate 255 into rdi
+mov rdi, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register rdi.
+<|code|>
+; [INTENT] Load immediate 256 into rdi
+mov rdi, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register rdi.
+<|code|>
+; [INTENT] Load immediate 512 into rdi
+mov rdi, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register rdi.
+<|code|>
+; [INTENT] Load immediate 1024 into rdi
+mov rdi, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register rdi.
+<|code|>
+; [INTENT] Load immediate 4096 into rdi
+mov rdi, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register rdi.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register r8.
+<|code|>
+; [INTENT] Load immediate 0 into r8
+mov r8, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register r8.
+<|code|>
+; [INTENT] Load immediate 1 into r8
+mov r8, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register r8.
+<|code|>
+; [INTENT] Load immediate 2 into r8
+mov r8, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register r8.
+<|code|>
+; [INTENT] Load immediate 4 into r8
+mov r8, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register r8.
+<|code|>
+; [INTENT] Load immediate 8 into r8
+mov r8, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register r8.
+<|code|>
+; [INTENT] Load immediate 16 into r8
+mov r8, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register r8.
+<|code|>
+; [INTENT] Load immediate 32 into r8
+mov r8, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register r8.
+<|code|>
+; [INTENT] Load immediate 64 into r8
+mov r8, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register r8.
+<|code|>
+; [INTENT] Load immediate 100 into r8
+mov r8, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register r8.
+<|code|>
+; [INTENT] Load immediate 128 into r8
+mov r8, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register r8.
+<|code|>
+; [INTENT] Load immediate 255 into r8
+mov r8, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register r8.
+<|code|>
+; [INTENT] Load immediate 256 into r8
+mov r8, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register r8.
+<|code|>
+; [INTENT] Load immediate 512 into r8
+mov r8, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register r8.
+<|code|>
+; [INTENT] Load immediate 1024 into r8
+mov r8, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register r8.
+<|code|>
+; [INTENT] Load immediate 4096 into r8
+mov r8, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register r8.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register r9.
+<|code|>
+; [INTENT] Load immediate 0 into r9
+mov r9, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register r9.
+<|code|>
+; [INTENT] Load immediate 1 into r9
+mov r9, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register r9.
+<|code|>
+; [INTENT] Load immediate 2 into r9
+mov r9, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register r9.
+<|code|>
+; [INTENT] Load immediate 4 into r9
+mov r9, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register r9.
+<|code|>
+; [INTENT] Load immediate 8 into r9
+mov r9, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register r9.
+<|code|>
+; [INTENT] Load immediate 16 into r9
+mov r9, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register r9.
+<|code|>
+; [INTENT] Load immediate 32 into r9
+mov r9, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register r9.
+<|code|>
+; [INTENT] Load immediate 64 into r9
+mov r9, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register r9.
+<|code|>
+; [INTENT] Load immediate 100 into r9
+mov r9, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register r9.
+<|code|>
+; [INTENT] Load immediate 128 into r9
+mov r9, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register r9.
+<|code|>
+; [INTENT] Load immediate 255 into r9
+mov r9, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register r9.
+<|code|>
+; [INTENT] Load immediate 256 into r9
+mov r9, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register r9.
+<|code|>
+; [INTENT] Load immediate 512 into r9
+mov r9, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register r9.
+<|code|>
+; [INTENT] Load immediate 1024 into r9
+mov r9, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register r9.
+<|code|>
+; [INTENT] Load immediate 4096 into r9
+mov r9, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register r9.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register r10.
+<|code|>
+; [INTENT] Load immediate 0 into r10
+mov r10, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register r10.
+<|code|>
+; [INTENT] Load immediate 1 into r10
+mov r10, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register r10.
+<|code|>
+; [INTENT] Load immediate 2 into r10
+mov r10, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register r10.
+<|code|>
+; [INTENT] Load immediate 4 into r10
+mov r10, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register r10.
+<|code|>
+; [INTENT] Load immediate 8 into r10
+mov r10, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register r10.
+<|code|>
+; [INTENT] Load immediate 16 into r10
+mov r10, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register r10.
+<|code|>
+; [INTENT] Load immediate 32 into r10
+mov r10, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register r10.
+<|code|>
+; [INTENT] Load immediate 64 into r10
+mov r10, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register r10.
+<|code|>
+; [INTENT] Load immediate 100 into r10
+mov r10, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register r10.
+<|code|>
+; [INTENT] Load immediate 128 into r10
+mov r10, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register r10.
+<|code|>
+; [INTENT] Load immediate 255 into r10
+mov r10, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register r10.
+<|code|>
+; [INTENT] Load immediate 256 into r10
+mov r10, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register r10.
+<|code|>
+; [INTENT] Load immediate 512 into r10
+mov r10, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register r10.
+<|code|>
+; [INTENT] Load immediate 1024 into r10
+mov r10, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register r10.
+<|code|>
+; [INTENT] Load immediate 4096 into r10
+mov r10, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register r10.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 0 to register r11.
+<|code|>
+; [INTENT] Load immediate 0 into r11
+mov r11, 0
+<|rule_register|>
+<|commentary|>
+Loads the constant value 0 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1 to register r11.
+<|code|>
+; [INTENT] Load immediate 1 into r11
+mov r11, 1
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 2 to register r11.
+<|code|>
+; [INTENT] Load immediate 2 into r11
+mov r11, 2
+<|rule_register|>
+<|commentary|>
+Loads the constant value 2 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4 to register r11.
+<|code|>
+; [INTENT] Load immediate 4 into r11
+mov r11, 4
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 8 to register r11.
+<|code|>
+; [INTENT] Load immediate 8 into r11
+mov r11, 8
+<|rule_register|>
+<|commentary|>
+Loads the constant value 8 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 16 to register r11.
+<|code|>
+; [INTENT] Load immediate 16 into r11
+mov r11, 16
+<|rule_register|>
+<|commentary|>
+Loads the constant value 16 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 32 to register r11.
+<|code|>
+; [INTENT] Load immediate 32 into r11
+mov r11, 32
+<|rule_register|>
+<|commentary|>
+Loads the constant value 32 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 64 to register r11.
+<|code|>
+; [INTENT] Load immediate 64 into r11
+mov r11, 64
+<|rule_register|>
+<|commentary|>
+Loads the constant value 64 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 100 to register r11.
+<|code|>
+; [INTENT] Load immediate 100 into r11
+mov r11, 100
+<|rule_register|>
+<|commentary|>
+Loads the constant value 100 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 128 to register r11.
+<|code|>
+; [INTENT] Load immediate 128 into r11
+mov r11, 128
+<|rule_register|>
+<|commentary|>
+Loads the constant value 128 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 255 to register r11.
+<|code|>
+; [INTENT] Load immediate 255 into r11
+mov r11, 255
+<|rule_register|>
+<|commentary|>
+Loads the constant value 255 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 256 to register r11.
+<|code|>
+; [INTENT] Load immediate 256 into r11
+mov r11, 256
+<|rule_register|>
+<|commentary|>
+Loads the constant value 256 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 512 to register r11.
+<|code|>
+; [INTENT] Load immediate 512 into r11
+mov r11, 512
+<|rule_register|>
+<|commentary|>
+Loads the constant value 512 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 1024 to register r11.
+<|code|>
+; [INTENT] Load immediate 1024 into r11
+mov r11, 1024
+<|rule_register|>
+<|commentary|>
+Loads the constant value 1024 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Assigning scalar immediate constant 4096 to register r11.
+<|code|>
+; [INTENT] Load immediate 4096 into r11
+mov r11, 4096
+<|rule_register|>
+<|commentary|>
+Loads the constant value 4096 directly into destination register r11.
+The destination is specified on the left and the source value is on the right.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rax by one.
+<|code|>
+; [INTENT] Advance counter rax
+inc rax
+<|rule_register|>
+<|commentary|>
+Increments destination register rax by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rax by one.
+<|code|>
+; [INTENT] Decrement counter rax
+dec rax
+<|rule_register|>
+<|commentary|>
+Decrements destination register rax by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rbx by one.
+<|code|>
+; [INTENT] Advance counter rbx
+inc rbx
+<|rule_register|>
+<|commentary|>
+Increments destination register rbx by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rbx by one.
+<|code|>
+; [INTENT] Decrement counter rbx
+dec rbx
+<|rule_register|>
+<|commentary|>
+Decrements destination register rbx by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rcx by one.
+<|code|>
+; [INTENT] Advance counter rcx
+inc rcx
+<|rule_register|>
+<|commentary|>
+Increments destination register rcx by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rcx by one.
+<|code|>
+; [INTENT] Decrement counter rcx
+dec rcx
+<|rule_register|>
+<|commentary|>
+Decrements destination register rcx by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rdx by one.
+<|code|>
+; [INTENT] Advance counter rdx
+inc rdx
+<|rule_register|>
+<|commentary|>
+Increments destination register rdx by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rdx by one.
+<|code|>
+; [INTENT] Decrement counter rdx
+dec rdx
+<|rule_register|>
+<|commentary|>
+Decrements destination register rdx by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rsi by one.
+<|code|>
+; [INTENT] Advance counter rsi
+inc rsi
+<|rule_register|>
+<|commentary|>
+Increments destination register rsi by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rsi by one.
+<|code|>
+; [INTENT] Decrement counter rsi
+dec rsi
+<|rule_register|>
+<|commentary|>
+Decrements destination register rsi by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rdi by one.
+<|code|>
+; [INTENT] Advance counter rdi
+inc rdi
+<|rule_register|>
+<|commentary|>
+Increments destination register rdi by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rdi by one.
+<|code|>
+; [INTENT] Decrement counter rdi
+dec rdi
+<|rule_register|>
+<|commentary|>
+Decrements destination register rdi by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rbp by one.
+<|code|>
+; [INTENT] Advance counter rbp
+inc rbp
+<|rule_register|>
+<|commentary|>
+Increments destination register rbp by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rbp by one.
+<|code|>
+; [INTENT] Decrement counter rbp
+dec rbp
+<|rule_register|>
+<|commentary|>
+Decrements destination register rbp by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register rsp by one.
+<|code|>
+; [INTENT] Advance counter rsp
+inc rsp
+<|rule_register|>
+<|commentary|>
+Increments destination register rsp by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register rsp by one.
+<|code|>
+; [INTENT] Decrement counter rsp
+dec rsp
+<|rule_register|>
+<|commentary|>
+Decrements destination register rsp by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r8 by one.
+<|code|>
+; [INTENT] Advance counter r8
+inc r8
+<|rule_register|>
+<|commentary|>
+Increments destination register r8 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r8 by one.
+<|code|>
+; [INTENT] Decrement counter r8
+dec r8
+<|rule_register|>
+<|commentary|>
+Decrements destination register r8 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r9 by one.
+<|code|>
+; [INTENT] Advance counter r9
+inc r9
+<|rule_register|>
+<|commentary|>
+Increments destination register r9 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r9 by one.
+<|code|>
+; [INTENT] Decrement counter r9
+dec r9
+<|rule_register|>
+<|commentary|>
+Decrements destination register r9 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r10 by one.
+<|code|>
+; [INTENT] Advance counter r10
+inc r10
+<|rule_register|>
+<|commentary|>
+Increments destination register r10 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r10 by one.
+<|code|>
+; [INTENT] Decrement counter r10
+dec r10
+<|rule_register|>
+<|commentary|>
+Decrements destination register r10 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r11 by one.
+<|code|>
+; [INTENT] Advance counter r11
+inc r11
+<|rule_register|>
+<|commentary|>
+Increments destination register r11 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r11 by one.
+<|code|>
+; [INTENT] Decrement counter r11
+dec r11
+<|rule_register|>
+<|commentary|>
+Decrements destination register r11 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r12 by one.
+<|code|>
+; [INTENT] Advance counter r12
+inc r12
+<|rule_register|>
+<|commentary|>
+Increments destination register r12 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r12 by one.
+<|code|>
+; [INTENT] Decrement counter r12
+dec r12
+<|rule_register|>
+<|commentary|>
+Decrements destination register r12 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r13 by one.
+<|code|>
+; [INTENT] Advance counter r13
+inc r13
+<|rule_register|>
+<|commentary|>
+Increments destination register r13 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r13 by one.
+<|code|>
+; [INTENT] Decrement counter r13
+dec r13
+<|rule_register|>
+<|commentary|>
+Decrements destination register r13 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r14 by one.
+<|code|>
+; [INTENT] Advance counter r14
+inc r14
+<|rule_register|>
+<|commentary|>
+Increments destination register r14 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r14 by one.
+<|code|>
+; [INTENT] Decrement counter r14
+dec r14
+<|rule_register|>
+<|commentary|>
+Decrements destination register r14 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Incrementing register r15 by one.
+<|code|>
+; [INTENT] Advance counter r15
+inc r15
+<|rule_register|>
+<|commentary|>
+Increments destination register r15 by one while preserving the Carry Flag.
+Updates the Zero, Sign, and Overflow flags in EFLAGS.
+<|concept_end|>
+
+<|concept_start|>
+Decrementing register r15 by one.
+<|code|>
+; [INTENT] Decrement counter r15
+dec r15
+<|rule_register|>
+<|commentary|>
+Decrements destination register r15 by one while preserving the Carry Flag.
+Useful for loop countdown termination checks.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 1.
+<|code|>
+; [INTENT] Multiply rax by 2
+shl rax, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax left by 1 positions, multiplying the value by 2.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Divide rax by 2
+shr rax, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 1 positions, dividing the unsigned value by 2.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Signed divide rax by 2
+sar rax, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 1 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 2.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 2.
+<|code|>
+; [INTENT] Multiply rax by 4
+shl rax, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax left by 2 positions, multiplying the value by 4.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Divide rax by 4
+shr rax, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 2 positions, dividing the unsigned value by 4.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Signed divide rax by 4
+sar rax, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 2 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 3.
+<|code|>
+; [INTENT] Multiply rax by 8
+shl rax, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax left by 3 positions, multiplying the value by 8.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Divide rax by 8
+shr rax, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 3 positions, dividing the unsigned value by 8.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Signed divide rax by 8
+sar rax, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 3 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 8.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 4.
+<|code|>
+; [INTENT] Multiply rax by 16
+shl rax, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax left by 4 positions, multiplying the value by 16.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Divide rax by 16
+shr rax, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 4 positions, dividing the unsigned value by 16.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Signed divide rax by 16
+sar rax, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 4 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 16.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 8.
+<|code|>
+; [INTENT] Multiply rax by 256
+shl rax, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax left by 8 positions, multiplying the value by 256.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Divide rax by 256
+shr rax, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 8 positions, dividing the unsigned value by 256.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Signed divide rax by 256
+sar rax, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 8 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 256.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 16.
+<|code|>
+; [INTENT] Multiply rax by 65536
+shl rax, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax left by 16 positions, multiplying the value by 65536.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Divide rax by 65536
+shr rax, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 16 positions, dividing the unsigned value by 65536.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Signed divide rax by 65536
+sar rax, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 16 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 65536.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 32.
+<|code|>
+; [INTENT] Multiply rax by 4294967296
+shl rax, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax left by 32 positions, multiplying the value by 4294967296.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Divide rax by 4294967296
+shr rax, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 32 positions, dividing the unsigned value by 4294967296.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Signed divide rax by 4294967296
+sar rax, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rax right by 32 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4294967296.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 1.
+<|code|>
+; [INTENT] Multiply rbx by 2
+shl rbx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx left by 1 positions, multiplying the value by 2.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Divide rbx by 2
+shr rbx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 1 positions, dividing the unsigned value by 2.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Signed divide rbx by 2
+sar rbx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 1 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 2.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 2.
+<|code|>
+; [INTENT] Multiply rbx by 4
+shl rbx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx left by 2 positions, multiplying the value by 4.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Divide rbx by 4
+shr rbx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 2 positions, dividing the unsigned value by 4.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Signed divide rbx by 4
+sar rbx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 2 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 3.
+<|code|>
+; [INTENT] Multiply rbx by 8
+shl rbx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx left by 3 positions, multiplying the value by 8.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Divide rbx by 8
+shr rbx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 3 positions, dividing the unsigned value by 8.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Signed divide rbx by 8
+sar rbx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 3 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 8.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 4.
+<|code|>
+; [INTENT] Multiply rbx by 16
+shl rbx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx left by 4 positions, multiplying the value by 16.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Divide rbx by 16
+shr rbx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 4 positions, dividing the unsigned value by 16.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Signed divide rbx by 16
+sar rbx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 4 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 16.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 8.
+<|code|>
+; [INTENT] Multiply rbx by 256
+shl rbx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx left by 8 positions, multiplying the value by 256.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Divide rbx by 256
+shr rbx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 8 positions, dividing the unsigned value by 256.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Signed divide rbx by 256
+sar rbx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 8 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 256.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 16.
+<|code|>
+; [INTENT] Multiply rbx by 65536
+shl rbx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx left by 16 positions, multiplying the value by 65536.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Divide rbx by 65536
+shr rbx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 16 positions, dividing the unsigned value by 65536.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Signed divide rbx by 65536
+sar rbx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 16 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 65536.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 32.
+<|code|>
+; [INTENT] Multiply rbx by 4294967296
+shl rbx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx left by 32 positions, multiplying the value by 4294967296.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Divide rbx by 4294967296
+shr rbx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 32 positions, dividing the unsigned value by 4294967296.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Signed divide rbx by 4294967296
+sar rbx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rbx right by 32 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4294967296.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 1.
+<|code|>
+; [INTENT] Multiply rcx by 2
+shl rcx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx left by 1 positions, multiplying the value by 2.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Divide rcx by 2
+shr rcx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 1 positions, dividing the unsigned value by 2.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Signed divide rcx by 2
+sar rcx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 1 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 2.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 2.
+<|code|>
+; [INTENT] Multiply rcx by 4
+shl rcx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx left by 2 positions, multiplying the value by 4.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Divide rcx by 4
+shr rcx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 2 positions, dividing the unsigned value by 4.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Signed divide rcx by 4
+sar rcx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 2 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 3.
+<|code|>
+; [INTENT] Multiply rcx by 8
+shl rcx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx left by 3 positions, multiplying the value by 8.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Divide rcx by 8
+shr rcx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 3 positions, dividing the unsigned value by 8.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Signed divide rcx by 8
+sar rcx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 3 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 8.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 4.
+<|code|>
+; [INTENT] Multiply rcx by 16
+shl rcx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx left by 4 positions, multiplying the value by 16.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Divide rcx by 16
+shr rcx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 4 positions, dividing the unsigned value by 16.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Signed divide rcx by 16
+sar rcx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 4 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 16.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 8.
+<|code|>
+; [INTENT] Multiply rcx by 256
+shl rcx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx left by 8 positions, multiplying the value by 256.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Divide rcx by 256
+shr rcx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 8 positions, dividing the unsigned value by 256.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Signed divide rcx by 256
+sar rcx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 8 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 256.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 16.
+<|code|>
+; [INTENT] Multiply rcx by 65536
+shl rcx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx left by 16 positions, multiplying the value by 65536.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Divide rcx by 65536
+shr rcx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 16 positions, dividing the unsigned value by 65536.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Signed divide rcx by 65536
+sar rcx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 16 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 65536.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 32.
+<|code|>
+; [INTENT] Multiply rcx by 4294967296
+shl rcx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx left by 32 positions, multiplying the value by 4294967296.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Divide rcx by 4294967296
+shr rcx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 32 positions, dividing the unsigned value by 4294967296.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Signed divide rcx by 4294967296
+sar rcx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rcx right by 32 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4294967296.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 1.
+<|code|>
+; [INTENT] Multiply rdx by 2
+shl rdx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx left by 1 positions, multiplying the value by 2.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Divide rdx by 2
+shr rdx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 1 positions, dividing the unsigned value by 2.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Signed divide rdx by 2
+sar rdx, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 1 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 2.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 2.
+<|code|>
+; [INTENT] Multiply rdx by 4
+shl rdx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx left by 2 positions, multiplying the value by 4.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Divide rdx by 4
+shr rdx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 2 positions, dividing the unsigned value by 4.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Signed divide rdx by 4
+sar rdx, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 2 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 3.
+<|code|>
+; [INTENT] Multiply rdx by 8
+shl rdx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx left by 3 positions, multiplying the value by 8.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Divide rdx by 8
+shr rdx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 3 positions, dividing the unsigned value by 8.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Signed divide rdx by 8
+sar rdx, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 3 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 8.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 4.
+<|code|>
+; [INTENT] Multiply rdx by 16
+shl rdx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx left by 4 positions, multiplying the value by 16.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Divide rdx by 16
+shr rdx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 4 positions, dividing the unsigned value by 16.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Signed divide rdx by 16
+sar rdx, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 4 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 16.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 8.
+<|code|>
+; [INTENT] Multiply rdx by 256
+shl rdx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx left by 8 positions, multiplying the value by 256.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Divide rdx by 256
+shr rdx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 8 positions, dividing the unsigned value by 256.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Signed divide rdx by 256
+sar rdx, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 8 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 256.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 16.
+<|code|>
+; [INTENT] Multiply rdx by 65536
+shl rdx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx left by 16 positions, multiplying the value by 65536.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Divide rdx by 65536
+shr rdx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 16 positions, dividing the unsigned value by 65536.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Signed divide rdx by 65536
+sar rdx, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 16 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 65536.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 32.
+<|code|>
+; [INTENT] Multiply rdx by 4294967296
+shl rdx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx left by 32 positions, multiplying the value by 4294967296.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Divide rdx by 4294967296
+shr rdx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 32 positions, dividing the unsigned value by 4294967296.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Signed divide rdx by 4294967296
+sar rdx, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdx right by 32 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4294967296.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 1.
+<|code|>
+; [INTENT] Multiply rsi by 2
+shl rsi, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi left by 1 positions, multiplying the value by 2.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Divide rsi by 2
+shr rsi, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 1 positions, dividing the unsigned value by 2.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Signed divide rsi by 2
+sar rsi, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 1 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 2.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 2.
+<|code|>
+; [INTENT] Multiply rsi by 4
+shl rsi, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi left by 2 positions, multiplying the value by 4.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Divide rsi by 4
+shr rsi, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 2 positions, dividing the unsigned value by 4.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Signed divide rsi by 4
+sar rsi, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 2 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 3.
+<|code|>
+; [INTENT] Multiply rsi by 8
+shl rsi, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi left by 3 positions, multiplying the value by 8.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Divide rsi by 8
+shr rsi, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 3 positions, dividing the unsigned value by 8.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Signed divide rsi by 8
+sar rsi, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 3 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 8.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 4.
+<|code|>
+; [INTENT] Multiply rsi by 16
+shl rsi, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi left by 4 positions, multiplying the value by 16.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Divide rsi by 16
+shr rsi, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 4 positions, dividing the unsigned value by 16.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Signed divide rsi by 16
+sar rsi, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 4 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 16.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 8.
+<|code|>
+; [INTENT] Multiply rsi by 256
+shl rsi, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi left by 8 positions, multiplying the value by 256.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Divide rsi by 256
+shr rsi, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 8 positions, dividing the unsigned value by 256.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Signed divide rsi by 256
+sar rsi, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 8 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 256.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 16.
+<|code|>
+; [INTENT] Multiply rsi by 65536
+shl rsi, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi left by 16 positions, multiplying the value by 65536.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Divide rsi by 65536
+shr rsi, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 16 positions, dividing the unsigned value by 65536.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Signed divide rsi by 65536
+sar rsi, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 16 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 65536.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 32.
+<|code|>
+; [INTENT] Multiply rsi by 4294967296
+shl rsi, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi left by 32 positions, multiplying the value by 4294967296.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Divide rsi by 4294967296
+shr rsi, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 32 positions, dividing the unsigned value by 4294967296.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Signed divide rsi by 4294967296
+sar rsi, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rsi right by 32 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4294967296.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 1.
+<|code|>
+; [INTENT] Multiply rdi by 2
+shl rdi, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi left by 1 positions, multiplying the value by 2.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Divide rdi by 2
+shr rdi, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 1 positions, dividing the unsigned value by 2.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 1.
+<|code|>
+; [INTENT] Signed divide rdi by 2
+sar rdi, 1
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 1 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 2.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 2.
+<|code|>
+; [INTENT] Multiply rdi by 4
+shl rdi, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi left by 2 positions, multiplying the value by 4.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Divide rdi by 4
+shr rdi, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 2 positions, dividing the unsigned value by 4.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 2.
+<|code|>
+; [INTENT] Signed divide rdi by 4
+sar rdi, 2
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 2 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 3.
+<|code|>
+; [INTENT] Multiply rdi by 8
+shl rdi, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi left by 3 positions, multiplying the value by 8.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Divide rdi by 8
+shr rdi, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 3 positions, dividing the unsigned value by 8.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 3.
+<|code|>
+; [INTENT] Signed divide rdi by 8
+sar rdi, 3
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 3 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 8.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 4.
+<|code|>
+; [INTENT] Multiply rdi by 16
+shl rdi, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi left by 4 positions, multiplying the value by 16.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Divide rdi by 16
+shr rdi, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 4 positions, dividing the unsigned value by 16.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 4.
+<|code|>
+; [INTENT] Signed divide rdi by 16
+sar rdi, 4
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 4 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 16.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 8.
+<|code|>
+; [INTENT] Multiply rdi by 256
+shl rdi, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi left by 8 positions, multiplying the value by 256.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Divide rdi by 256
+shr rdi, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 8 positions, dividing the unsigned value by 256.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 8.
+<|code|>
+; [INTENT] Signed divide rdi by 256
+sar rdi, 8
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 8 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 256.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 16.
+<|code|>
+; [INTENT] Multiply rdi by 65536
+shl rdi, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi left by 16 positions, multiplying the value by 65536.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Divide rdi by 65536
+shr rdi, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 16 positions, dividing the unsigned value by 65536.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 16.
+<|code|>
+; [INTENT] Signed divide rdi by 65536
+sar rdi, 16
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 16 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 65536.
+<|concept_end|>
+
+<|concept_start|>
+Fast multiplication by power of two using shift left by 32.
+<|code|>
+; [INTENT] Multiply rdi by 4294967296
+shl rdi, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi left by 32 positions, multiplying the value by 4294967296.
+Zeros are inserted into the vacated lower bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Unsigned integer division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Divide rdi by 4294967296
+shr rdi, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 32 positions, dividing the unsigned value by 4294967296.
+Zeros are inserted into the vacated upper bit positions.
+<|concept_end|>
+
+<|concept_start|>
+Signed arithmetic division by power of two using shift right by 32.
+<|code|>
+; [INTENT] Signed divide rdi by 4294967296
+sar rdi, 32
+<|rule_register|>
+<|commentary|>
+Shifts bits in rdi right by 32 positions while preserving the sign bit.
+Computes a mathematically sound two's complement division by 4294967296.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rax to hardware stack.
+<|code|>
+; [INTENT] Preserve rax on stack
+push rax
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rax at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rax from hardware stack.
+<|code|>
+; [INTENT] Restore rax from stack
+pop rax
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rax and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rbx to hardware stack.
+<|code|>
+; [INTENT] Preserve rbx on stack
+push rbx
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rbx at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rbx from hardware stack.
+<|code|>
+; [INTENT] Restore rbx from stack
+pop rbx
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rbx and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rcx to hardware stack.
+<|code|>
+; [INTENT] Preserve rcx on stack
+push rcx
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rcx at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rcx from hardware stack.
+<|code|>
+; [INTENT] Restore rcx from stack
+pop rcx
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rcx and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rdx to hardware stack.
+<|code|>
+; [INTENT] Preserve rdx on stack
+push rdx
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rdx at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rdx from hardware stack.
+<|code|>
+; [INTENT] Restore rdx from stack
+pop rdx
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rdx and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rsi to hardware stack.
+<|code|>
+; [INTENT] Preserve rsi on stack
+push rsi
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rsi at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rsi from hardware stack.
+<|code|>
+; [INTENT] Restore rsi from stack
+pop rsi
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rsi and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rdi to hardware stack.
+<|code|>
+; [INTENT] Preserve rdi on stack
+push rdi
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rdi at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rdi from hardware stack.
+<|code|>
+; [INTENT] Restore rdi from stack
+pop rdi
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rdi and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rbp to hardware stack.
+<|code|>
+; [INTENT] Preserve rbp on stack
+push rbp
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rbp at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rbp from hardware stack.
+<|code|>
+; [INTENT] Restore rbp from stack
+pop rbp
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rbp and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register rsp to hardware stack.
+<|code|>
+; [INTENT] Preserve rsp on stack
+push rsp
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of rsp at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register rsp from hardware stack.
+<|code|>
+; [INTENT] Restore rsp from stack
+pop rsp
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into rsp and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r8 to hardware stack.
+<|code|>
+; [INTENT] Preserve r8 on stack
+push r8
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r8 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r8 from hardware stack.
+<|code|>
+; [INTENT] Restore r8 from stack
+pop r8
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r8 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r9 to hardware stack.
+<|code|>
+; [INTENT] Preserve r9 on stack
+push r9
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r9 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r9 from hardware stack.
+<|code|>
+; [INTENT] Restore r9 from stack
+pop r9
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r9 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r10 to hardware stack.
+<|code|>
+; [INTENT] Preserve r10 on stack
+push r10
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r10 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r10 from hardware stack.
+<|code|>
+; [INTENT] Restore r10 from stack
+pop r10
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r10 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r11 to hardware stack.
+<|code|>
+; [INTENT] Preserve r11 on stack
+push r11
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r11 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r11 from hardware stack.
+<|code|>
+; [INTENT] Restore r11 from stack
+pop r11
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r11 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r12 to hardware stack.
+<|code|>
+; [INTENT] Preserve r12 on stack
+push r12
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r12 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r12 from hardware stack.
+<|code|>
+; [INTENT] Restore r12 from stack
+pop r12
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r12 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r13 to hardware stack.
+<|code|>
+; [INTENT] Preserve r13 on stack
+push r13
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r13 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r13 from hardware stack.
+<|code|>
+; [INTENT] Restore r13 from stack
+pop r13
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r13 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r14 to hardware stack.
+<|code|>
+; [INTENT] Preserve r14 on stack
+push r14
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r14 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r14 from hardware stack.
+<|code|>
+; [INTENT] Restore r14 from stack
+pop r14
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r14 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Pushing register r15 to hardware stack.
+<|code|>
+; [INTENT] Preserve r15 on stack
+push r15
+<|rule_memory|>
+<|commentary|>
+Decrements RSP by 8 bytes and stores the 64-bit value of r15 at address [RSP].
+The x86_64 stack grows downwards toward lower addresses.
+<|concept_end|>
+
+<|concept_start|>
+Popping register r15 from hardware stack.
+<|code|>
+; [INTENT] Restore r15 from stack
+pop r15
+<|rule_memory|>
+<|commentary|>
+Reads the 64-bit value from address [RSP] into r15 and increments RSP by 8 bytes.
+Restores the previously saved register state.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 8.
+<|code|>
+; [INTENT] Read local variable at [rbp - 8]
+mov rax, [rbp - 8]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 8 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 8.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 8]
+mov [rbp - 8], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 8.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 16.
+<|code|>
+; [INTENT] Read local variable at [rbp - 16]
+mov rax, [rbp - 16]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 16 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 16.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 16]
+mov [rbp - 16], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 16.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 24.
+<|code|>
+; [INTENT] Read local variable at [rbp - 24]
+mov rax, [rbp - 24]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 24 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 24.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 24]
+mov [rbp - 24], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 24.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 32.
+<|code|>
+; [INTENT] Read local variable at [rbp - 32]
+mov rax, [rbp - 32]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 32 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 32.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 32]
+mov [rbp - 32], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 32.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 40.
+<|code|>
+; [INTENT] Read local variable at [rbp - 40]
+mov rax, [rbp - 40]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 40 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 40.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 40]
+mov [rbp - 40], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 40.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 48.
+<|code|>
+; [INTENT] Read local variable at [rbp - 48]
+mov rax, [rbp - 48]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 48 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 48.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 48]
+mov [rbp - 48], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 48.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 64.
+<|code|>
+; [INTENT] Read local variable at [rbp - 64]
+mov rax, [rbp - 64]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 64 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 64.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 64]
+mov [rbp - 64], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 64.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 80.
+<|code|>
+; [INTENT] Read local variable at [rbp - 80]
+mov rax, [rbp - 80]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 80 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 80.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 80]
+mov [rbp - 80], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 80.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 96.
+<|code|>
+; [INTENT] Read local variable at [rbp - 96]
+mov rax, [rbp - 96]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 96 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 96.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 96]
+mov [rbp - 96], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 96.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Reading local stack variable at offset negative 128.
+<|code|>
+; [INTENT] Read local variable at [rbp - 128]
+mov rax, [rbp - 128]
+<|rule_memory|>
+<|commentary|>
+Dereferences memory at address RBP minus 128 bytes, loading the 64-bit local variable into RAX.
+Negative displacements from RBP access local variables in standard stack frames.
+<|concept_end|>
+
+<|concept_start|>
+Writing local stack variable at offset negative 128.
+<|code|>
+; [INTENT] Store value to local variable at [rbp - 128]
+mov [rbp - 128], rax
+<|rule_memory|>
+<|commentary|>
+Stores the 64-bit value in RAX into the stack memory location at RBP minus 128.
+Ensures persistent local storage within the function scope.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rcx scaled by 1.
+<|code|>
+; [INTENT] Access element index rcx in array rdi with element size 1
+mov rax, [rdi + rcx*1]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rcx * 1) and loads the value into RAX.
+Scale factor 1 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 1.
+<|code|>
+; [INTENT] Calculate address of element rcx with scale 1
+lea rax, [rdi + rcx*1]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rcx * 1) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rsi scaled by 1.
+<|code|>
+; [INTENT] Access element index rsi in array rdi with element size 1
+mov rax, [rdi + rsi*1]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rsi * 1) and loads the value into RAX.
+Scale factor 1 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 1.
+<|code|>
+; [INTENT] Calculate address of element rsi with scale 1
+lea rax, [rdi + rsi*1]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rsi * 1) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rdx scaled by 1.
+<|code|>
+; [INTENT] Access element index rdx in array rdi with element size 1
+mov rax, [rdi + rdx*1]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rdx * 1) and loads the value into RAX.
+Scale factor 1 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 1.
+<|code|>
+; [INTENT] Calculate address of element rdx with scale 1
+lea rax, [rdi + rdx*1]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rdx * 1) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rax scaled by 1.
+<|code|>
+; [INTENT] Access element index rax in array rdi with element size 1
+mov rax, [rdi + rax*1]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rax * 1) and loads the value into RAX.
+Scale factor 1 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 1.
+<|code|>
+; [INTENT] Calculate address of element rax with scale 1
+lea rax, [rdi + rax*1]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rax * 1) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r8 scaled by 1.
+<|code|>
+; [INTENT] Access element index r8 in array rdi with element size 1
+mov rax, [rdi + r8*1]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r8 * 1) and loads the value into RAX.
+Scale factor 1 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 1.
+<|code|>
+; [INTENT] Calculate address of element r8 with scale 1
+lea rax, [rdi + r8*1]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r8 * 1) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r9 scaled by 1.
+<|code|>
+; [INTENT] Access element index r9 in array rdi with element size 1
+mov rax, [rdi + r9*1]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r9 * 1) and loads the value into RAX.
+Scale factor 1 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 1.
+<|code|>
+; [INTENT] Calculate address of element r9 with scale 1
+lea rax, [rdi + r9*1]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r9 * 1) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rcx scaled by 2.
+<|code|>
+; [INTENT] Access element index rcx in array rdi with element size 2
+mov rax, [rdi + rcx*2]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rcx * 2) and loads the value into RAX.
+Scale factor 2 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 2.
+<|code|>
+; [INTENT] Calculate address of element rcx with scale 2
+lea rax, [rdi + rcx*2]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rcx * 2) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rsi scaled by 2.
+<|code|>
+; [INTENT] Access element index rsi in array rdi with element size 2
+mov rax, [rdi + rsi*2]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rsi * 2) and loads the value into RAX.
+Scale factor 2 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 2.
+<|code|>
+; [INTENT] Calculate address of element rsi with scale 2
+lea rax, [rdi + rsi*2]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rsi * 2) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rdx scaled by 2.
+<|code|>
+; [INTENT] Access element index rdx in array rdi with element size 2
+mov rax, [rdi + rdx*2]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rdx * 2) and loads the value into RAX.
+Scale factor 2 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 2.
+<|code|>
+; [INTENT] Calculate address of element rdx with scale 2
+lea rax, [rdi + rdx*2]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rdx * 2) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rax scaled by 2.
+<|code|>
+; [INTENT] Access element index rax in array rdi with element size 2
+mov rax, [rdi + rax*2]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rax * 2) and loads the value into RAX.
+Scale factor 2 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 2.
+<|code|>
+; [INTENT] Calculate address of element rax with scale 2
+lea rax, [rdi + rax*2]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rax * 2) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r8 scaled by 2.
+<|code|>
+; [INTENT] Access element index r8 in array rdi with element size 2
+mov rax, [rdi + r8*2]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r8 * 2) and loads the value into RAX.
+Scale factor 2 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 2.
+<|code|>
+; [INTENT] Calculate address of element r8 with scale 2
+lea rax, [rdi + r8*2]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r8 * 2) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r9 scaled by 2.
+<|code|>
+; [INTENT] Access element index r9 in array rdi with element size 2
+mov rax, [rdi + r9*2]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r9 * 2) and loads the value into RAX.
+Scale factor 2 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 2.
+<|code|>
+; [INTENT] Calculate address of element r9 with scale 2
+lea rax, [rdi + r9*2]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r9 * 2) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rcx scaled by 4.
+<|code|>
+; [INTENT] Access element index rcx in array rdi with element size 4
+mov rax, [rdi + rcx*4]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rcx * 4) and loads the value into RAX.
+Scale factor 4 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 4.
+<|code|>
+; [INTENT] Calculate address of element rcx with scale 4
+lea rax, [rdi + rcx*4]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rcx * 4) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rsi scaled by 4.
+<|code|>
+; [INTENT] Access element index rsi in array rdi with element size 4
+mov rax, [rdi + rsi*4]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rsi * 4) and loads the value into RAX.
+Scale factor 4 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 4.
+<|code|>
+; [INTENT] Calculate address of element rsi with scale 4
+lea rax, [rdi + rsi*4]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rsi * 4) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rdx scaled by 4.
+<|code|>
+; [INTENT] Access element index rdx in array rdi with element size 4
+mov rax, [rdi + rdx*4]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rdx * 4) and loads the value into RAX.
+Scale factor 4 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 4.
+<|code|>
+; [INTENT] Calculate address of element rdx with scale 4
+lea rax, [rdi + rdx*4]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rdx * 4) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rax scaled by 4.
+<|code|>
+; [INTENT] Access element index rax in array rdi with element size 4
+mov rax, [rdi + rax*4]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rax * 4) and loads the value into RAX.
+Scale factor 4 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 4.
+<|code|>
+; [INTENT] Calculate address of element rax with scale 4
+lea rax, [rdi + rax*4]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rax * 4) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r8 scaled by 4.
+<|code|>
+; [INTENT] Access element index r8 in array rdi with element size 4
+mov rax, [rdi + r8*4]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r8 * 4) and loads the value into RAX.
+Scale factor 4 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 4.
+<|code|>
+; [INTENT] Calculate address of element r8 with scale 4
+lea rax, [rdi + r8*4]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r8 * 4) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r9 scaled by 4.
+<|code|>
+; [INTENT] Access element index r9 in array rdi with element size 4
+mov rax, [rdi + r9*4]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r9 * 4) and loads the value into RAX.
+Scale factor 4 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 4.
+<|code|>
+; [INTENT] Calculate address of element r9 with scale 4
+lea rax, [rdi + r9*4]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r9 * 4) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rcx scaled by 8.
+<|code|>
+; [INTENT] Access element index rcx in array rdi with element size 8
+mov rax, [rdi + rcx*8]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rcx * 8) and loads the value into RAX.
+Scale factor 8 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 8.
+<|code|>
+; [INTENT] Calculate address of element rcx with scale 8
+lea rax, [rdi + rcx*8]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rcx * 8) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rsi scaled by 8.
+<|code|>
+; [INTENT] Access element index rsi in array rdi with element size 8
+mov rax, [rdi + rsi*8]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rsi * 8) and loads the value into RAX.
+Scale factor 8 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 8.
+<|code|>
+; [INTENT] Calculate address of element rsi with scale 8
+lea rax, [rdi + rsi*8]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rsi * 8) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rdx scaled by 8.
+<|code|>
+; [INTENT] Access element index rdx in array rdi with element size 8
+mov rax, [rdi + rdx*8]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rdx * 8) and loads the value into RAX.
+Scale factor 8 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 8.
+<|code|>
+; [INTENT] Calculate address of element rdx with scale 8
+lea rax, [rdi + rdx*8]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rdx * 8) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using rax scaled by 8.
+<|code|>
+; [INTENT] Access element index rax in array rdi with element size 8
+mov rax, [rdi + rax*8]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (rax * 8) and loads the value into RAX.
+Scale factor 8 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 8.
+<|code|>
+; [INTENT] Calculate address of element rax with scale 8
+lea rax, [rdi + rax*8]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (rax * 8) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r8 scaled by 8.
+<|code|>
+; [INTENT] Access element index r8 in array rdi with element size 8
+mov rax, [rdi + r8*8]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r8 * 8) and loads the value into RAX.
+Scale factor 8 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 8.
+<|code|>
+; [INTENT] Calculate address of element r8 with scale 8
+lea rax, [rdi + r8*8]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r8 * 8) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Array element access using r9 scaled by 8.
+<|code|>
+; [INTENT] Access element index r9 in array rdi with element size 8
+mov rax, [rdi + r9*8]
+<|rule_memory|>
+<|commentary|>
+Computes target address RDI + (r9 * 8) and loads the value into RAX.
+Scale factor 8 maps directly to element byte widths in hardware.
+<|concept_end|>
+
+<|concept_start|>
+Computing array element address with LEA and scale 8.
+<|code|>
+; [INTENT] Calculate address of element r9 with scale 8
+lea rax, [rdi + r9*8]
+<|rule_memory|>
+<|commentary|>
+Calculates the memory address RDI + (r9 * 8) without reading memory.
+Writes the calculated effective pointer into RAX in a single ALU cycle.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using je.
+<|code|>
+; [INTENT] Branch if Zero Flag is set (RAX == RBX)
+cmp rax, rbx
+je .equal_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if Zero Flag is set (RAX == RBX).
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jne.
+<|code|>
+; [INTENT] Branch if Zero Flag is clear (RAX != RBX)
+cmp rax, rbx
+jne .not_equal_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if Zero Flag is clear (RAX != RBX).
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jg.
+<|code|>
+; [INTENT] Branch if signed comparison indicates RAX > RBX
+cmp rax, rbx
+jg .greater_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if signed comparison indicates RAX > RBX.
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jl.
+<|code|>
+; [INTENT] Branch if signed comparison indicates RAX < RBX
+cmp rax, rbx
+jl .less_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if signed comparison indicates RAX < RBX.
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using ja.
+<|code|>
+; [INTENT] Branch if unsigned comparison indicates RAX > RBX
+cmp rax, rbx
+ja .above_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if unsigned comparison indicates RAX > RBX.
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jb.
+<|code|>
+; [INTENT] Branch if unsigned comparison indicates RAX < RBX
+cmp rax, rbx
+jb .below_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if unsigned comparison indicates RAX < RBX.
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jz.
+<|code|>
+; [INTENT] Branch if RAX contains zero
+test rax, rax
+jz .zero_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if RAX contains zero.
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jnz.
+<|code|>
+; [INTENT] Branch if RAX contains non-zero value
+test rax, rax
+jnz .nonzero_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if RAX contains non-zero value.
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jz.
+<|code|>
+; [INTENT] Branch if least significant bit is zero (even integer)
+test rax, 1
+jz .even_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if least significant bit is zero (even integer).
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Conditional jump using jnz.
+<|code|>
+; [INTENT] Branch if least significant bit is one (odd integer)
+test rax, 1
+jnz .odd_target
+<|rule_control_flow|>
+<|commentary|>
+Evaluates the condition flags in EFLAGS. Branches to target if least significant bit is one (odd integer).
+Otherwise execution falls through to the next sequential instruction.
+<|concept_end|>
+
+<|concept_start|>
+Branchless conditional assignment using cmovz.
+<|code|>
+; [INTENT] Assign rbx to rax if Zero Flag is set (condition equal)
+cmovz rax, rbx
+<|rule_register|>
+<|commentary|>
+Performs conditional move without branching. If Zero Flag is set (condition equal), RAX is updated with RBX.
+Eliminates branch misprediction pipeline flushes on modern superscalar processors.
+<|concept_end|>
+
+<|concept_start|>
+Branchless conditional assignment using cmovnz.
+<|code|>
+; [INTENT] Assign rbx to rax if Zero Flag is clear (condition not equal)
+cmovnz rax, rbx
+<|rule_register|>
+<|commentary|>
+Performs conditional move without branching. If Zero Flag is clear (condition not equal), RAX is updated with RBX.
+Eliminates branch misprediction pipeline flushes on modern superscalar processors.
+<|concept_end|>
+
+<|concept_start|>
+Branchless conditional assignment using cmovg.
+<|code|>
+; [INTENT] Assign rbx to rax if signed greater than condition
+cmovg rax, rbx
+<|rule_register|>
+<|commentary|>
+Performs conditional move without branching. If signed greater than condition, RAX is updated with RBX.
+Eliminates branch misprediction pipeline flushes on modern superscalar processors.
+<|concept_end|>
+
+<|concept_start|>
+Branchless conditional assignment using cmovl.
+<|code|>
+; [INTENT] Assign rbx to rax if signed less than condition
+cmovl rax, rbx
+<|rule_register|>
+<|commentary|>
+Performs conditional move without branching. If signed less than condition, RAX is updated with RBX.
+Eliminates branch misprediction pipeline flushes on modern superscalar processors.
+<|concept_end|>
+
+<|concept_start|>
+Branchless conditional assignment using cmova.
+<|code|>
+; [INTENT] Assign rbx to rax if unsigned above condition
+cmova rax, rbx
+<|rule_register|>
+<|commentary|>
+Performs conditional move without branching. If unsigned above condition, RAX is updated with RBX.
+Eliminates branch misprediction pipeline flushes on modern superscalar processors.
+<|concept_end|>
+
+<|concept_start|>
+Branchless conditional assignment using cmovb.
+<|code|>
+; [INTENT] Assign rbx to rax if unsigned below condition
+cmovb rax, rbx
+<|rule_register|>
+<|commentary|>
+Performs conditional move without branching. If unsigned below condition, RAX is updated with RBX.
+Eliminates branch misprediction pipeline flushes on modern superscalar processors.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of strlen_64 in x86_64 NASM.
+<|code|>
+strlen_64:
+    ; [INTENT] Compute length of null-terminated string rdi
+    xor rax, rax
+.loop:
+    cmp byte [rdi + rax], 0
+    je .done
+    inc rax
+    jmp .loop
+.done:
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Calculates string length by scanning for the null terminating byte and returns character count in RAX.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of memcpy_64 in x86_64 NASM.
+<|code|>
+memcpy_64:
+    ; [INTENT] Copy rdx bytes from rsi to rdi
+    mov rax, rdi
+    xor rcx, rcx
+.copy_loop:
+    cmp rcx, rdx
+    je .done
+    mov r8b, [rsi + rcx]
+    mov [rdi + rcx], r8b
+    inc rcx
+    jmp .copy_loop
+.done:
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Copies RDX bytes from source RSI to destination RDI using temporary byte register R8B, returning destination pointer in RAX.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of memset_64 in x86_64 NASM.
+<|code|>
+memset_64:
+    ; [INTENT] Fill rdx bytes at rdi with byte sil
+    mov rax, rdi
+    xor rcx, rcx
+.fill_loop:
+    cmp rcx, rdx
+    je .done
+    mov [rdi + rcx], sil
+    inc rcx
+    jmp .fill_loop
+.done:
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Fills RDX bytes of memory at RDI with byte pattern in SIL, returning base pointer in RAX.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of strcmp_64 in x86_64 NASM.
+<|code|>
+strcmp_64:
+    ; [INTENT] Compare null-terminated strings rdi and rsi
+.cmp_loop:
+    mov al, [rdi]
+    mov bl, [rsi]
+    cmp al, bl
+    jne .diff
+    test al, al
+    jz .equal
+    inc rdi
+    inc rsi
+    jmp .cmp_loop
+.diff:
+    movzx eax, al
+    movzx ebx, bl
+    sub eax, ebx
+    ret
+.equal:
+    xor eax, eax
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Lexicographical string comparison returning negative, zero, or positive integer in EAX.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of find_max_element in x86_64 NASM.
+<|code|>
+find_max_element:
+    ; [INTENT] Find maximum signed 64-bit integer in array rdi with length rsi
+    mov rax, [rdi]
+    mov rcx, 1
+.max_loop:
+    cmp rcx, rsi
+    jge .done
+    mov rdx, [rdi + rcx*8]
+    cmp rdx, rax
+    cmovg rax, rdx
+    inc rcx
+    jmp .max_loop
+.done:
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Scans array RDI for largest signed element using branchless CMOVG to eliminate branch mispredictions.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of euclidean_gcd in x86_64 NASM.
+<|code|>
+euclidean_gcd:
+    ; [INTENT] Greatest common divisor of rdi and rsi
+.gcd_step:
+    test rsi, rsi
+    jz .done
+    xor rdx, rdx
+    mov rax, rdi
+    div rsi
+    mov rdi, rsi
+    mov rsi, rdx
+    jmp .gcd_step
+.done:
+    mov rax, rdi
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Computes greatest common divisor using Euclidean division remainder loop until divisor reaches zero.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of popcount_fallback in x86_64 NASM.
+<|code|>
+popcount_fallback:
+    ; [INTENT] Count set bits in rdi without hardware popcnt
+    xor rax, rax
+.count_loop:
+    test rdi, rdi
+    jz .done
+    mov rbx, rdi
+    dec rbx
+    and rdi, rbx
+    inc rax
+    jmp .count_loop
+.done:
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Brian Kernighan bit-counting algorithm: clearing lowest set bit via rdi AND (rdi - 1) until zero.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of fast_inv_sqrt in x86_64 NASM.
+<|code|>
+fast_inv_sqrt:
+    ; [INTENT] Fast inverse square root of float in xmm0
+    movss xmm1, dword [rel magic_num]
+    movd eax, xmm0
+    sar eax, 1
+    sub eax, 0x5f3759df
+    neg eax
+    movd xmm0, eax
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Quake III fast reciprocal square root bit-cast hack for rapid initial vector normalization approximation.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of simd_vector_dot_product in x86_64 NASM.
+<|code|>
+simd_vector_dot_product:
+    ; [INTENT] Compute dot product of two 4-float vectors in xmm0 and xmm1
+    mulps xmm0, xmm1
+    movshdup xmm1, xmm0
+    addps xmm0, xmm1
+    movhlps xmm1, xmm0
+    addss xmm0, xmm1
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Multiplies four vector elements in parallel with MULPS and accumulates components into scalar float in XMM0.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of branchless_abs_64 in x86_64 NASM.
+<|code|>
+branchless_abs_64:
+    ; [INTENT] Compute absolute value of signed integer in rdi
+    mov rax, rdi
+    cqo
+    xor rax, rdx
+    sub rax, rdx
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Branchless absolute value: arithmetic sign extension into RDX followed by XOR and subtraction.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of power_of_two_check in x86_64 NASM.
+<|code|>
+power_of_two_check:
+    ; [INTENT] Return 1 if rdi is power of two, else 0
+    test rdi, rdi
+    jle .not_power
+    mov rax, rdi
+    dec rax
+    test rdi, rax
+    jnz .not_power
+    mov eax, 1
+    ret
+.not_power:
+    xor eax, eax
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Checks if integer in RDI is positive and has exactly one bit set using rdi AND (rdi - 1).
+<|concept_end|>
+
+<|concept_start|>
+Implementation of fnv1a_hash_64 in x86_64 NASM.
+<|code|>
+fnv1a_hash_64:
+    ; [INTENT] FNV-1a 64-bit hash of buffer rdi with length rsi
+    mov rax, 0xcbf29ce484222325
+    mov r8,  0x100000001b3
+    xor rcx, rcx
+.hash_loop:
+    cmp rcx, rsi
+    je .done
+    movzx rdx, byte [rdi + rcx]
+    xor rax, rdx
+    imul rax, r8
+    inc rcx
+    jmp .hash_loop
+.done:
+    ret
+<|rule_control_flow|>
+<|commentary|>
+64-bit Fowler-Noll-Vo hash FNV-1a multiplying by prime constant 0x100000001B3 after XORing each input byte.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of binary_search_64 in x86_64 NASM.
+<|code|>
+binary_search_64:
+    ; [INTENT] Binary search sorted array rdi between rsi and rdx for target rcx
+.search_loop:
+    cmp rsi, rdx
+    jg .not_found
+    mov rax, rsi
+    add rax, rdx
+    shr rax, 1
+    mov r8, [rdi + rax*8]
+    cmp r8, rcx
+    je .found
+    jl .search_right
+    mov rdx, rax
+    dec rdx
+    jmp .search_loop
+.search_right:
+    mov rsi, rax
+    inc rsi
+    jmp .search_loop
+.found:
+    ret
+.not_found:
+    mov rax, -1
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Logarithmic binary search over 64-bit sorted integer array returning index in RAX or -1 if absent.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of matrix_vector_mult_4x4 in x86_64 NASM.
+<|code|>
+matrix_vector_mult_4x4:
+    ; [INTENT] Multiply 4x4 float matrix rdi by 4D float vector rsi
+    movups xmm4, [rsi]
+    movups xmm0, [rdi]
+    mulps xmm0, xmm4
+    movups xmm1, [rdi + 16]
+    mulps xmm1, xmm4
+    movups xmm2, [rdi + 32]
+    mulps xmm2, xmm4
+    movups xmm3, [rdi + 48]
+    mulps xmm3, xmm4
+    haddps xmm0, xmm1
+    haddps xmm2, xmm3
+    haddps xmm0, xmm2
+    movups [rdx], xmm0
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Multiplies 4x4 matrix by 4-element column vector using SSE horizontal additions and stores result at RDX.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of string_to_int_atoi in x86_64 NASM.
+<|code|>
+string_to_int_atoi:
+    ; [INTENT] Convert ASCII decimal string rdi to 64-bit integer
+    xor rax, rax
+.parse_digit:
+    movzx rcx, byte [rdi]
+    cmp cl, '0'
+    jb .parse_done
+    cmp cl, '9'
+    ja .parse_done
+    sub cl, '0'
+    imul rax, 10
+    add rax, rcx
+    inc rdi
+    jmp .parse_digit
+.parse_done:
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Parses ASCII numeric digits into 64-bit scalar integer accumulator RAX until non-digit encountered.
+<|concept_end|>
+
+<|concept_start|>
+Implementation of int_to_hex_string in x86_64 NASM.
+<|code|>
+int_to_hex_string:
+    ; [INTENT] Convert 64-bit integer rdi to 16-character hex string at rsi
+    mov rcx, 16
+.hex_loop:
+    dec rcx
+    mov rax, rdi
+    and rax, 0x0F
+    cmp rax, 10
+    sbb al, 0x69
+    das
+    mov [rsi + rcx], al
+    shr rdi, 4
+    test rcx, rcx
+    jnz .hex_loop
+    ret
+<|rule_control_flow|>
+<|commentary|>
+Formats 64-bit integer into hexadecimal ASCII characters using branchless nibble arithmetic.
+<|concept_end|>
+
+<|concept_start|>
+System V AMD64 function argument passing.
+<|code|>
+mov rdi, 10
+mov rsi, 20
+mov rdx, 30
+mov rcx, 40
+mov r8,  50
+mov r9,  60
+call process_six_args
+<|rule_control_flow|>
+<|commentary|>
+First six integer arguments passed in registers RDI, RSI, RDX, RCX, R8, R9 under System V ABI.
+<|concept_end|>
+
+<|concept_start|>
+Microsoft x64 shadow store reservation.
+<|code|>
+sub rsp, 40
+call win64_subroutine
+add rsp, 40
+<|rule_memory|>
+<|commentary|>
+Caller allocates 32 bytes shadow space plus 8 bytes stack alignment before calling Win64 subroutines.
+<|concept_end|>
+
+<|concept_start|>
+System V callee-saved register preservation.
+<|code|>
+push rbx
+push r12
+push r13
+; function body
+pop r13
+pop r12
+pop rbx
+ret
+<|rule_memory|>
+<|commentary|>
+Callee must preserve RBX, R12, R13, R14, R15, RBP, RSP across function calls under System V ABI.
+<|concept_end|>
+
+<|concept_start|>
+Leaf function omitting frame pointer.
+<|code|>
+mov rax, rdi
+add rax, rsi
+ret
+<|rule_register|>
+<|commentary|>
+Leaf functions that do not allocate stack space or call other functions omit RBP frame setup for maximum speed.
+<|concept_end|>
+
+<|concept_start|>
+16-byte stack alignment before CALL.
+<|code|>
+push rbp
+mov rbp, rsp
+sub rsp, 32
+call external_function
+mov rsp, rbp
+pop rbp
+ret
+<|rule_memory|>
+<|commentary|>
+Both System V and Win64 ABIs require RSP to be 16-byte aligned at the point of CALL instruction.
+<|concept_end|>
+
+<|concept_start|>
+Scalar integer return value in RAX.
+<|code|>
+mov eax, 42
+ret
+<|rule_register|>
+<|commentary|>
+All 32-bit and 64-bit integer return values are transmitted in RAX (or EAX for 32-bit types).
+<|concept_end|>
+
+<|concept_start|>
+Scalar floating-point return value in XMM0.
+<|code|>
+movss xmm0, [rel result_float]
+ret
+<|rule_register|>
+<|commentary|>
+Floating-point scalar return values are transmitted in the lowest lane of XMM0.
+<|concept_end|>
+
+<|concept_start|>
+Linux x86_64 sys_exit system call.
+<|code|>
+mov rax, 60
+xor rdi, rdi
+syscall
+<|rule_control_flow|>
+<|commentary|>
+Invokes Linux sys_exit (syscall 60 in RAX) with exit status code 0 in RDI.
+<|concept_end|>
+
+<|concept_start|>
+Linux x86_64 sys_write system call.
+<|code|>
+mov rax, 1
+mov rdi, 1
+mov rsi, buffer
+mov rdx, 64
+syscall
+<|rule_control_flow|>
+<|commentary|>
+Invokes Linux sys_write (syscall 1 in RAX) writing 64 bytes from buffer RSI to stdout file descriptor 1 in RDI.
+<|concept_end|>
+
+<|concept_start|>
+Fused Multiply-Add AVX vector instruction.
+<|code|>
+vfmadd231ps ymm0, ymm1, ymm2
+<|rule_register|>
+<|commentary|>
+Computes ymm0 = (ymm1 * ymm2) + ymm0 for eight 32-bit single-precision floats across 256-bit YMM register.
+<|concept_end|>
+
+<|concept_start|>
+Aligned 128-bit vector load.
+<|code|>
+movaps xmm0, [rdi]
+<|rule_memory|>
+<|commentary|>
+Loads 128-bit vector from memory address RDI aligned to 16 bytes into XMM0.
+<|concept_end|>
+
+<|concept_start|>
+Unaligned 128-bit vector load.
+<|code|>
+movups xmm0, [rdi]
+<|rule_memory|>
+<|commentary|>
+Loads 128-bit vector from arbitrary memory address RDI into XMM0.
+<|concept_end|>
+
+<|concept_start|>
+Parallel 4-float vector addition.
+<|code|>
+addps xmm0, xmm1
+<|rule_register|>
+<|commentary|>
+Adds four 32-bit floats in XMM1 to XMM0 in parallel.
+<|concept_end|>
+
+<|concept_start|>
+Parallel 4-float vector multiplication.
+<|code|>
+mulps xmm0, xmm1
+<|rule_register|>
+<|commentary|>
+Multiplies four 32-bit floats in XMM0 by XMM1 in parallel.
+<|concept_end|>
+
+<|concept_start|>
+Scalar single float square root.
+<|code|>
+sqrtss xmm0, xmm1
+<|rule_register|>
+<|commentary|>
+Computes square root of lowest float in XMM1 into XMM0.
+<|concept_end|>
+
+<|concept_start|>
+Fast reciprocal square root approximation.
+<|code|>
+rsqrtss xmm0, xmm1
+<|rule_register|>
+<|commentary|>
+Approximate 1 / sqrt(x) in under 4 clock cycles using SSE hardware.
+<|concept_end|>
