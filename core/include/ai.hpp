@@ -5,12 +5,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <stdfloat>
 #include <string>
 #include <vector>
 
 #include "../src/CUDA/transfer.cuh"
 #include "optimizer.hpp"
+#include "paged_cache.hpp"
 
 #pragma pack(push, 1)
 
@@ -91,9 +93,10 @@ public:
 	GpuWeights gpu_weights;
 	GpuActivations gpu_activations;
 	GpuPortion gpu_portion; // Reused across
-
 	// iterations to prevent reallocation
 	GpuEmbeddings gpu_embeddings;
+	GpuPagedCache gpu_paged_cache;
+	std::unique_ptr<PagedBlockManager> block_manager;
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
 	// inside [weight_min, weight_max]
@@ -154,6 +157,19 @@ public:
 				  const std::vector<std::bfloat16_t>& hidden_states,
 				  size_t sequence_length,
 				  float learning_rate);
+
+	// Phase 4: PagedAttention KV-Cache & Block Management
+	bool build_paged_cache(size_t total_blocks = 256, size_t block_size = 16);
+	void free_paged_cache_memory();
+	bool fork_sequence_context(const SequenceContext& parent, SequenceContext& child);
+	bool append_sequence_token(SequenceContext& sequence,
+				   const std::vector<std::bfloat16_t>& key,
+				   const std::vector<std::bfloat16_t>& value);
+	void release_sequence_context(SequenceContext& sequence);
+	bool forward_paged_attention(const SequenceContext& sequence,
+				     const std::vector<std::bfloat16_t>& query,
+				     std::vector<std::bfloat16_t>& output,
+				     size_t query_length);
 };
 
 #endif

@@ -150,6 +150,17 @@ struct GpuActivations {
 	void* d_residual_out = nullptr;        // device ptr to __nv_bfloat16 (seq * dim)
 };
 
+// Phase 4: PagedAttention KV-Cache Physical Page Pool
+struct GpuPagedCache {
+	void* d_key_blocks = nullptr;   // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
+	void* d_value_blocks = nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
+	void* d_block_table = nullptr;  // device ptr to int (staged sequence block table)
+	size_t total_blocks = 0;
+	size_t block_size = 16;
+	size_t hidden_dimension = 32;
+	size_t num_heads = 4;
+};
+
 #ifdef BUILDING_CUDA_DLL
 #define CUDA_API __declspec(dllexport)
 #else

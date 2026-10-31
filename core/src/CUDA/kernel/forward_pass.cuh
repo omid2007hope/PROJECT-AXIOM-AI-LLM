@@ -70,6 +70,38 @@ CUDA_API bool transformer_forward_block(void* hidden_states,
 					size_t ffn_dim,
 					void* stream);
 
+// Phase 4: PagedAttention KV-Cache & Block Management
+CUDA_API bool allocate_paged_cache(GpuPagedCache* cache,
+				   size_t total_blocks,
+				   size_t block_size,
+				   size_t hidden_dim,
+				   size_t num_heads);
+
+CUDA_API void free_paged_cache(GpuPagedCache* cache);
+
+CUDA_API bool copy_physical_block(const GpuPagedCache* cache,
+				  int src_block,
+				  int dst_block,
+				  size_t valid_tokens,
+				  void* stream);
+
+CUDA_API bool append_paged_kv(const GpuPagedCache* cache,
+			      int physical_block,
+			      size_t block_offset,
+			      const void* key_vec,
+			      const void* val_vec,
+			      void* stream);
+
+CUDA_API bool paged_causal_attention(const void* query,
+				     const GpuPagedCache* cache,
+				     const int* d_block_table,
+				     void* output,
+				     size_t query_length,
+				     size_t context_length,
+				     size_t hidden_dim,
+				     size_t num_heads,
+				     void* stream);
+
 #ifdef __cplusplus
 }
 #endif

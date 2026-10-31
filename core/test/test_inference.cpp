@@ -422,6 +422,120 @@ bool test_inference() {
 	test_check(unique_tokens.size() > 1, "Gate 1: Stochastic sampling produces diverse tokens (unique > 1)", s_pass, s_fail);
 	test_check(unk_count < bench_tokens.size(), "Gate 1: No <UNK> saturation during generation (not 100% UNK)", s_pass, s_fail);
 
+	// ── [10] Gate 4 Verification: PagedAttention KV-Cache & COW Prefix Sharing ───
+	std::cout << "\n[10] Gate 4 Verification: PagedAttention KV-Cache & COW Prefix Sharing\n";
+
+	// 10.1 Paged Cache Construction & Allocation (16 tokens per block)
+	const size_t total_blocks = 32;
+	const size_t block_size = 16;
+	bool cache_ok = ai.build_paged_cache(total_blocks, block_size);
+	test_check(cache_ok, "build_paged_cache allocates physical VRAM pages", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_total_blocks(), total_blocks, "Total physical blocks match requested", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_free_count(), total_blocks, "All physical blocks initially free", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_used_count(), static_cast<size_t>(0), "Initial used blocks count is 0", s_pass, s_fail);
+
+	// 10.2 Sequence Ingestion: Append 32 tokens spanning exactly 2 physical blocks
+	SequenceContext seq_parent;
+	seq_parent.sequence_id = 1;
+	const size_t hidden_dim = ai.gpu_paged_cache.hidden_dimension;
+	std::vector<std::bfloat16_t> sample_k(hidden_dim, static_cast<std::bfloat16_t>(0.25f));
+	std::vector<std::bfloat16_t> sample_v(hidden_dim, static_cast<std::bfloat16_t>(0.5f));
+
+	bool append_ok = true;
+	for (size_t t = 0; t < 32; ++t) {
+		if (!ai.append_sequence_token(seq_parent, sample_k, sample_v)) {
+			append_ok = false;
+			break;
+		}
+	}
+	test_check(append_ok, "append_sequence_token successfully appends 32 tokens", s_pass, s_fail);
+	test_check_eq(seq_parent.sequence_length, static_cast<size_t>(32), "Sequence length is 32 tokens", s_pass, s_fail);
+	test_check_eq(seq_parent.block_table.size(), static_cast<size_t>(2), "32 tokens cleanly partitioned into 2 blocks (16 tokens/block)", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_used_count(), static_cast<size_t>(2), "Exactly 2 physical blocks used", s_pass, s_fail);
+
+	// 10.3 Copy-On-Write (COW) Prefix Sharing: Fork sequence and verify 100% block reuse
+	SequenceContext seq_child;
+	bool fork_ok = ai.fork_sequence_context(seq_parent, seq_child);
+	test_check(fork_ok, "fork_sequence_context succeeds", s_pass, s_fail);
+	test_check_eq(seq_child.sequence_length, static_cast<size_t>(32), "Child sequence inherits sequence length", s_pass, s_fail);
+	test_check_eq(seq_child.block_table.size(), static_cast<size_t>(2), "Child sequence inherits block table", s_pass, s_fail);
+	test_check(seq_child.block_table == seq_parent.block_table, "Child and parent share identical physical block IDs", s_pass, s_fail);
+
+	int block_0 = seq_parent.block_table[0];
+	int block_1 = seq_parent.block_table[1];
+	test_check_eq(ai.block_manager->get_reference_count(block_0), 2, "Block 0 reference count is 2 (shared)", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_reference_count(block_1), 2, "Block 1 reference count is 2 (shared)", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_used_count(), static_cast<size_t>(2), "Zero new blocks allocated on fork (100% prefix block reuse)", s_pass, s_fail);
+
+	// 10.4 Sequence Divergence & Dynamic COW Allocation
+	std::vector<std::bfloat16_t> child_k(hidden_dim, static_cast<std::bfloat16_t>(0.75f));
+	std::vector<std::bfloat16_t> child_v(hidden_dim, static_cast<std::bfloat16_t>(1.0f));
+	bool child_append_ok = ai.append_sequence_token(seq_child, child_k, child_v);
+	test_check(child_append_ok, "Child sequence appends next token across block boundary", s_pass, s_fail);
+	test_check_eq(seq_child.sequence_length, static_cast<size_t>(33), "Child sequence length is 33", s_pass, s_fail);
+	test_check_eq(seq_child.block_table.size(), static_cast<size_t>(3), "Child sequence expanded to 3 blocks", s_pass, s_fail);
+	test_check_eq(seq_parent.block_table.size(), static_cast<size_t>(2), "Parent sequence unaffected by child append", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_used_count(), static_cast<size_t>(3), "Exactly 3 physical blocks in use across both sequences", s_pass, s_fail);
+
+	// Test intra-block divergence COW: Fork child (33 tokens) into grandchild
+	SequenceContext seq_grandchild;
+	ai.fork_sequence_context(seq_child, seq_grandchild);
+	int block_2 = seq_child.block_table[2];
+	test_check_eq(ai.block_manager->get_reference_count(block_2), 2, "Partial block 2 shared with reference count 2", s_pass, s_fail);
+
+	// Grandchild appends token 34 with different data: triggers COW duplication of block 2!
+	std::vector<std::bfloat16_t> diverged_k(hidden_dim, static_cast<std::bfloat16_t>(-0.5f));
+	std::vector<std::bfloat16_t> diverged_v(hidden_dim, static_cast<std::bfloat16_t>(-1.0f));
+	bool cow_ok = ai.append_sequence_token(seq_grandchild, diverged_k, diverged_v);
+	test_check(cow_ok, "COW duplication triggered on intra-block append divergence", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_reference_count(block_2), 1, "Original block 2 reference count decremented back to 1", s_pass, s_fail);
+	test_check(seq_grandchild.block_table[2] != block_2, "Grandchild received unique private block after COW divergence", s_pass, s_fail);
+
+	// 10.5 Paged Causal Attention Execution & Mathematical Validity
+	std::vector<std::bfloat16_t> query_vec(hidden_dim, static_cast<std::bfloat16_t>(1.0f));
+	std::vector<std::bfloat16_t> paged_out;
+	bool attn_ok = ai.forward_paged_attention(seq_grandchild, query_vec, paged_out, 1);
+	test_check(attn_ok, "forward_paged_attention executes on diverged paged blocks", s_pass, s_fail);
+	test_check_eq(paged_out.size(), hidden_dim, "Paged attention output dimension matches hidden dimension", s_pass, s_fail);
+
+	bool paged_finite = true;
+	for (auto val : paged_out) {
+		float f = static_cast<float>(val);
+		if (std::isnan(f) || std::isinf(f)) {
+			paged_finite = false;
+			break;
+		}
+	}
+	test_check(paged_finite, "Paged attention outputs are finite numbers", s_pass, s_fail);
+
+	// 10.6 Resource Lifecycle & Deterministic Zero-Fragmentation Cleanup
+	ai.release_sequence_context(seq_parent);
+	ai.release_sequence_context(seq_child);
+	ai.release_sequence_context(seq_grandchild);
+	test_check_eq(ai.block_manager->get_used_count(), static_cast<size_t>(0), "All physical blocks returned after sequence releases", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_free_count(), total_blocks, "Free block count fully restored (zero fragmentation)", s_pass, s_fail);
+
+	// 10.7 Multi-Turn Conversation Stress Test (Zero Allocation Failures)
+	bool stress_ok = true;
+	std::vector<SequenceContext> sessions(10);
+	for (size_t s = 0; s < sessions.size(); ++s) {
+		sessions[s].sequence_id = static_cast<int>(s + 100);
+		for (size_t t = 0; t < 24; ++t) { // 24 tokens = 2 blocks each
+			if (!ai.append_sequence_token(sessions[s], sample_k, sample_v)) {
+				stress_ok = false;
+				break;
+			}
+		}
+	}
+	test_check(stress_ok, "Stress test: Successfully allocated multiple concurrent sequences", s_pass, s_fail);
+	test_check_eq(ai.block_manager->get_used_count(), static_cast<size_t>(20), "20 blocks in active use across 10 sessions", s_pass, s_fail);
+
+	for (auto& s : sessions) {
+		ai.release_sequence_context(s);
+	}
+	test_check_eq(ai.block_manager->get_free_count(), total_blocks, "Gate 4: 100% physical blocks recovered with zero leaks", s_pass, s_fail);
+	ai.free_paged_cache_memory();
+
 	std::cout << "=== Platinum Inference & System Resilience Test Suite: " << s_pass << " passed, "
 		  << s_fail << " failed ===\n";
 	return s_fail == 0;
