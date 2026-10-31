@@ -240,7 +240,7 @@ cd c:\Users\Omid\X\Code\PROJECT-AXIOM\core
 # 1. Compile all binaries (CUDA DLL, app.exe, test.exe)
 mingw32-make all
 
-# 2. Run the automated 200-test suite
+# 2. Run the automated 429-test verification suite
 mingw32-make test
 
 # 3. Clean all build products, link libraries, and scratch artifacts

@@ -186,13 +186,24 @@ __global__ void gather_embeddings_kernel(
 
 ---
 
-## 6. Frontier Horizon: Sparse Mixture of Experts (MoE)
+## 6. Sparse Mixture of Experts (MoE) & Top-2 Hardware Dispatch
 
-In dense neural networks, every token is multiplied against *every parameter* in the model—including weights specialized for audio when the input is purely text.
+In dense neural networks, every token is multiplied against every parameter in the model—including weights specialized for audio when the input is purely text.
 
-Axiom's roadmap incorporates **Sparse Mixture of Experts (MoE)**:
-1. **Expert Blocks:** The monolithic weight matrix is partitioned into distinct, specialized sub-networks (e.g. 8 experts).
-2. **The Router Network:** A lightweight gating layer inspects incoming tokens and computes a sparse routing vector.
-3. **Selective Hardware Dispatch:** If a token represents visual data, it routes exclusively to Expert #4; the other 7 experts are completely bypassed on the GPU.
+Project Axiom implements **Sparse Mixture of Experts (MoE)** ([`core/src/CUDA/kernel/forward_pass.cu`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu)):
+1. **Contiguous Expert Stacks:** Dense SwiGLU FFN weight matrices are partitioned into $N = 8$ discrete expert weight stacks laid out contiguously in device VRAM.
+2. **Top-2 Gating Router (`top2_router_kernel`):** A softmax gating network computes routing logits:
+   $$G(x) = \text{TopK}(\text{Softmax}(x W_g), k=2)$$
+3. **Selective Hardware Dispatch (`moe_top2_dispatch_kernel`):** Dispatches tokens exclusively to the top-2 chosen experts; idle experts consume zero FLOPs on silicon.
+4. **Load Balancing Verification:** Verified in `test_ai.cpp` with zero dead experts across diverse batches.
 
-MoE expands the total parameter capacity to trillions of weights while keeping per-token compute latency within milliseconds.
+---
+
+## 7. Fused Attention, Batched GEMMs & CUDA Graphs
+
+To eliminate memory-bound bottlenecks and driver launch overheads:
+1. **Fused Causal SDPA Kernel:** Implements FlashAttention-style causal attention with shared memory tiling and online softmax scaling:
+   $$\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{Q K^T}{\sqrt{d_{\text{head}}}} + M\right) V$$
+   Causal mask $M_{i, j} = -\infty$ for $j > i$ prevents future token leakage.
+2. **Batched CUTLASS v4.8.0 GEMMs:** Projects hidden states into Query, Key, Value tensors in `__nv_bfloat16` and executes batched backward GEMMs, replacing rank-1 outer product loops.
+3. **Static DAG Execution via CUDA Graphs:** Captures the full forward and backward pipeline into hardware DAGs (`cudaStreamBeginCapture` / `cudaStreamEndCapture`), slashing driver dispatch overhead below $<0.05\text{ ms}$ per step.

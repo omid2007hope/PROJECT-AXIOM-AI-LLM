@@ -153,3 +153,27 @@ Project Axiom enforces a rigid three-stage pointer safety lifecycle across all G
    ```
 
 By neutralizing pointers immediately upon deallocation, duplicate free operations safely evaluate to no-ops (`cudaFree(nullptr)` is legally defined by the CUDA specification as a successful no-op), completely preventing double-free memory corruption and invalid pointer dereferencing.
+
+---
+
+## 6. Userspace BFC Caching Allocator & Stream-Ordered Pools
+
+In high-throughput training loops, dynamic OS-level `cudaMalloc` calls introduce microsecond driver stalls that lock device page tables and serialize execution streams.
+
+Axiom eradicates this bottleneck through two specialized memory managers:
+1. **Userspace Best-Fit with Coalescing (`BfcAllocator`):**
+   - Carves memory slices out of pre-allocated contiguous VRAM arenas in nanoseconds.
+   - Merges adjacent free blocks immediately upon deallocation (neighbor coalescing), eradicating external fragmentation.
+2. **Stream-Ordered Asynchronous Pools:**
+   - Employs `cudaMallocAsync` and `cudaFreeAsync` for transient transfer buffers.
+   - Guarantees exactly zero calls to blocking `cudaMalloc` during active training iterations.
+
+---
+
+## 7. Non-Blocking Telemetry & Event-Polled Synchronization
+
+Traditional loss logging retrieves metrics via blocking `cudaMemcpy` or `cudaDeviceSynchronize()`, stalling the CPU and creating execution bubbles on the GPU timeline.
+
+Axiom implements **Zero-Sync Loss Telemetry**:
+1. **Dedicated Pinned Slot:** A 4-byte page-locked host buffer (`cudaHostAllocMapped`) receives loss asynchronously via `cudaMemcpyAsync`.
+2. **Non-Blocking Polling:** Telemetry checks query completion via `cudaEventQuery(loss_event)`. If the event has not completed, compute continues uninterrupted on the GPU, achieving true non-blocking double-buffering.

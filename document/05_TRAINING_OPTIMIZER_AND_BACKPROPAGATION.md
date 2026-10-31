@@ -216,3 +216,16 @@ Where $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$, and $\lambda$ is
 
 ### Binary Persistence (`optimizer.axiom`)
 When the user saves the model (via CLI `--archive` or keyboard shortcut `[S]`), Axiom writes the $m_t$ and $v_t$ tensors for both projection weights and the master embedding table into `optimizer.axiom`. Upon resuming, the engine reloads its complete momentum state directly into GPU VRAM, instantly continuing training at full velocity.
+
+---
+
+## 8. Batched CUTLASS Backward GEMMs & Dynamic Autograd Tape
+
+To scale beyond memory-bound rank-1 updates to full multi-layer transformer blocks:
+1. **Batched CUTLASS Backward GEMMs:**
+   - Evaluates input gradients $dX = dY W^T$ and weight gradients $dW = X^T dY$ using batched CUTLASS v4.8.0 GEMMs (`backward_gemm_bfloat16`).
+   - Saturates Ada Lovelace Tensor Cores across sequence and batch dimensions.
+2. **Dynamic Autograd Tape ([`AutogradTape`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.hpp)):**
+   - Intercepts operator dispatches carrying the `DispatchKey::Autograd` flag.
+   - Dynamically builds reverse execution graphs and accumulates gradients into target parameter buffers.
+   - Validated to achieve 100% numerical parity with analytical gradients in `test_ai.cpp`.

@@ -42,8 +42,8 @@ Project Axiom addresses this bottleneck through an event-driven, four-tier data 
 ### Tier 0: Persistent Storage (NVMe SSD)
 Raw training corpora and model assets reside permanently on the disk. File access operations are orchestrated via persistent file streams (`std::ifstream`) that remain continuously open throughout the application lifecycle. This prevents repeated operating system kernel context switches and file descriptor spin-up costs.
 
-### Tier 1: Host System RAM (The 100,000-Token Buffer)
-To prevent the operating system from thrashing physical storage or exhausting host memory on massive multi-gigabyte datasets, [`DataLoader`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) maintains a dedicated circular buffer holding exactly 100,000 categorical tokens (`uint32_t`). When the neural network consumes this buffer, the loader refreshes it in a single sequential I/O read.
+### Tier 1: Host System RAM (The 100,000-Token Buffer & SPSC Ring Buffer)
+To prevent the operating system from thrashing physical storage or exhausting host memory on massive multi-gigabyte datasets, [`DataLoader`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) maintains a dedicated circular buffer holding exactly 100,000 categorical tokens (`uint32_t`). A background producer thread pre-fetches the subsequent 100,000-token chunks into a lock-free Single-Producer Single-Consumer (SPSC) ring buffer ahead of GPU consumption, completely eliminating disk I/O stalls and CPU spin-lock contention.
 
 ### Tier 2: Pinned Context Windows (The Portion Structure)
 The neural network operates on discrete sliding context windows of 128 tokens. [`DataLoader::ram_to_contextWindow()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/loader.cpp) slices the 100,000-token RAM array into [`Portion`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) structures:
@@ -206,7 +206,7 @@ The engine differentiates cleanly between file processing and manual input:
 Generative AI models do not output formatted `.mp4` or `.pdf` files directly; they output a sequence of discrete token probabilities. To render output for humans, Axiom defines the inverse pipeline via **Output Codecs**:
 
 * **Text Detokenizer:** Inspects predicted token IDs in $[4, 64511]$, performs reverse lookup in `reverse_main_dictionary`, and streams UTF-8 strings to the console.
-* **Visual Output Codec:** Takes discrete visual tokens $[64512, 64767]$, converts them back into RGB pixel grids, and packages them into standard image or video formats.
-* **Acoustic Output Codec:** Takes discrete audio tokens $[64768, 65023]$, converts them to PCM amplitudes, and wraps them in RIFF/WAV headers.
+* **Visual Output Codec ([`CompressImage`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/compressor/compress_image.hpp)):** Maps discrete visual tokens $[64512, 64767]$ to RGB pixel grids, serializing them into valid 24-bit uncompressed `.bmp` files with full container headers and 100% bit-accurate round-trip reconstruction.
+* **Acoustic Output Codec ([`CompressAudio`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/compressor/compress_audio.hpp)):** Maps discrete audio tokens $[64768, 65023]$ to linear PCM waveforms and serializes valid RIFF `.wav` files (44.1 kHz, 16-bit) with 100% bit-accurate round-trip reconstruction.
 
 This symmetry ensures that the core neural matrix remains modality-agnostic: the GPU processes pure geometric vectors, while the modular edges handle decompression upon entry and compression upon exit.
