@@ -210,3 +210,26 @@ Generative AI models do not output formatted `.mp4` or `.pdf` files directly; th
 * **Acoustic Output Codec ([`CompressAudio`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/compressor/compress_audio.hpp)):** Maps discrete audio tokens $[64768, 65023]$ to linear PCM waveforms and serializes valid RIFF `.wav` files (44.1 kHz, 16-bit) with 100% bit-accurate round-trip reconstruction.
 
 This symmetry ensures that the core neural matrix remains modality-agnostic: the GPU processes pure geometric vectors, while the modular edges handle decompression upon entry and compression upon exit.
+
+---
+
+## 7. The Axiom v1 Architecture: Paired Transformer Block (Multi-Head Attention + SwiGLU)
+
+You do not choose between them—the optimal choice for Project Axiom is to use **both together** in a repeating structure called a **Transformer Block**.
+
+To build a brain capable of generating x86_64 assembly code, Multi-Head Attention and SwiGLU must operate as a paired engine. They solve two completely different halves of the non-linear problem:
+
+### 1. Multi-Head Attention (The Router)
+Attention handles the *relationships* between tokens. It allows the 1024-dimensional vector for `push` to mathematically scan the context window and find the vector for `rax`. However, Attention by itself is still entirely linear—it is just a dynamic weighted average of the other tokens. If you only use Attention, the engine still cannot compute complex conditional logic.
+
+### 2. SwiGLU (The Processor)
+SwiGLU handles the *logic*. Once Attention has routed and combined the data from `push` and `rax`, that combined vector is fed into the SwiGLU feed-forward network. SwiGLU applies the physical mathematical curve that bends the 1024-dimensional space, executing the actual non-linear "IF/THEN" deduction.
+
+### The Axiom v1 Architecture Topology
+To scale Project Axiom into a deep learning engine, you wrap them into a single modular block:
+
+```text
+Input -> RMSNorm -> Multi-Head Attention -> RMSNorm -> SwiGLU -> Output
+```
+
+Instead of relying on a single, massive flat pass to compute the final logit, you stack 4 to 6 of these blocks on top of each other in your CUDA execution graph. The geometric data flows out of the first SwiGLU, immediately back into the next layer's Attention mechanism, and repeats. This paired topology is the exact industry standard (used by Llama 3 and Qwen) that transforms a single-layer perceptron into a Deep Neural Network.

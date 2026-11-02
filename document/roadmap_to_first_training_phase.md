@@ -46,8 +46,8 @@ To execute this training run without token collapse, context starvation, or memo
                                           │
                                           ▼
 +-----------------------------------------------------------------------------------+
-|               PHASE 3: MULTI-HEAD SELF-ATTENTION (GAP 1) - ARCHITECTURE           |
-|   Fused QKV GEMM (1024 -> 3072) + Causal Masking for register lifecycle tracking  |
+|     PHASE 3: PAIRED TRANSFORMER BLOCKS (MHA + SWIGLU) (GAP 1) - ARCHITECTURE      |
+|   Fused QKV GEMM + Causal Attention paired with SwiGLU FFN in 4-6 repeating blocks|
 +-----------------------------------------------------------------------------------+
                                           │
                                           ▼
@@ -110,19 +110,31 @@ Upgrade [`gather_embeddings_kernel`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/
 
 ---
 
-## 5. Phase 3: Horizon 2 Multi-Head Self-Attention (Gap 1)
+## 5. Phase 3: Paired Transformer Blocks (Multi-Head Attention + SwiGLU) (Gap 1)
 
 ### The Problem
-A single-layer perceptron computes an un-gated static sum ($Y = X \cdot W + B$). It cannot establish causal relationships across time, such as tracking when a register pushed to the stack is popped, or identifying jump target labels.
+A single-layer perceptron computes an un-gated static sum ($Y = X \cdot W + B$). It cannot establish causal relationships across time, such as tracking when a register pushed to the stack is popped, or identifying jump target labels. Furthermore, attention by itself is still entirely linear—it is just a dynamic weighted average of tokens that cannot compute conditional branching or logical deductions.
 
-### The Solution: Fused QKV GEMM & Causal Masking
-1. **Fused $Q, K, V$ Projection:**
-   * Avoid launching three independent GEMMs. Launch a single CUTLASS GEMM multiplying input matrix $X$ by a concatenated weight tensor $W_{QKV}$ of shape $[1024 \times 3072]$.
-2. **Scaled Dot-Product Attention:**
-   $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{Q K^T}{\sqrt{d_k}} + M_{\text{causal}}\right) V$$
-   Where $d_k = 128$ (8 heads across 1,024 dimensions).
-3. **Causal Masking ($M_{\text{causal}}$):**
-   * Overwrite upper-triangle attention scores ($j > i$) to $-\infty$ (`-1e30f`) before softmax. This enforces strict causal autoregression so tokens can only attend to preceding instructions.
+### The Solution: Paired Transformer Blocks
+You do not choose between them—the optimal choice for Project Axiom is to use **both together** in a repeating structure called a **Transformer Block**.
+
+To build a brain capable of generating x86_64 assembly code, Multi-Head Attention and SwiGLU must operate as a paired engine. They solve two completely different halves of the non-linear problem:
+
+1. **Multi-Head Attention (The Router):**
+   * Attention handles the *relationships* between tokens. It allows the 1024-dimensional vector for `push` to mathematically scan the context window and find the vector for `rax`:
+     $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{Q K^T}{\sqrt{d_k}} + M_{\text{causal}}\right) V$$
+   * Where $d_k = 128$ (8 heads across 1,024 dimensions) and $M_{\text{causal}}$ enforces upper-triangle masking ($j > i$).
+   * However, Attention by itself is still entirely linear—it is just a dynamic weighted average of the other tokens. If you only use Attention, the engine still cannot compute complex conditional logic.
+
+2. **SwiGLU (The Processor):**
+   * SwiGLU handles the *logic*. Once Attention has routed and combined the data from `push` and `rax`, that combined vector is fed into the SwiGLU feed-forward network. SwiGLU applies the physical mathematical curve that bends the 1024-dimensional space, executing the actual non-linear "IF/THEN" deduction.
+
+3. **The Axiom v1 Architecture Topology:**
+   * To scale Project Axiom into a deep learning engine, you wrap them into a single modular block:
+     ```text
+     Input -> RMSNorm -> Multi-Head Attention -> RMSNorm -> SwiGLU -> Output
+     ```
+   * Instead of relying on a single, massive flat pass to compute the final logit, you stack 4 to 6 of these blocks on top of each other in your CUDA execution graph. The geometric data flows out of the first SwiGLU, immediately back into the next layer's Attention mechanism, and repeats. This paired topology is the exact industry standard (used by Llama 3 and Qwen) that transforms a single-layer perceptron into a Deep Neural Network.
 
 ---
 

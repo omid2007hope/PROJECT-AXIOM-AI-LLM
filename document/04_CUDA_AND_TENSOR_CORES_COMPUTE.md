@@ -207,3 +207,22 @@ To eliminate memory-bound bottlenecks and driver launch overheads:
    Causal mask $M_{i, j} = -\infty$ for $j > i$ prevents future token leakage.
 2. **Batched CUTLASS v4.8.0 GEMMs:** Projects hidden states into Query, Key, Value tensors in `__nv_bfloat16` and executes batched backward GEMMs, replacing rank-1 outer product loops.
 3. **Static DAG Execution via CUDA Graphs:** Captures the full forward and backward pipeline into hardware DAGs (`cudaStreamBeginCapture` / `cudaStreamEndCapture`), slashing driver dispatch overhead below $<0.05\text{ ms}$ per step.
+
+---
+
+## 8. The Axiom v1 Architecture: Paired Transformer Block Engine
+
+You do not choose between Multi-Head Attention and SwiGLU—the optimal architecture for Project Axiom is to use **both together** in a repeating structure called a **Transformer Block**.
+
+To generate x86_64 assembly code, Multi-Head Attention and SwiGLU operate as a paired engine solving two distinct halves of the non-linear compute problem:
+
+1. **Multi-Head Attention (The Router):** Attention handles the *relationships* between tokens (e.g., matching `push` to its corresponding register `rax` across context). Attention is linear—a dynamic weighted average of tokens.
+2. **SwiGLU (The Processor):** SwiGLU handles the *logic*. Once Attention routes and combines representations, that vector feeds into the SwiGLU feed-forward network. SwiGLU applies the physical mathematical curve that bends the 1024-dimensional space, executing non-linear "IF/THEN" deductions.
+
+### Modular Block Topology
+The unified execution pipeline wraps them into a single modular block:
+```text
+Input -> RMSNorm -> Multi-Head Attention -> RMSNorm -> SwiGLU -> Output
+```
+
+Instead of a single massive flat pass to compute final logits, 4 to 6 of these blocks are stacked in the CUDA execution graph. Output from the first SwiGLU flows directly into the next layer's Attention mechanism, matching the exact industry standard (Llama 3, Qwen) that transforms a single-layer perceptron into a Deep Neural Network.

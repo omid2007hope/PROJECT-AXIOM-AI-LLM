@@ -145,3 +145,26 @@ AdamW implements curvature estimation by tracking first and second stochastic mo
    Approximates the diagonal of the empirical Fisher Information Matrix (Hessian curvature), dampening oscillations along high-curvature ravines while accelerating progress along gentle slopes.
 
 Persisting $\mathbf{m}_t$ and $\mathbf{v}_t$ in `optimizer.axiom` cures neural amnesia, allowing the optimization trajectory on the loss surface to resume uninterrupted.
+
+---
+
+## 7. Mathematical Non-Linear Duality: Attention (The Router) and SwiGLU (The Processor)
+
+To compute complex conditional logic (such as x86_64 assembly code generation), a neural architecture must decouple relational routing from non-linear logic deduction. In Project Axiom, this is achieved by pairing Multi-Head Attention and SwiGLU in a repeating **Transformer Block**:
+
+$$\text{Block}(x) = \text{SwiGLU}(\text{RMSNorm}(x + \text{Attention}(\text{RMSNorm}(x))))$$
+
+### 1. Multi-Head Attention (The Linear Router)
+Attention computes dynamic relational weighted averages across the sequence:
+$$\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{Q K^T}{\sqrt{d_k}} + M_{\text{causal}}\right) V$$
+While dynamic, this operation remains convex and linearly bounded across the value vectors $V$. It routes representations (e.g., scanning context to bind `push` to `rax`), but cannot independently evaluate boolean logic or non-linear state bifurcations.
+
+### 2. SwiGLU (The Non-Linear Processor)
+SwiGLU applies the continuous mathematical manifold deformation required for discrete conditional computation:
+$$\text{SwiGLU}(x) = (\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$$
+By bending the 1024-dimensional space through the smooth $\text{Swish}(z) = z \cdot \sigma(\beta z)$ curve and element-wise gating ($\odot$), SwiGLU executes non-linear "IF/THEN" deductions.
+
+### Stacked CUDA Execution Graph
+Stacking 4 to 6 of these paired blocks:
+$$\text{Input} \longrightarrow [\text{RMSNorm} \to \text{MHA} \to \text{RMSNorm} \to \text{SwiGLU}]^{\times 4\dots 6} \longrightarrow \text{Output}$$
+ensures geometric representations repeatedly cycle between relational routing and logical processing, converting flat perceptron mappings into a Deep Neural Network.

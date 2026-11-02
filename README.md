@@ -342,7 +342,14 @@ The architectural objective is training a 120M–135M parameter silicon-whispere
 
 1. **Gap 2: Tokenizer Injection & Pre-Seeding (`vocab.axiom`):** Standard byte tokenizers splinter AVX instructions like `vfmadd231ps` into 8 fragments. Pre-allocating atomic IDs for registers (`rax`, `rsp`, `xmm0`–`xmm31`) and opcodes (`mov`, `lea`, `vfmadd231ps`, `syscall`) in slots `4` to `~500` achieves **~60% context compression**, allowing complete 80–120 line algorithms to fit within the 256-token context window.
 2. **Gap 3: Batched CUDA Dispatch ($M = 32$):** Single-sample forward passes starve Tensor Cores. Upgrading `gather_embeddings_kernel` and CUTLASS EVT to a 2D grid (`blockIdx.y`) elevates training throughput from **300 tok/s $\to$ 4,000 tok/s**.
-3. **Gap 1: Horizon 2 Multi-Head Self-Attention:** Fused $W_{QKV}$ projection ($1024 \times 3072$) and Causal Masking ($M_{\text{causal}}$) enable tokens to track register lifecycles (e.g., matching a `push` to its corresponding `pop`).
+3. **Gap 1: Paired Transformer Blocks (Multi-Head Attention + SwiGLU):** You do not choose between them—the optimal architecture for Project Axiom is to use **both together** in a repeating structure called a **Transformer Block**.
+   * **Multi-Head Attention (The Router):** Handles the *relationships* between tokens, enabling the 1024-dimensional vector for `push` to mathematically scan the context window and find `rax`. Attention is linear (dynamic weighted average) and routes data without computing conditional logic.
+   * **SwiGLU (The Processor):** Handles the *logic*. Once Attention routes representations, SwiGLU bends the 1024-dimensional space via smooth non-linear activation curves, executing physical "IF/THEN" deductions.
+   * **Axiom v1 Modular Topology:** Stacked 4 to 6 blocks high in the CUDA execution graph:
+     ```text
+     Input -> RMSNorm -> Multi-Head Attention -> RMSNorm -> SwiGLU -> Output
+     ```
+     This paired topology matches the modern industry standard (Llama 3, Qwen) that transforms a single-layer perceptron into a Deep Neural Network.
 4. **Gap 4: High-Signal Dataset with Semantic Intent Headers:** Annotating 150 MB–300 MB of NASM assembly with structured intent headers binds human logic to register manipulation:
    ```nasm
    ; [INTENT] Fast inverse square root calculation (Quake III)

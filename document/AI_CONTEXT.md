@@ -184,9 +184,11 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
   - Lock-free Single-Producer Single-Consumer (SPSC) ring buffer with async background disk prefetch.
   - **Gate 2 Verification (Passed):** Exactly 0 calls to `cudaMalloc` or `cudaDeviceSynchronize` in active loops; zero GPU starvation.
 - [x] **Phase 3: Multi-Head Self-Attention (MHA / GQA) & Transformer Blocks (Completed)**
+  - Paired Transformer Block engine: Attention (The Router for token relationships) + SwiGLU (The Processor for non-linear logic).
+  - Modular topology: `Input -> RMSNorm -> Multi-Head Attention -> RMSNorm -> SwiGLU -> Output`, stacked 4-6 blocks high in CUDA execution graphs.
   - Batched CUTLASS v4.8.0 GEMM backward passes saturating `sm_89` Tensor Cores across sequence dimension.
   - Fused FlashAttention-style causal SDPA CUDA kernel with upper-triangular masking.
-  - Pre-Norm residual streams and SwiGLU Feed-Forward Networks ($\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$.
+  - Pre-Norm residual streams and SwiGLU Feed-Forward Networks ($(\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$).
   - **Gate 3 Verification (Passed):** Monotonic cross-entropy loss reduction ($13.0 \to 8.5$) verified on causal sequence modeling.
 - [x] **Phase 4: PagedAttention KV-Cache & Prefix State Management (Completed)**
   - Fixed-size physical KV blocks (16 tokens per block) completely eliminating VRAM fragmentation.

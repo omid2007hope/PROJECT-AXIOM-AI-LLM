@@ -49,7 +49,7 @@ The destination is always on the left, the source is on the right.
 <|concept_end|>
 ```
 
-By placing `<|rule_register|>` right after the code, the engine's attention query ($Q$) matrix will form a massive weight correlation between the token `MOV`, the register `EAX`, and your English explanation.
+By placing `<|rule_register|>` right after the code, the engine's attention query ($Q$) matrix forms a massive weight correlation between the token `MOV`, the register `EAX`, and your English explanation. Multi-Head Attention acts as **The Router**, binding the relationship between opcode and register. The downstream SwiGLU feed-forward network acts as **The Processor**, applying the non-linear curvature to compute the conditional logic within the paired Transformer Block (`Input -> RMSNorm -> MHA -> RMSNorm -> SwiGLU -> Output`).
 
 ---
 

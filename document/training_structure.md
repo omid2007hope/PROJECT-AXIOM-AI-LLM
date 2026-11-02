@@ -161,18 +161,29 @@ A single linear pass over the dataset is insufficient for functional synthesis. 
 
 ---
 
-## 7. Architectural Prerequisite: Multi-Head Self-Attention (Horizon 2)
+## 7. Architectural Prerequisite: Paired Transformer Block (Multi-Head Attention + SwiGLU)
 
 Training 500 MB of high-density domain data on a single-layer perceptron projection risks creating a high-capacity memorization engine ("drunk historian") that predicts the next token based only on the immediate static average of the context window.
 
-Before committing to massive multi-epoch runs, the engine architecture must incorporate **Horizon 2: Multi-Head Self-Attention (MHA)**:
+You do not choose between them—the optimal choice for Project Axiom is to use **both together** in a repeating structure called a **Transformer Block**.
 
-1. **The Representation Limitation:**
-   * A linear perceptron computes $Y = X \cdot W + B$, flattening 256 tokens into a fixed static sum without pairwise relational gating.
-2. **The Attention Mechanism:**
-   * Query-Key-Value ($Q, K, V$) projections compute dynamic relational weights:
-     $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{Q K^T}{\sqrt{d_k}}\right) V$$
-   * This mechanism enables Token #255 to attend directly back to Token #12 (e.g., resolving a pointer declaration to its point of destruction), forming structural comprehension across the sequence.
+To build a brain capable of generating x86_64 assembly code, Multi-Head Attention and SwiGLU must operate as a paired engine. They solve two completely different halves of the non-linear problem:
+
+1. **Multi-Head Attention (The Router):**
+   * Attention handles the *relationships* between tokens. It allows the 1024-dimensional vector for `push` to mathematically scan the context window and find the vector for `rax`:
+     $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{Q K^T}{\sqrt{d_k}} + M_{\text{causal}}\right) V$$
+   * However, Attention by itself is still entirely linear—it is just a dynamic weighted average of the other tokens. If you only use Attention, the engine still cannot compute complex conditional logic.
+
+2. **SwiGLU (The Processor):**
+   * SwiGLU handles the *logic*. Once Attention has routed and combined the data from `push` and `rax`, that combined vector is fed into the SwiGLU feed-forward network. SwiGLU applies the physical mathematical curve that bends the 1024-dimensional space, executing the actual non-linear "IF/THEN" deduction:
+     $$\text{SwiGLU}(x) = (\text{Swish}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$$
+
+3. **The Axiom v1 Architecture Topology:**
+   * To scale Project Axiom into a deep learning engine, you wrap them into a single modular block:
+     ```text
+     Input -> RMSNorm -> Multi-Head Attention -> RMSNorm -> SwiGLU -> Output
+     ```
+   * Instead of relying on a single, massive flat pass to compute the final logit, you stack 4 to 6 of these blocks on top of each other in your CUDA execution graph. The geometric data flows out of the first SwiGLU, immediately back into the next layer's Attention mechanism, and repeats. This paired topology is the exact industry standard (used by Llama 3 and Qwen) that transforms a single-layer perceptron into a Deep Neural Network.
 
 ---
 
