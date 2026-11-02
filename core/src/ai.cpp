@@ -11,30 +11,30 @@
 #include "../include/transfer.hpp"
 
 
-AI::AI(size_t input_dimension,
-       size_t output_dimension,
+AI::AI(size_t input_elements_x_total,
+       size_t target_elements_y_total,
        float weight_min,
        float weight_max,
        Elements& elements)
-    : input_dimension(input_dimension),
-      output_dimension(output_dimension),
+    : input_elements_x_total(input_elements_x_total),
+      target_elements_y_total(target_elements_y_total),
       weight_min(weight_min),
       weight_max(weight_max) {
 
-	// input_dimension = token * dim = 512
-	// output_dimension = target * dim = 4
+	// input_elements_x_total = token * dim = 512
+	// target_elements_y_total = target * dim = 4
 
 	// 512 * 4 = 2048
-	elements.weight_elements = input_dimension * output_dimension;
+	elements.weight_elements = input_elements_x_total * target_elements_y_total;
 
-	// output_dimension = 4
-	elements.bias_elements = output_dimension;
+	// target_elements_y_total = 4
+	elements.bias_elements = target_elements_y_total;
 
 	host_weights.resize(elements.weight_elements);
 	host_bias.resize(elements.bias_elements);
 
 	vocab_size = 65536;
-	embedding_dim = output_dimension;
+	embedding_dim = target_elements_y_total;
 	if (embedding_dim == 0)
 		embedding_dim = 4;
 
@@ -47,8 +47,8 @@ AI::AI(size_t input_dimension,
 }
 
 void AI::reset_weights(Elements& elements) {
-	elements.weight_elements = input_dimension * output_dimension;
-	elements.bias_elements = output_dimension;
+	elements.weight_elements = input_elements_x_total * target_elements_y_total;
+	elements.bias_elements = target_elements_y_total;
 
 	// Initialize with Chaos (Symmetry Breaking)
 	// We use the Mersenne Twister engine for high-quality random numbers
@@ -167,8 +167,8 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 						  &gpu_embeddings,
 						  &gpu_weights,
 						  &gpu_activations,
-						  input_dimension,
-						  output_dimension,
+						  input_elements_x_total,
+						  target_elements_y_total,
 						  buffer_index)) {
 			std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
 			return TrainStatus::Failed;
@@ -179,8 +179,8 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 						   &gpu_embeddings,
 						   &gpu_weights,
 						   &gpu_activations,
-						   input_dimension,
-						   output_dimension,
+						   input_elements_x_total,
+						   target_elements_y_total,
 						   learning_rate,
 						   buffer_index,
 						   true /* use_adamw */)) {
@@ -202,8 +202,8 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 		if (!forward_pass(&gpu_portion,
 				  &gpu_weights,
 				  &gpu_activations,
-				  input_dimension,
-				  output_dimension,
+				  input_elements_x_total,
+				  target_elements_y_total,
 				  buffer_index)) {
 			std::cerr << "[AI Brain] Forward pass failed.\n";
 			return TrainStatus::Failed;
@@ -212,8 +212,8 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 		if (!backward_pass(&gpu_portion,
 				   &gpu_weights,
 				   &gpu_activations,
-				   input_dimension,
-				   output_dimension,
+				   input_elements_x_total,
+				   target_elements_y_total,
 				   learning_rate,
 				   buffer_index)) {
 			std::cerr << "[AI Brain] Backward pass failed.\n";
@@ -245,15 +245,15 @@ bool AI::save_weights(const std::string& path) {
 	// 3. Populate binary header
 	AxiomWeightHeader header {};
 	std::memcpy(header.magic, "AXIOM_V1", 8);
-	header.input_dimension = input_dimension;
-	header.output_dimension = output_dimension;
+	header.input_elements_x_total = input_elements_x_total;
+	header.target_elements_y_total = target_elements_y_total;
 	header.weight_count = host_weights.size();
 	header.bias_count = host_bias.size();
 	header.vocab_size = vocab_size;
 	header.embedding_dim = embedding_dim;
 
-	if (header.weight_count != input_dimension * output_dimension ||
-	    header.bias_count != output_dimension) {
+	if (header.weight_count != input_elements_x_total * target_elements_y_total ||
+	    header.bias_count != target_elements_y_total) {
 		std::cerr << "[AI Brain] Weight or bias dimension mismatch during serialization.\n";
 		return false;
 	}
@@ -362,24 +362,25 @@ bool AI::load_weights(const std::string& path) {
 	}
 
 	// Validate model dimensions
-	if (header.input_dimension != input_dimension ||
-	    header.output_dimension != output_dimension) {
+	if (header.input_elements_x_total != input_elements_x_total ||
+	    header.target_elements_y_total != target_elements_y_total) {
 		std::cerr << "[AI Brain] Dimension mismatch in " << path << ": file has ("
-			  << header.input_dimension << " -> " << header.output_dimension
-			  << "), model expects (" << input_dimension << " -> " << output_dimension
-			  << ")\n";
+			  << header.input_elements_x_total << " -> "
+			  << header.target_elements_y_total << "), model expects ("
+			  << input_elements_x_total << " -> " << target_elements_y_total << ")\n";
 		return false;
 	}
 
-	if (header.weight_count != input_dimension * output_dimension ||
-	    header.bias_count != output_dimension) {
+	if (header.weight_count != input_elements_x_total * target_elements_y_total ||
+	    header.bias_count != target_elements_y_total) {
 		std::cerr << "[AI Brain] Element count mismatch in " << path << "\n";
 		return false;
 	}
 
-	if (header.embedding_dim != 0 && header.embedding_dim != output_dimension) {
+	if (header.embedding_dim != 0 && header.embedding_dim != target_elements_y_total) {
 		std::cerr << "[AI Brain] Embedding dimension mismatch in " << path << ": file has "
-			  << header.embedding_dim << ", model expects " << output_dimension << "\n";
+			  << header.embedding_dim << ", model expects " << target_elements_y_total
+			  << "\n";
 		return false;
 	}
 
@@ -456,15 +457,15 @@ bool AI::load_weights(const std::string& path) {
 
 bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 		 std::vector<float>& output_prediction) {
-	if (context_window.size() != input_dimension) {
+	if (context_window.size() != input_elements_x_total) {
 		std::cerr << "[AI Brain] Input context dimension (" << context_window.size()
-			  << ") does not match model in_dim (" << input_dimension << ").\n";
+			  << ") does not match model in_dim (" << input_elements_x_total << ").\n";
 		return false;
 	}
 
 	synchronize_stream(&gpu_portion, 0);
 
-	std::vector<std::bfloat16_t> dummy_target(output_dimension,
+	std::vector<std::bfloat16_t> dummy_target(target_elements_y_total,
 						  static_cast<std::bfloat16_t>(0.0f));
 
 	if (!upload_to_gpu(context_window.data(),
@@ -484,8 +485,8 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 					  embeddings_pointer,
 					  &gpu_weights,
 					  &gpu_activations,
-					  input_dimension,
-					  output_dimension,
+					  input_elements_x_total,
+					  target_elements_y_total,
 					  0)) {
 		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
 		return false;
@@ -498,7 +499,7 @@ bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 
 bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
 			std::vector<float>& output_prediction) {
-	const size_t context_token_count = input_dimension / embedding_dim;
+	const size_t context_token_count = input_elements_x_total / embedding_dim;
 	if (context_ids.size() != context_token_count) {
 		std::cerr << "[AI Brain] Context token count (" << context_ids.size()
 			  << ") does not match model window (" << context_token_count << ").\n";
@@ -511,7 +512,7 @@ bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
 
 	synchronize_stream(&gpu_portion, 0);
 
-	std::vector<std::bfloat16_t> dummy_target(output_dimension,
+	std::vector<std::bfloat16_t> dummy_target(target_elements_y_total,
 						  static_cast<std::bfloat16_t>(0.0f));
 
 	// Same path as training: IDs cross PCIe, the GPU gathers the trained embeddings
@@ -530,8 +531,8 @@ bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
 					  &gpu_embeddings,
 					  &gpu_weights,
 					  &gpu_activations,
-					  input_dimension,
-					  output_dimension,
+					  input_elements_x_total,
+					  target_elements_y_total,
 					  0)) {
 		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
 		return false;
@@ -543,8 +544,9 @@ bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
 }
 
 bool AI::read_prediction(std::vector<float>& output_prediction) {
-	std::vector<std::bfloat16_t> output_activations(output_dimension);
-	if (!download_output(&gpu_activations, output_activations.data(), output_dimension)) {
+	std::vector<std::bfloat16_t> output_activations(target_elements_y_total);
+	if (!download_output(
+		    &gpu_activations, output_activations.data(), target_elements_y_total)) {
 		std::cerr << "[AI Brain] Failed to download prediction activations from GPU.\n";
 		return false;
 	}
@@ -556,8 +558,8 @@ bool AI::read_prediction(std::vector<float>& output_prediction) {
 		last_predicted_token_id = 0;
 	}
 
-	output_prediction.resize(output_dimension);
-	for (size_t i = 0; i < output_dimension; ++i) {
+	output_prediction.resize(target_elements_y_total);
+	for (size_t i = 0; i < target_elements_y_total; ++i) {
 		output_prediction[i] = static_cast<float>(output_activations[i]);
 	}
 
@@ -585,12 +587,12 @@ bool AI::generate(const std::string& prompt,
 		active_vocab_size = input.next_text_id;
 	}
 
-	const size_t context_token_count = input_dimension / embedding_dim;
+	const size_t context_token_count = input_elements_x_total / embedding_dim;
 
 	// Right-aligned: the newest token sits in the last slot, exactly as in training
 	std::vector<uint32_t> context_ids = parser.build_context_ids(tokens, context_token_count);
 
-	std::vector<float> prediction(output_dimension, 0.0f);
+	std::vector<float> prediction(target_elements_y_total, 0.0f);
 
 	for (size_t step = 0; step < max_new_tokens; ++step) {
 		if (!predict_tokens(context_ids, prediction)) {
@@ -603,9 +605,11 @@ bool AI::generate(const std::string& prompt,
 			// Greedy Fallback: directly use on-device GPU argmax winner
 			token_id = last_predicted_token_id;
 			if (token_id == 0) {
-				size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
+				size_t vocab_sz =
+					(active_vocab_size > 0) ? active_vocab_size : vocab_size;
 				std::vector<float> probabilities(vocab_sz, 0.0f);
-				if (download_probabilities(&gpu_activations, probabilities.data(), vocab_sz)) {
+				if (download_probabilities(
+					    &gpu_activations, probabilities.data(), vocab_sz)) {
 					float best_prob = -1.0f;
 					for (uint32_t id = 1; id < vocab_sz; ++id) {
 						if (probabilities[id] > best_prob) {
@@ -618,7 +622,8 @@ bool AI::generate(const std::string& prompt,
 		} else {
 			size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
 			std::vector<float> probabilities(vocab_sz, 0.0f);
-			if (download_probabilities(&gpu_activations, probabilities.data(), vocab_sz)) {
+			if (download_probabilities(
+				    &gpu_activations, probabilities.data(), vocab_sz)) {
 				std::vector<std::pair<float, uint32_t>> candidates;
 				candidates.reserve(vocab_sz);
 				for (uint32_t id = 1; id < vocab_sz; ++id) {
@@ -631,21 +636,19 @@ bool AI::generate(const std::string& prompt,
 					// 1. Top-K Truncation: Isolate K highest probability tokens
 					if (config.top_k > 0 &&
 					    static_cast<size_t>(config.top_k) < candidates.size()) {
-						std::partial_sort(
-							candidates.begin(),
-							candidates.begin() + config.top_k,
-							candidates.end(),
-							[](const auto& a, const auto& b) {
-								return a.first > b.first;
-							});
+						std::partial_sort(candidates.begin(),
+								  candidates.begin() + config.top_k,
+								  candidates.end(),
+								  [](const auto& a, const auto& b) {
+									  return a.first > b.first;
+								  });
 						candidates.resize(config.top_k);
 					} else {
-						std::sort(
-							candidates.begin(),
-							candidates.end(),
-							[](const auto& a, const auto& b) {
-								return a.first > b.first;
-							});
+						std::sort(candidates.begin(),
+							  candidates.end(),
+							  [](const auto& a, const auto& b) {
+								  return a.first > b.first;
+							  });
 					}
 
 					// 2. Top-P (Nucleus) Truncation: Cutoff cumulative mass at P
@@ -654,7 +657,8 @@ bool AI::generate(const std::string& prompt,
 					for (const auto& c : candidates) {
 						cumulative += c.first;
 						nucleus_size++;
-						if (cumulative >= config.top_p && nucleus_size >= 1) {
+						if (cumulative >= config.top_p &&
+						    nucleus_size >= 1) {
 							break;
 						}
 					}
@@ -667,10 +671,11 @@ bool AI::generate(const std::string& prompt,
 					}
 
 					if (sum_prob > 0.0f) {
-						std::mt19937_64 rng(config.seed != 0
-									    ? (config.seed + step)
-									    : std::random_device {}());
-						std::uniform_real_distribution<float> dist(0.0f, sum_prob);
+						std::mt19937_64 rng(
+							config.seed != 0 ? (config.seed + step)
+									 : std::random_device {}());
+						std::uniform_real_distribution<float> dist(
+							0.0f, sum_prob);
 						float r = dist(rng);
 						float running_sum = 0.0f;
 						token_id = candidates.front().second;
@@ -739,8 +744,14 @@ bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t
 		return false;
 	upload_device_buffer(d_temp, hidden_states.data(), bytes);
 
-	bool ok = transformer_forward_block(d_temp, &gpu_weights, &gpu_activations, sequence_length,
-					    hidden_dim, num_heads, ffn_dimension, 0);
+	bool ok = transformer_forward_block(d_temp,
+					    &gpu_weights,
+					    &gpu_activations,
+					    sequence_length,
+					    hidden_dim,
+					    num_heads,
+					    ffn_dimension,
+					    0);
 	if (ok) {
 		download_device_buffer(hidden_states.data(), d_temp, bytes);
 	}
@@ -766,18 +777,29 @@ bool AI::backward_transformer(const std::vector<float>& grad_output,
 	void* d_hidden = allocate_device_memory(bf_bytes);
 
 	if (!d_grad_out || !d_grad_in || !d_hidden) {
-		if (d_grad_out) free_device_memory(d_grad_out);
-		if (d_grad_in) free_device_memory(d_grad_in);
-		if (d_hidden) free_device_memory(d_hidden);
+		if (d_grad_out)
+			free_device_memory(d_grad_out);
+		if (d_grad_in)
+			free_device_memory(d_grad_in);
+		if (d_hidden)
+			free_device_memory(d_hidden);
 		return false;
 	}
 
 	upload_device_buffer(d_grad_out, grad_output.data(), f_bytes);
 	upload_device_buffer(d_hidden, hidden_states.data(), bf_bytes);
 
-	bool ok = transformer_backward_block(d_grad_out, d_grad_in, d_hidden, &gpu_weights,
-					     &gpu_activations, sequence_length, hidden_dim,
-					     num_heads, ffn_dimension, learning_rate, 0);
+	bool ok = transformer_backward_block(d_grad_out,
+					     d_grad_in,
+					     d_hidden,
+					     &gpu_weights,
+					     &gpu_activations,
+					     sequence_length,
+					     hidden_dim,
+					     num_heads,
+					     ffn_dimension,
+					     learning_rate,
+					     0);
 	if (ok) {
 		download_device_buffer(grad_input.data(), d_grad_in, f_bytes);
 	}
@@ -797,7 +819,8 @@ bool AI::build_paged_cache(size_t total_blocks, size_t block_size) {
 	if (hidden_dim == 0)
 		hidden_dim = 32;
 
-	bool ok = allocate_paged_cache(&gpu_paged_cache, total_blocks, block_size, hidden_dim, num_heads);
+	bool ok = allocate_paged_cache(
+		&gpu_paged_cache, total_blocks, block_size, hidden_dim, num_heads);
 	if (!ok)
 		return false;
 
@@ -847,7 +870,8 @@ bool AI::append_sequence_token(SequenceContext& sequence,
 			int new_block = block_manager->allocate_physical_block();
 			if (new_block < 0)
 				return false;
-			copy_physical_block(&gpu_paged_cache, target_block, new_block, offset, nullptr);
+			copy_physical_block(
+				&gpu_paged_cache, target_block, new_block, offset, nullptr);
 			block_manager->release_physical_block(target_block);
 			sequence.block_table.back() = new_block;
 			target_block = new_block;
@@ -881,12 +905,15 @@ bool AI::forward_paged_attention(const SequenceContext& sequence,
 		return false;
 
 	size_t table_bytes = sequence.block_table.size() * sizeof(int);
-	if (!upload_device_buffer(gpu_paged_cache.d_block_table, sequence.block_table.data(), table_bytes))
+	if (!upload_device_buffer(
+		    gpu_paged_cache.d_block_table, sequence.block_table.data(), table_bytes))
 		return false;
 
 	size_t query_bytes = query.size() * sizeof(std::bfloat16_t);
-	void* d_q = gpu_activations.d_query ? gpu_activations.d_query : allocate_device_memory(query_bytes);
-	void* d_out = gpu_activations.d_attention_output ? gpu_activations.d_attention_output : allocate_device_memory(query_bytes);
+	void* d_q = gpu_activations.d_query ? gpu_activations.d_query
+					    : allocate_device_memory(query_bytes);
+	void* d_out = gpu_activations.d_attention_output ? gpu_activations.d_attention_output
+							 : allocate_device_memory(query_bytes);
 
 	if (!d_q || !d_out) {
 		if (d_q && d_q != gpu_activations.d_query)
@@ -898,16 +925,15 @@ bool AI::forward_paged_attention(const SequenceContext& sequence,
 
 	upload_device_buffer(d_q, query.data(), query_bytes);
 
-	bool ok = paged_causal_attention(
-		d_q,
-		&gpu_paged_cache,
-		static_cast<const int*>(gpu_paged_cache.d_block_table),
-		d_out,
-		query_length,
-		sequence.sequence_length,
-		gpu_paged_cache.hidden_dimension,
-		gpu_paged_cache.num_heads,
-		nullptr);
+	bool ok = paged_causal_attention(d_q,
+					 &gpu_paged_cache,
+					 static_cast<const int*>(gpu_paged_cache.d_block_table),
+					 d_out,
+					 query_length,
+					 sequence.sequence_length,
+					 gpu_paged_cache.hidden_dimension,
+					 gpu_paged_cache.num_heads,
+					 nullptr);
 
 	if (ok) {
 		output.resize(query_length * gpu_paged_cache.hidden_dimension);
@@ -927,7 +953,7 @@ bool AI::forward_paged_attention(const SequenceContext& sequence,
 // ─────────────────────────────────────────────────────────────────────────────
 
 bool AI::build_training_graph(Optimizer& optimizer, Portion& portion) {
-	if (input_dimension == 0 || output_dimension == 0)
+	if (input_elements_x_total == 0 || target_elements_y_total == 0)
 		return false;
 
 	int buffer_index = portion.buffer_index;
@@ -945,9 +971,15 @@ bool AI::build_training_graph(Optimizer& optimizer, Portion& portion) {
 	}
 
 	float lr = optimizer.learning_rate;
-	return capture_training_graph(&gpu_graph_execution, &gpu_portion, &gpu_embeddings,
-				      &gpu_weights, &gpu_activations, input_dimension,
-				      output_dimension, lr, buffer_index);
+	return capture_training_graph(&gpu_graph_execution,
+				      &gpu_portion,
+				      &gpu_embeddings,
+				      &gpu_weights,
+				      &gpu_activations,
+				      input_elements_x_total,
+				      target_elements_y_total,
+				      lr,
+				      buffer_index);
 }
 
 bool AI::launch_training_graph_step() {
@@ -976,7 +1008,8 @@ bool AI::build_expert_layers(size_t hidden_dim, size_t ffn_dim, size_t num_exper
 bool AI::forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
 				 size_t sequence_length,
 				 std::vector<int>& routing_histogram) {
-	if (hidden_states.empty() || sequence_length == 0 || gpu_weights.d_router_weights == nullptr)
+	if (hidden_states.empty() || sequence_length == 0 ||
+	    gpu_weights.d_router_weights == nullptr)
 		return false;
 
 	size_t hidden_dim = hidden_states.size() / sequence_length;
@@ -987,12 +1020,18 @@ bool AI::forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
 		return false;
 	upload_device_buffer(d_temp, hidden_states.data(), bytes);
 
-	bool ok = ::forward_mixture_experts(d_temp, &gpu_weights, &gpu_activations, sequence_length,
-					    hidden_dim, ffn_dimension, 0);
+	bool ok = ::forward_mixture_experts(d_temp,
+					    &gpu_weights,
+					    &gpu_activations,
+					    sequence_length,
+					    hidden_dim,
+					    ffn_dimension,
+					    0);
 	if (ok) {
 		download_device_buffer(hidden_states.data(), d_temp, bytes);
 		routing_histogram.resize(gpu_weights.expert_count, 0);
-		download_expert_counts(&gpu_activations, routing_histogram.data(), gpu_weights.expert_count);
+		download_expert_counts(
+			&gpu_activations, routing_histogram.data(), gpu_weights.expert_count);
 	}
 	free_device_memory(d_temp);
 	return ok;
@@ -1010,8 +1049,10 @@ bool AI::verify_routing_balance(const std::vector<int>& routing_histogram,
 
 	for (int count : routing_histogram) {
 		sum_tokens += count;
-		if (count < min_tokens) min_tokens = count;
-		if (count > max_tokens) max_tokens = count;
+		if (count < min_tokens)
+			min_tokens = count;
+		if (count > max_tokens)
+			max_tokens = count;
 	}
 
 	// Each token is routed to exactly 2 experts

@@ -18,8 +18,8 @@
 
 struct AxiomWeightHeader {
 	char magic[8] = {'A', 'X', 'I', 'O', 'M', '_', 'V', '1'};
-	uint64_t input_dimension = 0;
-	uint64_t output_dimension = 0;
+	uint64_t input_elements_x_total = 0;
+	uint64_t target_elements_y_total = 0;
 	uint64_t weight_count = 0;
 	uint64_t bias_count = 0;
 	uint64_t vocab_size = 0;
@@ -54,8 +54,8 @@ struct Input;
 
 class AI {
 private:
-	size_t input_dimension;
-	size_t output_dimension;
+	size_t input_elements_x_total;
+	size_t target_elements_y_total;
 
 	// Bounds of the uniform distribution used to initialize the weights
 	float weight_min;
@@ -101,8 +101,8 @@ public:
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
 	// inside [weight_min, weight_max]
-	AI(size_t input_dimension,
-	   size_t output_dimension,
+	AI(size_t input_elements_x_total,
+	   size_t target_elements_y_total,
 	   float weight_min,
 	   float weight_max,
 	   Elements& elements);
@@ -151,7 +151,8 @@ public:
 	// Phase 3: Transformer Block Construction and Execution
 	bool build_transformer_block(size_t hidden_dim, size_t heads = 4, size_t ffn_dim = 64);
 
-	bool forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length);
+	bool forward_transformer(std::vector<std::bfloat16_t>& hidden_states,
+				 size_t sequence_length);
 
 	bool backward_transformer(const std::vector<float>& grad_output,
 				  std::vector<float>& grad_input,

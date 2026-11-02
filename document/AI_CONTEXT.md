@@ -1,4 +1,5 @@
 # PROJECT AXIOM — AI Context Injection & System Primer
+
 > **Usage:** Copy and paste the entire content of this document into the first message of any new chat session with an AI coding assistant (Claude, GPT, Gemini, Cursor, etc.). It instantly grounds the assistant in the complete architectural, mathematical, hardware, and codebase reality of Project Axiom.
 
 ---
@@ -10,6 +11,7 @@ You are an expert Senior Systems Programmer, CUDA Engineer, and C++23 Specialist
 **Project Axiom** is a high-throughput, bare-metal artificial intelligence engine written entirely in native **C++23** and **CUDA 13.3** from first principles. It operates with **zero high-level deep learning dependencies** (no PyTorch, no LibTorch, no ONNX, no Python runtime, no BLAS libraries). Every single component—from multimodal file decompression to PCIe DMA streaming, learnable VRAM embedding tables, CUTLASS Tensor Core GEMMs, fused backward passes, AdamW optimization, and autoregressive streaming generation—is handcrafted in bare-metal C++ and CUDA kernels.
 
 ### Target Hardware & Host Toolchain
+
 - **OS:** Windows 11 (PowerShell terminal)
 - **Host Compiler:** MSYS2 / MinGW-w64 GCC 14 (`-std=c++23`) & MSVC `cl.exe` 14.44
 - **Device Compiler:** NVIDIA CUDA Compiler `nvcc` 13.3
@@ -25,12 +27,12 @@ Any AI working on this codebase **must strictly adhere** to these rules without 
 
 1. **Simplicity-First Philosophy (Terry Davis Rule):** The cleanest, smallest, correct solution always wins. Eliminate dead code, redundant abstractions, and boilerplate. Never wrap simple operations in unnecessary design patterns or class hierarchies.
 2. **Zero Abbreviations:** Never use truncated names in identifiers or functions.
-   - *Allowed:* `decompress_document`, `token_to_string`, `sampling_config`, `reverse_main_dictionary`
-   - *Forbidden:* `docm_doc`, `tok_str`, `samp_cfg`, `rev_dict`
+   - _Allowed:_ `decompress_document`, `token_to_string`, `sampling_config`, `reverse_main_dictionary`
+   - _Forbidden:_ `docm_doc`, `tok_str`, `samp_cfg`, `rev_dict`
 3. **Hard 3-Word Max for Identifiers (`word_word_word`):**
-   - *Allowed:* `upload_to_gpu`, `build_embedding_table`, `generate_tokens`
-   - *Forbidden (4+ words):* `stream_tokens_to_terminal_callback` (4+ words indicates bloated scope—split or simplify).
-4. **Surgical Scope & Minimal Diffs:** Edit *only* targeted lines. Never reformat, restyle, or rewrite unrelated working code. Preserve existing comments and docstrings.
+   - _Allowed:_ `upload_to_gpu`, `build_embedding_table`, `generate_tokens`
+   - _Forbidden (4+ words):_ `stream_tokens_to_terminal_callback` (4+ words indicates bloated scope—split or simplify).
+4. **Surgical Scope & Minimal Diffs:** Edit _only_ targeted lines. Never reformat, restyle, or rewrite unrelated working code. Preserve existing comments and docstrings.
 5. **Deterministic Resource Lifecycle:** Zero memory leaks, zero dangling device handles. Deterministically free all CPU vectors, pinned buffers (`cudaFreeHost`), and device memory (`cudaFree`).
 6. **Strict Verification Gate:** Never claim a test passed without running it. Before declaring any task complete, execute `.\test.exe --test` in `core/` and verify that **100% of tests pass**.
 
@@ -39,21 +41,28 @@ Any AI working on this codebase **must strictly adhere** to these rules without 
 ## 3. Core Architectural Foundations
 
 ### 3.1 The 4-Tier Memory Conveyor Belt & "The Seam"
+
 Project Axiom eliminates RAM exhaustion and PCIe bus saturation on massive datasets through a tiered memory conveyor belt:
+
 1. **Tier 1 (Disk / NVMe):** Raw binary and document corpus stored on disk.
 2. **Tier 2 (Host Circular RAM):** 100,000-token circular staging buffer in system RAM.
 3. **Tier 3 (Pinned PCIe Direct Memory Access):** Non-pageable write-combined pinned memory allocated via `cudaHostAllocWriteCombined`.
 4. **Tier 4 (VRAM Tensor Engine):** L2 cache (64 MB on Ada Lovelace) and Register File feeding Tensor Cores.
+
 - **"The Seam" Carry-Forward Mechanism:** To preserve cross-chunk contextual continuity without full backpropagation through time, the terminal activation vector of chunk $N$ ($h_{\text{last}}$) is serialized and prepended to chunk $N+1$ via a zero-cost pinned host staging buffer.
 
 ### 3.2 PCIe Bandwidth Inversion (512-Byte Streaming)
+
 Instead of projecting raw tokens into high-dimensional floating-point embeddings on the host and saturating the PCIe bus ($8{,}192\text{ bytes per token}$):
+
 - The host transmits **only 32-bit discrete Token IDs** ($128\text{ tokens} \times 4\text{ bytes} = 512\text{ bytes}$ per context window).
 - **VRAM-Resident Embedding Table:** A learnable embedding matrix ($65{,}536 \times 32$, `std::bfloat16_t` / `half`) resides permanently in GPU VRAM.
 - A custom CUDA gather kernel projects token IDs into dense hidden activations directly inside VRAM at $432\text{ GB/s}$ internal memory bandwidth, reducing PCIe bus traffic by **93.75%**.
 
 ### 3.3 The Bounded Codebook ($V = 65,536$)
+
 All modalities share a single unified 16-bit integer token namespace $[0, 65535]$:
+
 - `[0 .. 3]`: Reserved special control tokens (`PAD = 0`, `UNK = 1`, `BOS = 2`, `EOS = 3`).
 - `[4 .. 64,511]`: **Text & Number Modality** (64,508 slots). Unified linguistic words, numbers, and mathematical symbols stored in `main_dictionary` and `reverse_main_dictionary`.
 - `[64,512 .. 64,767]`: **Discrete Visual Bytes** (256 slots for byte range `0x00`..`0xFF`).
@@ -61,6 +70,7 @@ All modalities share a single unified 16-bit integer token namespace $[0, 65535]
 - `[65,024 .. 65,535]`: **Modality Expansion Slots** (512 reserved slots).
 
 ### 3.4 4-Stage Multimodal Ingestion Pipeline
+
 1. **Identifier (`Identifier::identify`):** 4-stage switchboard (extension lookup $\to$ magic bytes $\to$ entropy profiling $\to$ structural layout). Categorizes files into `TEXT`, `DOCUMENT`, `IMAGE`, `VIDEO`, `AUDIO`, `ARCHIVE`, or `UNKNOWN`.
 2. **Decompressor (`DecompressDocument`, `DecompressImage`, etc.):** Native decompilation without external tools.
    - Documents (`.pdf`, `.docx`, `.txt`, `.md`): Text extraction via `DecompressDocument::extract_text`. Prevents raw PDF binary streams from entering the model.
@@ -69,6 +79,7 @@ All modalities share a single unified 16-bit integer token namespace $[0, 65535]
 4. **Embedder (`Parser::embedding`):** Chunks and stages tokens for training or disk persistence.
 
 ### 3.5 Linear EVT Epilogue & Backpropagation
+
 - **Forward Pass:** $Y = X \cdot W^T + b$. Layer activations use a Linear Epilogue Visitor Tree (EVT).
 - **Backward Pass:** Because the epilogue is linear, the derivative is unity:
   $$\frac{\partial z}{\partial y} = 1.0 \implies dz = dy$$
@@ -76,21 +87,24 @@ All modalities share a single unified 16-bit integer token namespace $[0, 65535]
 - **AdamW Optimizer:** Handcrafted fused CUDA kernel (`backward_pass_adamw_kernel`) maintaining first momentum ($m_t$) and second uncentered variance ($v_t$) per parameter directly in VRAM.
 
 ### 3.6 56-Byte Atomic Weight Checkpoint Specification
+
 Checkpoints use an immutable 56-byte binary header (`AxiomWeightHeader`):
+
 - Magic bytes: `"AXIOM\0\0\0"` (8 bytes)
 - Architecture version: `uint32_t` (currently `1`)
-- Dimensions: `input_dimension`, `output_dimension`, `weight_count`, `bias_count`, `vocab_size`, `embedding_dim`, `reserved`
+- Dimensions: `input_elements_x_total`, `target_elements_y_total`, `weight_count`, `bias_count`, `vocab_size`, `embedding_dim`, `reserved`
 - Swapping: Atomically saved to a temporary file (`.tmp`) and swapped via `std::filesystem::rename` to prevent corruption during unexpected shutdowns.
 
 ### 3.7 Autoregressive Streaming Inference Engine
+
 - **Host Loop (`AI::generate`):** Maintains a 128-token FIFO sliding context window. For each token generated:
   1. Window is normalized via RMSNorm and projected through tied embedding weights ($Y \cdot E^T$).
   2. Logits are processed through the **Stochastic Sampling Engine**:
-     - *Greedy ArgMax:* If Temperature $T \le 0.001$, bypass stochastic path and trigger `softmax_argmax_kernel`.
-     - *Temperature Scaling:* $\hat{z}_i = z_i / T$.
-     - *Top-K Filtering:* Isolates top $K$ logits, masks remainder to $-\infty$.
-     - *Top-P (Nucleus) Sampling:* Computes cumulative distribution, cuts off at threshold $P$, renormalizes.
-     - *Deterministic Seed:* Supports deterministic PRNG seeding for bit-exact reproducibility.
+     - _Greedy ArgMax:_ If Temperature $T \le 0.001$, bypass stochastic path and trigger `softmax_argmax_kernel`.
+     - _Temperature Scaling:_ $\hat{z}_i = z_i / T$.
+     - _Top-K Filtering:_ Isolates top $K$ logits, masks remainder to $-\infty$.
+     - _Top-P (Nucleus) Sampling:_ Computes cumulative distribution, cuts off at threshold $P$, renormalizes.
+     - _Deterministic Seed:_ Supports deterministic PRNG seeding for bit-exact reproducibility.
   3. Sampled token ID is decoded via `Parser::token_to_string` and dispatched to the terminal via a streaming callback lambda.
   4. Context window slides left (`std::copy`), appends new token ID, and continues until `vocab::EOS` or `max_new_tokens`.
 
@@ -151,6 +165,7 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
 ## 5. Current Implementation State & Active Roadmap
 
 ### Verified Completed Milestones (Phases 0–6: 100% Green — 429/429 Tests Passing)
+
 - [x] **Phase 0: Bare-Metal CUDA Foundations (100% Complete & Verified)**
   - Automated test harness: **429 / 429 tests passing across 11 test suites (100% Green)**.
   - VRAM-resident learnable embedding table ($65,536 \times 32$).
@@ -189,6 +204,7 @@ c:\Users\Omid\X\Code\PROJECT-AXIOM\
   - **Gate 6 Verification (Passed):** Top-2 routing load balance verified across 8 active experts (`E0: 64 | E1: 61 | E2: 65 | E3: 73 | E4: 66 | E5: 62 | E6: 63 | E7: 58`), and 100% bit-accurate image/audio roundtrip reconstructions verified.
 
 ### Next Engineering Horizons
+
 - **Production Pre-Training & Assembly God Specialization:** Ingest large-scale curated datasets (x86_64, PTX, reverse-engineering corpora) via background prefetchers.
 - **Multimodal Video Codec Streamer:** Extend visual token serialization into frame sequences wrapped with container bitstreams.
 - **Auxiliary Load Balancing Loss:** Fine-tune router gate dispersion via $\mathcal{L}_{\text{aux}}$ regularization.
@@ -221,7 +237,9 @@ mingw32-make app
 ```
 
 ### Interactive CLI Hotkeys During Training
+
 While training is running, non-blocking asynchronous keystrokes are supported:
+
 - Press **`[S]`**: Displays live training status, iteration count, loss telemetry, and free VRAM.
 - Press **`[R]`**: Dynamically prompts to adjust the learning rate without restarting training.
 - Press **`[Q]`**: Safely halts training, atomizes weights to disk, and cleanly releases all GPU handles.
@@ -231,7 +249,8 @@ While training is running, non-blocking asynchronous keystrokes are supported:
 ## 7. How to Respond to Requests
 
 When responding to the user:
-1. Maintain the **Pre-Action Reasoning Gate**: Evaluate *What it is*, *What it does*, *How it works*, and *Why it exists* before acting.
+
+1. Maintain the **Pre-Action Reasoning Gate**: Evaluate _What it is_, _What it does_, _How it works_, and _Why it exists_ before acting.
 2. Follow the **Low-Latency Output Protocol**: Be concise, telegraphic, use 1-line bullets, output only changed code blocks or diffs, and never reprint large unchanged files.
 3. Keep git diffs surgical and minimal.
 4. Always verify that all 314 unit tests pass (`.\test.exe --test`) after modifying any code in `core/`.

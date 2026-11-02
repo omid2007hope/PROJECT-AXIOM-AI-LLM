@@ -143,7 +143,12 @@ static void test_gpu_roundtrip() {
 	}
 
 	// 1. First call: cudaMalloc + cudaMemcpy
-	bool up1 = upload_to_gpu(host_context_input.data(), context_elements, host_target_input.data(), target_elements, &gpu, 0);
+	bool up1 = upload_to_gpu(host_context_input.data(),
+				 context_elements,
+				 host_target_input.data(),
+				 target_elements,
+				 &gpu,
+				 0);
 	check(up1, "upload_to_gpu() — first call allocates and copies");
 	check(gpu.d_context_window[0] != nullptr, "gpu.d_context_window is not null");
 	check(gpu.d_target[0] != nullptr, "gpu.d_target is not null");
@@ -155,18 +160,29 @@ static void test_gpu_roundtrip() {
 	void* old_target_pointer = gpu.d_target[0];
 
 	// 2. Second call same size: reuse buffer
-	bool up2 = upload_to_gpu(host_context_input.data(), context_elements, host_target_input.data(), target_elements, &gpu, 0);
+	bool up2 = upload_to_gpu(host_context_input.data(),
+				 context_elements,
+				 host_target_input.data(),
+				 target_elements,
+				 &gpu,
+				 0);
 	check(up2, "upload_to_gpu() — second call succeeds");
 	check(gpu.d_context_window[0] == old_context_pointer,
 	      "d_context_window pointer reused (no realloc)");
 	check(gpu.d_target[0] == old_target_pointer, "d_target pointer reused (no realloc)");
 
 	// 3. Verify H→D values match by downloading back (D→H)
-	std::vector<std::bfloat16_t> host_context_output(context_elements, static_cast<std::bfloat16_t>(0.0f));
-	std::vector<std::bfloat16_t> host_target_output(target_elements, static_cast<std::bfloat16_t>(0.0f));
+	std::vector<std::bfloat16_t> host_context_output(context_elements,
+							 static_cast<std::bfloat16_t>(0.0f));
+	std::vector<std::bfloat16_t> host_target_output(target_elements,
+							static_cast<std::bfloat16_t>(0.0f));
 
-	bool down = download_from_gpu(
-		host_context_output.data(), context_elements, host_target_output.data(), target_elements, &gpu, 0);
+	bool down = download_from_gpu(host_context_output.data(),
+				      context_elements,
+				      host_target_output.data(),
+				      target_elements,
+				      &gpu,
+				      0);
 	check(down, "download_from_gpu() succeeds");
 
 	bool context_match = true;
@@ -187,11 +203,17 @@ static void test_gpu_roundtrip() {
 	const size_t new_context_elements = 1024;
 	std::vector<std::bfloat16_t> new_host_context_input(new_context_elements,
 							    static_cast<std::bfloat16_t>(1.0f));
-	bool up3 = upload_to_gpu(
-		new_host_context_input.data(), new_context_elements, host_target_input.data(), target_elements, &gpu, 0);
+	bool up3 = upload_to_gpu(new_host_context_input.data(),
+				 new_context_elements,
+				 host_target_input.data(),
+				 target_elements,
+				 &gpu,
+				 0);
 	check(up3, "upload_to_gpu() — size change succeeds");
-	check(gpu.d_context_window[0] != old_context_pointer, "d_context_window reallocated for new size");
-	check_eq(gpu.context_elements, new_context_elements, "context_elements updated to new size");
+	check(gpu.d_context_window[0] != old_context_pointer,
+	      "d_context_window reallocated for new size");
+	check_eq(
+		gpu.context_elements, new_context_elements, "context_elements updated to new size");
 
 	// 5. Free GPU
 	free_gpu(&gpu);
@@ -251,7 +273,8 @@ static void test_cutlass_forward_pass_evt() {
 		float actual = static_cast<float>(h_out[row]);
 		if (std::abs(actual - sum) > 0.15f) {
 			matched = false;
-			std::cerr << "Mismatch row " << row << ": actual=" << actual << " ref=" << sum << "\n";
+			std::cerr << "Mismatch row " << row << ": actual=" << actual
+				  << " ref=" << sum << "\n";
 		}
 	}
 	check(matched, "CUTLASS EVT output matches CPU reference (Wx + b)");
@@ -283,7 +306,8 @@ static void test_backward_pass_and_loss_drop() {
 
 	std::vector<float> h_w_init(in_dim * out_dim, 0.01f);
 	std::vector<float> h_b_init(out_dim, 0.0f);
-	upload_ai_weights(h_w_init.data(), h_w_init.size(), h_b_init.data(), h_b_init.size(), &weights);
+	upload_ai_weights(
+		h_w_init.data(), h_w_init.size(), h_b_init.data(), h_b_init.size(), &weights);
 
 	// 1. Initial step
 	forward_pass(&gpu, &weights, &acts, in_dim, out_dim, 0);
@@ -296,7 +320,8 @@ static void test_backward_pass_and_loss_drop() {
 	// 2. Check weights actually changed
 	std::vector<float> h_w_after(in_dim * out_dim);
 	std::vector<float> h_b_after(out_dim);
-	download_ai_weights(&weights, h_w_after.data(), h_w_after.size(), h_b_after.data(), h_b_after.size());
+	download_ai_weights(
+		&weights, h_w_after.data(), h_w_after.size(), h_b_after.data(), h_b_after.size());
 
 	bool weights_changed = false;
 	for (size_t i = 0; i < h_w_after.size(); ++i) {
@@ -322,7 +347,8 @@ static void test_backward_pass_and_loss_drop() {
 	download_loss(&acts, &eval_loss);
 
 	std::cout << "  Initial loss: " << init_loss << " -> Final loss: " << eval_loss << "\n";
-	check(eval_loss < init_loss * 0.1f, "Loss dropped by > 90% (Network is learning sequences)");
+	check(eval_loss < init_loss * 0.1f,
+	      "Loss dropped by > 90% (Network is learning sequences)");
 
 	free_gpu(&gpu);
 	free_gpu_weights(&weights);
@@ -338,8 +364,8 @@ static void test_learnable_embeddings_and_adamw() {
 	const size_t vocab_size = 65536;
 	const size_t embedding_dimension = 4;
 	const size_t num_tokens = 128;
-	const size_t input_dimension = num_tokens * embedding_dimension; // 512
-	const size_t output_dimension = 4;
+	const size_t input_elements_x_total = num_tokens * embedding_dimension; // 512
+	const size_t target_elements_y_total = 4;
 
 	// 1. Allocate embeddings matrix
 	bool alloc_ok = allocate_gpu_embeddings(&embeddings, vocab_size, embedding_dimension);
@@ -360,27 +386,49 @@ static void test_learnable_embeddings_and_adamw() {
 	check(bounds_ok, "Initial embeddings strictly within [-1/sqrt(D), +1/sqrt(D)]");
 
 	// 3. Setup weights
-	std::vector<float> host_weights(input_dimension * output_dimension, 0.05f);
-	std::vector<float> host_bias(output_dimension, 0.0f);
-	upload_ai_weights(host_weights.data(), host_weights.size(), host_bias.data(), host_bias.size(), &weights);
+	std::vector<float> host_weights(input_elements_x_total * target_elements_y_total, 0.05f);
+	std::vector<float> host_bias(target_elements_y_total, 0.0f);
+	upload_ai_weights(host_weights.data(),
+			  host_weights.size(),
+			  host_bias.data(),
+			  host_bias.size(),
+			  &weights);
 
 	// 4. Upload 128 uint32_t token IDs across PCIe
 	std::vector<uint32_t> token_ids(num_tokens);
 	for (size_t i = 0; i < num_tokens; ++i) {
 		token_ids[i] = static_cast<uint32_t>(10 + (i % 30));
 	}
-	std::vector<std::bfloat16_t> host_target(output_dimension, static_cast<std::bfloat16_t>(1.0f));
-	bool upload_tokens_success = upload_tokens_to_gpu(token_ids.data(), num_tokens, host_target.data(), output_dimension, &gpu, 0);
+	std::vector<std::bfloat16_t> host_target(target_elements_y_total,
+						 static_cast<std::bfloat16_t>(1.0f));
+	bool upload_tokens_success = upload_tokens_to_gpu(
+		token_ids.data(), num_tokens, host_target.data(), target_elements_y_total, &gpu, 0);
 	check(upload_tokens_success, "upload_tokens_to_gpu uploads 128 token IDs across PCIe");
 
 	// 5. Forward pass with embeddings gather
-	bool fwd_ok = forward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, input_dimension, output_dimension, 0);
-	check(fwd_ok, "forward_pass_with_embeddings gathers from d_table and executes CUTLASS GEMM");
+	bool fwd_ok = forward_pass_with_embeddings(&gpu,
+						   &embeddings,
+						   &weights,
+						   &acts,
+						   input_elements_x_total,
+						   target_elements_y_total,
+						   0);
+	check(fwd_ok,
+	      "forward_pass_with_embeddings gathers from d_table and executes CUTLASS GEMM");
 
 	// 6. Backward pass with AdamW + scatter into master embedding table
 	uint32_t tracked_id = token_ids[0];
-	bool bwd_ok = backward_pass_with_embeddings(&gpu, &embeddings, &weights, &acts, input_dimension, output_dimension, 0.01f, 0, true);
-	check(bwd_ok, "backward_pass_with_embeddings executes AdamW and scatters into embedding table");
+	bool bwd_ok = backward_pass_with_embeddings(&gpu,
+						    &embeddings,
+						    &weights,
+						    &acts,
+						    input_elements_x_total,
+						    target_elements_y_total,
+						    0.01f,
+						    0,
+						    true);
+	check(bwd_ok,
+	      "backward_pass_with_embeddings executes AdamW and scatters into embedding table");
 
 	// Verify embedding remains finite after update
 	download_embeddings(host_embeddings.data(), &embeddings);
