@@ -1,0 +1,5 @@
+- Always think and respond exclusively in English.
+- Host environment: Windows 11 (PowerShell/CMD). Never write Linux/Bash scripts.
+- Do not run directory-wide search dumps or recursive listings.
+- Keep responses concise and focused directly on the code being edited.
+
