@@ -530,51 +530,93 @@ void run_inference_engine(AI& ai,
 		  << "             AXIOM INFERENCE ENGINE ('Use it')          \n"
 		  << "========================================================\n";
 
-	if (std::filesystem::exists(weights_path)) {
-		std::cout << "[..] Loading model weights from: " << weights_path.filename().string()
+	std::filesystem::path target_weights = weights_path;
+	std::filesystem::path target_vocab = vocab_path;
+
+	bool is_transformer = false;
+	if (std::filesystem::exists(target_weights)) {
+		std::ifstream probe(target_weights, std::ios::binary);
+		if (probe.is_open()) {
+			uint32_t magic = 0;
+			probe.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+			if (magic == 0x4D4F4958) {
+				is_transformer = true;
+			}
+		}
+	} else if (std::filesystem::exists("models/qwen1_5b.axiom")) {
+		target_weights = "models/qwen1_5b.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
+		is_transformer = true;
+	}
+
+	if (is_transformer) {
+		std::cout << "[..] Detected Axiom Stacked Transformer (v2). Streaming weights via Win32 DMA mmap...\n";
+		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
+		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
+		if (vocab_ok && model_ok) {
+			std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n";
+		} else {
+			std::cerr << "[!] Failed to map transformer model weights.\n\n";
+		}
+	} else if (std::filesystem::exists(target_weights)) {
+		std::cout << "[..] Loading model weights from: " << target_weights.filename().string()
 			  << "\n";
-		if (ai.load_weights(weights_path.string())) {
+		if (ai.load_weights(target_weights.string())) {
 			std::cout << "[OK] Model weights successfully loaded into VRAM.\n\n";
 		} else {
 			std::cerr
 				<< "[!] Failed to load model weights. Using baseline weights.\n\n";
 		}
-	} else if (weights_path.filename().string() != config::weights_file) {
-		std::cerr << "[!] Specified weights file not found: " << weights_path.string()
+	} else if (target_weights.filename().string() != config::weights_file) {
+		std::cerr << "[!] Specified weights file not found: " << target_weights.string()
 			  << "\n"
 			  << "[!] Running with baseline initialized weights.\n\n";
 	} else {
 		std::cout
-			<< "[!] Notice: '" << weights_path.filename().string() << "' not found.\n"
+			<< "[!] Notice: '" << target_weights.filename().string() << "' not found.\n"
 			<< "[!] Running with baseline initialized weights.\n"
 			<< "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
 	}
 
-	if (std::filesystem::exists(vocab_path)) {
-		std::cout << "[..] Loading vocabulary from: " << vocab_path.filename().string()
-			  << "\n";
-		if (parser.load_vocabulary(vocab_path, input)) {
-			std::cout << "[OK] Vocabulary successfully restored ("
-				  << input.main_dictionary.size() << " tokens).\n\n";
+	if (!is_transformer) {
+		if (std::filesystem::exists(target_vocab)) {
+			std::cout << "[..] Loading vocabulary from: " << target_vocab.filename().string()
+				  << "\n";
+			if (parser.load_vocabulary(target_vocab, input)) {
+				std::cout << "[OK] Vocabulary successfully restored ("
+					  << input.main_dictionary.size() << " tokens).\n\n";
+			}
+		} else if (target_vocab.filename().string() != config::vocab_file) {
+			std::cerr << "[!] Specified vocabulary file not found: " << target_vocab.string()
+				  << "\n";
 		}
-	} else if (vocab_path.filename().string() != config::vocab_file) {
-		std::cerr << "[!] Specified vocabulary file not found: " << vocab_path.string()
-			  << "\n";
+
+		parser.build_embedding_table(input);
+		if (input.next_text_id > 4) {
+			ai.active_vocab_size = input.next_text_id;
+		}
 	}
 
-	parser.build_embedding_table(input);
-	if (input.next_text_id > 4) {
-		ai.active_vocab_size = input.next_text_id;
+	if (ai.has_transformer_model()) {
+		std::cout << "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
+			  << "Layers            : " << ai.config_.num_layers << " stacked blocks\n"
+			  << "Hidden Dimension  : " << ai.config_.hidden_dim << " (Q Heads: "
+			  << ai.config_.num_q_heads << ", KV Heads: " << ai.config_.num_kv_heads << ")\n"
+			  << "Context Window    : " << ai.config_.max_seq_len << " tokens\n"
+			  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
+			  << "Vocabulary Size   : " << ai.config_.vocab_size << " tokens (BPE exact code preserved)\n"
+			  << "--------------------------------------------------------\n"
+			  << "Enter code prompt or instruction (type 'exit' to quit):\n";
+	} else {
+		std::cout << "Model Architecture: Single Dedicated Multimodal Perceptron\n"
+			  << "Context Window    : " << config::context_window_size << " tokens ("
+			  << (config::context_window_size * config::token_dim * sizeof(std::bfloat16_t))
+			  << " bytes BF16)\n"
+			  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
+			  << "Vocabulary Size   : " << input.embedding_table.size() << " tokens mapped\n"
+			  << "--------------------------------------------------------\n"
+			  << "Enter text or prompt to predict next token (type 'exit' to quit):\n";
 	}
-
-	std::cout << "Model Architecture: Single Dedicated Multimodal Perceptron\n"
-		  << "Context Window    : " << config::context_window_size << " tokens ("
-		  << (config::context_window_size * config::token_dim * sizeof(std::bfloat16_t))
-		  << " bytes BF16)\n"
-		  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
-		  << "Vocabulary Size   : " << input.embedding_table.size() << " tokens mapped\n"
-		  << "--------------------------------------------------------\n"
-		  << "Enter text or prompt to predict next token (type 'exit' to quit):\n";
 
 	// ****
 	// Use
@@ -608,6 +650,15 @@ void run_inference_engine(AI& ai,
 		if (line == "exit" || line == "quit" || line == ":q") {
 			std::cout << "Exiting inference engine.\n";
 			break;
+		}
+
+		if (ai.has_transformer_model()) {
+			std::cout << "[Axiom 28-Layer GQA Stream]: ";
+			ai.generate(line, 256, 0.2f, 40, 0.9f, [](const std::string& token_string) {
+				std::cout << token_string << std::flush;
+			});
+			std::cout << "\n";
+			continue;
 		}
 
 		// Read-only tokenization: unseen words become <UNK>, never a new untrained ID

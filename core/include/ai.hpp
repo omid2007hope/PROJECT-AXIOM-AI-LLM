@@ -254,6 +254,7 @@ public:
 
 	bool load_vocabulary(const std::string& vocab_path);
 	bool load_axiom_model_mmap(const char* filepath);
+	bool has_transformer_model() const noexcept { return d_weights_arena_ != nullptr; }
 	void forward_transformer_step(int token_id, int token_pos, float* d_out_logits, void* stream);
 	bool generate(const std::string& prompt,
 		      size_t max_new_tokens,
