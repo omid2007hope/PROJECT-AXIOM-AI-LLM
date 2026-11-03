@@ -14,3 +14,4 @@ Qwen3.8-27B-UD-IQ4_XS.gguf
 core/database
 core/training_data
 .aider*
+models/
