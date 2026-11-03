@@ -6,6 +6,9 @@
 #include <sstream>
 #include <vector>
 #include <cstdint>
+#include <conio.h>
+#include <io.h>
+#include <filesystem>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -159,6 +162,23 @@ static std::string build_qwen_chatml_prompt(const std::string& body) {
 }
 
 void run_axiom_openai_server(AI& engine, uint16_t port) {
+    if (!engine.has_transformer_model()) {
+        std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n";
+        std::string weights_p = "models/qwen1_5b.axiom";
+        std::string vocab_p = "models/qwen_vocab.axiom";
+        if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
+            weights_p = "core/models/qwen1_5b.axiom";
+            vocab_p = "core/models/qwen_vocab.axiom";
+        }
+        bool v_ok = engine.load_vocabulary(vocab_p);
+        bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());
+        if (!v_ok || !m_ok) {
+            std::cerr << "[!] Failed to load transformer weights from: " << weights_p << "\n";
+            return;
+        }
+        std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n";
+    }
+
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         std::cerr << "[Axiom Server] WSAStartup failed.\n";
@@ -172,8 +192,8 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
         return;
     }
 
-    int opt = 1;
-    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt), sizeof(opt));
+    BOOL exclusive_opt = TRUE;
+    setsockopt(listen_sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&exclusive_opt), sizeof(exclusive_opt));
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -181,7 +201,14 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
     addr.sin_port = htons(port);
 
     if (bind(listen_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == SOCKET_ERROR) {
-        std::cerr << "[Axiom Server] bind failed on port " << port << ".\n";
+        int err = WSAGetLastError();
+        if (err == WSAEADDRINUSE) {
+            std::cerr << "\n[!] Error: Port " << port << " is ALREADY in use by another running Project Axiom process.\n"
+                      << "[!] The server is already active and listening. To stop the existing server, run:\n"
+                      << "    powershell \"Stop-Process -Name app -Force\"\n\n";
+        } else {
+            std::cerr << "[Axiom Server] bind failed on port " << port << " (WSA Error: " << err << ").\n";
+        }
         closesocket(listen_sock);
         WSACleanup();
         return;
@@ -194,9 +221,35 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
         return;
     }
 
-    std::cout << "[Axiom Server] Listening for Cline CLI on http://127.0.0.1:" << port << "/v1/chat/completions\n";
+    std::cout << "========================================================\n"
+              << "     PROJECT AXIOM DUAL SERVER (OpenAI + Ollama API)    \n"
+              << "========================================================\n"
+              << "[OK] Listening on http://127.0.0.1:" << port << "\n"
+              << "  - Cline VS Code  : http://127.0.0.1:" << port << "/v1\n"
+              << "  - ComfyUI Ollama : http://127.0.0.1:" << port << "\n"
+              << "--------------------------------------------------------\n"
+              << "[Ready for requests... Press 'q' or Ctrl+C to stop]\n\n" << std::flush;
+
+    fd_set read_fds;
+    timeval tv{};
 
     while (true) {
+        if (_isatty(_fileno(stdin)) && _kbhit()) {
+            int ch = _getch();
+            if (ch == 'q' || ch == 'Q' || ch == 27) {
+                std::cout << "\n[Axiom Server] Shutdown requested ('" << (char)ch << "'). Closing server...\n";
+                break;
+            }
+        }
+
+        FD_ZERO(&read_fds);
+        FD_SET(listen_sock, &read_fds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 250000; // 250ms
+
+        int sel = select(0, &read_fds, nullptr, nullptr, &tv);
+        if (sel <= 0) continue;
+
         SOCKET client = accept(listen_sock, nullptr, nullptr);
         if (client == INVALID_SOCKET) continue;
 
@@ -245,6 +298,7 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
             }
             // Handle GET /models
             else if (req.rfind("GET /v1/models", 0) == 0 || req.rfind("GET /models", 0) == 0) {
+                std::cout << "[Server] GET /v1/models (Cline model discovery)\n" << std::flush;
                 std::string models_json =
                     "{\"object\":\"list\",\"data\":["
                     "{\"id\":\"qwen2.5-coder-7b\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
@@ -264,6 +318,7 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
             }
             // Handle Ollama GET /api/tags (ComfyUI-Ollama connectivity)
             else if (req.rfind("GET /api/tags", 0) == 0) {
+                std::cout << "[Server] GET /api/tags (ComfyUI model discovery)\n" << std::flush;
                 std::string tags_json =
                     "{\"models\":["
                     "{\"name\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"model\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
@@ -283,6 +338,7 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
             }
             // Handle Ollama POST /api/generate (ComfyUI OllamaGenerateV2)
             else if (req.rfind("POST /api/generate", 0) == 0) {
+                std::cout << "[Server] POST /api/generate (ComfyUI prompt expansion)\n" << std::flush;
                 std::string chatml_prompt = build_ollama_prompt(body);
                 int max_tokens = 512;
                 size_t np_pos = body.find("\"num_predict\":");
@@ -311,6 +367,7 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
                 std::string wire = resp.str();
                 send(client, wire.data(), static_cast<int>(wire.size()), 0);
             } else {
+                std::cout << "[Server] POST /v1/chat/completions (Cline token generation)\n" << std::flush;
                 std::string chatml_prompt = build_qwen_chatml_prompt(body);
                 bool is_stream = (body.find("\"stream\": true") != std::string::npos ||
                                   body.find("\"stream\":true") != std::string::npos);
