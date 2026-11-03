@@ -79,7 +79,7 @@ Beyond deep learning systems engineering, Project Axiom serves as a research tes
 > _"If you can rewind the whole system to one origin — a seed, a singularity, a single initial state — you are not looking at true randomness. You are looking at a generator. Randomness that was actually source-less would not collapse backward onto a point; it would smear into infinitely many unrelated origins."_
 
 ### The Experimental Sandbox: Ingesting Silicon Thermal Noise
-In [`core/src/ai.cpp`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp), the engine interfaces with `std::random_device`, which samples non-deterministic thermal noise, semiconductor quantum tunneling jitter, and interrupt timing from the motherboard chipset:
+In [`core/src/ai.cpp`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/ai.cpp), the engine interfaces with `std::random_device`, which samples non-deterministic thermal noise, semiconductor quantum tunneling jitter, and interrupt timing from the motherboard chipset:
 
 ```cpp
 std::random_device rd; // Physical silicon hardware entropy

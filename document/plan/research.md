@@ -397,7 +397,7 @@ This architectural roadmap outlines a rigorous, mathematically sound transition 
 Scaling this custom framework to fully saturate an RTX 4080 requires treating the PCIe bus and VRAM as continuous, asynchronous streams rather than discrete, blocking stages.
 
 > [!NOTE]
-> **Active Implementation Directive:** The active engineering sequence is codified in the single authoritative blueprint: [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) and [`document/plan/plan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/plan.md).
+> **Active Implementation Directive:** The active engineering sequence is codified in the single authoritative blueprint: [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) and [`document/plan/plan.md`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/plan/plan.md).
 
 Here is the strategic breakdown of the migration path, organized by execution priority:
 

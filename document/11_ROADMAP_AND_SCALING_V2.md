@@ -15,10 +15,10 @@ Ingesting raw compressed bytes (zlib in PDFs, MP4 container headers) directly in
 1. **Four-Stage Multimodal Pipeline:**
    $$\text{Identifier (Magic Bytes)} \longrightarrow \text{Decompressor (Strip Wrapper)} \longrightarrow \text{Sanitizer} \longrightarrow \text{Tokenizer} \longrightarrow \text{Embedder}$$
 2. **Specialized Decompressor Modules:**
-   - [`decom_doc`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_doc.hpp): Extracts clean UTF-8 text and equations from `.pdf` and `.docx`.
-   - [`decom_image`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_image.hpp): Decodes container formats into raw uncompressed RGB pixel arrays.
-   - [`decom_video`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_video.hpp): Strips container headers and frame encodings into raw RGB frame matrices.
-   - [`decom_audio`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/decompressor/decom_audio.hpp): Strips container wrappers into raw PCM audio waveforms.
+   - [`decom_doc`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/decompressor/decom_doc.hpp): Extracts clean UTF-8 text and equations from `.pdf` and `.docx`.
+   - [`decom_image`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/decompressor/decom_image.hpp): Decodes container formats into raw uncompressed RGB pixel arrays.
+   - [`decom_video`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/decompressor/decom_video.hpp): Strips container headers and frame encodings into raw RGB frame matrices.
+   - [`decom_audio`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/decompressor/decom_audio.hpp): Strips container wrappers into raw PCM audio waveforms.
 3. **Dual Ingestion Workflows:** Raw manual CLI text inputs completely bypass the Identifier and Decompressor, flowing straight into character sanitization and tokenization.
 4. **Unified Text & Number Codebook:** Eliminates numerical offsets; words and numbers reside together in `main_dictionary`, allowing the network to learn relationships between concepts and quantities (e.g. `"gravity"` and `"9.8"`).
 
@@ -72,8 +72,8 @@ Generative models output mathematical sequences of token probabilities, not huma
 
 ### The Silicon Implementation: Inverted Output Codecs
 1. **Text Detokenizer:** Maps token IDs $[4, 64511]$ back to UTF-8 strings via `reverse_main_dictionary`.
-2. **Visual Output Codec ([`CompressImage`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/compressor/compress_image.hpp)):** Maps discrete visual tokens $[64512, 64767]$ to RGB pixel grids, serializing them into valid 24-bit uncompressed `.bmp` files with 100% bit-accurate round-trip reconstruction.
-3. **Acoustic Output Codec ([`CompressAudio`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/compressor/compress_audio.hpp)):** Maps discrete audio tokens $[64768, 65023]$ to linear PCM waveforms and serializes valid RIFF `.wav` audio containers with 100% bit-accurate round-trip reconstruction.
+2. **Visual Output Codec ([`CompressImage`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/compressor/compress_image.hpp)):** Maps discrete visual tokens $[64512, 64767]$ to RGB pixel grids, serializing them into valid 24-bit uncompressed `.bmp` files with 100% bit-accurate round-trip reconstruction.
+3. **Acoustic Output Codec ([`CompressAudio`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/compressor/compress_audio.hpp)):** Maps discrete audio tokens $[64768, 65023]$ to linear PCM waveforms and serializes valid RIFF `.wav` audio containers with 100% bit-accurate round-trip reconstruction.
 
 ---
 
@@ -88,7 +88,7 @@ In scaled multi-layer networks, allocating temporary activation tensors via stan
 ```
 
 ### The Silicon Implementation: Userspace BFC Allocator
-1. **Upfront VRAM Reservation:** The engine pre-allocates contiguous arenas in VRAM via `BfcAllocator` in [`core/src/CUDA/util/memory_allocation.cu`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/util/memory_allocation.cu).
+1. **Upfront VRAM Reservation:** The engine pre-allocates contiguous arenas in VRAM via `BfcAllocator` in [`core/src/CUDA/util/memory_allocation.cu`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/CUDA/util/memory_allocation.cu).
 2. **Best-Fit with Coalescing (BFC):** Incoming tensor allocation requests are serviced by carving pointers out of the pre-allocated arena in userspace, dropping allocation latency from microseconds to nanoseconds.
 3. **Neighbor Coalescing:** When a tensor is freed, adjacent free blocks are immediately merged back into a single continuous span, eradicating external heap fragmentation.
 4. **Stream-Ordered Pools:** Temporary PCIe transfer buffers utilize `cudaMallocAsync` and `cudaFreeAsync` across non-blocking CUDA streams.
@@ -101,7 +101,7 @@ In scaled multi-layer networks, allocating temporary activation tensors via stan
 When expanding from fixed context perceptrons to full Generative Pre-trained Transformers (GPTs), autoregressive decoding requires caching Key and Value (KV) projection tensors for every past token. Naively allocating continuous VRAM blocks for the maximum sequence length wastes up to **80% of VRAM** due to internal fragmentation.
 
 ### The Silicon Implementation: Virtual Memory PagedAttention
-Axiom implements **PagedAttention** ([`PagedAttentionBlockTable`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.hpp)), treating GPU VRAM identically to an operating system virtual memory manager:
+Axiom implements **PagedAttention** ([`PagedAttentionBlockTable`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/ai.hpp)), treating GPU VRAM identically to an operating system virtual memory manager:
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -128,7 +128,7 @@ Axiom implements **PagedAttention** ([`PagedAttentionBlockTable`](file:///c:/Use
 As individual Tensor Core operations are optimized to compute in sub-microsecond intervals, the time required for the host CPU to launch kernels across the PCIe bus and traverse the NVIDIA driver stack becomes the dominant system bottleneck.
 
 ### The Silicon Implementation: Directed Acyclic Graph (DAG) Execution
-Using the CUDA Graphs API in [`core/src/CUDA/kernel/forward_pass.cu`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu), the engine captures entire iterations into hardware DAGs:
+Using the CUDA Graphs API in [`core/src/CUDA/kernel/forward_pass.cu`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu), the engine captures entire iterations into hardware DAGs:
 
 ```cpp
 cudaGraph_t graph;
@@ -148,7 +148,7 @@ execute_cuda_graph(instance, stream);
 
 ## 9. Phase IX: Modular Framework Architecture via ATen Dispatcher [COMPLETED]
 
-Project Axiom implements an **ATen-style Dispatch Architecture** ([`AtenDispatcher`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.hpp)):
+Project Axiom implements an **ATen-style Dispatch Architecture** ([`AtenDispatcher`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/ai.hpp)):
 
 ```
 +-------------------------------------------------------------------+
@@ -177,7 +177,7 @@ Project Axiom implements an **ATen-style Dispatch Architecture** ([`AtenDispatch
 
 ## 10. Phase X: Sparse Mixture of Experts (MoE) Architecture [COMPLETED]
 
-Axiom implements **Sparse Mixture of Experts (MoE)** ([`forward_mixture_experts`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu)):
+Axiom implements **Sparse Mixture of Experts (MoE)** ([`forward_mixture_experts`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu)):
 1. **Contiguous Expert Stacks:** Dense SwiGLU FFN weights are partitioned into $N = 8$ discrete expert weight stacks in contiguous device memory.
 2. **Top-2 Gating Router (`top2_router_kernel`):** A softmax gating network selects the top-2 experts per token ($G(x) = \text{TopK}(\text{Softmax}(x W_g), k=2)$).
 3. **Selective Hardware Dispatch (`moe_top2_dispatch_kernel`):** Dispatches tokens exclusively to active experts, skipping idle experts on silicon. Verified under diverse batches with 100% active experts and uniform load distribution.

@@ -35,7 +35,7 @@ Continual dynamic memory allocations (`malloc`, `cudaMalloc`) during forward and
 
 ### D. The Axiom Solution
 Axiom enforces direct, byte-level control over memory layouts:
-- **Zero Python Runtime Dependencies:** Axiom compiles into a standalone native Windows binary ([`core/app.exe`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/app.exe)) and a high-performance acceleration library ([`core/cuda_transfer.dll`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/cuda_transfer.dll)).
+- **Zero Python Runtime Dependencies:** Axiom compiles into a standalone native Windows binary ([`core/app.exe`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/app.exe)) and a high-performance acceleration library ([`core/cuda_transfer.dll`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/cuda_transfer.dll)).
 - **Deterministic Static Memory Lifecycles:** Dynamic allocations are strictly prohibited inside the compute loop. Memory is pre-allocated upfront during initialization.
 - **Defensive Pointer Nullification:** Every allocation and deallocation strictly adheres to the Null-Guard $\rightarrow$ Free $\rightarrow$ Neutralize lifecycle:
   ```cpp
@@ -127,7 +127,7 @@ When training resumes, loading `optimizer.axiom` restores full momentum instanta
 Project Axiom supports two distinct engineering paradigms:
 
 1. **Version 1.0 (Current Baseline):**
-   - **Form Factor:** Zero-overhead, pure native C++23 terminal executable ([`core/app.exe`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/app.exe)).
+   - **Form Factor:** Zero-overhead, pure native C++23 terminal executable ([`core/app.exe`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/app.exe)).
    - **Guiding Rule:** Zero UI/UX overhead. Pure computation, instant terminal streaming, and deterministic command-line flags.
    - **Ingestion:** Four-Stage Ingestion Pipeline with specialized decompressors (`decom_doc`, `decom_image`, `decom_audio`, `decom_video`), dense early-fusion codebook ($V=65,536$), unified text/number `main_dictionary`, and uncompressed semantic extraction.
 2. **Version 2.0 (Ecosystem Expansion & Frontier Horizons):**

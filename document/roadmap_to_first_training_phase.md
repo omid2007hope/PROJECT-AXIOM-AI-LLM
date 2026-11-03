@@ -71,7 +71,7 @@ To execute this training run without token collapse, context starvation, or memo
 Standard whitespace and byte tokenizers fragment assembly instructions. An AVX instruction like `vfmadd231ps ymm0, ymm1, [rax + 32]` splinters into 8 disjointed tokens (`vf`, `madd`, `231`, `ps`, `ymm0`, etc.), consuming 3% of the entire 256-token context window on a single line.
 
 ### The Solution: Pre-Seed Atomic Register and Opcode IDs
-Before processing training files, manually inject core x86_64 tokens into `main_dictionary` in [`parser.cpp`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/parser.cpp):
+Before processing training files, manually inject core x86_64 tokens into `main_dictionary` in [`parser.cpp`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/parser.cpp):
 
 1. **Reserve IDs `4` through `~500`** specifically for the x86_64 instruction set and register bank:
    * General-Purpose Registers: `rax`, `rbx`, `rcx`, `rdx`, `rsi`, `rdi`, `rbp`, `rsp`, `r8`–`r15`
@@ -90,7 +90,7 @@ Before processing training files, manually inject core x86_64 tokens into `main_
 At batch size $M = 1$, Tensor Cores starve (yielding only ~300 tok/s) because single-vector GEMMs do not fill the Ada Lovelace warp MMA tiles ($16 \times 16 \times 16$ or $32 \times 8 \times 16$).
 
 ### The Solution: 2D Grid Launch Layout
-Upgrade [`gather_embeddings_kernel`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu) and the CUTLASS EVT launcher to use a 2D grid:
+Upgrade [`gather_embeddings_kernel`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu) and the CUTLASS EVT launcher to use a 2D grid:
 
 1. **Host Launch Grid:**
    ```cpp

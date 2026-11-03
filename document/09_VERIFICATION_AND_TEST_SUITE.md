@@ -2,7 +2,7 @@
 
 In mission-critical systems engineering, unverified code is broken code. Because Project Axiom controls raw GPU pointers, asynchronous PCIe DMA channels, lock-free ring buffers, and low-level binary disk serialization, an exhaustive verification suite is required to guarantee memory safety, numerical correctness, and corruption resistance.
 
-This document details the **429 automated verification tests across 11 test suites** implemented in [`core/test/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/test/).
+This document details the **429 automated verification tests across 11 test suites** implemented in [`core/test/`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/test/).
 
 ---
 

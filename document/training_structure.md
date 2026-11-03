@@ -72,7 +72,7 @@ The target dataset footprint is **100 MB to 500 MB** of uncompressed, plain-text
 
 ### Domain B: Kinetic Physics & Ballistics Ingestion
 1. Collect 20 to 40 academic textbooks, peer-reviewed journals, and declassified impact mechanics papers.
-2. Feed PDF and compressed documents through the Project Axiom [`Decompressor`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md#the-four-stage-multimodal-ingestion-pipeline) pipeline to extract continuous text streams, discarding raster graphics and layout artifacts.
+2. Feed PDF and compressed documents through the Project Axiom [`Decompressor`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md#the-four-stage-multimodal-ingestion-pipeline) pipeline to extract continuous text streams, discarding raster graphics and layout artifacts.
 
 ### Domain C: Bare-Metal Assembly & ISA Ingestion
 1. Curate heavily commented assembly projects and standalone kernel bootloaders.
@@ -114,7 +114,7 @@ Default character/byte tokenization splinters vectorized instructions (e.g., `vf
 
 Raw textual data frequently contains non-semantic byte sequences (corrupted PDF symbols, Base64 strings, unescaped HTML, or hex dumps) that degrade Tensor Core efficiency.
 
-Before raw text enters the [`Identifier`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md) stage, the following hygiene rules must be applied:
+Before raw text enters the [`Identifier`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md) stage, the following hygiene rules must be applied:
 
 1. **UTF-8 Sanitization:**
    * Strip invalid UTF-8 byte sequences, control characters (excluding newline `\n`), and non-semantic formatting anomalies.
@@ -124,7 +124,7 @@ Before raw text enters the [`Identifier`](file:///c:/Users/Omid/X/Code/PROJECT-A
 3. **Frequency Filtering ($N < 3$ Threshold):**
    * Run a global token frequency pass across the entire corpus.
    * If any token or character sequence appears fewer than 3 times across the 500 MB corpus, replace it with `<UNK>` (Token ID `1`) or excise it.
-   * **Rationale:** Protects the 65,536-entry [`main_dictionary`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/07_MULTIMODAL_TOKENIZER_AND_INFERENCE.md) from being flooded by typos, GUIDs, and random hexadecimal strings.
+   * **Rationale:** Protects the 65,536-entry [`main_dictionary`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/07_MULTIMODAL_TOKENIZER_AND_INFERENCE.md) from being flooded by typos, GUIDs, and random hexadecimal strings.
 
 ---
 

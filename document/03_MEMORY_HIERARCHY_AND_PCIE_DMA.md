@@ -51,7 +51,7 @@ The operating system reserves the authority to page out physical memory to the S
 To protect system integrity, the NVIDIA CUDA driver detects pageable memory passed into `cudaMemcpyAsync()` and **silently degrades the call into a synchronous, blocking operation**. The CPU is halted while the CUDA driver copies the data into an internal pinned staging buffer before initiating the PCIe transfer. As a result, asynchronous streaming fails completely.
 
 ### The Axiom Solution: Persistent Pinned Memory
-To enable true hardware DMA, memory buffers that cross the PCIe bus must be **page-locked (pinned)** via [`cudaHostAlloc()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/tensor_cores.cu):
+To enable true hardware DMA, memory buffers that cross the PCIe bus must be **page-locked (pinned)** via [`cudaHostAlloc()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/tensor_cores.cu):
 
 ```cpp
 cudaError_t err = cudaHostAlloc(&host_ptr, byte_size, cudaHostAllocWriteCombined);
@@ -94,7 +94,7 @@ The GPU compute cores sit completely idle while memory is transferring across th
 Submitting CUDA commands without explicitly designating a stream places them in the **Default Stream (Stream 0)**. Stream 0 acts as a global device synchronization barrier: no operation in Stream 0 can begin until all prior operations across all other streams have finished, and no operation in any other stream can begin until Stream 0 has completed.
 
 ### Dual Non-Blocking Streams
-Axiom eradicates this synchronization barrier by creating two explicit non-blocking CUDA streams via [`cudaStreamCreateWithFlags()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/tensor_cores.cu):
+Axiom eradicates this synchronization barrier by creating two explicit non-blocking CUDA streams via [`cudaStreamCreateWithFlags()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/tensor_cores.cu):
 
 ```cpp
 cudaStreamCreateWithFlags(&stream_compute, cudaStreamNonBlocking);

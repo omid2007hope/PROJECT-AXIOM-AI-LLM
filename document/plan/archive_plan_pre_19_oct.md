@@ -4,9 +4,9 @@
 > [!NOTE]
 > **Historical Archive Notice:** This document preserves the legacy 11-phase roadmap formulated during early prototype development. 
 > For active engineering, consult the single authoritative source of truth:
-> - **Primary Engineering Plan:** [document/plan/UnifiedMasterEngineeringPlan.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md)
-> - **Active Horizons Directive:** [document/plan/plan.md](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/plan.md)
-> - **Master Checklist:** [.todo](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/.todo)
+> - **Primary Engineering Plan:** [document/plan/UnifiedMasterEngineeringPlan.md](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md)
+> - **Active Horizons Directive:** [document/plan/plan.md](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/plan/plan.md)
+> - **Master Checklist:** [.todo](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/.todo)
 
 ---
 

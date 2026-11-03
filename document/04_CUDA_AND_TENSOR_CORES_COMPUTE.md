@@ -190,7 +190,7 @@ __global__ void gather_embeddings_kernel(
 
 In dense neural networks, every token is multiplied against every parameter in the model—including weights specialized for audio when the input is purely text.
 
-Project Axiom implements **Sparse Mixture of Experts (MoE)** ([`core/src/CUDA/kernel/forward_pass.cu`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu)):
+Project Axiom implements **Sparse Mixture of Experts (MoE)** ([`core/src/CUDA/kernel/forward_pass.cu`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu)):
 1. **Contiguous Expert Stacks:** Dense SwiGLU FFN weight matrices are partitioned into $N = 8$ discrete expert weight stacks laid out contiguously in device VRAM.
 2. **Top-2 Gating Router (`top2_router_kernel`):** A softmax gating network computes routing logits:
    $$G(x) = \text{TopK}(\text{Softmax}(x W_g), k=2)$$

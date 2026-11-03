@@ -43,17 +43,17 @@ Project Axiom addresses this bottleneck through an event-driven, four-tier data 
 Raw training corpora and model assets reside permanently on the disk. File access operations are orchestrated via persistent file streams (`std::ifstream`) that remain continuously open throughout the application lifecycle. This prevents repeated operating system kernel context switches and file descriptor spin-up costs.
 
 ### Tier 1: Host System RAM (The 100,000-Token Buffer & SPSC Ring Buffer)
-To prevent the operating system from thrashing physical storage or exhausting host memory on massive multi-gigabyte datasets, [`DataLoader`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) maintains a dedicated circular buffer holding exactly 100,000 categorical tokens (`uint32_t`). A background producer thread pre-fetches the subsequent 100,000-token chunks into a lock-free Single-Producer Single-Consumer (SPSC) ring buffer ahead of GPU consumption, completely eliminating disk I/O stalls and CPU spin-lock contention.
+To prevent the operating system from thrashing physical storage or exhausting host memory on massive multi-gigabyte datasets, [`DataLoader`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/loader.h) maintains a dedicated circular buffer holding exactly 100,000 categorical tokens (`uint32_t`). A background producer thread pre-fetches the subsequent 100,000-token chunks into a lock-free Single-Producer Single-Consumer (SPSC) ring buffer ahead of GPU consumption, completely eliminating disk I/O stalls and CPU spin-lock contention.
 
 ### Tier 2: Pinned Context Windows (The Portion Structure)
-The neural network operates on discrete sliding context windows of 128 tokens. [`DataLoader::ram_to_contextWindow()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/loader.cpp) slices the 100,000-token RAM array into [`Portion`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) structures:
+The neural network operates on discrete sliding context windows of 128 tokens. [`DataLoader::ram_to_contextWindow()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/loader.cpp) slices the 100,000-token RAM array into [`Portion`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/loader.h) structures:
 - **Input Tensor ($X$):** 128 context token IDs (`uint32_t` integers = 512 bytes). Uploading integer token IDs across PCIe rather than high-dimensional floating-point vectors slashes bus traffic by over **93%**.
 - **Target Tensor ($Y$):** The 129th target token serving as the self-supervised ground truth.
 
 Crucially, these buffers are allocated in page-locked, write-combined physical memory (`cudaHostAllocWriteCombined`) to enable true asynchronous hardware Direct Memory Access (DMA) without CPU intervention or cache pollution.
 
 ### Tier 3: GPU Video Memory (VRAM)
-Data arriving over the PCIe bus lands in dedicated VRAM allocated via [`allocate_gpu_memory()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/tensor_cores.cu). Here:
+Data arriving over the PCIe bus lands in dedicated VRAM allocated via [`allocate_gpu_memory()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/tensor_cores.cu). Here:
 1. **Branchless Gather Kernel:** Maps the 128 integer token IDs directly into 32-dimensional vectors from the learnable VRAM embedding table `d_embedding_table` ($65,536 \times 32$ in `__nv_bfloat16`).
 2. **Tensor Core GEMM:** CUTLASS v4.8.0 templates execute the matrix multiplication directly within high-speed shared memory registers before linear EVT write-back.
 
@@ -73,7 +73,7 @@ In naive chunked data loaders, reading discrete blocks of tokens from disk creat
 If the loader seeks backwards on the disk to recover the overlapping tokens, it invalidates the operating system's sequential file cache, severely degrading storage read throughput.
 
 ### The Axiom Seam Solution
-Axiom solves this through **The Seam**—an in-memory carry-forward mechanism implemented in [`DataLoader::file_to_ram()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/loader.cpp):
+Axiom solves this through **The Seam**—an in-memory carry-forward mechanism implemented in [`DataLoader::file_to_ram()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/loader.cpp):
 
 ```cpp
 // If the buffer already contained data, preserve the final 128 tokens
@@ -117,8 +117,8 @@ To conceptualize the memory hierarchy and concurrency flow, Project Axiom implem
 | Analogy | Physical Hardware | Axiom Component | Scale / Scope |
 | :--- | :--- | :--- | :--- |
 | **The Library** | NVMe Solid-State Disk | Raw Storage Corpora | Terabytes of uncompressed text and multimedia. |
-| **The Book** | Host System RAM | [`DataLoader::buffer`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) | 100,000 categorical tokens held in volatile physical memory. |
-| **The Page** | Pinned Host RAM / VRAM | [`Portion`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h) Context Window | 128 token IDs uploaded via PCIe $\rightarrow$ gathered into $128 \times 32$ VRAM matrix for Tensor Cores. |
+| **The Book** | Host System RAM | [`DataLoader::buffer`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/loader.h) | 100,000 categorical tokens held in volatile physical memory. |
+| **The Page** | Pinned Host RAM / VRAM | [`Portion`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/loader.h) Context Window | 128 token IDs uploaded via PCIe $\rightarrow$ gathered into $128 \times 32$ VRAM matrix for Tensor Cores. |
 
 - You do not bring the entire **Library** onto your desk (this causes an Out-Of-Memory crash).
 - You take a single **Book** (100,000 tokens) off the shelf and place it on your desk (System RAM).
@@ -151,10 +151,10 @@ The engine is partitioned into four decoupled subsystems:
                                              +--------------------+
 ```
 
-1. **[`Parser`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/parser.h) & Decompressors (`core/include/decompressor/`):** Orchestrates the Four-Stage Ingestion Pipeline. Detects file formats, strips compression/container wrappers (`decom_doc`, `decom_image`, `decom_audio`, `decom_video`), sanitizes text, and quantizes tokens into the dense early-fusion codebook ($V = 65,536$).
-2. **[`DataLoader`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/loader.h):** Manages disk-to-RAM streaming, the 100,000-token circular buffer, the seam carry-forward window, and pinned write-combined context allocations.
-3. **[`AI`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.h):** Manages master weights, the master learnable embedding matrix, binary persistence (`weights.axiom` and `optimizer.axiom`), forward pass predictions, loss evaluations, and interactive inference.
-4. **[`TensorCores`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/tensor_cores.h):** Compiled into [`core/cuda_transfer.dll`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/cuda_transfer.dll) behind an un-mangled `extern "C"` ABI boundary. Manages physical VRAM buffers, the branchless embedding gather kernel, CUTLASS v4.8.0 EVT matrix multiplications, and dual non-blocking CUDA streams.
+1. **[`Parser`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/parser.h) & Decompressors (`core/include/decompressor/`):** Orchestrates the Four-Stage Ingestion Pipeline. Detects file formats, strips compression/container wrappers (`decom_doc`, `decom_image`, `decom_audio`, `decom_video`), sanitizes text, and quantizes tokens into the dense early-fusion codebook ($V = 65,536$).
+2. **[`DataLoader`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/loader.h):** Manages disk-to-RAM streaming, the 100,000-token circular buffer, the seam carry-forward window, and pinned write-combined context allocations.
+3. **[`AI`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/ai.h):** Manages master weights, the master learnable embedding matrix, binary persistence (`weights.axiom` and `optimizer.axiom`), forward pass predictions, loss evaluations, and interactive inference.
+4. **[`TensorCores`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/tensor_cores.h):** Compiled into [`core/cuda_transfer.dll`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/cuda_transfer.dll) behind an un-mangled `extern "C"` ABI boundary. Manages physical VRAM buffers, the branchless embedding gather kernel, CUTLASS v4.8.0 EVT matrix multiplications, and dual non-blocking CUDA streams.
 
 ---
 
@@ -206,8 +206,8 @@ The engine differentiates cleanly between file processing and manual input:
 Generative AI models do not output formatted `.mp4` or `.pdf` files directly; they output a sequence of discrete token probabilities. To render output for humans, Axiom defines the inverse pipeline via **Output Codecs**:
 
 * **Text Detokenizer:** Inspects predicted token IDs in $[4, 64511]$, performs reverse lookup in `reverse_main_dictionary`, and streams UTF-8 strings to the console.
-* **Visual Output Codec ([`CompressImage`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/compressor/compress_image.hpp)):** Maps discrete visual tokens $[64512, 64767]$ to RGB pixel grids, serializing them into valid 24-bit uncompressed `.bmp` files with full container headers and 100% bit-accurate round-trip reconstruction.
-* **Acoustic Output Codec ([`CompressAudio`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/compressor/compress_audio.hpp)):** Maps discrete audio tokens $[64768, 65023]$ to linear PCM waveforms and serializes valid RIFF `.wav` files (44.1 kHz, 16-bit) with 100% bit-accurate round-trip reconstruction.
+* **Visual Output Codec ([`CompressImage`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/compressor/compress_image.hpp)):** Maps discrete visual tokens $[64512, 64767]$ to RGB pixel grids, serializing them into valid 24-bit uncompressed `.bmp` files with full container headers and 100% bit-accurate round-trip reconstruction.
+* **Acoustic Output Codec ([`CompressAudio`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/compressor/compress_audio.hpp)):** Maps discrete audio tokens $[64768, 65023]$ to linear PCM waveforms and serializes valid RIFF `.wav` files (44.1 kHz, 16-bit) with 100% bit-accurate round-trip reconstruction.
 
 This symmetry ensures that the core neural matrix remains modality-agnostic: the GPU processes pure geometric vectors, while the modular edges handle decompression upon entry and compression upon exit.
 

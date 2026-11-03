@@ -36,7 +36,7 @@ The `weights.axiom` file is divided into a 56-byte compiler-safe header followed
 ```
 
 ### Compiler-Safe Struct Definition
-In [`core/include/ai.h`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.h), the header struct is packed with strict alignment to prevent non-deterministic compiler padding:
+In [`core/include/ai.h`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/ai.h), the header struct is packed with strict alignment to prevent non-deterministic compiler padding:
 
 ```cpp
 #pragma pack(push, 1)
@@ -61,7 +61,7 @@ struct AxiomWeightHeader {
 
 Directly writing parameters to the production `weights.axiom` file introduces a critical data integrity vulnerability. If the application crashes, the host machine loses power, or disk storage is exhausted mid-write, the existing file is truncated or corrupted, destroying the model permanently.
 
-Project Axiom implements an **Atomic Two-Stage Write Protocol** in [`AI::save_weights()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp):
+Project Axiom implements an **Atomic Two-Stage Write Protocol** in [`AI::save_weights()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/ai.cpp):
 
 ```
                         [TRAINING PROCESS]
@@ -106,7 +106,7 @@ save_weights("weights.axiom"); // RACE CONDITION! Partial updates written to dis
 ```
 
 ### The Synchronization Barrier
-In Axiom, [`AI::save_weights()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp) enforces a strict hardware barrier:
+In Axiom, [`AI::save_weights()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/ai.cpp) enforces a strict hardware barrier:
 
 ```cpp
 // Ensure all device updates in stream are complete
@@ -121,7 +121,7 @@ The CPU halts until the GPU's command queue has completely drained. Only when th
 
 ## 4. Integrity Validation and Graceful Degradation on Load
 
-When [`AI::load_weights()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp) is called (such as during `app.exe --use` or startup), the file undergoes forensic validation before any memory is touched:
+When [`AI::load_weights()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/ai.cpp) is called (such as during `app.exe --use` or startup), the file undergoes forensic validation before any memory is touched:
 
 ```cpp
 bool AI::load_weights(const std::string& path) {

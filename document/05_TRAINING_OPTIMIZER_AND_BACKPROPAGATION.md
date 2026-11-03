@@ -38,7 +38,7 @@ The gradient of the loss with respect to each weight element $W_{i, j}$ is the o
 $$\frac{\partial \mathcal{L}}{\partial W_{i, j}} = \delta_i \cdot x_j, \quad \frac{\partial \mathcal{L}}{\partial b_i} = \delta_i$$
 
 ### Parameter Update Equation
-Using Stochastic Gradient Descent with learning rate $\eta$ (configured to $\eta = 0.01$ in [`AI`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp)):
+Using Stochastic Gradient Descent with learning rate $\eta$ (configured to $\eta = 0.01$ in [`AI`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/ai.cpp)):
 
 $$W_{i, j}^{(t+1)} = W_{i, j}^{(t)} - \eta \cdot (\delta_i \cdot x_j)$$
 
@@ -64,7 +64,7 @@ $$b_i^{(t+1)} = b_i^{(t)} - \eta \cdot \delta_i$$
 
 ## 3. The Rank-1 CUDA Backpropagation Kernel
 
-In [`core/src/tensor_cores.cu`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/tensor_cores.cu), the gradient calculation and parameter update are executed via a dedicated parallel CUDA kernel:
+In [`core/src/tensor_cores.cu`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/tensor_cores.cu), the gradient calculation and parameter update are executed via a dedicated parallel CUDA kernel:
 
 ```cpp
 __global__ void sgd_rank1_update_kernel(
@@ -107,7 +107,7 @@ If updates of magnitude $10^{-6}$ are added directly to a `bfloat16` number (whi
 
 ### The Axiom Master Weight Pattern
 Project Axiom resolves this via **FP32 Master Weights**:
-1. **Host Master Parameters:** The authoritative copy of all weights is maintained in full **IEEE FP32 single-precision** inside [`AI::weights`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp).
+1. **Host Master Parameters:** The authoritative copy of all weights is maintained in full **IEEE FP32 single-precision** inside [`AI::weights`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/ai.cpp).
 2. **Device Acceleration Parameters:** During forward passes and streaming updates, weights are maintained in `bfloat16` on the GPU for high-speed Tensor Core execution.
 3. **Loss Gradient Accumulation:** Parameter gradients are accumulated in 32-bit float precision before syncing to disk or committing to long-term storage, guaranteeing zero underflow loss.
 
@@ -147,7 +147,7 @@ for (float& w : weights) {
 ```
 
 ### The Hard Weight Reset Shortcut (`[R]`)
-During live interactive training in [`AI::train_interactive()`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/ai.cpp), the developer can press **`[R]`**:
+During live interactive training in [`AI::train_interactive()`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/src/ai.cpp), the developer can press **`[R]`**:
 1. Instantly re-randomizes all weights on the host using the Mersenne Twister engine.
 2. Synchronizes the randomized weights to the GPU device buffer via `cudaMemcpyAsync()`.
 3. Resets the training step counter and loss metrics.
@@ -225,7 +225,7 @@ To scale beyond memory-bound rank-1 updates to full multi-layer transformer bloc
 1. **Batched CUTLASS Backward GEMMs:**
    - Evaluates input gradients $dX = dY W^T$ and weight gradients $dW = X^T dY$ using batched CUTLASS v4.8.0 GEMMs (`backward_gemm_bfloat16`).
    - Saturates Ada Lovelace Tensor Cores across sequence and batch dimensions.
-2. **Dynamic Autograd Tape ([`AutogradTape`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/include/ai.hpp)):**
+2. **Dynamic Autograd Tape ([`AutogradTape`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/include/ai.hpp)):**
    - Intercepts operator dispatches carrying the `DispatchKey::Autograd` flag.
    - Dynamically builds reverse execution graphs and accumulates gradients into target parameter buffers.
    - Validated to achieve 100% numerical parity with analytical gradients in `test_ai.cpp`.

@@ -1,6 +1,6 @@
 # 08. CLI Manual and Operator Guide
 
-In accordance with Project Axiom's Version 1.0 design doctrine, the engine operates as a zero-overhead, bare-metal command-line binary ([`core/app.exe`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/app.exe)). There are no electron runtimes, no browser windows, and no Python interpretative shims.
+In accordance with Project Axiom's Version 1.0 design doctrine, the engine operates as a zero-overhead, bare-metal command-line binary ([`core/app.exe`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/app.exe)). There are no electron runtimes, no browser windows, and no Python interpretative shims.
 
 This document serves as the complete operator manual for executing inference, orchestrating training runs, utilizing runtime keyboard hotkeys, and building the binaries from source.
 
@@ -16,11 +16,11 @@ The executable accepts standard UNIX-style command-line flags:
 
 | Flag | Argument | Description |
 | :--- | :--- | :--- |
-| **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads [`weights.axiom`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/weights.axiom) for zero-latency prompt evaluation with live HUD telemetry. |
+| **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads [`weights.axiom`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/weights.axiom) for zero-latency prompt evaluation with live HUD telemetry. |
 | **`--train`** | `[STEPS]` (Optional) | Executes the continuous training loop on sample prompt data. Takes an optional step count integer (defaults to continuous if omitted). |
 | **`--bulk`** | `[STEPS]` (Optional) | Automatically scans and trains on all assets inside `asset_sample` (Text, PDF, Images, Video, Audio, 3D models). Takes an optional step count limit. |
 | **`--benchmark`** | _None_ | Executes the bare-metal hardware profiler using `cudaEvent_t` driver timers, printing the 4-variable Hardware Saturation HUD. |
-| **`--test`** | _None_ | Runs the internal self-test validation routine. For the complete automated test suite, run [`test.exe --test`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/test.exe). |
+| **`--test`** | _None_ | Runs the internal self-test validation routine. For the complete automated test suite, run [`test.exe --test`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/test.exe). |
 | **`--weights`** | `<path>` | Designates custom neural weights checkpoint path (supports `--weights <path>` or `--weights=<path>`). |
 | **`--vocab`** | `<path>` | Designates custom vocabulary dictionary path (supports `--vocab <path>` or `--vocab=<path>`). |
 | **`--lr`** | `<rate>` | Sets optimizer learning rate override (e.g., `--lr 0.002`). |
@@ -30,7 +30,7 @@ The executable accepts standard UNIX-style command-line flags:
 | **`--help`** | _None_ | Prints command-line argument documentation and version info to the console. |
 
 ### Interactive Main Menu (Default Execution)
-If [`app.exe`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/app.exe) is launched without flags, it presents an interactive terminal dashboard:
+If [`app.exe`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/app.exe) is launched without flags, it presents an interactive terminal dashboard:
 
 ```
 ======================================
@@ -127,7 +127,7 @@ Axiom trains directly across multiple orthogonal modalities. Training can be ini
 
 #### 6. Bulk Directory Training from `asset_sample` (Mass Four-Stage Ingestion)
 * **Interactive Path:** Select `[5] Bulk Training (asset_sample)` from the main menu, or execute `.\app.exe --bulk` (with optional step limit: `.\app.exe --bulk 50000`).
-* **Four-Stage Ingestion Mechanics:** Axiom scans [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) and routes each asset through the Identifier and specialized Decompressor:
+* **Four-Stage Ingestion Mechanics:** Axiom scans [`core/asset_sample`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/asset_sample) and routes each asset through the Identifier and specialized Decompressor:
   * **Text & Code (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.cpp`):** Sanitized and tokenized into `main_dictionary` `[4, 64,511]`.
   * **Documents (`.pdf`, `.docx`):** Decompressed via `decom_doc` into clean UTF-8 text and equations (eliminating zlib compression entropy).
   * **Images (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`):** Decompressed via `decom_image` into raw RGB pixel tensors.
@@ -140,7 +140,7 @@ Axiom trains directly across multiple orthogonal modalities. Training can be ini
   [..] Tokenizing Video Video.mp4 [========================] 100.0% (7.7 MB / 7.7 MB)
   ```
 * **Continuous Fine-Tuning & Asset Management Workflow:**
-  1. Fill [`core/asset_sample`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample) with training files.
+  1. Fill [`core/asset_sample`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/asset_sample) with training files.
   2. Launch `.\app.exe` $\to$ Option `[5] Bulk Training (asset_sample)`.
   3. The model loads existing weights from `weights.axiom` and momentum from `optimizer.axiom`, continuing training with zero amnesia.
   4. Upon training completion or manual exit (`[Q]`), new weights and optimizer momentum are saved atomically.
@@ -231,7 +231,7 @@ Project Axiom employs a dual-compiler toolchain combining **MinGW-w64 GCC** (for
 3. **CUDA Toolkit:** NVIDIA CUDA Toolkit 12.x (`nvcc`) targeting Ada Lovelace (`sm_89`).
 4. **Make Utility:** `mingw32-make` or GNU Make.
 
-### Build Targets in [`core/Makefile`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/Makefile)
+### Build Targets in [`core/Makefile`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/Makefile)
 
 ```powershell
 # Navigate to the core source directory

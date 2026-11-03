@@ -3,8 +3,8 @@
 **Document Path:** `document/plan/plan.md`  
 **Target Hardware:** NVIDIA Ada Lovelace (`sm_89` / RTX 4080 Laptop GPU) & Native C++23 / CUDA 13.3  
 **Status:** Active Engineering Directive — Horizon Execution Sequence  
-**Single Source of Truth:** [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md)  
-**Historical Archive:** [`document/plan/archive_plan_pre_19_oct.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/archive_plan_pre_19_oct.md) & [`document/plan/Project_Axiom_Plan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/Project_Axiom_Plan.md)
+**Single Source of Truth:** [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md)  
+**Historical Archive:** [`document/plan/archive_plan_pre_19_oct.md`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/plan/archive_plan_pre_19_oct.md) & [`document/plan/Project_Axiom_Plan.md`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/document/plan/Project_Axiom_Plan.md)
 
 ---
 
