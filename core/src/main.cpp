@@ -304,10 +304,13 @@ std::string fetch_argument(int count, char* argument[]) {
 AppMode collect_user_input(Input& input) {
 	int option = 0;
 	while (true) {
+		bool has_qwen = std::filesystem::exists("models/qwen1_5b.axiom") ||
+		                std::filesystem::exists("core/models/qwen1_5b.axiom");
+
 		std::cout << "======================================\n"
 			  << "           Welcome to AXIOM           \n"
 			  << "======================================\n"
-			  << "[1] Use it (Inference)\n"
+			  << (has_qwen ? "[1] Use it (Qwen 28-Layer Transformer)\n" : "[1] Use it (Inference)\n")
 			  << "[2] Train it (Training)\n"
 			  << "[3] Run Tests\n"
 			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
@@ -1697,9 +1700,16 @@ int main(int argc, char* argv[]) {
 			weights_path = custom_weights_path;
 		}
 	} else {
+		const std::filesystem::path qwen_w1 = "models/qwen1_5b.axiom";
+		const std::filesystem::path qwen_w2 = core_dir / "models" / "qwen1_5b.axiom";
 		const std::filesystem::path default_weights = models_dir / config::weights_file;
 		const std::filesystem::path legacy_weights = core_dir / config::weights_file;
-		if (std::filesystem::exists(default_weights)) {
+
+		if (std::filesystem::exists(qwen_w1)) {
+			weights_path = qwen_w1;
+		} else if (std::filesystem::exists(qwen_w2)) {
+			weights_path = qwen_w2;
+		} else if (std::filesystem::exists(default_weights)) {
 			weights_path = default_weights;
 		} else if (std::filesystem::exists(legacy_weights)) {
 			weights_path = legacy_weights;
@@ -1718,9 +1728,16 @@ int main(int argc, char* argv[]) {
 			vocab_path = custom_vocab_path;
 		}
 	} else {
+		const std::filesystem::path qwen_v1 = "models/qwen_vocab.axiom";
+		const std::filesystem::path qwen_v2 = core_dir / "models" / "qwen_vocab.axiom";
 		const std::filesystem::path default_vocab = models_dir / config::vocab_file;
 		const std::filesystem::path legacy_vocab = core_dir / config::vocab_file;
-		if (std::filesystem::exists(default_vocab)) {
+
+		if ((weights_path.filename().string().find("qwen") != std::string::npos) && std::filesystem::exists(qwen_v1)) {
+			vocab_path = qwen_v1;
+		} else if ((weights_path.filename().string().find("qwen") != std::string::npos) && std::filesystem::exists(qwen_v2)) {
+			vocab_path = qwen_v2;
+		} else if (std::filesystem::exists(default_vocab)) {
 			vocab_path = default_vocab;
 		} else if (std::filesystem::exists(legacy_vocab)) {
 			vocab_path = legacy_vocab;
