@@ -16,7 +16,9 @@ The executable accepts standard UNIX-style command-line flags:
 
 | Flag | Argument | Description |
 | :--- | :--- | :--- |
-| **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads [`weights.axiom`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/weights.axiom) for zero-latency prompt evaluation with live HUD telemetry. |
+| **`--chat`** | _None_ | Launches direct interactive conversation with Project Axiom (Qwen 28-Layer GQA LLM) in the console with full multi-turn context memory. |
+| **`--serve`** | `[PORT]` (Optional) | Starts the native OpenAI-compatible REST & SSE chat completions server (default port: `8080`) for Cline CLI & VS Code extension. |
+| **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads weights checkpoint for zero-latency prompt evaluation with live HUD telemetry. |
 | **`--train`** | `[STEPS]` (Optional) | Executes the continuous training loop on sample prompt data. Takes an optional step count integer (defaults to continuous if omitted). |
 | **`--bulk`** | `[STEPS]` (Optional) | Automatically scans and trains on all assets inside `asset_sample` (Text, PDF, Images, Video, Audio, 3D models). Takes an optional step count limit. |
 | **`--benchmark`** | _None_ | Executes the bare-metal hardware profiler using `cudaEvent_t` driver timers, printing the 4-variable Hardware Saturation HUD. |
@@ -36,18 +38,79 @@ If [`app.exe`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/cor
 ======================================
            Welcome to AXIOM           
 ======================================
-[1] Use it (Inference)
+[1] Chat with Axiom (Direct Qwen LLM)
 [2] Train it (Training)
 [3] Run Tests
 [4] Benchmark Hardware (Telemetry HUD)
 [5] Bulk Training (asset_sample)
-[6] Exit
+[6] Launch OpenAI Server (Cline / Port 8080)
+[7] Single-Layer Perceptron (Legacy Inference)
+[8] Exit
 > 
 ```
 
 ---
 
-## 2. Interactive Local Inference Session (`--use`)
+## 2. Interactive Direct Chat with Axiom (`--chat` or Menu Option `[1]`)
+
+Speak directly with Project Axiom's 28-layer GQA LLM inside your terminal with conversational multi-turn context memory:
+
+```powershell
+.\app.exe --chat
+```
+
+```text
+========================================================
+       AXIOM DIRECT CHAT (Qwen 28-Layer GQA Engine)     
+========================================================
+[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...
+[OK] Stacked GQA Transformer weights loaded into VRAM.
+
+Model Architecture: Stacked Grouped Query Attention (GQA) Transformer
+Layers            : 28 stacked blocks
+Hidden Dimension  : 1536 (Q Heads: 12, KV Heads: 2)
+Context Window    : 8192 tokens (Paged KV-Cache)
+Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)
+Vocabulary Size   : 151936 tokens (BPE exact code preserved)
+--------------------------------------------------------
+Speak directly with Axiom (type 'exit' to quit, 'clear' to reset):
+--------------------------------------------------------
+
+You > Write a fast C++23 function to reverse an array in place.
+
+Axiom > Here is a modern C++23 function using std::ranges:
+...
+```
+
+- **Interactive Commands:**
+  - `exit`, `quit`, `:q`: Return to the main menu or exit the process.
+  - `clear`, `reset`: Clear multi-turn conversation memory back to the initial system state.
+
+---
+
+## 3. Local OpenAI Server for Cline & VS Code (`--serve` or Menu Option `[6]`)
+
+Project Axiom embeds a bare-metal C++23 Winsock2 HTTP and SSE streaming server compliant with the OpenAI REST specification (`/v1/models` and `/v1/chat/completions`).
+
+```powershell
+# Start OpenAI server on default port 8080:
+.\app.exe --serve 8080
+```
+
+### Configuring Cline CLI or VS Code Extension:
+1. Open Cline **Settings** $\to$ **API Configuration**.
+2. **API Provider**: `OpenAI Compatible`.
+3. **Base URL**: `http://127.0.0.1:8080/v1`.
+4. **API Key**: `.....` (any non-empty placeholder).
+5. **Model ID**: `axiom` or `qwen2.5-coder-7b` or `qwen2.5-coder-1.5b`.
+6. Click **▼ ADVANCED**:
+   - Set **Model Context Window** to `8000` (or `8192`).
+   - Set **Max Output Tokens** to `2048` or `4096`.
+7. Click **Done**. Cline will stream responses directly from your GPU!
+
+---
+
+## 4. Single-Layer Legacy Inference (`--use` or Menu Option `[7]`)
 
 Launching the inference engine:
 ```powershell

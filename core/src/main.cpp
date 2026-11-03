@@ -86,7 +86,7 @@ constexpr const char* vocab_file = "vocab.axiom";
 
 } // namespace config
 
-enum class AppMode { Use, Train, BulkTrain, Test, Benchmark, Exit };
+enum class AppMode { Chat, Use, Train, BulkTrain, Test, Benchmark, Server, Exit };
 
 // core/ folder, located from the executable binary with fallbacks
 std::filesystem::path locate_core_dir() {
@@ -304,18 +304,17 @@ std::string fetch_argument(int count, char* argument[]) {
 AppMode collect_user_input(Input& input) {
 	int option = 0;
 	while (true) {
-		bool has_qwen = std::filesystem::exists("models/qwen1_5b.axiom") ||
-		                std::filesystem::exists("core/models/qwen1_5b.axiom");
-
 		std::cout << "======================================\n"
 			  << "           Welcome to AXIOM           \n"
 			  << "======================================\n"
-			  << (has_qwen ? "[1] Use it (Qwen 28-Layer Transformer)\n" : "[1] Use it (Inference)\n")
+			  << "[1] Chat with Axiom (Direct Qwen LLM)\n"
 			  << "[2] Train it (Training)\n"
 			  << "[3] Run Tests\n"
 			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
 			  << "[5] Bulk Training (asset_sample)\n"
-			  << "[6] Exit\n"
+			  << "[6] Launch OpenAI Server (Cline / Port 8080)\n"
+			  << "[7] Single-Layer Perceptron (Legacy Inference)\n"
+			  << "[8] Exit\n"
 			  << "> ";
 
 		option = read_choice();
@@ -325,7 +324,7 @@ AppMode collect_user_input(Input& input) {
 		}
 
 		if (option == 1) {
-			return AppMode::Use;
+			return AppMode::Chat;
 		}
 
 		if (option == 3) {
@@ -341,6 +340,14 @@ AppMode collect_user_input(Input& input) {
 		}
 
 		if (option == 6) {
+			return AppMode::Server;
+		}
+
+		if (option == 7) {
+			return AppMode::Use;
+		}
+
+		if (option == 8) {
 			return AppMode::Exit;
 		}
 
@@ -519,6 +526,93 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 	}
 
 	std::cout << "\n" << std::flush;
+}
+
+// *****************************************************************************
+// Direct Chat Engine (Interactive Qwen 28-Layer GQA)
+// *****************************************************************************
+void run_chat_engine(AI& ai,
+                     const std::filesystem::path& weights_path,
+                     const std::filesystem::path& vocab_path) {
+	std::cout << "\n========================================================\n"
+		  << "       AXIOM DIRECT CHAT (Qwen 28-Layer GQA Engine)     \n"
+		  << "========================================================\n";
+
+	std::filesystem::path target_weights = weights_path;
+	std::filesystem::path target_vocab = vocab_path;
+
+	if (std::filesystem::exists("models/qwen1_5b.axiom")) {
+		target_weights = "models/qwen1_5b.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
+		target_weights = "core/models/qwen1_5b.axiom";
+		target_vocab = "core/models/qwen_vocab.axiom";
+	}
+
+	if (!ai.has_transformer_model()) {
+		std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n";
+		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
+		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
+		if (!vocab_ok || !model_ok) {
+			std::cerr << "[!] Failed to load transformer weights from: " << target_weights << "\n";
+			return;
+		}
+		std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n";
+	}
+
+	std::cout << "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
+		  << "Layers            : " << ai.config_.num_layers << " stacked blocks\n"
+		  << "Hidden Dimension  : " << ai.config_.hidden_dim << " (Q Heads: "
+		  << ai.config_.num_q_heads << ", KV Heads: " << ai.config_.num_kv_heads << ")\n"
+		  << "Context Window    : " << ai.config_.max_seq_len << " tokens (Paged KV-Cache)\n"
+		  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
+		  << "Vocabulary Size   : " << ai.config_.vocab_size << " tokens (BPE exact code preserved)\n"
+		  << "--------------------------------------------------------\n"
+		  << "Speak directly with Axiom (type 'exit' to quit, 'clear' to reset):\n"
+		  << "--------------------------------------------------------\n";
+
+	std::string conversation_history =
+		"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n";
+
+	std::string user_input;
+	while (true) {
+		std::cout << "\nYou > ";
+		if (!std::getline(std::cin, user_input)) break;
+		strip_utf8_bom(user_input);
+
+		if (user_input.empty()) continue;
+		if (user_input == "exit" || user_input == "quit" || user_input == ":q") {
+			std::cout << "\nExiting chat session.\n";
+			break;
+		}
+		if (user_input == "clear" || user_input == "reset") {
+			conversation_history =
+				"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n";
+			std::cout << "[Axiom] Context memory reset.\n";
+			continue;
+		}
+
+		conversation_history += "<|im_start|>user\n" + user_input + "<|im_end|>\n<|im_start|>assistant\n";
+
+		std::cout << "\nAxiom > ";
+		std::string assistant_reply;
+		ai.generate(conversation_history, 1024, 0.2f, 40, 0.9f, [&](const std::string& tok) {
+			std::cout << tok << std::flush;
+			assistant_reply += tok;
+		});
+		std::cout << "\n";
+
+		conversation_history += assistant_reply + "<|im_end|>\n";
+
+		if (conversation_history.size() > 12288) {
+			size_t second_turn = conversation_history.find("<|im_start|>user", 64);
+			if (second_turn != std::string::npos) {
+				conversation_history =
+					"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n" +
+					conversation_history.substr(second_turn);
+			}
+		}
+	}
 }
 
 // *****************************************************************************
@@ -1543,6 +1637,7 @@ int main(int argc, char* argv[]) {
 				<< "Usage: app.exe [OPTION] [FLAGS]\n\n"
 				<< "Execution Modes:\n"
 				<< "  (no argument)       Interactive console menu\n"
+				<< "  --chat              Speak directly with Axiom (Interactive Qwen 28-Layer GQA)\n"
 				<< "  --serve [port]      Start native OpenAI-compatible chat server (default: 8080)\n"
 				<< "  --use               Run direct forward inference ('Use it')\n"
 				<< "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
@@ -1636,6 +1731,8 @@ int main(int argc, char* argv[]) {
 			auto_archive = true;
 		} else if (a == "--purge") {
 			auto_purge = true;
+		} else if (a == "--chat") {
+			primary_mode_arg = "--chat";
 		} else if (a == "--use" || a == "--benchmark") {
 			primary_mode_arg = a;
 		} else if (a == "--bulk" || a == "--train-bulk" || a == "--train") {
@@ -1662,7 +1759,10 @@ int main(int argc, char* argv[]) {
 	AppMode mode = AppMode::Train;
 	bool developer_mode = false;
 
-	if (primary_mode_arg == "--use") {
+	if (primary_mode_arg == "--chat") {
+		mode = AppMode::Chat;
+		developer_mode = true;
+	} else if (primary_mode_arg == "--use") {
 		mode = AppMode::Use;
 		developer_mode = true;
 	} else if (primary_mode_arg == "--benchmark") {
@@ -1781,6 +1881,14 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (!is_interactive) {
+		if (mode == AppMode::Chat) {
+			run_chat_engine(ai, weights_path, vocab_path);
+			return 0;
+		}
+		if (mode == AppMode::Server) {
+			run_axiom_openai_server(ai, 8080);
+			return 0;
+		}
 		if (mode == AppMode::Test) {
 			const bool tests_ok = run_tests(embedded_path);
 			restore_brain(ai, ai_elements, weights_path);
@@ -1827,6 +1935,18 @@ int main(int argc, char* argv[]) {
 
 		if (selected_mode == AppMode::Exit) {
 			break;
+		}
+
+		if (selected_mode == AppMode::Chat) {
+			run_chat_engine(ai, weights_path, vocab_path);
+			pause_menu();
+			continue;
+		}
+
+		if (selected_mode == AppMode::Server) {
+			run_axiom_openai_server(ai, 8080);
+			pause_menu();
+			continue;
 		}
 
 		if (selected_mode == AppMode::Test) {
