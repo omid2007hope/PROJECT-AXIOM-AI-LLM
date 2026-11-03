@@ -1,7 +1,7 @@
 CXX      = g++
 CXXFLAGS = -Wall -std=c++23 -Iinclude
 
-# ─── CUDA ────────────────────────────────────────────────────────────────────
+# ─── CUDA ─────────────────────────────────────────────────────────────────────
 CUDA_DIR  = C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3
 CUDA_LIB_DIR = $(CUDA_DIR)/lib/x64
 NVCC      = "$(CUDA_DIR)/bin/nvcc.exe"
@@ -26,14 +26,16 @@ ALL_SRCS  = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(TEST_DIR)/*.cpp) $(UTIL_SR
 APP_SRCS  = $(ALL_SRCS)
 TEST_SRCS = $(ALL_SRCS)
 
-# ─── Output targets ──────────────────────────────────────────────────────────
+# ─── Output targets ───────────────────────────────────────────────────────────
 APP_TARGET  = app.exe
 TEST_TARGET = test.exe
+DLL_TARGET  = build/axiom_core.dll
+DLL_SRCS    = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp $(UTIL_SRCS)
 
-# ─── Default: compile everything ─────────────────────────────────────────────
+# ─── Default: compile everything ──────────────────────────────────────────────
 all: $(APP_TARGET) $(TEST_TARGET)
 
-# ─── Compile CUDA sources into a single DLL ──────────────────────────────────
+# ─── Compile CUDA sources into a single DLL ───────────────────────────────────
 # Build a shared library so MSVC's linker handles all MSVC-specific symbols.
 CUDA_DLL = cuda_transfer.dll
 $(CUDA_DLL): $(CUDA_SRCS)
@@ -42,18 +44,24 @@ $(CUDA_DLL): $(CUDA_SRCS)
 # Helper: return the CUDA DLL only if it was successfully built
 CUDA_LINK = $(if $(wildcard $(CUDA_DLL)),$(CUDA_DLL),)
 
-# ─── Link CPU + GPU into the app ─────────────────────────────────────────────
+# ─── Link CPU + GPU into the app ──────────────────────────────────────────────
 $(APP_TARGET): $(APP_SRCS) $(CUDA_DLL)
-	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_LINK) -o $(APP_TARGET) -lpsapi
+	$(CXX) $(CXXFLAGS) $(APP_SRCS) $(CUDA_LINK) -o $(APP_TARGET) -lpsapi -lws2_32
 
-# ─── Link CPU + GPU into the test binary ─────────────────────────────────────
+# ─── Link CPU + GPU into the test binary ──────────────────────────────────────
 $(TEST_TARGET): $(TEST_SRCS) $(CUDA_DLL)
-	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) -o $(TEST_TARGET) -lpsapi
+	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) -o $(TEST_TARGET) -lpsapi -lws2_32
 
-# ─── Clean ───────────────────────────────────────────────────────────────────
+# ─── Shared library DLL target for Python / ComfyUI ───────────────────────────
+dll: $(CUDA_DLL)
+	@mkdir -p build ../build
+	$(CXX) $(CXXFLAGS) -shared -o $(DLL_TARGET) $(DLL_SRCS) $(CUDA_LINK) -lpsapi -lws2_32
+	@cp -f $(DLL_TARGET) ../build/axiom_core.dll
+
+# ─── Clean ────────────────────────────────────────────────────────────────────
 clean:
-	-rm -f $(APP_TARGET) $(TEST_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp
+	-rm -f $(APP_TARGET) $(TEST_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp build/*.o build/*.dll
 
-# ─── Run tests ───────────────────────────────────────────────────────────────
+# ─── Run tests ────────────────────────────────────────────────────────────────
 test: $(TEST_TARGET)
 	./$(TEST_TARGET) --test

@@ -351,6 +351,14 @@ public:
 	// Read-only variant for inference: unseen words become <UNK>, the vocabulary never grows
 	std::vector<uint32_t> tokenize_for_inference(const Input& input, const std::string& prompt);
 
+	// Pre-seeds x86_64 primitives and control tokens into vocabulary
+	void init_reserved_vocabulary(Input& input);
+
+	// Exact case-preserving longest-match tokenizer for Qwen / Code prompts
+	std::vector<uint32_t> tokenize_exact_code(const Input& input, const std::string& raw_prompt) const;
+	static std::vector<uint32_t> tokenize_exact_code(const std::string& raw_prompt,
+							 const std::unordered_map<std::string, uint32_t>& vocab);
+
 	// Right-aligned window of token IDs: newest token in the last slot, leading slots are PAD (0)
 	std::vector<uint32_t> build_context_ids(const std::vector<uint32_t>& tokens,
 						size_t context_tokens);

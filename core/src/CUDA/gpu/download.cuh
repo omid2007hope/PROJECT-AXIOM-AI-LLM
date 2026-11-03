@@ -40,6 +40,9 @@ CUDA_API bool download_probabilities(const GpuActivations* gpu_activations,
 				     float* h_probs,
 				     size_t count);
 
+CUDA_API void enqueue_loss_download(GpuPortion* gpu, int stream_idx);
+CUDA_API bool poll_loss_nonblocking(GpuPortion* gpu, int stream_idx, float* out_loss);
+
 
 #ifdef __cplusplus
 }

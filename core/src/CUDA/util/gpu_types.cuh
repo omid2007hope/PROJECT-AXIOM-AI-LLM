@@ -37,6 +37,15 @@ struct GpuPortion {
 	size_t token_count = 0;	     // total token count in context window (e.g. 128)
 	size_t context_elements = 0; // total bfloat16 elements in X
 	size_t target_elements = 0;  // total bfloat16 elements in Y
+
+	// Pre-allocated persistent device buffers & events per stream
+	void* d_hidden_state[2] = {nullptr, nullptr};
+	void* d_loss_scalar[2] = {nullptr, nullptr};
+	float* h_pinned_loss[2] = {nullptr, nullptr};
+	void* loss_ready_event[2] = {nullptr, nullptr};
+
+	size_t max_batch_tokens = 0;
+	bool is_allocated = false;
 };
 
 // GPU-side mirror of the learnable embedding matrix.

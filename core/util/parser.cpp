@@ -1053,3 +1053,78 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 		  << std::flush;
 	return true;
 }
+
+void Parser::init_reserved_vocabulary(Input& input) {
+	static const char* kX86Primitives[] = {
+		"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
+		"r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
+		"xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
+		"ymm0", "ymm1", "ymm2", "ymm3", "zmm0", "zmm1", "zmm2", "zmm3",
+		"mov", "lea", "add", "sub", "imul", "idiv", "xor", "and", "or", "shl", "shr",
+		"cmp", "test", "je", "jne", "jg", "jl", "jmp", "call", "ret", "push", "pop",
+		"vmovups", "vmovaps", "vfmadd231ps", "vbroadcastss", "vxorps", "vaddps",
+		"section", ".text", ".data", "global", "[intent]", "[var]",
+		"<|im_start|>", "<|im_end|>", "<|endoftext|>"
+	};
+
+	uint32_t next_id = 4;
+	for (const char* token_str : kX86Primitives) {
+		input.main_dictionary[token_str] = next_id;
+		input.reverse_main_dictionary[next_id] = token_str;
+		++next_id;
+	}
+	if (next_id > input.next_text_id) {
+		input.next_text_id = next_id;
+	}
+}
+
+std::vector<uint32_t> Parser::tokenize_exact_code(const Input& input, const std::string& raw_prompt) const {
+	std::vector<uint32_t> out_ids;
+	out_ids.reserve(raw_prompt.size() / 2);
+
+	size_t pos = 0;
+	const size_t n = raw_prompt.size();
+	while (pos < n) {
+		size_t match_len = std::min<size_t>(32, n - pos);
+		uint32_t matched_id = 1; // Default <UNK>
+		bool found = false;
+
+		for (; match_len >= 1; --match_len) {
+			std::string_view candidate(raw_prompt.data() + pos, match_len);
+			auto it = input.main_dictionary.find(std::string(candidate));
+			if (it != input.main_dictionary.end()) {
+				matched_id = it->second;
+				found = true;
+				break;
+			}
+		}
+		out_ids.push_back(matched_id);
+		pos += found ? match_len : 1;
+	}
+	return out_ids;
+}
+
+std::vector<uint32_t> Parser::tokenize_exact_code(const std::string& raw_prompt,
+					  const std::unordered_map<std::string, uint32_t>& vocab) {
+	std::vector<uint32_t> out_ids;
+	out_ids.reserve(raw_prompt.size() / 2);
+	size_t pos = 0;
+	const size_t n = raw_prompt.size();
+	while (pos < n) {
+		size_t match_len = std::min<size_t>(64, n - pos);
+		uint32_t matched_id = 1;
+		bool found = false;
+		for (; match_len >= 1; --match_len) {
+			std::string_view candidate(raw_prompt.data() + pos, match_len);
+			auto it = vocab.find(std::string(candidate));
+			if (it != vocab.end()) {
+				matched_id = it->second;
+				found = true;
+				break;
+			}
+		}
+		out_ids.push_back(matched_id);
+		pos += found ? match_len : 1;
+	}
+	return out_ids;
+}

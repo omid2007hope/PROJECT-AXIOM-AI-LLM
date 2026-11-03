@@ -23,6 +23,9 @@ CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
 				   GpuPortion* gpu,
 				   int buffer_index);
 
+CUDA_API bool init_gpu_portion(GpuPortion* gpu, size_t max_batch_tokens, size_t hidden_dim);
+CUDA_API void upload_tokens_async(GpuPortion* gpu, int stream_idx, const uint32_t* h_pinned_tokens, size_t count);
+
 CUDA_API void synchronize_stream(GpuPortion* gpu, int buffer_index);
 
 CUDA_API bool upload_ai_weights(const float* h_weights,

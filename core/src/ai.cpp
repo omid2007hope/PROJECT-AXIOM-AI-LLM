@@ -9,6 +9,23 @@
 
 #include "../include/parser.hpp"
 #include "../include/transfer.hpp"
+#include "CUDA/kernel/forward_pass.cuh"
+#include "CUDA/kernel/rmsnorm.cuh"
+#include "CUDA/kernel/rope.cuh"
+#include "CUDA/kernel/swiglu.cuh"
+#include "CUDA/kernel/paged_gqa.cuh"
+#include "CUDA/util/memory_allocation.cuh"
+#include <windows.h>
+
+AI::AI()
+    : input_elements_x_total(512),
+      target_elements_y_total(4),
+      weight_min(-0.1f),
+      weight_max(0.1f) {
+	vocab_size = 151936;
+	embedding_dim = 1536;
+	compute_stream_ = create_cuda_stream();
+}
 
 
 AI::AI(size_t input_elements_x_total,
@@ -91,6 +108,26 @@ AI::~AI() {
 	free_gpu_weights(&gpu_weights);
 	free_gpu_activations(&gpu_activations);
 	free_gpu_embeddings(&gpu_embeddings);
+
+	if (d_weights_arena_) { free_device_memory(d_weights_arena_); d_weights_arena_ = nullptr; }
+	if (d_curr_token_) { free_device_memory(d_curr_token_); d_curr_token_ = nullptr; }
+	if (d_curr_pos_) { free_device_memory(d_curr_pos_); d_curr_pos_ = nullptr; }
+	if (d_residual_stream_) { free_device_memory(d_residual_stream_); d_residual_stream_ = nullptr; }
+	if (d_normed_x_) { free_device_memory(d_normed_x_); d_normed_x_ = nullptr; }
+	if (d_q_) { free_device_memory(d_q_); d_q_ = nullptr; }
+	if (d_k_) { free_device_memory(d_k_); d_k_ = nullptr; }
+	if (d_v_) { free_device_memory(d_v_); d_v_ = nullptr; }
+	if (d_attn_out_) { free_device_memory(d_attn_out_); d_attn_out_ = nullptr; }
+	if (d_proj_tmp_) { free_device_memory(d_proj_tmp_); d_proj_tmp_ = nullptr; }
+	if (d_gate_buf_) { free_device_memory(d_gate_buf_); d_gate_buf_ = nullptr; }
+	if (d_up_buf_) { free_device_memory(d_up_buf_); d_up_buf_ = nullptr; }
+	if (d_act_buf_) { free_device_memory(d_act_buf_); d_act_buf_ = nullptr; }
+	if (d_block_table_) { free_device_memory(d_block_table_); d_block_table_ = nullptr; }
+	for (void* ptr : d_k_cache_) { if (ptr) free_device_memory(ptr); }
+	for (void* ptr : d_v_cache_) { if (ptr) free_device_memory(ptr); }
+	d_k_cache_.clear();
+	d_v_cache_.clear();
+	if (compute_stream_) { destroy_cuda_stream(compute_stream_); compute_stream_ = nullptr; }
 }
 
 bool AI::upload_weights() {
@@ -1068,4 +1105,328 @@ bool AI::verify_routing_balance(const std::vector<int>& routing_histogram,
 	float max_ratio = static_cast<float>(max_tokens) / avg_load;
 
 	return max_ratio < 3.0f;
+}
+
+bool AI::load_vocabulary(const std::string& vocab_path) {
+	std::ifstream file(vocab_path, std::ios::binary);
+	if (!file.is_open()) {
+		std::cerr << "[Axiom Engine] Failed to open vocab file: " << vocab_path << "\n";
+		return false;
+	}
+	uint32_t count = 0;
+	if (!file.read(reinterpret_cast<char*>(&count), sizeof(uint32_t))) {
+		return false;
+	}
+	qwen_vocab_.clear();
+	qwen_reverse_vocab_.clear();
+	qwen_vocab_.reserve(count);
+	qwen_reverse_vocab_.reserve(count);
+
+	for (uint32_t i = 0; i < count; ++i) {
+		uint32_t token_id = 0;
+		uint32_t str_len = 0;
+		if (!file.read(reinterpret_cast<char*>(&token_id), sizeof(uint32_t))) break;
+		if (!file.read(reinterpret_cast<char*>(&str_len), sizeof(uint32_t))) break;
+		std::string token_str(str_len, '\0');
+		if (str_len > 0) {
+			if (!file.read(&token_str[0], str_len)) break;
+		}
+		qwen_vocab_[token_str] = token_id;
+		qwen_reverse_vocab_[token_id] = token_str;
+	}
+	std::cout << "[Axiom Engine] Successfully loaded " << qwen_vocab_.size() << " vocabulary entries.\n";
+	return !qwen_vocab_.empty();
+}
+
+bool AI::load_axiom_model_mmap(const char* filepath) {
+	HANDLE hFile = CreateFileA(
+		filepath, GENERIC_READ, FILE_SHARE_READ, nullptr,
+		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr
+	);
+	if (hFile == INVALID_HANDLE_VALUE) {
+		std::cerr << "[Axiom Engine] Cannot open model file: " << filepath << "\n";
+		return false;
+	}
+
+	LARGE_INTEGER file_size;
+	GetFileSizeEx(hFile, &file_size);
+	size_t total_bytes = static_cast<size_t>(file_size.QuadPart);
+	if (total_bytes <= 64) {
+		CloseHandle(hFile);
+		return false;
+	}
+
+	HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+	if (!hMap) {
+		CloseHandle(hFile);
+		return false;
+	}
+
+	const uint8_t* mapped_base = static_cast<const uint8_t*>(
+		MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0)
+	);
+	if (!mapped_base) {
+		CloseHandle(hMap);
+		CloseHandle(hFile);
+		return false;
+	}
+
+	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
+	const uint8_t* host_weights_ptr = mapped_base + 64;
+	size_t weights_bytes = total_bytes - 64;
+
+	if (d_weights_arena_) {
+		free_device_memory(d_weights_arena_);
+		d_weights_arena_ = nullptr;
+	}
+
+	d_weights_arena_ = allocate_device_memory(weights_bytes);
+	if (!d_weights_arena_) {
+		std::cerr << "[Axiom Engine] Failed to allocate device memory for weights arena (" << (weights_bytes >> 20) << " MB)\n";
+		UnmapViewOfFile(mapped_base);
+		CloseHandle(hMap);
+		CloseHandle(hFile);
+		return false;
+	}
+
+	register_host_memory(const_cast<uint8_t*>(mapped_base), total_bytes);
+	upload_device_buffer_async(d_weights_arena_, host_weights_ptr, weights_bytes, compute_stream_);
+	sync_cuda_stream(compute_stream_);
+	unregister_host_memory(const_cast<uint8_t*>(mapped_base));
+
+	UnmapViewOfFile(mapped_base);
+	CloseHandle(hMap);
+	CloseHandle(hFile);
+
+	const uint16_t* cursor = static_cast<const uint16_t*>(d_weights_arena_);
+	const size_t D   = config_.hidden_dim;
+	const size_t Qd  = config_.num_q_heads * config_.head_dim;
+	const size_t KVd = config_.num_kv_heads * config_.head_dim;
+	const size_t FFN = config_.ffn_dim;
+	const size_t V   = config_.vocab_size;
+
+	d_embed_tokens_ = cursor; cursor += V * D;
+	layers_.resize(config_.num_layers);
+
+	for (uint32_t l = 0; l < config_.num_layers; ++l) {
+		layers_[l].d_input_layernorm     = cursor; cursor += D;
+		layers_[l].d_q_proj_weight       = cursor; cursor += Qd * D;
+		layers_[l].d_q_proj_bias         = cursor; cursor += Qd;
+		layers_[l].d_k_proj_weight       = cursor; cursor += KVd * D;
+		layers_[l].d_k_proj_bias         = cursor; cursor += KVd;
+		layers_[l].d_v_proj_weight       = cursor; cursor += KVd * D;
+		layers_[l].d_v_proj_bias         = cursor; cursor += KVd;
+		layers_[l].d_o_proj_weight       = cursor; cursor += D * Qd;
+		layers_[l].d_post_attn_layernorm = cursor; cursor += D;
+		layers_[l].d_gate_proj_weight    = cursor; cursor += FFN * D;
+		layers_[l].d_up_proj_weight      = cursor; cursor += FFN * D;
+		layers_[l].d_down_proj_weight    = cursor; cursor += D * FFN;
+	}
+
+	d_final_norm_weight_ = cursor; cursor += D;
+	d_lm_head_weight_    = cursor;
+
+	// Allocate working activation buffers
+	if (d_curr_token_)      free_device_memory(d_curr_token_);
+	if (d_curr_pos_)        free_device_memory(d_curr_pos_);
+	if (d_residual_stream_) free_device_memory(d_residual_stream_);
+	if (d_normed_x_)        free_device_memory(d_normed_x_);
+	if (d_q_)               free_device_memory(d_q_);
+	if (d_k_)               free_device_memory(d_k_);
+	if (d_v_)               free_device_memory(d_v_);
+	if (d_attn_out_)        free_device_memory(d_attn_out_);
+	if (d_proj_tmp_)        free_device_memory(d_proj_tmp_);
+	if (d_gate_buf_)        free_device_memory(d_gate_buf_);
+	if (d_up_buf_)          free_device_memory(d_up_buf_);
+	if (d_act_buf_)         free_device_memory(d_act_buf_);
+
+	d_curr_token_      = allocate_device_memory(sizeof(uint32_t));
+	d_curr_pos_        = allocate_device_memory(sizeof(int32_t));
+	d_residual_stream_ = allocate_device_memory(D * sizeof(uint16_t));
+	d_normed_x_        = allocate_device_memory(D * sizeof(uint16_t));
+	d_q_               = allocate_device_memory(Qd * sizeof(uint16_t));
+	d_k_               = allocate_device_memory(KVd * sizeof(uint16_t));
+	d_v_               = allocate_device_memory(KVd * sizeof(uint16_t));
+	d_attn_out_        = allocate_device_memory(Qd * sizeof(uint16_t));
+	d_proj_tmp_        = allocate_device_memory(std::max(D, Qd) * sizeof(uint16_t));
+	d_gate_buf_        = allocate_device_memory(FFN * sizeof(uint16_t));
+	d_up_buf_          = allocate_device_memory(FFN * sizeof(uint16_t));
+	d_act_buf_         = allocate_device_memory(FFN * sizeof(uint16_t));
+
+	// Allocate Paged KV Cache and physical block table
+	int num_blocks = static_cast<int>(config_.max_seq_len / 16);
+	if (num_blocks <= 0) num_blocks = 256;
+	std::vector<int32_t> h_block_table(num_blocks);
+	for (int i = 0; i < num_blocks; ++i) {
+		h_block_table[i] = i;
+	}
+	if (d_block_table_) free_device_memory(d_block_table_);
+	d_block_table_ = allocate_device_memory(num_blocks * sizeof(int32_t));
+	upload_device_buffer(d_block_table_, h_block_table.data(), num_blocks * sizeof(int32_t));
+
+	for (void* ptr : d_k_cache_) if (ptr) free_device_memory(ptr);
+	for (void* ptr : d_v_cache_) if (ptr) free_device_memory(ptr);
+	d_k_cache_.resize(config_.num_layers, nullptr);
+	d_v_cache_.resize(config_.num_layers, nullptr);
+
+	size_t kv_cache_bytes = static_cast<size_t>(config_.max_seq_len) * config_.num_kv_heads * config_.head_dim * sizeof(uint16_t);
+	for (uint32_t l = 0; l < config_.num_layers; ++l) {
+		d_k_cache_[l] = allocate_device_memory(kv_cache_bytes);
+		d_v_cache_[l] = allocate_device_memory(kv_cache_bytes);
+	}
+
+	std::cout << "[Axiom Engine] Loaded model: " << config_.num_layers << " layers, hidden_dim="
+		  << config_.hidden_dim << ", ffn_dim=" << config_.ffn_dim << " ("
+		  << (weights_bytes >> 20) << " MB VRAM)\n";
+	return true;
+}
+
+void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logits, void* stream) {
+	const uint32_t D   = config_.hidden_dim;
+	const uint32_t Qd  = config_.num_q_heads * config_.head_dim;
+	const uint32_t KVd = config_.num_kv_heads * config_.head_dim;
+	const uint32_t FFN = config_.ffn_dim;
+
+	uint32_t u_token_id = static_cast<uint32_t>(token_id);
+	int32_t  s_token_pos = static_cast<int32_t>(token_pos);
+	upload_device_buffer_async(d_curr_token_, &u_token_id, sizeof(uint32_t), stream);
+	upload_device_buffer_async(d_curr_pos_, &s_token_pos, sizeof(int32_t), stream);
+
+	launch_gather_embeddings_batched(
+		static_cast<const uint32_t*>(d_curr_token_),
+		d_embed_tokens_,
+		d_residual_stream_,
+		1, D, config_.vocab_size, stream
+	);
+
+	for (uint32_t l = 0; l < config_.num_layers; ++l) {
+		const auto& w = layers_[l];
+
+		launch_rmsnorm_bf16(d_residual_stream_, w.d_input_layernorm, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
+
+		launch_cutlass_gemm_bf16(1, Qd,  D, d_normed_x_, w.d_q_proj_weight, w.d_q_proj_bias, d_q_, stream);
+		launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_k_proj_weight, w.d_k_proj_bias, d_k_, stream);
+		launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_v_proj_weight, w.d_v_proj_bias, d_v_, stream);
+
+		launch_rope_inplace_bf16(
+			d_q_, d_k_, static_cast<const int32_t*>(d_curr_pos_), 1,
+			config_.num_q_heads, config_.num_kv_heads, config_.head_dim, config_.rope_theta, stream
+		);
+
+		launch_append_paged_kv(
+			d_k_, d_v_, d_k_cache_[l], d_v_cache_[l], static_cast<const int32_t*>(d_block_table_),
+			token_pos, config_.num_kv_heads, config_.head_dim, stream
+		);
+
+		float scale = 1.0f / std::sqrt(static_cast<float>(config_.head_dim));
+		launch_paged_gqa_decode(
+			d_q_, d_k_cache_[l], d_v_cache_[l], static_cast<const int32_t*>(d_block_table_), d_attn_out_,
+			token_pos + 1, config_.num_q_heads, config_.num_kv_heads, config_.head_dim, scale, stream
+		);
+
+		launch_cutlass_gemm_bf16(1, D, Qd, d_attn_out_, w.d_o_proj_weight, nullptr, d_proj_tmp_, stream);
+		launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
+
+		launch_rmsnorm_bf16(d_residual_stream_, w.d_post_attn_layernorm, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
+
+		launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_gate_proj_weight, nullptr, d_gate_buf_, stream);
+		launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_up_proj_weight,   nullptr, d_up_buf_,   stream);
+		launch_swiglu_bf16(d_gate_buf_, d_up_buf_, d_act_buf_, FFN, stream);
+		launch_cutlass_gemm_bf16(1, D, FFN, d_act_buf_,  w.d_down_proj_weight, nullptr, d_proj_tmp_, stream);
+		launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
+	}
+
+	launch_rmsnorm_bf16(d_residual_stream_, d_final_norm_weight_, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
+	launch_tied_logits_bf16(d_normed_x_, d_lm_head_weight_, d_out_logits, 1, config_.vocab_size, D, stream);
+}
+
+bool AI::generate(const std::string& prompt,
+		  size_t max_new_tokens,
+		  float temperature,
+		  int top_k,
+		  float top_p,
+		  std::function<void(const std::string&)> token_callback) {
+	if (!d_weights_arena_ || qwen_vocab_.empty()) {
+		std::cerr << "[Axiom Engine] Cannot generate: model or vocabulary not loaded.\n";
+		return false;
+	}
+
+	std::vector<uint32_t> prompt_tokens = Parser::tokenize_exact_code(prompt, qwen_vocab_);
+	if (prompt_tokens.empty()) {
+		return false;
+	}
+
+	size_t logits_bytes = config_.vocab_size * sizeof(float);
+	float* d_logits = static_cast<float*>(allocate_device_memory(logits_bytes));
+	if (!d_logits) return false;
+
+	std::vector<float> h_logits(config_.vocab_size);
+
+	// 1. Prefill prompt tokens
+	for (size_t i = 0; i < prompt_tokens.size(); ++i) {
+		forward_transformer_step(prompt_tokens[i], static_cast<int>(i), d_logits, compute_stream_);
+	}
+	sync_cuda_stream(compute_stream_);
+
+	int current_pos = static_cast<int>(prompt_tokens.size());
+	std::mt19937 rng(1337);
+
+	// 2. Autoregressive decode
+	for (size_t step = 0; step < max_new_tokens; ++step) {
+		if (current_pos >= static_cast<int>(config_.max_seq_len)) break;
+
+		download_device_buffer(h_logits.data(), d_logits, logits_bytes);
+
+		uint32_t next_token = 0;
+		if (temperature <= 0.01f) {
+			// Greedy
+			float max_val = -1e30f;
+			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
+				if (h_logits[v] > max_val) {
+					max_val = h_logits[v];
+					next_token = v;
+				}
+			}
+		} else {
+			// Temperature scaled
+			float inv_temp = 1.0f / temperature;
+			float max_val = -1e30f;
+			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
+				h_logits[v] *= inv_temp;
+				if (h_logits[v] > max_val) max_val = h_logits[v];
+			}
+			float sum = 0.0f;
+			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
+				h_logits[v] = std::exp(h_logits[v] - max_val);
+				sum += h_logits[v];
+			}
+			std::uniform_real_distribution<float> dist(0.0f, sum);
+			float r = dist(rng);
+			float accum = 0.0f;
+			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
+				accum += h_logits[v];
+				if (accum >= r) {
+					next_token = v;
+					break;
+				}
+			}
+		}
+
+		// Check EOS (<|endoftext|> = 151643, <|im_end|> = 151645)
+		if (next_token == 151643 || next_token == 151645) {
+			break;
+		}
+
+		auto it = qwen_reverse_vocab_.find(next_token);
+		if (it != qwen_reverse_vocab_.end()) {
+			if (token_callback) token_callback(it->second);
+		}
+
+		forward_transformer_step(next_token, current_pos, d_logits, compute_stream_);
+		sync_cuda_stream(compute_stream_);
+		current_pos++;
+	}
+
+	free_device_memory(d_logits);
+	return true;
 }

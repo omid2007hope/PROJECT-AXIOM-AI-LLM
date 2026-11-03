@@ -49,6 +49,36 @@ struct SamplingConfig {
 	uint64_t seed = 0;
 };
 
+struct AxiomModelConfig {
+	uint32_t magic          = 0x4D4F4958; // "XIOM"
+	uint32_t version        = 2;
+	uint32_t num_layers     = 28;
+	uint32_t hidden_dim     = 1536;
+	uint32_t num_q_heads    = 12;
+	uint32_t num_kv_heads   = 2;
+	uint32_t head_dim       = 128;
+	uint32_t ffn_dim        = 8960;
+	uint32_t vocab_size     = 151936;
+	uint32_t max_seq_len    = 4096;
+	float    rms_norm_eps   = 1e-6f;
+	float    rope_theta     = 1000000.0f;
+};
+
+struct TransformerLayerWeights {
+	const void* d_input_layernorm     = nullptr;
+	const void* d_q_proj_weight       = nullptr;
+	const void* d_q_proj_bias         = nullptr;
+	const void* d_k_proj_weight       = nullptr;
+	const void* d_k_proj_bias         = nullptr;
+	const void* d_v_proj_weight       = nullptr;
+	const void* d_v_proj_bias         = nullptr;
+	const void* d_o_proj_weight       = nullptr;
+	const void* d_post_attn_layernorm = nullptr;
+	const void* d_gate_proj_weight    = nullptr;
+	const void* d_up_proj_weight      = nullptr;
+	const void* d_down_proj_weight    = nullptr;
+};
+
 class Parser;
 struct Input;
 
@@ -98,6 +128,9 @@ public:
 	GpuPagedCache gpu_paged_cache;
 	std::unique_ptr<PagedBlockManager> block_manager;
 	GpuGraphExecution gpu_graph_execution;
+
+	// Default constructor for standalone inference/serving
+	AI();
 
 	// Constructor: Takes dimensions and initializes with Chaos (Randomness)
 	// inside [weight_min, weight_max]
@@ -187,6 +220,47 @@ public:
 	bool verify_routing_balance(const std::vector<int>& routing_histogram,
 				    size_t total_tokens,
 				    size_t num_experts = 8);
+
+	// ── Qwen2.5 / Multi-Layer Stacked Pipeline ──────────────────────────────────
+	AxiomModelConfig config_;
+	std::vector<TransformerLayerWeights> layers_;
+
+	void* d_weights_arena_ = nullptr;
+	const void* d_embed_tokens_ = nullptr;
+	const void* d_final_norm_weight_ = nullptr;
+	const void* d_lm_head_weight_ = nullptr;
+
+	void* d_curr_token_ = nullptr;
+	void* d_curr_pos_ = nullptr;
+	void* d_residual_stream_ = nullptr;
+	void* d_normed_x_ = nullptr;
+	void* d_q_ = nullptr;
+	void* d_k_ = nullptr;
+	void* d_v_ = nullptr;
+	void* d_attn_out_ = nullptr;
+	void* d_proj_tmp_ = nullptr;
+	void* d_gate_buf_ = nullptr;
+	void* d_up_buf_ = nullptr;
+	void* d_act_buf_ = nullptr;
+	void* d_block_table_ = nullptr;
+
+	std::vector<void*> d_k_cache_;
+	std::vector<void*> d_v_cache_;
+
+	void* compute_stream_ = nullptr;
+
+	std::unordered_map<std::string, uint32_t> qwen_vocab_;
+	std::unordered_map<uint32_t, std::string> qwen_reverse_vocab_;
+
+	bool load_vocabulary(const std::string& vocab_path);
+	bool load_axiom_model_mmap(const char* filepath);
+	void forward_transformer_step(int token_id, int token_pos, float* d_out_logits, void* stream);
+	bool generate(const std::string& prompt,
+		      size_t max_new_tokens,
+		      float temperature,
+		      int top_k,
+		      float top_p,
+		      std::function<void(const std::string&)> token_callback);
 };
 
 #endif

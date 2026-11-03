@@ -38,6 +38,7 @@
 #include "../include/ai.hpp"
 #include "../include/optimizer.hpp"
 #include "../include/telemetry.hpp"
+#include "../include/server.hpp"
 #include "../src/CUDA/kernel/forward_pass.cuh"
 
 bool test_path();
@@ -1456,6 +1457,24 @@ int main(int argc, char* argv[]) {
 
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
+				if (a == "--serve") {
+			uint16_t port = 8080;
+			if (i + 1 < argc && argv[i + 1][0] != '-') {
+				try {
+					port = static_cast<uint16_t>(std::stoi(argv[++i]));
+				} catch (...) {}
+			}
+			AI engine;
+			std::filesystem::path vocab_p = "models/qwen_vocab.axiom";
+			std::filesystem::path weights_p = "models/qwen1_5b.axiom";
+			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
+			if (!custom_weights_path.empty()) weights_p = custom_weights_path;
+
+			engine.load_vocabulary(vocab_p.string());
+			engine.load_axiom_model_mmap(weights_p.string().c_str());
+			run_axiom_openai_server(engine, port);
+			return 0;
+		}
 		if (a == "--test") {
 			return run_tests(locate_core_dir() / config::database_folder /
 					 config::embedded_file)
@@ -1470,6 +1489,7 @@ int main(int argc, char* argv[]) {
 				<< "Usage: app.exe [OPTION] [FLAGS]\n\n"
 				<< "Execution Modes:\n"
 				<< "  (no argument)       Interactive console menu\n"
+				<< "  --serve [port]      Start native OpenAI-compatible chat server (default: 8080)\n"
 				<< "  --use               Run direct forward inference ('Use it')\n"
 				<< "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
 				<< "  --bulk [N]          Bulk train on all files in asset directory (optional N steps)\n"

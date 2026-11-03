@@ -284,4 +284,30 @@ public:
 	bool load_context_window(Portion& portion);
 };
 
+template <typename T, size_t Capacity>
+class LockFreeSPSCRingBuffer {
+	static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of 2");
+private:
+	alignas(64) std::atomic<size_t> write_idx_{0};
+	alignas(64) std::atomic<size_t> read_idx_{0};
+	alignas(64) T buffer_[Capacity];
+public:
+	bool try_push(const T& item) noexcept {
+		const size_t w = write_idx_.load(std::memory_order_relaxed);
+		const size_t next_w = (w + 1) & (Capacity - 1);
+		if (next_w == read_idx_.load(std::memory_order_acquire)) return false;
+		buffer_[w] = item;
+		write_idx_.store(next_w, std::memory_order_release);
+		return true;
+	}
+
+	bool try_pop(T& out_item) noexcept {
+		const size_t r = read_idx_.load(std::memory_order_relaxed);
+		if (r == write_idx_.load(std::memory_order_acquire)) return false;
+		out_item = buffer_[r];
+		read_idx_.store((r + 1) & (Capacity - 1), std::memory_order_release);
+		return true;
+	}
+};
+
 #endif

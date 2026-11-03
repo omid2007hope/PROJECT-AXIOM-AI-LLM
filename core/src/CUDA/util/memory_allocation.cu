@@ -335,6 +335,41 @@ extern "C" CUDA_API bool download_device_buffer(void* dst, const void* src, size
 	return CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToHost));
 }
 
+extern "C" CUDA_API bool register_host_memory(void* ptr, size_t bytes) {
+	if (!ptr || bytes == 0) return false;
+	return CUDA_CHECK(cudaHostRegister(ptr, bytes, cudaHostRegisterReadOnly));
+}
+
+extern "C" CUDA_API void unregister_host_memory(void* ptr) {
+	if (ptr) cudaHostUnregister(ptr);
+}
+
+extern "C" CUDA_API void* create_cuda_stream() {
+	cudaStream_t stream = nullptr;
+	if (cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess) {
+		return stream;
+	}
+	return nullptr;
+}
+
+extern "C" CUDA_API void destroy_cuda_stream(void* stream) {
+	if (stream) cudaStreamDestroy(static_cast<cudaStream_t>(stream));
+}
+
+extern "C" CUDA_API void sync_cuda_stream(void* stream) {
+	if (stream) cudaStreamSynchronize(static_cast<cudaStream_t>(stream));
+}
+
+extern "C" CUDA_API bool upload_device_buffer_async(void* dst, const void* src, size_t bytes, void* stream) {
+	if (!dst || !src || bytes == 0) return false;
+	return CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyHostToDevice, static_cast<cudaStream_t>(stream)));
+}
+
+extern "C" CUDA_API bool download_device_buffer_async(void* dst, const void* src, size_t bytes, void* stream) {
+	if (!dst || !src || bytes == 0) return false;
+	return CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToHost, static_cast<cudaStream_t>(stream)));
+}
+
 extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
 						      size_t hidden_dim,
 						      size_t ffn_dim) {

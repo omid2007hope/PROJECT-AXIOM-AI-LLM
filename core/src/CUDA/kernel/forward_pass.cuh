@@ -136,6 +136,31 @@ CUDA_API void free_training_graph(GpuGraphExecution* graph_engine);
 
 CUDA_API float benchmark_graph_latency(GpuGraphExecution* graph_engine, void* stream, int iterations);
 
+CUDA_API void launch_gather_embeddings_batched(const uint32_t* d_token_ids,
+					       const void* d_table,
+					       void* d_output,
+					       uint32_t batch_tokens,
+					       uint32_t hidden_dim,
+					       uint32_t vocab_size,
+					       void* stream);
+
+CUDA_API void launch_cutlass_gemm_bf16(int M,
+				       int N,
+				       int K,
+				       const void* d_x,
+				       const void* d_w,
+				       const void* d_b,
+				       void* d_y,
+				       void* stream);
+
+CUDA_API void launch_tied_logits_bf16(const void* d_normed_x,
+				      const void* d_lm_head_weight,
+				      float* d_out_logits,
+				      int M,
+				      int vocab_size,
+				      int hidden_dim,
+				      void* stream);
+
 #ifdef __cplusplus
 }
 #endif

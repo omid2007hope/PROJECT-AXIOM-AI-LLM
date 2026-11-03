@@ -143,6 +143,140 @@ __global__ static void gather_embeddings_kernel(const uint32_t* __restrict__ tok
 	}
 }
 
+__global__ static void gather_embeddings_batched_kernel(
+	const uint32_t* __restrict__ d_token_ids,
+	const __nv_bfloat16* __restrict__ d_table,
+	__nv_bfloat16* __restrict__ d_output,
+	uint32_t total_tokens,
+	uint32_t hidden_dim,
+	uint32_t vocab_size
+) {
+	uint32_t token_idx = blockIdx.y * blockDim.y + threadIdx.y;
+	uint32_t dim_idx   = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (token_idx < total_tokens && dim_idx < hidden_dim) {
+		uint32_t id = d_token_ids[token_idx];
+		uint32_t safe_id = (id < vocab_size) ? id : 1u;
+		if (id == 0) {
+			d_output[token_idx * hidden_dim + dim_idx] = __float2bfloat16(0.0f);
+		} else {
+			d_output[token_idx * hidden_dim + dim_idx] = d_table[safe_id * hidden_dim + dim_idx];
+		}
+	}
+}
+
+extern "C" CUDA_API void launch_gather_embeddings_batched(
+	const uint32_t* d_token_ids,
+	const void* d_table,
+	void* d_output,
+	uint32_t batch_tokens,
+	uint32_t hidden_dim,
+	uint32_t vocab_size,
+	void* stream
+) {
+	dim3 threads(32, 8);
+	dim3 blocks((hidden_dim + threads.x - 1) / threads.x,
+	            (batch_tokens + threads.y - 1) / threads.y);
+	gather_embeddings_batched_kernel<<<blocks, threads, 0, static_cast<cudaStream_t>(stream)>>>(
+		d_token_ids,
+		static_cast<const __nv_bfloat16*>(d_table),
+		static_cast<__nv_bfloat16*>(d_output),
+		batch_tokens,
+		hidden_dim,
+		vocab_size
+	);
+}
+
+__global__ static void cutlass_gemm_bf16_kernel(
+	int M,
+	int N,
+	int K,
+	const __nv_bfloat16* __restrict__ X,
+	const __nv_bfloat16* __restrict__ W,
+	const __nv_bfloat16* __restrict__ B,
+	__nv_bfloat16* __restrict__ Y)
+{
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (row < M && col < N) {
+		float sum = 0.0f;
+		const __nv_bfloat16* w_row = W + static_cast<size_t>(col) * K;
+		const __nv_bfloat16* x_row = X + static_cast<size_t>(row) * K;
+		for (int k = 0; k < K; ++k) {
+			sum += __bfloat162float(x_row[k]) * __bfloat162float(w_row[k]);
+		}
+		if (B) {
+			sum += __bfloat162float(B[col]);
+		}
+		Y[static_cast<size_t>(row) * N + col] = __float2bfloat16(sum);
+	}
+}
+
+extern "C" CUDA_API void launch_cutlass_gemm_bf16(
+	int M,
+	int N,
+	int K,
+	const void* d_x,
+	const void* d_w,
+	const void* d_b,
+	void* d_y,
+	void* stream
+) {
+	dim3 block(16, 16);
+	dim3 grid((N + block.x - 1) / block.x, (M + block.y - 1) / block.y);
+	cutlass_gemm_bf16_kernel<<<grid, block, 0, static_cast<cudaStream_t>(stream)>>>(
+		M, N, K,
+		static_cast<const __nv_bfloat16*>(d_x),
+		static_cast<const __nv_bfloat16*>(d_w),
+		static_cast<const __nv_bfloat16*>(d_b),
+		static_cast<__nv_bfloat16*>(d_y)
+	);
+}
+
+__global__ static void tied_logits_bf16_kernel(
+	const __nv_bfloat16* __restrict__ X,
+	const __nv_bfloat16* __restrict__ W,
+	float* __restrict__ out_logits,
+	int M,
+	int vocab_size,
+	int hidden_dim)
+{
+	int v = blockIdx.x * blockDim.x + threadIdx.x;
+	int m = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (m < M && v < vocab_size) {
+		float sum = 0.0f;
+		const __nv_bfloat16* w_row = W + static_cast<size_t>(v) * hidden_dim;
+		const __nv_bfloat16* x_row = X + static_cast<size_t>(m) * hidden_dim;
+		for (int k = 0; k < hidden_dim; ++k) {
+			sum += __bfloat162float(x_row[k]) * __bfloat162float(w_row[k]);
+		}
+		out_logits[static_cast<size_t>(m) * vocab_size + v] = sum;
+	}
+}
+
+extern "C" CUDA_API void launch_tied_logits_bf16(
+	const void* d_normed_x,
+	const void* d_lm_head_weight,
+	float* d_out_logits,
+	int M,
+	int vocab_size,
+	int hidden_dim,
+	void* stream
+) {
+	dim3 block(256, 1);
+	dim3 grid((vocab_size + block.x - 1) / block.x, (M + block.y - 1) / block.y);
+	tied_logits_bf16_kernel<<<grid, block, 0, static_cast<cudaStream_t>(stream)>>>(
+		static_cast<const __nv_bfloat16*>(d_normed_x),
+		static_cast<const __nv_bfloat16*>(d_lm_head_weight),
+		d_out_logits,
+		M,
+		vocab_size,
+		hidden_dim
+	);
+}
+
 // Milestone 3: RMSNorm Forward Kernel (in-place normalization before Tensor Cores)
 __global__ static void rms_norm_forward_kernel(__nv_bfloat16* __restrict__ x,
 					       float* __restrict__ inv_rms_out,
