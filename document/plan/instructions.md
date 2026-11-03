@@ -1,29 +1,28 @@
-This unified, step-by-step execution blueprint reconciles your **Project Axiom v1 Core Roadmap** (fixing the Phase 2 synchronization liabilities, batching Tensor Cores at $M=32$, and stacking Transformer blocks) with the **Qwen2.5 + Zero-PyTorch ComfyUI Integration** into a single chronological build order.
+Switching Cline CLI to run Qwen inference directly on Project Axiom requires upgrading your single-layer execution loop into a stacked 28-layer Grouped Query Attention (GQA) pipeline, preserving code punctuation in the tokenizer, streaming the converted `.safetensors` weights into VRAM via Win32 memory mapping, and exposing a local OpenAI-compatible `/v1/chat/completions` endpoint.
 
 ## Master Execution Order
 
-| Stage | Subsystem Target | Primary Files Modified / Created | Deliverable Outcome |
-| --- | --- | --- | --- |
-| **Stage 1** | Sync & VRAM Eradication | `upload.cu`, `download.cu`, `optimizer.cpp` | Zero runtime `cudaMalloc` or `cudaDeviceSynchronize` |
-| **Stage 2** | Tokenizer & Batched GEMM | `parser.cpp`, `forward_pass.cu`, `backward_pass.cu` | $M=32$ Tensor Core saturation (4,000 tok/s) |
-| **Stage 3** | Qwen / Transformer Kernels | `rmsnorm.cu`, `rope.cu`, `paged_gqa.cu`, `swiglu.cu` | Native `sm_89` BF16 operators for stacked layers |
-| **Stage 4** | Multi-Layer Stacked Loop | `ai.hpp`, `ai.cpp` | $N$-layer forward/autoregressive pipeline |
-| **Stage 5** | Weight Converter & `mmap` | `tools/convert_qwen.py`, `ai.cpp` | Sub-0.8s NVMe-to-VRAM weight streaming |
-| **Stage 6** | C ABI DLL & ComfyUI Node | `axiom_c_api.cpp`, `Makefile`, `axiom_node.py` | `axiom_core.dll` bridged to ComfyUI via `ctypes` |
-| **Stage 7** | Verification & Acceptance | `test_ai.cpp`, `test_inference.cpp` | All automated gates passing + live ComfyUI prompt expansion |
+| Stage | Subsystem              | Target Files                                 | Primary Deliverable      | Verification Gate  |
+| ----- | ---------------------- | -------------------------------------------- | ------------------------ | ------------------ |
+| 1     | Sync Eradication       | gpu_types.cuh, upload.cu, download.cu        | Zero runtime allocations | 0 sync stalls      |
+| 2     | Batched Dispatch       | forward_pass.cu, parser.cpp                  | 2D grid prefill          | 4,000 tok/s        |
+| 3     | Transformer Kernels    | rmsnorm.cu, rope.cu, swiglu.cu, paged_gqa.cu | Native BF16 operators    | Numerical parity   |
+| 4     | Stacked Pipeline       | ai.hpp, ai.cpp                               | 28-layer forward loop    | Coherent decode    |
+| 5     | Weight Streaming       | convert_qwen.py, ai.cpp                      | Win32 mmap DMA loader    | Sub-0.8s load      |
+| 6     | Cline & ComfyUI ABI    | server.cpp, axiom_c_api.cpp, Makefile        | HTTP server and DLL      | Live JSON response |
+| 7     | Cutover & Verification | Terminal & Cline CLI config                  | Local coding agent       | 429 tests green    |
+
+The table above sequences the build so low-level VRAM and stream fixes land before multi-layer tensor operations and external API bridges are compiled.
 
 ## Stage 1: Surgical Sync Eradication & Production VRAM Management
 
-Before stacking multiple Transformer layers, you must eliminate the three hardware stalls identified in the codebase audit so multi-layer execution does not choke on PCIe barriers.
+Before stacking 28 Qwen layers or 6 Axiom v1 layers, you must eliminate the three hardware stalls in the transfer loop so multi-layer execution never blocks on PCIe synchronization barriers.
 
-### Step 1.1: Eradicate Dynamic `cudaMalloc` in `core/src/CUDA/gpu/upload.cu`
+### Step 1.1: Pre-Allocated VRAM Arena in core/src/CUDA/util/gpu_types.cuh and core/src/CUDA/gpu/upload.cu
 
-Currently, `upload_to_gpu` checks buffer sizes at runtime and invokes `cudaMalloc`/`cudaFree`, triggering a global GPU synchronization barrier. Replace runtime allocations with a persistent, pre-allocated VRAM arena initialized once at startup.
-
-1. Open `core/src/CUDA/util/gpu_types.cuh` and add fixed capacity tracking and async pool handles to `GPUPortion`:
+1. Open **core/src/CUDA/util/gpu_types.cuh** and define fixed-capacity ping-pong device pointers and pinned telemetry slots:
 
 ```cpp
-// Inside core/src/CUDA/util/gpu_types.cuh
 #pragma once
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
@@ -33,25 +32,21 @@ struct GPUPortion {
     cudaStream_t stream[2];
     cudaEvent_t  loss_ready_event[2];
 
-    // Pre-allocated persistent device buffers per stream (Ping-Pong)
-    uint32_t*       d_token_ids[2]      = {nullptr, nullptr};
-    __nv_bfloat16*  d_context_window[2] = {nullptr, nullptr};
-    __nv_bfloat16*  d_hidden_state[2]   = {nullptr, nullptr};
-    float*          d_loss_scalar[2]    = {nullptr, nullptr};
+    uint32_t*      d_token_ids[2]      = {nullptr, nullptr};
+    __nv_bfloat16* d_context_window[2] = {nullptr, nullptr};
+    __nv_bfloat16* d_hidden_state[2]   = {nullptr, nullptr};
+    float*         d_loss_scalar[2]    = {nullptr, nullptr};
+    float*         h_pinned_loss[2]    = {nullptr, nullptr};
 
-    // Pinned host telemetry slots (4 bytes per stream)
-    float*          h_pinned_loss[2]    = {nullptr, nullptr};
-
-    size_t max_batch_tokens = 0; // Locked at initialization (e.g., M=32 * seq_len=128 = 4096)
+    size_t max_batch_tokens = 0;
     bool   is_allocated     = false;
 };
 
 ```
 
-2. Open `core/src/CUDA/gpu/upload.cu` and strip out the runtime `if (size != ...)` reallocation blocks. Allocate once during engine initialization and use `cudaMemcpyAsync` exclusively in the hot loop:
+2. Open **core/src/CUDA/gpu/upload.cu**, remove the runtime size check that calls `cudaMalloc` inside the hot loop, and allocate once at startup:
 
 ```cpp
-// Inside core/src/CUDA/gpu/upload.cu
 #include "../util/gpu_types.cuh"
 #include <cstdio>
 
@@ -76,7 +71,6 @@ bool init_gpu_portion(GPUPortion* gpu, size_t max_batch_tokens, size_t hidden_di
 }
 
 void upload_tokens_async(GPUPortion* gpu, int stream_idx, const uint32_t* h_pinned_tokens, size_t count) {
-    // Zero cudaMalloc calls in the hot path
     cudaMemcpyAsync(
         gpu->d_token_ids[stream_idx],
         h_pinned_tokens,
@@ -88,12 +82,11 @@ void upload_tokens_async(GPUPortion* gpu, int stream_idx, const uint32_t* h_pinn
 
 ```
 
-### Step 1.2: Non-Blocking Loss Telemetry in `core/src/CUDA/gpu/download.cu`
+### Step 1.2: Non-Blocking Loss Telemetry in core/src/CUDA/gpu/download.cu
 
-Replace the synchronous `cudaDeviceSynchronize()` call inside `download_loss` with an asynchronous event query so Stream 0 and Stream 1 never stall while reporting loss to the host CLI:
+Replace `cudaDeviceSynchronize()` inside **core/src/CUDA/gpu/download.cu** with `cudaEventQuery` so neither stream stalls when reporting metrics:
 
 ```cpp
-// Inside core/src/CUDA/gpu/download.cu
 #include "../util/gpu_types.cuh"
 
 void enqueue_loss_download(GPUPortion* gpu, int stream_idx) {
@@ -108,22 +101,20 @@ void enqueue_loss_download(GPUPortion* gpu, int stream_idx) {
 }
 
 bool poll_loss_nonblocking(GPUPortion* gpu, int stream_idx, float& out_loss) {
-    cudaError_t status = cudaEventQuery(gpu->loss_ready_event[stream_idx]);
-    if (status == cudaSuccess) {
+    if (cudaEventQuery(gpu->loss_ready_event[stream_idx]) == cudaSuccess) {
         out_loss = *(gpu->h_pinned_loss[stream_idx]);
-        return true; // New loss value ready without blocking GPU compute
+        return true;
     }
-    return false; // Still computing; keep running
+    return false;
 }
 
 ```
 
-### Step 1.3: Lock-Free SPSC Ring Buffer in `core/include/optimizer.hpp` & `core/util/optimizer.cpp`
+### Step 1.3: Lock-Free SPSC Ring Buffer in core/include/optimizer.hpp
 
-Replace the `while (buffer_in_use)` spin-wait loop with a cache-line-aligned Single-Producer Single-Consumer (SPSC) lock-free ring buffer:
+Replace the `while (buffer_in_use)` spin-lock in **core/include/optimizer.hpp** with an acquire/release Single-Producer Single-Consumer ring buffer:
 
 ```cpp
-// Inside core/include/optimizer.hpp
 #pragma once
 #include <atomic>
 #include <cstdint>
@@ -136,14 +127,11 @@ private:
     alignas(64) std::atomic<size_t> write_idx_{0};
     alignas(64) std::atomic<size_t> read_idx_{0};
     alignas(64) T buffer_[Capacity];
-
 public:
     bool try_push(const T& item) noexcept {
         const size_t w = write_idx_.load(std::memory_order_relaxed);
         const size_t next_w = (w + 1) & (Capacity - 1);
-        if (next_w == read_idx_.load(std::memory_order_acquire)) {
-            return false; // Buffer full
-        }
+        if (next_w == read_idx_.load(std::memory_order_acquire)) return false;
         buffer_[w] = item;
         write_idx_.store(next_w, std::memory_order_release);
         return true;
@@ -151,9 +139,7 @@ public:
 
     bool try_pop(T& out_item) noexcept {
         const size_t r = read_idx_.load(std::memory_order_relaxed);
-        if (r == write_idx_.load(std::memory_order_acquire)) {
-            return false; // Buffer empty
-        }
+        if (r == write_idx_.load(std::memory_order_acquire)) return false;
         out_item = buffer_[r];
         read_idx_.store((r + 1) & (Capacity - 1), std::memory_order_release);
         return true;
@@ -162,30 +148,29 @@ public:
 
 ```
 
-## Stage 2: Domain Tokenizer Injection & Batched 2D Dispatch ($M = 32$)
+## Stage 2: Code-Safe Tokenizer & Batched 2D Gather ($M = 32$)
 
-### Step 2.1: Inject Reserved x86_64 & Structural Tokens (`core/util/parser.cpp`)
+Cline CLI sends large system prompts containing source code, indentation, and Qwen ChatML control tags (`<|im_start|>`, `<|im_end|>`). Your existing sanitizer strips punctuation and lowercases ASCII, which destroys C++ syntax (`{`, `}`, `->`, `;`) and corrupts Qwen token IDs.
 
-To prevent opcodes and registers from splintering into 4–8 subword tokens during Axiom v1 training, pre-seed IDs `4` through `515` at dictionary initialization:
+### Step 2.1: Add Code-Preserving BPE Mode & x86_64 Primitives in core/util/parser.cpp
+
+Open **core/util/parser.cpp** and add both the x86_64 pre-seeding for native Axiom v1 training and a greedy longest-match tokenizer for Qwen's exact vocabulary:
 
 ```cpp
-// Inside core/util/parser.cpp -> Parser::init_reserved_vocabulary()
 void Parser::init_reserved_vocabulary() {
     static const char* kX86Primitives[] = {
-        // 64-bit General Purpose Registers
         "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
         "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
-        // Vector & SIMD Registers
         "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
         "ymm0", "ymm1", "ymm2", "ymm3", "zmm0", "zmm1", "zmm2", "zmm3",
-        // High-frequency x86_64 / AVX2 / FMA Opcodes & Directives
         "mov", "lea", "add", "sub", "imul", "idiv", "xor", "and", "or", "shl", "shr",
         "cmp", "test", "je", "jne", "jg", "jl", "jmp", "call", "ret", "push", "pop",
         "vmovups", "vmovaps", "vfmadd231ps", "vbroadcastss", "vxorps", "vaddps",
-        "section", ".text", ".data", "global", "[intent]", "[var]"
+        "section", ".text", ".data", "global", "[intent]", "[var]",
+        "<|im_start|>", "<|im_end|>", "<|endoftext|>"
     };
 
-    uint32_t next_id = 4; // 0=PAD, 1=UNK, 2=BOS, 3=EOS
+    uint32_t next_id = 4;
     for (const char* token_str : kX86Primitives) {
         main_dictionary[token_str] = next_id;
         decode_ids[next_id] = token_str;
@@ -193,28 +178,54 @@ void Parser::init_reserved_vocabulary() {
     }
 }
 
+// Exact case-preserving longest-match tokenizer for Qwen / Code prompts
+std::vector<uint32_t> Parser::tokenize_exact_code(const std::string& raw_prompt) const {
+    std::vector<uint32_t> out_ids;
+    out_ids.reserve(raw_prompt.size() / 2);
+
+    size_t pos = 0;
+    const size_t n = raw_prompt.size();
+    while (pos < n) {
+        size_t match_len = std::min<size_t>(32, n - pos);
+        uint32_t matched_id = 1; // Default <UNK>
+        bool found = false;
+
+        for (; match_len >= 1; --match_len) {
+            std::string_view candidate(raw_prompt.data() + pos, match_len);
+            auto it = main_dictionary.find(std::string(candidate));
+            if (it != main_dictionary.end()) {
+                matched_id = it->second;
+                found = true;
+                break;
+            }
+        }
+        out_ids.push_back(matched_id);
+        pos += found ? match_len : 1;
+    }
+    return out_ids;
+}
+
 ```
 
-### Step 2.2: Upgrade Gather Kernel & CUTLASS GEMM to Batched 2D Grid ($M = 32$)
+### Step 2.2: Upgrade Gather Kernel to 2D Batched Grid in core/src/CUDA/kernel/forward_pass.cu
 
-Single-sequence dispatch ($M=1$) leaves 93% of an Ada Lovelace Tensor Core warp tile ($16 \times 16 \times 16$) idle. Upgrading `gather_embeddings_kernel` in `core/src/CUDA/kernel/forward_pass.cu` to a 2D grid processes $B \times S$ tokens in parallel:
+When Cline CLI sends a 1,500-token file context, running $M=1$ takes 1,500 serial passes. Upgrading **core/src/CUDA/kernel/forward_pass.cu** to a 2D grid processes all prompt tokens in parallel across Ada Lovelace Tensor Cores:
 
 ```cpp
-// Inside core/src/CUDA/kernel/forward_pass.cu
 __global__ void gather_embeddings_batched_kernel(
-    const uint32_t* __restrict__ d_token_ids,      // [B * S]
-    const __nv_bfloat16* __restrict__ d_table,     // [V, D]
-    __nv_bfloat16* __restrict__ d_output,          // [B * S, D]
-    uint32_t total_tokens,                         // M = B * S (e.g., 32 * 128 = 4096)
-    uint32_t hidden_dim,                           // D (e.g., 32, 512, or 1536)
-    uint32_t vocab_size                            // V = 65536 or 151936
+    const uint32_t* __restrict__ d_token_ids,
+    const __nv_bfloat16* __restrict__ d_table,
+    __nv_bfloat16* __restrict__ d_output,
+    uint32_t total_tokens,
+    uint32_t hidden_dim,
+    uint32_t vocab_size
 ) {
     uint32_t token_idx = blockIdx.y * blockDim.y + threadIdx.y;
     uint32_t dim_idx   = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (token_idx < total_tokens && dim_idx < hidden_dim) {
         uint32_t id = d_token_ids[token_idx];
-        uint32_t safe_id = (id < vocab_size) ? id : 1u; // Clamp out-of-bounds to <UNK> (1)
+        uint32_t safe_id = (id < vocab_size) ? id : 1u;
         d_output[token_idx * hidden_dim + dim_idx] = d_table[safe_id * hidden_dim + dim_idx];
     }
 }
@@ -228,7 +239,7 @@ void launch_gather_embeddings_batched(
     uint32_t vocab_size,
     cudaStream_t stream
 ) {
-    dim3 threads(32, 8); // 256 threads per block
+    dim3 threads(32, 8);
     dim3 blocks((hidden_dim + threads.x - 1) / threads.x,
                 (batch_tokens + threads.y - 1) / threads.y);
     gather_embeddings_batched_kernel<<<blocks, threads, 0, stream>>>(
@@ -238,18 +249,13 @@ void launch_gather_embeddings_batched(
 
 ```
 
-When passing `d_output` into your CUTLASS v4.8.0 GEMM adapter in `forward_pass.cu`, set the problem size `M = batch_tokens` (e.g., `M = 4096` during training or `M = seq_len` during prefill), `N = out_features`, and `K = hidden_dim`.
+## Stage 3: Implement Missing Transformer & Qwen CUDA Kernels
 
-## Stage 3: Implement Missing Transformer & Qwen CUDA Primitives
+Create the four modular CUDA files inside **core/src/CUDA/kernel/** to execute RMSNorm, RoPE, SwiGLU, and Paged Grouped Query Attention natively on `sm_89`.
 
-Create the four modular CUDA kernels required by both Axiom v1's stacked architecture and Qwen2.5 (`rmsnorm.cu`, `rope.cu`, `swiglu.cu`, and `paged_gqa.cu`).
-
-### Step 3.1: Warp-Reduced RMSNorm Kernel (`core/src/CUDA/kernel/rmsnorm.cu`)
-
-Implements $y_i = \frac{x_i}{\sqrt{\frac{1}{D}\sum_{j=0}^{D-1} x_j^2 + \epsilon}} \cdot \gamma_i$ using register-level `__shfl_xor_sync` reductions:
+### Step 3.1: Create core/src/CUDA/kernel/rmsnorm.cu
 
 ```cpp
-// File: core/src/CUDA/kernel/rmsnorm.cu
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 
@@ -262,9 +268,9 @@ __inline__ __device__ float warp_reduce_sum(float val) {
 }
 
 __global__ void rmsnorm_bf16_kernel(
-    const __nv_bfloat16* __restrict__ d_in,     // [M, D]
-    const __nv_bfloat16* __restrict__ d_weight, // [D]
-    __nv_bfloat16* __restrict__ d_out,          // [M, D]
+    const __nv_bfloat16* __restrict__ d_in,
+    const __nv_bfloat16* __restrict__ d_weight,
+    __nv_bfloat16* __restrict__ d_out,
     int hidden_dim,
     float eps
 ) {
@@ -279,7 +285,6 @@ __global__ void rmsnorm_bf16_kernel(
         float v = __bfloat162float(row_in[i]);
         sum_sq += v * v;
     }
-
     sum_sq = warp_reduce_sum(sum_sq);
 
     __shared__ float s_warp_sums[32];
@@ -299,7 +304,6 @@ __global__ void rmsnorm_bf16_kernel(
     __syncthreads();
 
     float inv_rms = s_warp_sums[0];
-
     for (int i = tid; i < hidden_dim; i += blockDim.x) {
         float v = __bfloat162float(row_in[i]);
         float w = __bfloat162float(d_weight[i]);
@@ -324,21 +328,18 @@ void launch_rmsnorm_bf16(
 
 ```
 
-### Step 3.2: Rotary Positional Embeddings (RoPE) Kernel (`core/src/CUDA/kernel/rope.cu`)
-
-Applies half-dim complex plane rotation (standard across Qwen2.5 and LLaMA-style models where pairs are $(i, i + d_{\text{head}}/2)$) with base frequency $\theta_{\text{base}} = 1{,}000{,}000.0$:
+### Step 3.2: Create core/src/CUDA/kernel/rope.cu
 
 ```cpp
-// File: core/src/CUDA/kernel/rope.cu
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <cmath>
 #include <cstdint>
 
 __global__ void rope_inplace_bf16_kernel(
-    __nv_bfloat16* __restrict__ d_q, // [num_tokens, num_q_heads * head_dim]
-    __nv_bfloat16* __restrict__ d_k, // [num_tokens, num_kv_heads * head_dim]
-    const int32_t* __restrict__ d_pos, // [num_tokens] logical token positions
+    __nv_bfloat16* __restrict__ d_q,
+    __nv_bfloat16* __restrict__ d_k,
+    const int32_t* __restrict__ d_pos,
     int num_tokens,
     int num_q_heads,
     int num_kv_heads,
@@ -350,9 +351,8 @@ __global__ void rope_inplace_bf16_kernel(
 
     int half_dim = head_dim >> 1;
     int pos = d_pos[token_idx];
-
-    // Rotate Q heads and K heads in a single pass
     int total_pairs = (num_q_heads + num_kv_heads) * half_dim;
+
     for (int idx = threadIdx.x; idx < total_pairs; idx += blockDim.x) {
         int head_idx = idx / half_dim;
         int pair_idx = idx % half_dim;
@@ -398,20 +398,17 @@ void launch_rope_inplace_bf16(
 
 ```
 
-### Step 3.3: Fused SwiGLU Activation Kernel (`core/src/CUDA/kernel/swiglu.cu`)
-
-Computes $\text{SwiGLU}(g, u) = \left(\frac{g}{1 + e^{-g}}\right) \cdot u$ in a single VRAM pass:
+### Step 3.3: Create core/src/CUDA/kernel/swiglu.cu
 
 ```cpp
-// File: core/src/CUDA/kernel/swiglu.cu
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <cmath>
 
 __global__ void swiglu_bf16_kernel(
-    const __nv_bfloat16* __restrict__ d_gate, // [M, ffn_dim]
-    const __nv_bfloat16* __restrict__ d_up,   // [M, ffn_dim]
-    __nv_bfloat16* __restrict__ d_out,        // [M, ffn_dim]
+    const __nv_bfloat16* __restrict__ d_gate,
+    const __nv_bfloat16* __restrict__ d_up,
+    __nv_bfloat16* __restrict__ d_out,
     size_t total_elements
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -437,12 +434,9 @@ void launch_swiglu_bf16(
 
 ```
 
-### Step 3.4: Grouped Query Attention (GQA) + Paged KV-Cache Kernel (`core/src/CUDA/kernel/paged_gqa.cu`)
-
-Maps Query head $h_q$ to shared Key/Value head $h_{kv} = \lfloor h_q / (N_q / N_{kv}) \rfloor$ across 16-token PagedAttention physical blocks:
+### Step 3.4: Create core/src/CUDA/kernel/paged_gqa.cu
 
 ```cpp
-// File: core/src/CUDA/kernel/paged_gqa.cu
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <cmath>
@@ -450,13 +444,12 @@ Maps Query head $h_q$ to shared Key/Value head $h_{kv} = \lfloor h_q / (N_q / N_
 
 constexpr int KV_BLOCK_SIZE = 16;
 
-// Appends current step's K and V vectors into the physical KV page table
 __global__ void append_paged_kv_kernel(
-    const __nv_bfloat16* __restrict__ d_k,     // [num_kv_heads, head_dim]
-    const __nv_bfloat16* __restrict__ d_v,     // [num_kv_heads, head_dim]
-    __nv_bfloat16* __restrict__ d_k_cache,     // [num_blocks, KV_BLOCK_SIZE, num_kv_heads, head_dim]
-    __nv_bfloat16* __restrict__ d_v_cache,     // [num_blocks, KV_BLOCK_SIZE, num_kv_heads, head_dim]
-    const int32_t* __restrict__ d_block_table, // [max_blocks_per_seq]
+    const __nv_bfloat16* __restrict__ d_k,
+    const __nv_bfloat16* __restrict__ d_v,
+    __nv_bfloat16* __restrict__ d_k_cache,
+    __nv_bfloat16* __restrict__ d_v_cache,
+    const int32_t* __restrict__ d_block_table,
     int token_pos,
     int num_kv_heads,
     int head_dim
@@ -465,8 +458,8 @@ __global__ void append_paged_kv_kernel(
     int d       = threadIdx.x;
     if (kv_head >= num_kv_heads || d >= head_dim) return;
 
-    int logical_block = token_pos / KV_BLOCK_SIZE;
-    int block_offset  = token_pos % KV_BLOCK_SIZE;
+    int logical_block  = token_pos / KV_BLOCK_SIZE;
+    int block_offset   = token_pos % KV_BLOCK_SIZE;
     int physical_block = d_block_table[logical_block];
 
     size_t cache_idx = ((static_cast<size_t>(physical_block) * KV_BLOCK_SIZE + block_offset) * num_kv_heads + kv_head) * head_dim + d;
@@ -476,28 +469,26 @@ __global__ void append_paged_kv_kernel(
     d_v_cache[cache_idx] = d_v[src_idx];
 }
 
-// Evaluates causal GQA over Paged KV-Cache for autoregressive decoding / prefill
 __global__ void paged_gqa_decode_kernel(
-    const __nv_bfloat16* __restrict__ d_q,     // [num_q_heads, head_dim]
+    const __nv_bfloat16* __restrict__ d_q,
     const __nv_bfloat16* __restrict__ d_k_cache,
     const __nv_bfloat16* __restrict__ d_v_cache,
     const int32_t* __restrict__ d_block_table,
-    __nv_bfloat16* __restrict__ d_attn_out,    // [num_q_heads, head_dim]
-    int seq_len,                               // Current total length (token_pos + 1)
+    __nv_bfloat16* __restrict__ d_attn_out,
+    int seq_len,
     int num_q_heads,
     int num_kv_heads,
     int head_dim,
-    float scale                                // 1.0f / sqrtf(head_dim)
+    float scale
 ) {
-    extern __shared__ float s_logits[]; // Dynamic shared memory [seq_len]
-    int q_head  = blockIdx.x;
-    int tid     = threadIdx.x;
+    extern __shared__ float s_logits[];
+    int q_head    = blockIdx.x;
+    int tid       = threadIdx.x;
     int gqa_ratio = num_q_heads / num_kv_heads;
-    int kv_head = q_head / gqa_ratio;
+    int kv_head   = q_head / gqa_ratio;
 
     const __nv_bfloat16* q_vec = d_q + q_head * head_dim;
 
-    // 1. Compute Q * K^T across all cached positions t = 0 .. seq_len - 1
     float local_max = -1e30f;
     for (int t = tid; t < seq_len; t += blockDim.x) {
         int phys_block = d_block_table[t / KV_BLOCK_SIZE];
@@ -513,7 +504,6 @@ __global__ void paged_gqa_decode_kernel(
         if (score > local_max) local_max = score;
     }
 
-    // Block-wide max reduction for numerical stability
     __shared__ float s_reduce[256];
     s_reduce[tid] = local_max;
     __syncthreads();
@@ -525,7 +515,6 @@ __global__ void paged_gqa_decode_kernel(
     }
     float max_score = s_reduce[0];
 
-    // 2. Exponentiate and sum
     float local_sum = 0.0f;
     for (int t = tid; t < seq_len; t += blockDim.x) {
         float p = expf(s_logits[t] - max_score);
@@ -545,7 +534,6 @@ __global__ void paged_gqa_decode_kernel(
     }
     __syncthreads();
 
-    // 3. Weighted sum over V cache along head_dim
     for (int d = tid; d < head_dim; d += blockDim.x) {
         float acc = 0.0f;
         for (int t = 0; t < seq_len; ++t) {
@@ -560,63 +548,59 @@ __global__ void paged_gqa_decode_kernel(
 
 ```
 
-## Stage 4: Multi-Layer Stacked Execution Pipeline (`ai.hpp` & `ai.cpp`)
+## Stage 4: Multi-Layer Stacked Pipeline in core/include/ai.hpp and core/src/ai.cpp
 
-### Step 4.1: Define the Multi-Layer Configuration & Weight Pointer Table
-
-In `core/include/ai.hpp`, define `AxiomModelConfig` and `TransformerLayerWeights` so the engine can run either your 6-layer native Axiom v1 model or a 28-layer Qwen2.5-1.5B checkpoint simply by reading the header:
+### Step 4.1: Add Multi-Layer Structs to core/include/ai.hpp
 
 ```cpp
-// Inside core/include/ai.hpp
 #pragma once
 #include <cuda_bf16.h>
 #include <cstdint>
+#include <vector>
+#include <string>
+#include <functional>
 
 struct AxiomModelConfig {
     uint32_t magic          = 0x4D4F4958; // "XIOM"
     uint32_t version        = 2;
-    uint32_t num_layers     = 28;         // 6 for Axiom v1, 28 for Qwen2.5-1.5B
-    uint32_t hidden_dim     = 1536;       // 512 for Axiom v1, 1536 for Qwen2.5-1.5B
-    uint32_t num_q_heads    = 12;         // 8 for Axiom v1, 12 for Qwen2.5-1.5B
-    uint32_t num_kv_heads   = 2;          // 2 for Qwen2.5-1.5B GQA
-    uint32_t head_dim       = 128;        // 1536 / 12 = 128
-    uint32_t ffn_dim        = 8960;       // SwiGLU intermediate size
-    uint32_t vocab_size     = 151936;     // 65536 for Axiom v1, 151936 for Qwen2.5
+    uint32_t num_layers     = 28;
+    uint32_t hidden_dim     = 1536;
+    uint32_t num_q_heads    = 12;
+    uint32_t num_kv_heads   = 2;
+    uint32_t head_dim       = 128;
+    uint32_t ffn_dim        = 8960;
+    uint32_t vocab_size     = 151936;
     uint32_t max_seq_len    = 4096;
     float    rms_norm_eps   = 1e-6f;
     float    rope_theta     = 1000000.0f;
 };
 
 struct TransformerLayerWeights {
-    const __nv_bfloat16* d_input_layernorm;     // [hidden_dim]
-    const __nv_bfloat16* d_q_proj_weight;       // [num_q_heads * head_dim, hidden_dim]
-    const __nv_bfloat16* d_q_proj_bias;         // [num_q_heads * head_dim] (Qwen uses QKV bias)
-    const __nv_bfloat16* d_k_proj_weight;       // [num_kv_heads * head_dim, hidden_dim]
-    const __nv_bfloat16* d_k_proj_bias;         // [num_kv_heads * head_dim]
-    const __nv_bfloat16* d_v_proj_weight;       // [num_kv_heads * head_dim, hidden_dim]
-    const __nv_bfloat16* d_v_proj_bias;         // [num_kv_heads * head_dim]
-    const __nv_bfloat16* d_o_proj_weight;       // [hidden_dim, num_q_heads * head_dim]
-    const __nv_bfloat16* d_post_attn_layernorm; // [hidden_dim]
-    const __nv_bfloat16* d_gate_proj_weight;    // [ffn_dim, hidden_dim]
-    const __nv_bfloat16* d_up_proj_weight;      // [ffn_dim, hidden_dim]
-    const __nv_bfloat16* d_down_proj_weight;    // [hidden_dim, ffn_dim]
+    const __nv_bfloat16* d_input_layernorm;
+    const __nv_bfloat16* d_q_proj_weight;
+    const __nv_bfloat16* d_q_proj_bias;
+    const __nv_bfloat16* d_k_proj_weight;
+    const __nv_bfloat16* d_k_proj_bias;
+    const __nv_bfloat16* d_v_proj_weight;
+    const __nv_bfloat16* d_v_proj_bias;
+    const __nv_bfloat16* d_o_proj_weight;
+    const __nv_bfloat16* d_post_attn_layernorm;
+    const __nv_bfloat16* d_gate_proj_weight;
+    const __nv_bfloat16* d_up_proj_weight;
+    const __nv_bfloat16* d_down_proj_weight;
 };
 
 ```
 
-### Step 4.2: Implement the Sequential Multi-Layer Loop in `core/src/ai.cpp`
-
-Chain the layers $l = 0 \dots N-1$ inside `AI::forward_transformer_step`:
+### Step 4.2: Implement the 28-Layer Forward Step in core/src/ai.cpp
 
 ```cpp
-// Inside core/src/ai.cpp
 void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logits, cudaStream_t stream) {
     const uint32_t D   = config_.hidden_dim;
     const uint32_t Qd  = config_.num_q_heads * config_.head_dim;
     const uint32_t KVd = config_.num_kv_heads * config_.head_dim;
     const uint32_t FFN = config_.ffn_dim;
 
-    // 1. Copy single token ID & position and gather [1, D] embedding
     cudaMemcpyAsync(d_curr_token_, &token_id, sizeof(uint32_t), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(d_curr_pos_, &token_pos, sizeof(int32_t), cudaMemcpyHostToDevice, stream);
 
@@ -625,25 +609,20 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
         1, D, config_.vocab_size, stream
     );
 
-    // 2. Loop sequentially through all N Transformer blocks
     for (uint32_t l = 0; l < config_.num_layers; ++l) {
         const auto& w = layers_[l];
 
-        // 2a. Pre-Attention RMSNorm
         launch_rmsnorm_bf16(d_residual_stream_, w.d_input_layernorm, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
 
-        // 2b. Q, K, V Projections via CUTLASS Linear Identity EVT (Y = X * W^T + bias)
         launch_cutlass_gemm_bf16(1, Qd,  D, d_normed_x_, w.d_q_proj_weight, w.d_q_proj_bias, d_q_, stream);
         launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_k_proj_weight, w.d_k_proj_bias, d_k_, stream);
         launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_v_proj_weight, w.d_v_proj_bias, d_v_, stream);
 
-        // 2c. In-place RoPE on Q and K
         launch_rope_inplace_bf16(
             d_q_, d_k_, d_curr_pos_, 1,
             config_.num_q_heads, config_.num_kv_heads, config_.head_dim, config_.rope_theta, stream
         );
 
-        // 2d. Append K, V to layer l's Paged KV-Cache & execute Paged GQA
         append_paged_kv_kernel<<<config_.num_kv_heads, config_.head_dim, 0, stream>>>(
             d_k_, d_v_, d_k_cache_[l], d_v_cache_[l], d_block_table_,
             token_pos, config_.num_kv_heads, config_.head_dim
@@ -656,14 +635,11 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
             token_pos + 1, config_.num_q_heads, config_.num_kv_heads, config_.head_dim, scale
         );
 
-        // 2e. Output Projection + Residual Add
         launch_cutlass_gemm_bf16(1, D, Qd, d_attn_out_, w.d_o_proj_weight, nullptr, d_proj_tmp_, stream);
         launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
 
-        // 2f. Pre-FFN RMSNorm
         launch_rmsnorm_bf16(d_residual_stream_, w.d_post_attn_layernorm, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
 
-        // 2g. SwiGLU FFN: Gate & Up GEMMs -> SwiGLU -> Down GEMM -> Residual Add
         launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_gate_proj_weight, nullptr, d_gate_buf_, stream);
         launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_up_proj_weight,   nullptr, d_up_buf_,   stream);
         launch_swiglu_bf16(d_gate_buf_, d_up_buf_, d_act_buf_, FFN, stream);
@@ -671,64 +647,48 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
         launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
     }
 
-    // 3. Final RMSNorm & LM Head Logit Projection
     launch_rmsnorm_bf16(d_residual_stream_, d_final_norm_weight_, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
     launch_tied_logits_bf16(d_normed_x_, d_lm_head_weight_, d_out_logits, 1, config_.vocab_size, D, stream);
 }
 
 ```
 
-## Stage 5: Weight Ingestion (`convert_qwen.py`) & Fast Win32 `mmap` Loader
+## Stage 5: Qwen2.5-Coder Weight & Vocabulary Converter + Win32 mmap Loader
 
-### Step 5.1: Create the Offline Weight Converter (`tools/convert_qwen.py`)
+### Step 5.1: Create tools/convert_qwen.py (Exports Both Weights and Exact Vocabulary)
 
-This standalone script runs once on CPU to pack official HuggingFace `model.safetensors` weights into a single flat binary (`models/qwen1_5b.axiom`) with exact tensor order matching `TransformerLayerWeights`:
+This script converts **Qwen2.5-Coder-1.5B-Instruct** (or **Qwen2.5-1.5B-Instruct**) `model.safetensors` and `tokenizer.json` into flat Axiom binaries:
 
 ```python
-# File: tools/convert_qwen.py
+import json
 import struct
 import sys
 from pathlib import Path
 from safetensors import safe_open
 import torch
 
-def export_qwen_to_axiom(safetensors_path: str, output_axiom_path: str):
-    print(f"[Axiom Converter] Opening {safetensors_path}...")
-    f = safe_open(safetensors_path, framework="pt", device="cpu")
+def export_qwen_to_axiom(model_dir: str, out_weights: str, out_vocab: str):
+    model_dir_path = Path(model_dir)
+    safetensors_path = model_dir_path / "model.safetensors"
+    tokenizer_path = model_dir_path / "tokenizer.json"
 
-    # Qwen2.5-1.5B architectural constants
-    magic        = 0x4D4F4958 # "XIOM"
-    version      = 2
-    num_layers   = 28
-    hidden_dim   = 1536
-    num_q_heads  = 12
-    num_kv_heads = 2
-    head_dim     = 128
-    ffn_dim      = 8960
-    vocab_size   = 151936
-    max_seq_len  = 4096
-    rms_eps      = 1e-6
-    rope_theta   = 1000000.0
+    print(f"[Axiom Converter] Packing weights from {safetensors_path}...")
+    f = safe_open(str(safetensors_path), framework="pt", device="cpu")
 
     header = struct.pack(
-        "<10I2f16x", # 64-byte aligned header (48 bytes payload + 16 pad bytes)
-        magic, version, num_layers, hidden_dim, num_q_heads,
-        num_kv_heads, head_dim, ffn_dim, vocab_size, max_seq_len,
-        rms_eps, rope_theta
+        "<10I2f16x",
+        0x4D4F4958, 2, 28, 1536, 12, 2, 128, 8960, 151936, 4096,
+        1e-6, 1000000.0
     )
 
     def write_bf16(out_file, tensor_name: str):
         t = f.get_tensor(tensor_name).to(torch.bfloat16).contiguous()
-        raw_bytes = t.view(torch.uint16).numpy().tobytes()
-        out_file.write(raw_bytes)
+        out_file.write(t.view(torch.uint16).numpy().tobytes())
 
-    with open(output_axiom_path, "wb") as out:
+    with open(out_weights, "wb") as out:
         out.write(header)
-        # 1. Token embedding table
         write_bf16(out, "model.embed_tokens.weight")
-
-        # 2. Sequential layers 0 .. 27
-        for l in range(num_layers):
+        for l in range(28):
             p = f"model.layers.{l}"
             write_bf16(out, f"{p}.input_layernorm.weight")
             write_bf16(out, f"{p}.self_attn.q_proj.weight")
@@ -742,31 +702,39 @@ def export_qwen_to_axiom(safetensors_path: str, output_axiom_path: str):
             write_bf16(out, f"{p}.mlp.gate_proj.weight")
             write_bf16(out, f"{p}.mlp.up_proj.weight")
             write_bf16(out, f"{p}.mlp.down_proj.weight")
-            print(f"  -> Packed Layer {l+1}/{num_layers}")
-
-        # 3. Final RMSNorm & LM Head (tied or explicit)
         write_bf16(out, "model.norm.weight")
         if "lm_head.weight" in f.keys():
             write_bf16(out, "lm_head.weight")
         else:
             write_bf16(out, "model.embed_tokens.weight")
 
-    print(f"[Axiom Converter] Successfully wrote {output_axiom_path}")
+    if tokenizer_path.exists():
+        print(f"[Axiom Converter] Exporting vocabulary from {tokenizer_path}...")
+        tok_data = json.loads(tokenizer_path.read_text(encoding="utf-8"))
+        vocab = tok_data.get("model", {}).get("vocab", {})
+        for added in tok_data.get("added_tokens", []):
+            vocab[added["content"]] = added["id"]
+
+        with open(out_vocab, "wb") as vf:
+            vf.write(struct.pack("<I", len(vocab)))
+            for token_str, token_id in vocab.items():
+                raw_str = token_str.replace("Ġ", " ").replace("Ċ", "\n").encode("utf-8")
+                vf.write(struct.pack("<II", int(token_id), len(raw_str)))
+                vf.write(raw_str)
+
+    print("[Axiom Converter] Conversion complete.")
 
 if __name__ == "__main__":
-    src = sys.argv[1] if len(sys.argv) > 1 else "model.safetensors"
-    dst = sys.argv[2] if len(sys.argv) > 2 else "models/qwen1_5b.axiom"
-    Path(dst).parent.mkdir(parents=True, exist_ok=True)
-    export_qwen_to_axiom(src, dst)
+    src_dir = sys.argv[1] if len(sys.argv) > 1 else "./Qwen2.5-Coder-1.5B-Instruct"
+    export_qwen_to_axiom(src_dir, "models/qwen1_5b.axiom", "models/qwen_vocab.axiom")
 
 ```
 
-### Step 5.2: Win32 Memory-Mapped Zero-Copy VRAM Loader (`core/src/ai.cpp`)
+### Step 5.2: Win32 Memory-Mapped Zero-Copy VRAM Loader in core/src/ai.cpp
 
-Stream the entire `.axiom` binary from NVMe SSD straight into a single contiguous VRAM block on your RTX 4080 and assign layer pointers by offset arithmetic:
+Add `AI::load_axiom_model_mmap` to **core/src/ai.cpp** to stream the 3.1 GB `.axiom` checkpoint directly from NVMe into contiguous VRAM in under 0.8 seconds:
 
 ```cpp
-// Inside core/src/ai.cpp
 #include <windows.h>
 
 bool AI::load_axiom_model_mmap(const char* filepath) {
@@ -785,15 +753,11 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
         MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0)
     );
 
-    // Read 64-byte header
     std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
     const uint8_t* host_weights_ptr = mapped_base + 64;
     size_t weights_bytes = total_bytes - 64;
 
-    // Allocate single contiguous VRAM arena for all model weights
     cudaMalloc(&d_weights_arena_, weights_bytes);
-
-    // Pin the OS file-mapped view for direct DMA transfer across PCIe
     cudaHostRegister(const_cast<uint8_t*>(host_weights_ptr), weights_bytes, cudaHostRegisterReadOnly);
     cudaMemcpyAsync(d_weights_arena_, host_weights_ptr, weights_bytes, cudaMemcpyHostToDevice, compute_stream_);
     cudaStreamSynchronize(compute_stream_);
@@ -803,7 +767,6 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
     CloseHandle(hMap);
     CloseHandle(hFile);
 
-    // Slice contiguous VRAM arena into layer pointer offsets
     const __nv_bfloat16* cursor = static_cast<const __nv_bfloat16*>(d_weights_arena_);
     const size_t D   = config_.hidden_dim;
     const size_t Qd  = config_.num_q_heads * config_.head_dim;
@@ -812,8 +775,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
     const size_t V   = config_.vocab_size;
 
     d_embed_tokens_ = cursor; cursor += V * D;
-
     layers_.resize(config_.num_layers);
+
     for (uint32_t l = 0; l < config_.num_layers; ++l) {
         layers_[l].d_input_layernorm     = cursor; cursor += D;
         layers_[l].d_q_proj_weight       = cursor; cursor += Qd * D;
@@ -836,212 +799,185 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 
 ```
 
-## Stage 6: Zero-PyTorch C ABI (`axiom_core.dll`) & ComfyUI Custom Node
+## Stage 6: Connect Project Axiom to Cline CLI (And ComfyUI)
 
-### Step 6.1: Create the C Export Interface (`core/src/axiom_c_api.cpp`)
+Cline CLI communicates via the OpenAI `/v1/chat/completions` HTTP protocol. Rather than introducing a heavy Python server, build a zero-dependency C++23 WinSock2 HTTP endpoint directly inside **core/src/server.cpp** alongside **core/src/axiom_c_api.cpp**.
 
-Expose a clean C ABI with zero C++ name-mangling so Python's built-in `ctypes` can call Axiom directly:
+### Step 6.1: Create the Native C++23 OpenAI Server for Cline CLI in core/src/server.cpp
 
 ```cpp
-// File: core/src/axiom_c_api.cpp
 #include "../include/ai.hpp"
-#include <cstring>
-#include <memory>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iostream>
+#include <string>
+#include <sstream>
 
-#ifdef _WIN32
-#define AXIOM_API extern "C" __declspec(dllexport)
-#else
-#define AXIOM_API extern "C" __attribute__((visibility("default")))
-#endif
+#pragma comment(lib, "Ws2_32.lib")
 
-static std::unique_ptr<AI> g_axiom_engine = nullptr;
-
-AXIOM_API bool axiom_load_model(const char* model_path, const char* vocab_path) {
-    if (!g_axiom_engine) {
-        g_axiom_engine = std::make_unique<AI>();
-    }
-    if (!g_axiom_engine->load_vocabulary(vocab_path)) return false;
-    return g_axiom_engine->load_axiom_model_mmap(model_path);
-}
-
-AXIOM_API int axiom_generate_text(
-    const char* prompt,
-    int max_new_tokens,
-    float temperature,
-    int top_k,
-    float top_p,
-    char* out_buffer,
-    int out_buffer_capacity
-) {
-    if (!g_axiom_engine || !prompt || !out_buffer || out_buffer_capacity <= 1) {
-        return -1;
-    }
-
-    std::string accumulated;
-    bool ok = g_axiom_engine->generate(
-        std::string(prompt),
-        static_cast<size_t>(max_new_tokens),
-        temperature,
-        top_k,
-        top_p,
-        [&accumulated](const std::string& token_str) {
-            accumulated += token_str;
+static std::string escape_json(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 16);
+    for (char c : s) {
+        switch (c) {
+            case '\"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:   out += c;      break;
         }
-    );
-
-    if (!ok) return -2;
-
-    size_t copy_len = accumulated.size();
-    if (copy_len >= static_cast<size_t>(out_buffer_capacity)) {
-        copy_len = static_cast<size_t>(out_buffer_capacity - 1);
     }
-    std::memcpy(out_buffer, accumulated.data(), copy_len);
-    out_buffer[copy_len] = '\0';
-    return static_cast<int>(copy_len);
+    return out;
 }
 
-AXIOM_API void axiom_free_model() {
-    g_axiom_engine.reset();
-}
-
-```
-
-### Step 6.2: Add the Shared Library Target to `Makefile`
-
-Add the `dll` target to your root `Makefile` to compile `build/axiom_core.dll` targeting `sm_89`:
-
-```makefile
-# Add inside root Makefile
-DLL_TARGET := build/axiom_core.dll
-
-dll: $(CUDA_OBJS) $(CORE_OBJS)
-	$(NVCC) -arch=sm_89 -shared -o $(DLL_TARGET) \
-		core/src/axiom_c_api.cpp $(CUDA_OBJS) $(CORE_OBJS) \
-		-L"$(CUDA_PATH)/lib/x64" -lcudart -lcurand
-
-```
-
-### Step 6.3: Create the ComfyUI Node (`ComfyUI/custom_nodes/ComfyUI-ProjectAxiom/`)
-
-Create two files inside your ComfyUI `custom_nodes/ComfyUI-ProjectAxiom` directory:
-
-1. `ComfyUI/custom_nodes/ComfyUI-ProjectAxiom/axiom_node.py`:
-
-```python
-# File: ComfyUI/custom_nodes/ComfyUI-ProjectAxiom/axiom_node.py
-import ctypes
-import os
-from pathlib import Path
-
-class AxiomQwenNode:
-    _dll = None
-    _loaded_model_path = None
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "prompt": ("STRING", {"multiline": True, "default": "Expand this into a detailed cinematic prompt:"}),
-                "model_path": ("STRING", {"default": "C:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/models/qwen1_5b.axiom"}),
-                "vocab_path": ("STRING", {"default": "C:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/models/vocab.axiom"}),
-                "max_new_tokens": ("INT", {"default": 256, "min": 1, "max": 2048, "step": 1}),
-                "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "top_k": ("INT", {"default": 40, "min": 1, "max": 200, "step": 1}),
-                "top_p": ("FLOAT", {"default": 0.9, "min": 0.1, "max": 1.0, "step": 0.05}),
+// Extracts the last user message from Cline's JSON payload and wraps in Qwen ChatML
+static std::string build_qwen_chatml_prompt(const std::string& body) {
+    std::string content = "Write clean C++23 and CUDA code.";
+    size_t pos = body.rfind("\"content\"");
+    if (pos != std::string::npos) {
+        size_t start = body.find('\"', pos + 9);
+        if (start != std::string::npos) {
+            size_t end = body.find("\"}", start + 1);
+            if (end != std::string::npos) {
+                content = body.substr(start + 1, end - start - 1);
             }
         }
+    }
+    return "<|im_start|>system\nYou are Project Axiom, an expert C++23 and CUDA coding agent.<|im_end|>\n"
+           "<|im_start|>user\n" + content + "<|im_end|>\n"
+           "<|im_start|>assistant\n";
+}
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("expanded_prompt",)
-    FUNCTION = "generate"
-    CATEGORY = "Project Axiom"
+void run_axiom_openai_server(AI& engine, uint16_t port) {
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
 
-    @classmethod
-    def _ensure_dll(cls, model_path: str, vocab_path: str):
-        if cls._dll is None:
-            dll_path = Path(model_path).resolve().parent.parent / "build" / "axiom_core.dll"
-            cls._dll = ctypes.CDLL(str(dll_path))
+    SOCKET listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_port = htons(port);
 
-            cls._dll.axiom_load_model.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-            cls._dll.axiom_load_model.restype = ctypes.c_bool
+    bind(listen_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    listen(listen_sock, SOMAXCONN);
 
-            cls._dll.axiom_generate_text.argtypes = [
-                ctypes.c_char_p, ctypes.c_int, ctypes.c_float,
-                ctypes.c_int, ctypes.c_float, ctypes.c_char_p, ctypes.c_int
-            ]
-            cls._dll.axiom_generate_text.restype = ctypes.c_int
+    std::cout << "[Axiom Server] Listening for Cline CLI on http://127.0.0.1:" << port << "/v1/chat/completions\n";
 
-            cls._dll.axiom_free_model.argtypes = []
-            cls._dll.axiom_free_model.restype = None
+    std::vector<char> recv_buf(65536);
+    while (true) {
+        SOCKET client = accept(listen_sock, nullptr, nullptr);
+        if (client == INVALID_SOCKET) continue;
 
-        if cls._loaded_model_path != model_path:
-            ok = cls._dll.axiom_load_model(
-                model_path.encode("utf-8"),
-                vocab_path.encode("utf-8")
-            )
-            if not ok:
-                raise RuntimeError(f"[Project Axiom] Failed to load model: {model_path}")
-            cls._loaded_model_path = model_path
+        int bytes = recv(client, recv_buf.data(), static_cast<int>(recv_buf.size() - 1), 0);
+        if (bytes > 0) {
+            recv_buf[bytes] = '\0';
+            std::string req(recv_buf.data(), bytes);
+            size_t body_pos = req.find("\r\n\r\n");
+            std::string body = (body_pos != std::string::npos) ? req.substr(body_pos + 4) : "";
 
-    def generate(self, prompt, model_path, vocab_path, max_new_tokens, temperature, top_k, top_p):
-        self._ensure_dll(model_path, vocab_path)
+            std::string chatml_prompt = build_qwen_chatml_prompt(body);
+            std::string generated_reply;
 
-        buf_size = max_new_tokens * 16 + 4096
-        out_buf = ctypes.create_string_buffer(buf_size)
+            engine.generate(chatml_prompt, 512, 0.2f, 40, 0.9f, [&](const std::string& tok) {
+                generated_reply += tok;
+                std::cout << tok << std::flush;
+            });
 
-        bytes_written = self._dll.axiom_generate_text(
-            prompt.encode("utf-8"),
-            int(max_new_tokens),
-            float(temperature),
-            int(top_k),
-            float(top_p),
-            out_buf,
-            buf_size
-        )
+            std::string json_payload =
+                "{\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,"
+                "\"message\":{\"role\":\"assistant\",\"content\":\"" + escape_json(generated_reply) + "\"},"
+                "\"finish_reason\":\"stop\"}]}";
 
-        if bytes_written < 0:
-            raise RuntimeError(f"[Project Axiom] Generation failed with error code {bytes_written}")
+            std::ostringstream resp;
+            resp << "HTTP/1.1 200 OK\r\n"
+                 << "Content-Type: application/json\r\n"
+                 << "Content-Length: " << json_payload.size() << "\r\n"
+                 << "Connection: close\r\n\r\n"
+                 << json_payload;
 
-        return (out_buf.value.decode("utf-8", errors="replace"),)
+            std::string wire = resp.str();
+            send(client, wire.data(), static_cast<int>(wire.size()), 0);
+        }
+        closesocket(client);
+    }
+}
 
 ```
 
-2. `ComfyUI/custom_nodes/ComfyUI-ProjectAxiom/__init__.py`:
+### Step 6.2: Wire the `--serve` Flag in core/src/main.cpp
 
-```python
-# File: ComfyUI/custom_nodes/ComfyUI-ProjectAxiom/__init__.py
-from .axiom_node import AxiomQwenNode
+Open **core/src/main.cpp** and add the `--serve` CLI branch so `.\app.exe --serve 8080` boots the model into VRAM and starts listening for Cline CLI requests:
 
-NODE_CLASS_MAPPINGS = {
-    "AxiomQwenNode": AxiomQwenNode
+```cpp
+if (arg == "--serve") {
+    uint16_t port = (i + 1 < argc) ? static_cast<uint16_t>(std::stoi(argv[++i])) : 8080;
+    AI engine;
+    engine.load_vocabulary("models/qwen_vocab.axiom");
+    engine.load_axiom_model_mmap("models/qwen1_5b.axiom");
+    run_axiom_openai_server(engine, port);
+    return 0;
 }
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "AxiomQwenNode": "Axiom Native C++/CUDA LLM (Zero-PyTorch)"
-}
-
-__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
 
 ```
 
-## Stage 7: Terminal Build & Verification Sequence
+### Step 6.3: Add the Server & Shared DLL Targets in core/Makefile
 
-Run these commands in order from your Project Axiom root directory in PowerShell:
+Open **core/Makefile** and link `-lws2_32` for the native OpenAI server while preserving the `dll` target for ComfyUI (`build/axiom_core.dll` + **ComfyUI/custom_nodes/ComfyUI-ProjectAxiom/axiom_node.py**):
+
+```makefile
+CUDA_KERNELS := src/CUDA/kernel/forward_pass.cu \
+                src/CUDA/kernel/backward_pass.cu \
+                src/CUDA/kernel/rmsnorm.cu \
+                src/CUDA/kernel/rope.cu \
+                src/CUDA/kernel/swiglu.cu \
+                src/CUDA/kernel/paged_gqa.cu
+
+HOST_SRCS := src/main.cpp src/ai.cpp src/server.cpp src/transfer.cpp \
+             util/identifier.cpp util/optimizer.cpp util/parser.cpp
+
+all:
+	$(NVCC) -arch=sm_89 -O3 --shared -o cuda_transfer.dll $(CUDA_KERNELS) src/CUDA/gpu/upload.cu src/CUDA/gpu/download.cu
+	g++ -std=c++23 -O3 $(HOST_SRCS) -L. -lcuda_transfer -lws2_32 -o app.exe
+
+dll:
+	$(NVCC) -arch=sm_89 -O3 --shared -o ../build/axiom_core.dll src/axiom_c_api.cpp $(CUDA_KERNELS)
+
+```
+
+## Stage 7: Build, Launch & Cut Over Cline CLI to Project Axiom
+
+Execute these commands in order from your Project Axiom root directory in PowerShell:
+
+1. Convert your local Qwen2.5-Coder weights and tokenizer into flat Axiom files:
 
 ```powershell
-# 1. Compile all new CUDA kernels (rmsnorm, rope, swiglu, paged_gqa) and run the 429+ test harness
-mingw32-make clean
-mingw32-make test
-
-# 2. Verify zero runtime cudaMalloc / cudaDeviceSynchronize regressions
-./build/test.exe --test
-
-# 3. Build the standalone C ABI shared library for ComfyUI
-mingw32-make dll
-
-# 4. Convert official Qwen2.5-1.5B safetensors once into a flat .axiom binary
-python tools/convert_qwen.py path/to/Qwen2.5-1.5B/model.safetensors models/qwen1_5b.axiom
-
-# 5. Launch ComfyUI and wire [Axiom Native C++/CUDA LLM] -> [CLIP Text Encode (Prompt)]
+python tools/convert_qwen.py path/to/Qwen2.5-Coder-1.5B-Instruct models/qwen1_5b.axiom models/qwen_vocab.axiom
 
 ```
+
+2. Clean, compile the updated CUDA kernels and C++23 server, and verify all unit tests pass:
+
+```powershell
+cd core
+mingw32-make clean
+mingw32-make all
+.\test.exe --test
+
+```
+
+3. Start the bare-metal Project Axiom OpenAI server on port 8080:
+
+```powershell
+.\app.exe --serve 8080
+
+```
+
+4. Point Cline CLI to Project Axiom as its compute backend:
+
+- Set **API Provider** to `OpenAI Compatible`.
+- Set **Base URL** to `[http://127.0.0.1:8080/v1](http://127.0.0.1:8080/v1)`.
+- Set **API Key** to `axiom-local`.
+- Set **Model ID** to `axiom-qwen-coder`.
+
+Want to start by dropping the four new CUDA kernels (`rmsnorm.cu`, `rope.cu`, `swiglu.cu`, `paged_gqa.cu`) into **core/src/CUDA/kernel/** and running a quick `nvcc` compile check?
