@@ -222,7 +222,7 @@ Project Axiom eliminates sparse multi-billion offsets, unifying text and numeric
 ## 🦅 Sovereign OSINT & Surveillance: Project Spector
 
 > [!IMPORTANT]
-> **The Strategic Cognitive Engine:** Project Axiom was not engineered merely as a standalone local model—it was forged as the closed-loop, zero-API-key cognitive engine powering **[Project Spector](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/Spector/Spector.md)**. By eliminating third-party cloud APIs, Spector becomes a fully sovereign Open-Source Intelligence (OSINT) and legal surveillance platform that ingests raw multi-source intelligence, prevents hallucination drift through hardware-anchored reasoning, and autonomously trains on every new database record.
+> **The Strategic Cognitive Engine:** Project Axiom was not engineered merely as a standalone local model—it was forged as the closed-loop, zero-API-key cognitive engine powering **[Project Spector](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/Spector/Spector.md)**. By eliminating third-party cloud APIs, Spector becomes a fully sovereign Open-Source Intelligence (OSINT) and legal surveillance platform that ingests raw multi-source intelligence, prevents hallucination drift through hardware-anchored reasoning, and autonomously trains on every new database record.
 
 Project Spector operates across two tightly coupled execution planes:
 
@@ -291,7 +291,7 @@ Project Spector operates across two tightly coupled execution planes:
 
 - **Direct Raw Archival (`Data` $\xrightarrow{\text{Saves}}$ `MongoDB`):** High-velocity streams of public records, legal filings, and target telemetry are written immediately to persistent storage.
 - **Security Boundary:** All inbound client and surveillance traffic traverses cryptographic `Auth / Validation` middleware before reaching Express controllers.
-- **Autonomous Learning Loop (`Refines` $\to$ `Save Again`):** A MongoDB change-stream listener detects new entries and wakes Project Axiom (`AI Core`). Axiom ingests raw records through its 4-stage pipeline, extracts cross-referenced entity correlations, and executes non-blocking incremental gradient updates via [`backward_pass_adamw_kernel`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu). Updated intelligence summaries and semantic vectors are committed back to MongoDB (`Save Again`) with zero pipeline downtime.
+- **Autonomous Learning Loop (`Refines` $\to$ `Save Again`):** A MongoDB change-stream listener detects new entries and wakes Project Axiom (`AI Core`). Axiom ingests raw records through its 4-stage pipeline, extracts cross-referenced entity correlations, and executes non-blocking incremental gradient updates via [`backward_pass_adamw_kernel`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu). Updated intelligence summaries and semantic vectors are committed back to MongoDB (`Save Again`) with zero pipeline downtime.
 
 ### 2. Dual-Stream Cognitive Execution Graph & Re-Anchor Lifeline
 
@@ -310,7 +310,7 @@ When evaluating complex surveillance targets or legal discovery briefs, Axiom ex
 
 ## ⚡ Domain Specialization & The Assembly God Blueprint
 
-> Reference Specifications: [`document/training_structure.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/training_structure.md) • [`document/roadmap_to_first_training_phase.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/roadmap_to_first_training_phase.md) • [`document/efficient_model_training.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/efficient_model_training.md)
+> Reference Specifications: [`document/training_structure.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/training_structure.md) • [`document/roadmap_to_first_training_phase.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/roadmap_to_first_training_phase.md) • [`document/efficient_model_training.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/efficient_model_training.md)
 
 ### The Desktop Hardware Reality: Rejecting the Generalist Illusion
 
@@ -390,7 +390,7 @@ Injecting explicit instruction markers steepens gradient descent, reducing train
 
 ## 🛰️ Real-Time Multimodal Watchdog: Nuclear Detection
 
-> Reference Specification: [`document/nuclear_detection_scenario.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/nuclear_detection_scenario.md)
+> Reference Specification: [`document/nuclear_detection_scenario.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/nuclear_detection_scenario.md)
 
 Project Axiom defines an autonomous operational pipeline for detecting underground nuclear detonations and verifying Comprehensive Nuclear-Test-Ban Treaty (CTBT) compliance using open-source geophysical and orbital feeds:
 
@@ -722,7 +722,7 @@ PROJECT-AXIOM/
 │   │   ├── ai.cpp                   # C++ AI implementation & 28-layer autoregressive decode loop
 │   │   ├── axiom_c_api.cpp          # Pure C ABI exports (axiom_load_model, axiom_generate_text)
 │   │   ├── main.cpp                 # CLI dispatcher, direct chat REPL & telemetry HUD
-│   │   ├── server.cpp               # Winsock2 OpenAI-compatible REST & SSE streaming server
+│   │   ├── server.cpp               # Dual OpenAI + Ollama API Winsock2 server (Background Threading & 8K Context)
 │   │   ├── transfer.cpp             # Host-to-DLL bridge implementation
 │   │   └── CUDA/
 │   │       ├── transfer.cuh         # Top-level DLL export interface
@@ -798,6 +798,10 @@ PROJECT-AXIOM/
 │   └── Spector/
 │       ├── Spector.md               # Project Spector sovereign OSINT & cognitive DAG specification
 │       └── Spector.jpg              # Official engineering blueprint schematic
+├── models/                          # Compiled Production VRAM Weights & Tokenizer
+│   ├── qwen1_5b.axiom               # 28-Layer GQA Transformer weights (3.4 GB Win32 DMA mmap)
+│   ├── qwen_vocab.axiom             # 151,665-entry BPE tokenization vocabulary (2.4 MB)
+│   └── qwen_hf/model.safetensors    # Source HuggingFace Qwen2.5-Coder weights (3.1 GB)
 └── other_models/
     └── Qwen3.8-27B-UD-IQ4_XS.gguf   # High-capacity benchmark reference model (14.2 GB)
 ```
@@ -806,46 +810,46 @@ PROJECT-AXIOM/
 
 ## 📚 Master Documentation Suite
 
-Project Axiom features an exhaustive 15-chapter technical whitepaper suite and engineering reference library located in [`document/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/):
+Project Axiom features an exhaustive 15-chapter technical whitepaper suite and engineering reference library located in [`document/`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/):
 
 ### Core Architecture Chapters (01 – 15)
 
-1. [`00_INDEX.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/00_INDEX.md) — Master navigation hub, document directory, and cross-reference sitemap.
-2. [`01_PROJECT_VISION_AND_PHILOSOPHY.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/01_PROJECT_VISION_AND_PHILOSOPHY.md) — The manifesto: silicon-native architecture, Terry Davis simplicity doctrine, and data hygiene.
-3. [`02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md) — The 4-tier pipeline from NVMe disk to Tensor Cores and Output Codecs.
-4. [`03_MEMORY_HIERARCHY_AND_PCIE_DMA.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/03_MEMORY_HIERARCHY_AND_PCIE_DMA.md) — Write-combining pinned memory, PCIe DMA logistics, and multi-stream double-buffering.
-5. [`04_CUDA_AND_TENSOR_CORES_COMPUTE.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/04_CUDA_AND_TENSOR_CORES_COMPUTE.md) — CUTLASS v4.8.0 templates, Epilogue Visitor Trees (EVT), and Ada Lovelace `sm_89` optimization.
-6. [`05_TRAINING_OPTIMIZER_AND_BACKPROPAGATION.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/05_TRAINING_OPTIMIZER_AND_BACKPROPAGATION.md) — Un-gated SGD backpropagation, master FP32 tables, and AdamW momentum dynamics.
-7. [`06_WEIGHT_PERSISTENCE_SPECIFICATION.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/06_WEIGHT_PERSISTENCE_SPECIFICATION.md) — The 56-byte compiler-safe header, atomic filesystem commit, and binary memory layout.
-8. [`07_MULTIMODAL_TOKENIZER_AND_INFERENCE.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/07_MULTIMODAL_TOKENIZER_AND_INFERENCE.md) — Dense codebook $V = 65,536$, learnable VRAM embeddings, and Output Codecs / Detokenizers.
-9. [`08_CLI_MANUAL_AND_OPERATIONS.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/08_CLI_MANUAL_AND_OPERATIONS.md) — Command-line argument manual, interactive menu controls, and keyboard hotkeys.
-10. [`09_VERIFICATION_AND_TEST_SUITE.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/09_VERIFICATION_AND_TEST_SUITE.md) — Automated verification harness, failure injection, and memory safety audits.
-11. [`10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md) — Matrix dimensions, spectral norms, convergence stability proofs, and entropy tests.
-12. [`11_ROADMAP_AND_SCALING_V2.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/11_ROADMAP_AND_SCALING_V2.md) — Technical roadmap: BFC caching allocators, PagedAttention, and CUDA Graphs.
-13. [`12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md) — Publication-ready copy for LinkedIn, X (Twitter), Hacker News, and technical subreddits.
-14. [`training_structure.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/training_structure.md) — Domain-specific expert training blueprint, Assembly God specialization (x86_64/PTX), and Crawl-Walk-Run strategy.
-15. [`roadmap_to_first_training_phase.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/roadmap_to_first_training_phase.md) — The Assembly God Blueprint: 4 Engineering Gaps, Batched CUDA Dispatch ($M=32$, 4,000 tok/s), and 34.7-hour weekend run.
-16. [`Spector/Spector.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/Spector/Spector.md) — Sovereign OSINT & Legal Surveillance Architecture: Node.js/MongoDB refining plane, autonomous retraining, and dual-stream cognitive execution graph with re-anchor lifeline.
+1. [`00_INDEX.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/00_INDEX.md) — Master navigation hub, document directory, and cross-reference sitemap.
+2. [`01_PROJECT_VISION_AND_PHILOSOPHY.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/01_PROJECT_VISION_AND_PHILOSOPHY.md) — The manifesto: silicon-native architecture, Terry Davis simplicity doctrine, and data hygiene.
+3. [`02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/02_SYSTEM_ARCHITECTURE_AND_PIPELINE.md) — The 4-tier pipeline from NVMe disk to Tensor Cores and Output Codecs.
+4. [`03_MEMORY_HIERARCHY_AND_PCIE_DMA.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/03_MEMORY_HIERARCHY_AND_PCIE_DMA.md) — Write-combining pinned memory, PCIe DMA logistics, and multi-stream double-buffering.
+5. [`04_CUDA_AND_TENSOR_CORES_COMPUTE.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/04_CUDA_AND_TENSOR_CORES_COMPUTE.md) — CUTLASS v4.8.0 templates, Epilogue Visitor Trees (EVT), and Ada Lovelace `sm_89` optimization.
+6. [`05_TRAINING_OPTIMIZER_AND_BACKPROPAGATION.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/05_TRAINING_OPTIMIZER_AND_BACKPROPAGATION.md) — Un-gated SGD backpropagation, master FP32 tables, and AdamW momentum dynamics.
+7. [`06_WEIGHT_PERSISTENCE_SPECIFICATION.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/06_WEIGHT_PERSISTENCE_SPECIFICATION.md) — The 56-byte compiler-safe header, atomic filesystem commit, and binary memory layout.
+8. [`07_MULTIMODAL_TOKENIZER_AND_INFERENCE.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/07_MULTIMODAL_TOKENIZER_AND_INFERENCE.md) — Dense codebook $V = 65,536$, learnable VRAM embeddings, and Output Codecs / Detokenizers.
+9. [`08_CLI_MANUAL_AND_OPERATIONS.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/08_CLI_MANUAL_AND_OPERATIONS.md) — Command-line argument manual, interactive menu controls, and keyboard hotkeys.
+10. [`09_VERIFICATION_AND_TEST_SUITE.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/09_VERIFICATION_AND_TEST_SUITE.md) — Automated verification harness, failure injection, and memory safety audits.
+11. [`10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/10_MATHEMATICAL_FOUNDATIONS_AND_PHYSICS.md) — Matrix dimensions, spectral norms, convergence stability proofs, and entropy tests.
+12. [`11_ROADMAP_AND_SCALING_V2.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/11_ROADMAP_AND_SCALING_V2.md) — Technical roadmap: BFC caching allocators, PagedAttention, and CUDA Graphs.
+13. [`12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/12_PUBLIC_LAUNCH_AND_ANNOUNCEMENT_KIT.md) — Publication-ready copy for LinkedIn, X (Twitter), Hacker News, and technical subreddits.
+14. [`training_structure.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/training_structure.md) — Domain-specific expert training blueprint, Assembly God specialization (x86_64/PTX), and Crawl-Walk-Run strategy.
+15. [`roadmap_to_first_training_phase.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/roadmap_to_first_training_phase.md) — The Assembly God Blueprint: 4 Engineering Gaps, Batched CUDA Dispatch ($M=32$, 4,000 tok/s), and 34.7-hour weekend run.
+16. [`Spector/Spector.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/Spector/Spector.md) — Sovereign OSINT & Legal Surveillance Architecture: Node.js/MongoDB refining plane, autonomous retraining, and dual-stream cognitive execution graph with re-anchor lifeline.
 
 ### Specialized Engineering Specifications & Master Plans
 
-- [`AI_CONTEXT.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/AI_CONTEXT.md) — AI Context Injection & System Primer for LLM pair programmers (Claude, GPT, Gemini, Cursor).
-- [`efficient_model_training.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/efficient_model_training.md) — High-Density Curated Training & Control-Token Architecture (`<|concept_start|>`, `<|rule_register|>`).
-- [`nuclear_detection_scenario.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/nuclear_detection_scenario.md) — Real-Time Multimodal Watchdog Scenario: Seismic Hypersphere Moment Tensor Projection & InSAR subsidence detection.
-- [`learning/ai.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/learning/ai.md) — Deep Learning, CUDA Architecture & High-Performance Systems Programming Master Guide.
-- [`plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) — Unified Master Engineering Plan: Authoritative roadmap, 6 execution phases, and locked baseline.
-- [`plan/Project_Axiom_Plan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/Project_Axiom_Plan.md) — Master Engineering Evaluation, Forensic Codebase Audit, and Dying ReLU revival.
-- [`plan/research.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/research.md) — Strategic Technical Review & Forensic Scaling Report.
-- [`plan/plan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/plan.md) — Active Engineering Directive & Strategic Execution Horizons.
+- [`AI_CONTEXT.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/AI_CONTEXT.md) — AI Context Injection & System Primer for LLM pair programmers (Claude, GPT, Gemini, Cursor).
+- [`efficient_model_training.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/efficient_model_training.md) — High-Density Curated Training & Control-Token Architecture (`<|concept_start|>`, `<|rule_register|>`).
+- [`nuclear_detection_scenario.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/nuclear_detection_scenario.md) — Real-Time Multimodal Watchdog Scenario: Seismic Hypersphere Moment Tensor Projection & InSAR subsidence detection.
+- [`learning/ai.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/learning/ai.md) — Deep Learning, CUDA Architecture & High-Performance Systems Programming Master Guide.
+- [`plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) — Unified Master Engineering Plan: Authoritative roadmap, 6 execution phases, and locked baseline.
+- [`plan/Project_Axiom_Plan.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/plan/Project_Axiom_Plan.md) — Master Engineering Evaluation, Forensic Codebase Audit, and Dying ReLU revival.
+- [`plan/research.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/plan/research.md) — Strategic Technical Review & Forensic Scaling Report.
+- [`plan/plan.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/plan/plan.md) — Active Engineering Directive & Strategic Execution Horizons.
 
 ### Visual Reference Asset Catalog
 
-All visual reference diagrams and architectural blueprints are archived in [`document/ref/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/ref/):
+All visual reference diagrams and architectural blueprints are archived in [`document/ref/`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/ref/):
 
 - **Hardware Foundations & Limits:** Bitmask layouts (`byte_and_bits_structure.png`), powers-of-two hardware alignment (`powers_of_two_hardware_table.png`), exponential state scaling (`binary_combination_growth_curve.png`), and address space ceilings (`cpu_architecture_32bit_vs_64bit_limits.png`).
 - **CUDA Execution & Memory:** Hardware-to-software mappings (`cuda_software_to_hardware_mapping.png`), 3D thread blocks (`cuda_execution_hierarchy_grids_blocks_threads.png`), SM occupancy (`cuda_sm_occupancy_calculator.png`), pointer safety state machines (`cuda_pointer_lifecycle_and_hazards.png`), and memory pyramids (`gpu_memory_hierarchy_pyramid.jpg`, `memory_hierarchy_latency_tradeoffs.png`).
 - **Neural Computing & Taxonomy:** Artificial neuron models (`artificial_neuron_perceptron_model.jpg`), MLP layers (`neural_network_mlp_layers_diagram.png`), token topologies (`neural_network_token_dimension_topology.png`), hierarchical feature emergence (`hierarchical_feature_representation.jpg`), and deep learning taxonomies (`ai_ml_nn_dl_taxonomy_diagram.png`).
-- **Cognitive & Physics Research:** Cognitive context anchoring (`cognitive_architecture_pipeline.jpg`), The Rewind Test determinism diagram (`the_rewind_test_determinism_vs_randomness.jpg`), and the Project Spector official engineering blueprint ([`document/Spector/Spector.jpg`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/Spector/Spector.jpg)).
+- **Cognitive & Physics Research:** Cognitive context anchoring (`cognitive_architecture_pipeline.jpg`), The Rewind Test determinism diagram (`the_rewind_test_determinism_vs_randomness.jpg`), and the Project Spector official engineering blueprint ([`document/Spector/Spector.jpg`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/Spector/Spector.jpg)).
 
 ---
 
@@ -976,25 +980,45 @@ constexpr uint64_t fibonacci(uint32_t n) {
 
 ---
 
-### 5. Local OpenAI Server for Cline CLI & VS Code (`--serve`)
+### 5. Local Dual Server for Cline VS Code & ComfyUI Desktop (`--serve`)
 
-Axiom includes an integrated, zero-dependency C++23 Winsock2 HTTP and SSE streaming server that exposes OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints.
+Axiom includes an integrated, zero-dependency C++23 Winsock2 HTTP and SSE streaming server that concurrently serves **OpenAI API** (`/v1/models`, `/v1/chat/completions`) and **Ollama API** (`/api/tags`, `/api/generate`) endpoints on port 8080.
 
 ```powershell
-# Start OpenAI server on default port 8080:
-.\app.exe --serve 8080
+# Start server in foreground (default port 8080):
+.\\app.exe --serve 8080
+
+# Or launch interactively and select background mode:
+.\\app.exe
+# Select [6] -> [1] Start Background Server (keeps server alive while you chat in Option [1]!)
 ```
 
+#### Key Architecture & Resilience Features:
+- **Zero-Copy DMA Streaming:** Directly maps `qwen1_5b.axiom` into VRAM via Win32 DMA memory-mapped IO before opening the listening socket.
+- **8,192 Token Context Window & Paged KV-Cache:** Supports deep code review and long multi-file reasoning with 12 Q-Heads and 2 KV-Heads in hardware BF16.
+- **Sliding Context Window Guard:** Automatically clamps overflowing prompt prefixes when massive multi-file attachments (e.g. `@/core/src/main.cpp`) are sent, preventing CUDA KV buffer overflows and eliminating "Model returned empty response" errors.
+- **Multi-Part JSON Parser:** Parses complex multi-part message content arrays (`[{"type":"text", "text":"..."}]`) without dropping file attachments or secondary instructions.
+- **Port Conflict Diagnostic:** Uses `SO_EXCLUSIVEADDRUSE` to prevent socket collision, providing clear actionable diagnostics if the port is already bound.
+- **Non-Blocking Background Threading:** Can be spawned in a dedicated background `std::thread`, leaving the interactive console free for Option `[1]` direct chat with full thread-safe `std::mutex` serialization.
+
 #### Configuring Cline CLI / VS Code Extension:
-1. Open **Cline Settings** $\to$ **API Configuration**.
+1. Open **Cline Settings** $	o$ **API Configuration**.
 2. Set **API Provider**: `OpenAI Compatible`.
 3. Set **Base URL**: `http://127.0.0.1:8080/v1`.
-4. Set **API Key**: `.....` (any non-empty placeholder string).
+4. Set **API Key**: `axiom` (or any non-empty placeholder string).
 5. Set **Model ID**: `axiom` (or `qwen2.5-coder-7b` / `qwen2.5-coder-1.5b`).
 6. Click **▼ ADVANCED**:
    - Set **Model Context Window**: `8000` (or `8192`).
    - Set **Max Output Tokens**: `2048` or `4096`.
-7. Click **Done**. Cline will now code agentically, streaming tokens directly from your Ada Lovelace GPU.
+7. Click **Done**. Cline will now stream tokens directly from your Ada Lovelace GPU.
+
+#### Configuring ComfyUI Desktop:
+In your ComfyUI workflow (using `ComfyUI-Ollama` / `OllamaConnectivityV2`):
+1. In Node **1. Ollama Connection (`OllamaConnectivityV2`)**:
+   - Set **`url`**: `http://127.0.0.1:8080` (or run server on port 11434 with `.\\app.exe --serve 11434`).
+   - Set **`model`**: `huihui_ai/qwen2.5-vl-abliterated:7b` (or `axiom`).
+   - Click **`🔄 Reconnect`**.
+2. Connect to **`OllamaGenerateV2`** to trigger autonomous, high-speed prompt expansions and negative conditioning before the diffusion model renders your image.
 
 ---
 
@@ -1047,7 +1071,7 @@ To interact with single-layer perceptron checkpoints in real time:
 Launching without arguments presents the full interactive terminal dashboard:
 
 ```powershell
-.\app.exe
+.\\app.exe
 ```
 
 ```text
@@ -1059,15 +1083,165 @@ Launching without arguments presents the full interactive terminal dashboard:
 [3] Run Tests
 [4] Benchmark Hardware (Telemetry HUD)
 [5] Bulk Training (asset_sample)
-[6] Launch OpenAI Server (Cline / Port 8080)
+[6] OpenAI/Ollama Server: [RUNNING on port 8080] (Select to Stop or Switch)
 [7] Single-Layer Perceptron (Legacy Inference)
 [8] Exit
 >
 ```
 
+#### Server Controller Sub-Menu (Option `[6]`):
+- **`[1] Start Background Server`**: Launches the server in a non-blocking background thread. Returns to the menu immediately so you can chat in Option `[1]` while Cline and ComfyUI connect continuously over port 8080.
+- **`[2] Start Foreground Server`**: Launches the server with real-time console request streaming. Press `'q'` or `Esc` anytime to cleanly shutdown and return to the menu.
+- **`[3] Stop Background Server`**: Shuts down the background socket, releases the port, and safely joins the background thread.
+
 ---
 
 ## 📖 Complete Operator Manual & How-To-Use Guide
+
+---
+
+### 🐣 The "For Dummies" Quick-Start Cookbook (Every Scenario Explained)
+
+No deep learning degree required. Here is how to run every feature in under 60 seconds:
+
+---
+
+#### 🟢 Scenario 1: Just Chat with Axiom in Your Terminal
+*You want to talk with your local 28-layer AI directly in the command prompt.*
+
+1. Open PowerShell and go to `core`:
+   ```powershell
+   cd "core"
+   .\app.exe
+   ```
+2. Type **`1`** and press **Enter** (Selects *[1] Chat with Axiom*).
+3. The model loads into GPU VRAM in $<1$ second.
+4. **Type anything!** Ask questions, request C++ code, or brainstorm.
+5. Type **`exit`** when you want to return to the main menu.
+
+---
+
+#### 🤖 Scenario 2: Use Axiom as Your Free Local AI Coding Assistant in Cline (VS Code)
+*You want Cline in VS Code to write code, review files, and build software using your local RTX GPU instead of paying for OpenAI or Anthropic API keys.*
+
+1. **Start the Axiom Server:**
+   ```powershell
+   cd "core"
+   .\app.exe
+   ```
+   - Type **`6`** (OpenAI Server).
+   - Type **`1`** (*Start Background Server*).
+   - You will see: `[OK] Project Axiom server running in background on http://127.0.0.1:8080`.
+2. **Configure Cline in VS Code:**
+   - Click the **Cline Gear Icon ⚙️** (Settings) $\to$ **API Configuration**.
+   - **API Provider:** Select `OpenAI Compatible`.
+   - **Base URL:** Enter `http://127.0.0.1:8080/v1`
+   - **API Key:** Enter `axiom` (or any letters).
+   - **Model ID:** Enter `axiom` (or `qwen2.5-coder-7b`).
+   - Click **▼ ADVANCED**:
+     - **Model Context Window:** `8000` (or `8192`).
+     - **Max Output Tokens:** `2048` (or `4096`).
+   - Click **Done**.
+3. **Start Coding:** Open any file in VS Code and tell Cline what to do. Tokens will stream from your local GPU at zero cost!
+
+---
+
+#### 🎨 Scenario 3: Connect ComfyUI to Project Axiom (Fast Prompt Expander & Brain)
+*You want ComfyUI to use Axiom to expand short ideas into vivid, detailed positive & negative prompts before your diffusion model renders images.*
+
+1. Make sure Axiom's background server is running on port **8080** (from Scenario 2).
+2. Open **ComfyUI Desktop**.
+3. In your workflow, locate the **Ollama Connection** node (`OllamaConnectivityV2`):
+   - **`url`:** Change `http://127.0.0.1:11434` to:
+     ```text
+     http://127.0.0.1:8080
+     ```
+   - **`model`:** Keep as `huihui_ai/qwen2.5-vl-abliterated:7b` (or `axiom`).
+   - Click **`🔄 Reconnect`**.
+4. Connect the output to **`OllamaGenerateV2`** and wire the resulting text into your CLIP text encoder.
+5. Queue your prompt: Axiom expands your scene descriptions instantly without touching internet APIs.
+
+---
+
+#### ⚡ Scenario 4: Chat in Terminal AND Use Cline / ComfyUI Concurrently
+*You want the server running for Cline and ComfyUI, but you ALSO want to chat with Axiom directly in your terminal at the same time.*
+
+1. Run `core\app.exe`.
+2. Type **`6`** $\to$ Type **`1`** (*Start Background Server*).
+3. Press **Enter** to return to the main menu.
+4. Notice Option 6 now says:
+   `[6] OpenAI/Ollama Server: [RUNNING on port 8080] (Select to Stop or Switch)`
+5. Now choose Option **`[1]`** to chat in the terminal!
+6. You can type and chat freely in the console while Cline and ComfyUI make background requests. Axiom's internal thread-safe GPU lock automatically synchronizes access so neither crashes!
+
+---
+
+#### 🧠 Scenario 5: Train Your Own AI Model (Your Own Weights!)
+*You want to teach Axiom new concepts, your own writing style, or custom domain data.*
+
+##### Method A: Quick Interactive Training
+1. In `core\app.exe`, select **`[2] Train it (Training)`**.
+2. Select **`[1] Text`**.
+3. Paste or type the text you want the model to learn.
+4. Select `Add media? [2] No` (or `[1] Yes` if you want to pair it with an image or audio file).
+5. Axiom executes CUDA backpropagation and saves your trained weights to:
+   `core/database/models/weights.axiom`.
+
+##### Method B: Mass Bulk Training on a Folder of Documents
+1. Put all your training files (`.txt`, `.pdf`, `.docx`, `.jpg`, `.mp4`, `.ogg`) into:
+   [`core/asset_sample/`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/asset_sample).
+2. Run:
+   ```powershell
+   .\app.exe --bulk
+   ```
+   *(Or launch `.\app.exe` and select Option `[5]`)*.
+3. Axiom detects the file types automatically, tokenizes all data, and trains continuously on your GPU Tensor Cores.
+4. When finished, press **`[Q]`** to save and exit.
+
+---
+
+#### 📊 Scenario 6: Test Your Hardware Saturation & Speed (Benchmark HUD)
+*You want to measure how fast your GPU is running (FLOPs, tokens/second, memory bandwidth).*
+
+1. Run:
+   ```powershell
+   cd "core"
+   .\app.exe --benchmark
+   ```
+   *(Or launch `.\app.exe` and select Option `[4]`)*.
+2. The real-time Telemetry HUD displays:
+   - **TTFT (Time To First Token):** Latency in milliseconds.
+   - **Throughput:** Generation speed in tokens/second.
+   - **PCIe Bandwidth:** Host-to-Device transfer rate in GB/s.
+   - **MFU:** Model FLOPs Utilization of your RTX Tensor Cores.
+
+---
+
+#### 🛡️ Scenario 7: Verify Everything is Working (Run Automated Tests)
+*You made code changes or want to ensure your CUDA kernels are 100% bug-free.*
+
+1. Run:
+   ```powershell
+   cd "core"
+   .\test.exe --test
+   ```
+   *(Or launch `.\app.exe` and select Option `[3]`)*.
+2. Executes 429 automated unit and integration tests across 11 test suites.
+3. Expect: `ALL TEST SUITES PASSED (100% GREEN)`.
+
+---
+
+#### 🔨 Scenario 8: How to Rebuild if You Modify the Code
+*You modified a C++ or CUDA file and want to recompile.*
+
+1. Open PowerShell in `core`:
+   ```powershell
+   cd "core"
+   mingw32-make app.exe
+   ```
+2. In $<15$ seconds, GCC and NVCC recompile the modified files and output a fresh `core\app.exe`.
+
+---
 
 ### 🧭 Operational Modes Matrix
 
@@ -1075,7 +1249,7 @@ Launching without arguments presents the full interactive terminal dashboard:
 | :----------------------------------- | :-------------------------- | :----------------------------------------------------------- | :---------------------------------------------------------- |
 | **`.\app.exe`**                      | Interactive Dashboard       | All (Chat, Training, Server, Benchmarking, Tests)            | Real-time terminal menus, HUDs, and token streams           |
 | **`.\app.exe --chat`**               | Conversational coding agent | Multi-turn text & code chat with full context memory         | Live token streaming (tok/s), ChatML dialogue loop          |
-| **`.\app.exe --serve [port]`**       | OpenAI API HTTP & SSE       | OpenAI JSON & Server-Sent Events (`text/event-stream`)       | Native Cline CLI / VS Code agentic coding backend           |
+| **`.\\app.exe --serve [port]`**       | OpenAI & Ollama Dual Server | OpenAI JSON, Ollama `/api/generate`, SSE streaming          | Cline VS Code & ComfyUI autonomous LLM backend             |
 | **`.\app.exe --use`**                | Low-latency inference       | Text prompts (autoregressive 128 tokens)                     | TTFT, decode throughput (tok/s), predicted token ID & word  |
 | **`.\app.exe --use --vocab <file>`** | Custom vocabulary inference | Text prompts & domain vocabularies                           | Restores custom `.vocab` file, $O(1)$ reverse text decoding |
 | **`.\app.exe --train [N]`**          | Batch/continuous training   | Interactive prompt / sample data                             | Step-by-step MSE loss reduction, % convergence              |
@@ -1120,7 +1294,7 @@ Launching without arguments presents the full interactive terminal dashboard:
 
 #### Scenario G: Bulk Dataset Ingestion from `asset_sample` (Mass Files & Auto-Archive)
 
-1. Drop training files into [`core/asset_sample/`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/core/asset_sample): text, `.pdf`, `.docx`, `.jpg`, `.mp4`, `.ogg`, etc.
+1. Drop training files into [`core/asset_sample/`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/asset_sample): text, `.pdf`, `.docx`, `.jpg`, `.mp4`, `.ogg`, etc.
 2. Run `.\app.exe --bulk` or `.\app.exe --bulk 50000`.
 3. Files $\ge 5\text{ MB}$ render a live progress percentage bar.
 4. Existing checkpoints (`weights.axiom` and `optimizer.axiom`) are automatically detected and loaded into VRAM to continue training cumulatively with full momentum!
@@ -1151,7 +1325,7 @@ Launching without arguments presents the full interactive terminal dashboard:
 
 ## 🚀 Active Engineering Roadmap
 
-Project Axiom's development is governed by the single source of truth: [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) and [`.todo`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/.todo).
+Project Axiom's development is governed by the single source of truth: [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) and [`.todo`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/.todo).
 
 ```
                                   PROJECT AXIOM EXECUTION PHASES
@@ -1208,7 +1382,7 @@ Project Axiom's development is governed by the single source of truth: [`documen
 
 ### Unified Verification Gates & Acceptance Protocol
 
-In accordance with [`UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/X/Code/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md), every phase adheres to a strict hardware and numerical acceptance gate:
+In accordance with [`UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md), every phase adheres to a strict hardware and numerical acceptance gate:
 
 | Phase | Milestone Name                       | Target Success Metric                                                                                 | Primary Verification Method                                                         |    Status    |
 | :---: | :----------------------------------- | :---------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------- | :----------: |
