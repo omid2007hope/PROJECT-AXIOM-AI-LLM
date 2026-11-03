@@ -311,9 +311,13 @@ AppMode collect_user_input(Input& input) {
 			  << "[2] Train it (Training)\n"
 			  << "[3] Run Tests\n"
 			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
-			  << "[5] Bulk Training (asset_sample)\n"
-			  << "[6] Launch OpenAI Server (Cline / Port 8080)\n"
-			  << "[7] Single-Layer Perceptron (Legacy Inference)\n"
+			  << "[5] Bulk Training (asset_sample)\n";
+		if (is_background_axiom_server_running()) {
+			std::cout << "[6] OpenAI/Ollama Server: [RUNNING on port 8080] (Select to Stop or Switch)\n";
+		} else {
+			std::cout << "[6] Launch OpenAI Server (Cline / ComfyUI / Port 8080)\n";
+		}
+		std::cout << "[7] Single-Layer Perceptron (Legacy Inference)\n"
 			  << "[8] Exit\n"
 			  << "> ";
 
@@ -1934,6 +1938,7 @@ int main(int argc, char* argv[]) {
 		AppMode selected_mode = collect_user_input(session_input);
 
 		if (selected_mode == AppMode::Exit) {
+			stop_background_axiom_server();
 			break;
 		}
 
@@ -1944,7 +1949,38 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (selected_mode == AppMode::Server) {
-			run_axiom_openai_server(ai, 8080);
+			if (is_background_axiom_server_running()) {
+				std::cout << "\n=========================================\n"
+					  << "      PROJECT AXIOM SERVER CONTROLLER    \n"
+					  << "=========================================\n"
+					  << "Status: Currently RUNNING on http://127.0.0.1:8080\n"
+					  << "[1] Stop Background Server\n"
+					  << "[2] Keep Running & Return to Menu\n"
+					  << "> ";
+				int s_choice = read_choice();
+				if (s_choice == 1) {
+					stop_background_axiom_server();
+					std::cout << "\n[OK] Background server stopped cleanly.\n\n";
+				}
+			} else {
+				std::cout << "\n=========================================\n"
+					  << "      PROJECT AXIOM SERVER CONTROLLER    \n"
+					  << "=========================================\n"
+					  << "[1] Start Background Server (Recommended: chat in app while Cline/ComfyUI connect)\n"
+					  << "[2] Start Foreground Server (Live stream request logs, press 'q' to stop)\n"
+					  << "[3] Back to Main Menu\n"
+					  << "> ";
+				int s_choice = read_choice();
+				if (s_choice == 1) {
+					if (start_background_axiom_server(ai, 8080)) {
+						std::cout << "\n[OK] Project Axiom server running in background on http://127.0.0.1:8080\n"
+							  << "[OK] Cline and ComfyUI can now connect continuously!\n"
+							  << "[OK] You can select Option [1] anytime to chat directly in this app.\n\n";
+					}
+				} else if (s_choice == 2) {
+					run_axiom_openai_server(ai, 8080);
+				}
+			}
 			pause_menu();
 			continue;
 		}
@@ -1993,5 +2029,6 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	stop_background_axiom_server();
 	return 0;
 }

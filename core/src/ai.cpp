@@ -1172,6 +1172,9 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	}
 
 	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
+	if (config_.max_seq_len < 8192) {
+		config_.max_seq_len = 8192;
+	}
 	const uint8_t* host_weights_ptr = mapped_base + 64;
 	size_t weights_bytes = total_bytes - 64;
 
@@ -1346,6 +1349,7 @@ bool AI::generate(const std::string& prompt,
 		  int top_k,
 		  float top_p,
 		  std::function<void(const std::string&)> token_callback) {
+	std::lock_guard<std::mutex> lock(inference_mutex_);
 	if (!d_weights_arena_ || qwen_vocab_.empty()) {
 		std::cerr << "[Axiom Engine] Cannot generate: model or vocabulary not loaded.\n";
 		return false;
@@ -1354,6 +1358,14 @@ bool AI::generate(const std::string& prompt,
 	std::vector<uint32_t> prompt_tokens = Parser::tokenize_exact_code(prompt, qwen_vocab_);
 	if (prompt_tokens.empty()) {
 		return false;
+	}
+
+	const size_t max_allowed_prompt = (config_.max_seq_len > max_new_tokens + 32)
+						? (config_.max_seq_len - max_new_tokens - 32)
+						: 2048;
+	if (prompt_tokens.size() > max_allowed_prompt) {
+		size_t excess = prompt_tokens.size() - max_allowed_prompt;
+		prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
 	}
 
 	size_t logits_bytes = config_.vocab_size * sizeof(float);

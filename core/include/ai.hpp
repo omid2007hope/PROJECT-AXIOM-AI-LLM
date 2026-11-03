@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <stdfloat>
 #include <string>
 #include <vector>
@@ -59,7 +60,7 @@ struct AxiomModelConfig {
 	uint32_t head_dim       = 128;
 	uint32_t ffn_dim        = 8960;
 	uint32_t vocab_size     = 151936;
-	uint32_t max_seq_len    = 4096;
+	uint32_t max_seq_len    = 8192;
 	float    rms_norm_eps   = 1e-6f;
 	float    rope_theta     = 1000000.0f;
 };
@@ -251,6 +252,7 @@ public:
 
 	std::unordered_map<std::string, uint32_t> qwen_vocab_;
 	std::unordered_map<uint32_t, std::string> qwen_reverse_vocab_;
+	mutable std::mutex inference_mutex_;
 
 	bool load_vocabulary(const std::string& vocab_path);
 	bool load_axiom_model_mmap(const char* filepath);
