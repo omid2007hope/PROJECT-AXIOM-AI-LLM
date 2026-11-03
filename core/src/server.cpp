@@ -57,6 +57,42 @@ static std::string extract_json_string(const std::string& json, size_t start_pos
     return val;
 }
 
+// Extracts Ollama /api/generate prompt and system instructions into Qwen ChatML
+static std::string build_ollama_prompt(const std::string& body) {
+    std::string prompt_text;
+    std::string system_text = "You are an expert prompt expander and creative writing AI.";
+
+    size_t sys_pos = body.find("\"system\"");
+    if (sys_pos != std::string::npos) {
+        size_t colon = body.find(':', sys_pos + 8);
+        if (colon != std::string::npos) {
+            size_t val_start = body.find('\"', colon + 1);
+            if (val_start != std::string::npos) {
+                size_t next_i = 0;
+                system_text = extract_json_string(body, val_start + 1, next_i);
+            }
+        }
+    }
+
+    size_t pr_pos = body.find("\"prompt\"");
+    if (pr_pos != std::string::npos) {
+        size_t colon = body.find(':', pr_pos + 8);
+        if (colon != std::string::npos) {
+            size_t val_start = body.find('\"', colon + 1);
+            if (val_start != std::string::npos) {
+                size_t next_i = 0;
+                prompt_text = extract_json_string(body, val_start + 1, next_i);
+            }
+        }
+    }
+
+    if (prompt_text.empty()) prompt_text = "Describe a photorealistic, detailed scene.";
+
+    return "<|im_start|>system\n" + system_text + "<|im_end|>\n"
+           "<|im_start|>user\n" + prompt_text + "<|im_end|>\n"
+           "<|im_start|>assistant\n";
+}
+
 // Extracts messages from Cline's JSON payload and formats into Qwen ChatML
 static std::string build_qwen_chatml_prompt(const std::string& body) {
     std::string prompt;
@@ -223,6 +259,55 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
                      << "Content-Length: " << models_json.size() << "\r\n"
                      << "Connection: close\r\n\r\n"
                      << models_json;
+                std::string wire = resp.str();
+                send(client, wire.data(), static_cast<int>(wire.size()), 0);
+            }
+            // Handle Ollama GET /api/tags (ComfyUI-Ollama connectivity)
+            else if (req.rfind("GET /api/tags", 0) == 0) {
+                std::string tags_json =
+                    "{\"models\":["
+                    "{\"name\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"model\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
+                    "{\"name\":\"axiom\",\"model\":\"axiom\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
+                    "{\"name\":\"qwen2.5-coder-7b\",\"model\":\"qwen2.5-coder-7b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
+                    "{\"name\":\"qwen2.5-coder-1.5b\",\"model\":\"qwen2.5-coder-1.5b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"}"
+                    "]}";
+                std::ostringstream resp;
+                resp << "HTTP/1.1 200 OK\r\n"
+                     << "Content-Type: application/json\r\n"
+                     << "Access-Control-Allow-Origin: *\r\n"
+                     << "Content-Length: " << tags_json.size() << "\r\n"
+                     << "Connection: close\r\n\r\n"
+                     << tags_json;
+                std::string wire = resp.str();
+                send(client, wire.data(), static_cast<int>(wire.size()), 0);
+            }
+            // Handle Ollama POST /api/generate (ComfyUI OllamaGenerateV2)
+            else if (req.rfind("POST /api/generate", 0) == 0) {
+                std::string chatml_prompt = build_ollama_prompt(body);
+                int max_tokens = 512;
+                size_t np_pos = body.find("\"num_predict\":");
+                if (np_pos != std::string::npos) {
+                    try {
+                        int parsed = std::stoi(body.substr(np_pos + 14));
+                        if (parsed > 0 && parsed <= 2048) max_tokens = parsed;
+                    } catch (...) {}
+                }
+
+                std::string generated_reply;
+                engine.generate(chatml_prompt, max_tokens, 0.5f, 50, 0.9f, [&](const std::string& tok) {
+                    generated_reply += tok;
+                    std::cout << tok << std::flush;
+                });
+
+                std::string ollama_resp =
+                    "{\"model\":\"axiom\",\"response\":\"" + escape_json(generated_reply) + "\",\"done\":true,\"done_reason\":\"stop\"}";
+                std::ostringstream resp;
+                resp << "HTTP/1.1 200 OK\r\n"
+                     << "Content-Type: application/json\r\n"
+                     << "Access-Control-Allow-Origin: *\r\n"
+                     << "Content-Length: " << ollama_resp.size() << "\r\n"
+                     << "Connection: close\r\n\r\n"
+                     << ollama_resp;
                 std::string wire = resp.str();
                 send(client, wire.data(), static_cast<int>(wire.size()), 0);
             } else {
