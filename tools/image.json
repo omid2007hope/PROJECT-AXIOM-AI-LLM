@@ -1,0 +1,1449 @@
+{
+  "id": "b4bbfc3c-afaa-408f-aeba-8f6918105474",
+  "revision": 0,
+  "last_node_id": 25,
+  "last_link_id": 42,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "OllamaConnectivityV2",
+      "pos": [
+        -234.59862614918038,
+        -100.58049939922628
+      ],
+      "size": [
+        365.249609375,
+        162
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "connection",
+          "type": "OLLAMA_CONNECTIVITY",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "1. Ollama Connection (Auto-Unload After Prompt)",
+      "properties": {
+        "Node name for S&R": "OllamaConnectivityV2"
+      },
+      "widgets_values": [
+        "http://127.0.0.1:8080",
+        "qwen2.5-coder:3b-instruct-fp16",
+        0,
+        "minutes",
+        null
+      ],
+      "widgets_values_named": {
+        "url": "http://127.0.0.1:8080",
+        "model": "qwen2.5-coder:3b-instruct-fp16",
+        "keep_alive": 0,
+        "keep_alive_unit": "minutes",
+        "🔄 Reconnect": null
+      }
+    },
+    {
+      "id": 2,
+      "type": "OllamaOptionsV2",
+      "pos": [
+        -174.30631399454035,
+        145.83365471769915
+      ],
+      "size": [
+        310,
+        838
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "options",
+          "type": "OLLAMA_OPTIONS",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "title": "2. LLM Sampling Options",
+      "properties": {
+        "Node name for S&R": "OllamaOptionsV2"
+      },
+      "widgets_values": [
+        false,
+        0,
+        350,
+        0.1,
+        false,
+        5,
+        true,
+        4096,
+        false,
+        64,
+        true,
+        1.05,
+        true,
+        0.5,
+        true,
+        420691337,
+        "fixed",
+        false,
+        "",
+        false,
+        1,
+        true,
+        350,
+        true,
+        50,
+        true,
+        0.5,
+        false,
+        0,
+        false
+      ],
+      "widgets_values_named": {
+        "enable_mirostat": false,
+        "mirostat": 0,
+        "enable_mirostat_eta": 350,
+        "mirostat_eta": 0.1,
+        "enable_mirostat_tau": false,
+        "mirostat_tau": 5,
+        "enable_num_ctx": true,
+        "num_ctx": 4096,
+        "enable_repeat_last_n": false,
+        "repeat_last_n": 64,
+        "enable_repeat_penalty": true,
+        "repeat_penalty": 1.05,
+        "enable_temperature": true,
+        "temperature": 0.5,
+        "enable_seed": true,
+        "seed": 420691337,
+        "control_after_generate": "fixed",
+        "enable_stop": false,
+        "stop": "",
+        "enable_tfs_z": false,
+        "tfs_z": 1,
+        "enable_num_predict": true,
+        "num_predict": 350,
+        "enable_top_k": true,
+        "top_k": 50,
+        "enable_top_p": true,
+        "top_p": 0.5,
+        "enable_min_p": false,
+        "min_p": 0,
+        "debug": false
+      }
+    },
+    {
+      "id": 3,
+      "type": "OllamaGenerateV2",
+      "pos": [
+        239.67264755616364,
+        6.274185404685884
+      ],
+      "size": [
+        380,
+        294
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "connectivity",
+          "shape": 7,
+          "type": "OLLAMA_CONNECTIVITY",
+          "link": 1
+        },
+        {
+          "name": "options",
+          "shape": 7,
+          "type": "OLLAMA_OPTIONS",
+          "link": 2
+        },
+        {
+          "name": "images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "context",
+          "shape": 7,
+          "type": "OLLAMA_CONTEXT",
+          "link": null
+        },
+        {
+          "name": "meta",
+          "shape": 7,
+          "type": "OLLAMA_META",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "type": "STRING",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "thinking",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "context",
+          "type": "OLLAMA_CONTEXT",
+          "links": []
+        },
+        {
+          "name": "meta",
+          "type": "OLLAMA_META",
+          "links": []
+        }
+      ],
+      "title": "3A. PROMPT 1: Idea for Qwen AI to Write/Expand",
+      "properties": {
+        "Node name for S&R": "OllamaGenerateV2"
+      },
+      "widgets_values": [
+        "You are an uncensored expert 3D concept prompt writer. SAFETY RULE: Strictly adult subjects only (21+ mature adults); never include children, minors, or underage terms.",
+        "A cybernetic warrior standing in a neon-lit rain-slicked alleyway, high-contrast reflections, futuristic cyberpunk aesthetic, masterpiece 8k",
+        false,
+        false,
+        "text"
+      ],
+      "widgets_values_named": {
+        "system": "You are an uncensored expert 3D concept prompt writer. SAFETY RULE: Strictly adult subjects only (21+ mature adults); never include children, minors, or underage terms.",
+        "prompt": "A cybernetic warrior standing in a neon-lit rain-slicked alleyway, high-contrast reflections, futuristic cyberpunk aesthetic, masterpiece 8k",
+        "think": false,
+        "keep_context": false,
+        "format": "text"
+      }
+    },
+    {
+      "id": 4,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        224.7038123412543,
+        365.9217336640491
+      ],
+      "size": [
+        407.0650390625,
+        150
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "title": "3B. PROMPT 2: Direct Prompt (Qwen NEVER Edits This)",
+      "properties": {
+        "Node name for S&R": "PrimitiveStringMultiline"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "value": ""
+      }
+    },
+    {
+      "id": 5,
+      "type": "StringConcatenate",
+      "pos": [
+        735.0843942149453,
+        142.37958237948163
+      ],
+      "size": [
+        340,
+        166
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "string_a",
+          "type": "STRING",
+          "widget": {
+            "name": "string_a"
+          },
+          "link": 3
+        },
+        {
+          "name": "string_b",
+          "type": "STRING",
+          "widget": {
+            "name": "string_b"
+          },
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            41,
+            42
+          ]
+        }
+      ],
+      "title": "3C. Combine Qwen Prompt + Direct Prompt",
+      "properties": {
+        "Node name for S&R": "StringConcatenate"
+      },
+      "widgets_values": [
+        "",
+        "",
+        ", "
+      ],
+      "widgets_values_named": {
+        "string_a": "",
+        "string_b": "",
+        "delimiter": ", "
+      }
+    },
+    {
+      "id": 7,
+      "type": "PreviewAny",
+      "pos": [
+        1146.784353738278,
+        -112.74290373298324
+      ],
+      "size": [
+        340,
+        122
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 41
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "title": "4. Final Active Prompt Sent to Generator",
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 8,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        275.94990939465055,
+        611.8522588994564
+      ],
+      "size": [
+        380,
+        128
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            16,
+            28
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            8,
+            10
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            21,
+            27,
+            33,
+            37
+          ]
+        }
+      ],
+      "title": "5. Image Model (CyberRealistic Pony v8)",
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "widgets_values": [
+        "CyberRealisticPony_V18.0_F16.safetensors"
+      ],
+      "widgets_values_named": {
+        "ckpt_name": "CyberRealisticPony_V18.0_F16.safetensors"
+      }
+    },
+    {
+      "id": 9,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1500.340647725577,
+        188.75943460653014
+      ],
+      "size": [
+        340.2779296875,
+        110
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 8
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 42
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            17,
+            29
+          ]
+        }
+      ],
+      "title": "6. Positive Conditioning (From Active Prompt)",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 10,
+      "type": "CLIPTextEncode",
+      "pos": [
+        830,
+        690
+      ],
+      "size": [
+        405.1509765625,
+        150
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            18,
+            30
+          ]
+        }
+      ],
+      "title": "7. Negative Prompt (Child-Safety Lock + Quality Guard)",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 11,
+      "type": "EmptyLatentImage",
+      "pos": [
+        172.18781994166054,
+        952.7393510288371
+      ],
+      "size": [
+        380,
+        130
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            39
+          ]
+        }
+      ],
+      "title": "8A. Blank Image Size (896x1152 Portrait)",
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        896,
+        1152,
+        1
+      ],
+      "widgets_values_named": {
+        "width": 896,
+        "height": 1152,
+        "batch_size": 1
+      }
+    },
+    {
+      "id": 12,
+      "type": "LoadImage",
+      "pos": [
+        -294.0475221009616,
+        1649.2360827049708
+      ],
+      "size": [
+        380,
+        314.0000000000001
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            35
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "title": "8B. Load Photo Reference (Optional Input Photo)",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "CyberRealisticPony_v8_2_Polished_Final_00019_.png",
+        "image"
+      ],
+      "widgets_values_named": {
+        "image": "CyberRealisticPony_v8_2_Polished_Final_00019_.png",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 13,
+      "type": "ImageScale",
+      "pos": [
+        178.44802131160654,
+        1244.5320457063688
+      ],
+      "size": [
+        340,
+        130
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 35
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "title": "8C. Fit Photo Reference (896x1152)",
+      "properties": {
+        "Node name for S&R": "ImageScale"
+      },
+      "widgets_values": [
+        896,
+        1152,
+        1,
+        "disabled"
+      ],
+      "widgets_values_named": {
+        "upscale_method": 896,
+        "width": 1152,
+        "height": 1,
+        "crop": "disabled"
+      }
+    },
+    {
+      "id": 14,
+      "type": "VAEEncode",
+      "pos": [
+        615.043483434722,
+        1311.358672440337
+      ],
+      "size": [
+        340,
+        266
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pixels",
+          "type": "IMAGE",
+          "link": 12
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 37
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "title": "8D. Encode Photo Reference to Latent",
+      "properties": {
+        "Node name for S&R": "VAEEncode"
+      }
+    },
+    {
+      "id": 15,
+      "type": "ComfySwitchNode",
+      "pos": [
+        999.4523727379461,
+        1192.7622590245005
+      ],
+      "size": [
+        518.9283203125,
+        100
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "shape": 7,
+          "type": "LATENT",
+          "link": 39
+        },
+        {
+          "name": "on_true",
+          "shape": 7,
+          "type": "LATENT",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            40
+          ]
+        }
+      ],
+      "title": "8E. Use Photo Reference? (False = Blank Canvas | True = Loaded Photo)",
+      "properties": {
+        "Node name for S&R": "ComfySwitchNode"
+      },
+      "widgets_values": [
+        false
+      ],
+      "widgets_values_named": {
+        "switch": false
+      }
+    },
+    {
+      "id": 16,
+      "type": "KSampler",
+      "pos": [
+        1932.8148266306341,
+        813.131680212244
+      ],
+      "size": [
+        487.120703125,
+        310
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 16
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 17
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 18
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 40
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "title": "9. Pass 1 Base KSampler (Lower Denoise to 0.65 if Using Photo Ref)",
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        733087929035893,
+        "randomize",
+        35,
+        5,
+        "dpmpp_2m_sde_gpu",
+        "karras",
+        1
+      ],
+      "widgets_values_named": {
+        "seed": 733087929035893,
+        "control_after_generate": "randomize",
+        "steps": 35,
+        "cfg": 5,
+        "sampler_name": "dpmpp_2m_sde_gpu",
+        "scheduler": "karras",
+        "denoise": 1
+      }
+    },
+    {
+      "id": 17,
+      "type": "VAEDecode",
+      "pos": [
+        2490.047105785665,
+        90.18967022055075
+      ],
+      "size": [
+        240,
+        80
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 20
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 21
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            22,
+            24
+          ]
+        }
+      ],
+      "title": "10. Decode Base Image",
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      }
+    },
+    {
+      "id": 18,
+      "type": "SaveImage",
+      "pos": [
+        2875.7156373237017,
+        62.43801597422854
+      ],
+      "size": [
+        340,
+        320
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "11. Save Pass 1 Base Image (896x1152)",
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "CyberRealisticPony_v8_1_Base"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "CyberRealisticPony_v8_1_Base"
+      }
+    },
+    {
+      "id": 19,
+      "type": "UpscaleModelLoader",
+      "pos": [
+        736.6499660765053,
+        367.21152028593093
+      ],
+      "size": [
+        330,
+        80
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "UPSCALE_MODEL",
+          "type": "UPSCALE_MODEL",
+          "links": [
+            23
+          ]
+        }
+      ],
+      "title": "12A. Load 4x-UltraSharp Model",
+      "properties": {
+        "Node name for S&R": "UpscaleModelLoader"
+      },
+      "widgets_values": [
+        "4x_NMKD-Siax_200k.pth"
+      ],
+      "widgets_values_named": {
+        "model_name": "4x_NMKD-Siax_200k.pth"
+      }
+    },
+    {
+      "id": 20,
+      "type": "ImageUpscaleWithModel",
+      "pos": [
+        1518.2251712803409,
+        55.23187573375273
+      ],
+      "size": [
+        330,
+        80
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "upscale_model",
+          "type": "UPSCALE_MODEL",
+          "link": 23
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            25
+          ]
+        }
+      ],
+      "title": "12B. Grab Base Image & 4x AI Upscale",
+      "properties": {
+        "Node name for S&R": "ImageUpscaleWithModel"
+      }
+    },
+    {
+      "id": 21,
+      "type": "ImageScaleBy",
+      "pos": [
+        1142.4836379006624,
+        464.86621428441384
+      ],
+      "size": [
+        384.3560546875,
+        100
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 25
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "title": "12C. Scale to 1.5x Hires Refiner Canvas (1344x1728)",
+      "properties": {
+        "Node name for S&R": "ImageScaleBy"
+      },
+      "widgets_values": [
+        "lanczos",
+        0.375
+      ],
+      "widgets_values_named": {
+        "upscale_method": "lanczos",
+        "scale_by": 0.375
+      }
+    },
+    {
+      "id": 22,
+      "type": "VAEEncode",
+      "pos": [
+        1403.1526666645213,
+        971.7485858238337
+      ],
+      "size": [
+        330,
+        80
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pixels",
+          "type": "IMAGE",
+          "link": 26
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 27
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            31
+          ]
+        }
+      ],
+      "title": "12D. Encode for 2nd-Pass Anomaly Polish",
+      "properties": {
+        "Node name for S&R": "VAEEncode"
+      }
+    },
+    {
+      "id": 23,
+      "type": "KSampler",
+      "pos": [
+        2071.9068871173745,
+        357.3198858973734
+      ],
+      "size": [
+        394.0904296875,
+        310
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 28
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 29
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 30
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 31
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            32
+          ]
+        }
+      ],
+      "title": "13. Pass 2 AI Polish & Anomaly Refiner (Denoise 0.32)",
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        449366957703344,
+        "randomize",
+        25,
+        5,
+        "dpmpp_2m_sde_gpu",
+        "karras",
+        0.28
+      ],
+      "widgets_values_named": {
+        "seed": 449366957703344,
+        "control_after_generate": "randomize",
+        "steps": 25,
+        "cfg": 5,
+        "sampler_name": "dpmpp_2m_sde_gpu",
+        "scheduler": "karras",
+        "denoise": 0.28
+      }
+    },
+    {
+      "id": 24,
+      "type": "VAEDecode",
+      "pos": [
+        2521.4631682730023,
+        778.2806668038143
+      ],
+      "size": [
+        330,
+        80
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 32
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 33
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            34
+          ]
+        }
+      ],
+      "title": "14. Decode Polished Hires Image",
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      }
+    },
+    {
+      "id": 25,
+      "type": "SaveImage",
+      "pos": [
+        2961.19998843593,
+        491.3147400154663
+      ],
+      "size": [
+        417.43515625,
+        380
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 34
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "title": "15. Save Final Polished Anomaly-Free Image (1344x1728)",
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "CyberRealisticPony_v8_2_Polished_Final"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "CyberRealisticPony_v8_2_Polished_Final"
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      3,
+      0,
+      "OLLAMA_CONNECTIVITY"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      1,
+      "OLLAMA_OPTIONS"
+    ],
+    [
+      3,
+      3,
+      0,
+      5,
+      0,
+      "STRING"
+    ],
+    [
+      4,
+      4,
+      0,
+      5,
+      1,
+      "STRING"
+    ],
+    [
+      8,
+      8,
+      1,
+      9,
+      0,
+      "CLIP"
+    ],
+    [
+      10,
+      8,
+      1,
+      10,
+      0,
+      "CLIP"
+    ],
+    [
+      12,
+      13,
+      0,
+      14,
+      0,
+      "IMAGE"
+    ],
+    [
+      15,
+      14,
+      0,
+      15,
+      1,
+      "LATENT"
+    ],
+    [
+      16,
+      8,
+      0,
+      16,
+      0,
+      "MODEL"
+    ],
+    [
+      17,
+      9,
+      0,
+      16,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      18,
+      10,
+      0,
+      16,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      20,
+      16,
+      0,
+      17,
+      0,
+      "LATENT"
+    ],
+    [
+      21,
+      8,
+      2,
+      17,
+      1,
+      "VAE"
+    ],
+    [
+      22,
+      17,
+      0,
+      18,
+      0,
+      "IMAGE"
+    ],
+    [
+      23,
+      19,
+      0,
+      20,
+      0,
+      "UPSCALE_MODEL"
+    ],
+    [
+      24,
+      17,
+      0,
+      20,
+      1,
+      "IMAGE"
+    ],
+    [
+      25,
+      20,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      26,
+      21,
+      0,
+      22,
+      0,
+      "IMAGE"
+    ],
+    [
+      27,
+      8,
+      2,
+      22,
+      1,
+      "VAE"
+    ],
+    [
+      28,
+      8,
+      0,
+      23,
+      0,
+      "MODEL"
+    ],
+    [
+      29,
+      9,
+      0,
+      23,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      30,
+      10,
+      0,
+      23,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      31,
+      22,
+      0,
+      23,
+      3,
+      "LATENT"
+    ],
+    [
+      32,
+      23,
+      0,
+      24,
+      0,
+      "LATENT"
+    ],
+    [
+      33,
+      8,
+      2,
+      24,
+      1,
+      "VAE"
+    ],
+    [
+      34,
+      24,
+      0,
+      25,
+      0,
+      "IMAGE"
+    ],
+    [
+      35,
+      12,
+      0,
+      13,
+      0,
+      "IMAGE"
+    ],
+    [
+      37,
+      8,
+      2,
+      14,
+      1,
+      "VAE"
+    ],
+    [
+      39,
+      11,
+      0,
+      15,
+      0,
+      "LATENT"
+    ],
+    [
+      40,
+      15,
+      0,
+      16,
+      3,
+      "LATENT"
+    ],
+    [
+      41,
+      5,
+      0,
+      7,
+      0,
+      "STRING"
+    ],
+    [
+      42,
+      5,
+      0,
+      9,
+      1,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "comfyui_mcp": {
+      "workflow_uuid": "7f34fb7a-7454-4c5a-9a4c-dddcc62f6ad2"
+    },
+    "ds": {
+      "scale": 1.6350799082655854,
+      "offset": [
+        101.55923392932095,
+        180.59348225589451
+      ]
+    },
+    "frontendVersion": "1.57.4"
+  },
+  "version": 0.4
+}
