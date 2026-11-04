@@ -76,9 +76,10 @@ constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU sy
 constexpr float weight_min = -0.0033854167f;
 constexpr float weight_max = 0.0033854167f;
 
-// Folder layout, relative to the core/ folder
+// Folder layout
 constexpr const char* database_folder = "database";
 constexpr const char* models_folder = "models";
+constexpr const char* training_folder = "training";
 constexpr const char* embedded_file = "embedded_data.bin";
 constexpr const char* asset_folder = "asset_sample";
 constexpr const char* weights_file = "weights.axiom";
@@ -549,22 +550,16 @@ void run_chat_engine(AI& ai,
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
 
-	if (std::filesystem::exists("models/qwen7b.axiom")) {
-		target_weights = "models/qwen7b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
-	} else if (std::filesystem::exists("core/models/qwen7b.axiom")) {
-		target_weights = "core/models/qwen7b.axiom";
-		target_vocab = "core/models/qwen_vocab.axiom";
-	} else if (std::filesystem::exists("models/qwen1_5b.axiom")) {
-		target_weights = "models/qwen1_5b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
-	} else if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
-		target_weights = "core/models/qwen1_5b.axiom";
-		target_vocab = "core/models/qwen_vocab.axiom";
+	if (std::filesystem::exists("models/qwen3b.axiom")) {
+		target_weights = "models/qwen3b.axiom";
+		target_vocab = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("core/models/qwen3b.axiom")) {
+		target_weights = "core/models/qwen3b.axiom";
+		target_vocab = std::filesystem::exists("core/models/qwen3b_vocab.axiom") ? "core/models/qwen3b_vocab.axiom" : "core/models/qwen_vocab.axiom";
 	}
 
 	if (!ai.has_transformer_model()) {
-		std::cout << "\033[90m[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\033[0m\n" << std::flush;
+		std::cout << "\033[90m[..] Streaming Qwen 3B weights via Win32 DMA mmap...\033[0m\n" << std::flush;
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (!vocab_ok || !model_ok) {
@@ -690,17 +685,13 @@ void run_inference_engine(AI& ai,
 				is_transformer = true;
 			}
 		}
-	} else if (std::filesystem::exists("models/qwen7b.axiom")) {
-		target_weights = "models/qwen7b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("models/qwen3b.axiom")) {
+		target_weights = "models/qwen3b.axiom";
+		target_vocab = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
 		is_transformer = true;
-	} else if (std::filesystem::exists("core/models/qwen7b.axiom")) {
-		target_weights = "core/models/qwen7b.axiom";
-		target_vocab = "core/models/qwen_vocab.axiom";
-		is_transformer = true;
-	} else if (std::filesystem::exists("models/qwen1_5b.axiom")) {
-		target_weights = "models/qwen1_5b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("core/models/qwen3b.axiom")) {
+		target_weights = "core/models/qwen3b.axiom";
+		target_vocab = std::filesystem::exists("core/models/qwen3b_vocab.axiom") ? "core/models/qwen3b_vocab.axiom" : "core/models/qwen_vocab.axiom";
 		is_transformer = true;
 	}
 
@@ -1671,10 +1662,11 @@ int main(int argc, char* argv[]) {
 				} catch (...) {}
 			}
 			AI engine;
-			std::filesystem::path vocab_p = "models/qwen_vocab.axiom";
-			std::filesystem::path weights_p = "models/qwen7b.axiom";
-			if (!std::filesystem::exists(weights_p) && !std::filesystem::exists("core/" + weights_p.string())) {
-				weights_p = "models/qwen1_5b.axiom";
+			std::filesystem::path vocab_p = "models/qwen3b_vocab.axiom";
+			if (!std::filesystem::exists(vocab_p)) vocab_p = "models/qwen_vocab.axiom";
+			std::filesystem::path weights_p = "models/qwen3b.axiom";
+			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("core/models/qwen3b.axiom")) {
+				weights_p = "core/models/qwen3b.axiom";
 			}
 			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
 			if (!custom_weights_path.empty()) weights_p = custom_weights_path;
@@ -1846,71 +1838,38 @@ int main(int argc, char* argv[]) {
 	const std::filesystem::path embedded_path =
 		core_dir / config::database_folder / config::embedded_file;
 
-	const std::filesystem::path models_dir =
-		core_dir / config::database_folder / config::models_folder;
-	std::error_code models_ec;
-	std::filesystem::create_directories(models_dir, models_ec);
+	// Dedicated training directory (keeps training artifacts isolated from LLM models)
+	const std::filesystem::path training_dir = config::training_folder;
+	std::error_code dir_ec;
+	std::filesystem::create_directories(training_dir, dir_ec);
 
-	std::filesystem::path weights_path;
+	// 1. LLM Model Paths (strictly used by Chat and Server)
+	std::filesystem::path llm_weights_path = "models/qwen3b.axiom";
+	if (!std::filesystem::exists(llm_weights_path) && std::filesystem::exists(core_dir / "models" / "qwen3b.axiom")) {
+		llm_weights_path = core_dir / "models" / "qwen3b.axiom";
+	}
 	if (!custom_weights_path.empty()) {
-		if (std::filesystem::exists(custom_weights_path)) {
-			weights_path = custom_weights_path;
-		} else if (std::filesystem::exists(core_dir / custom_weights_path)) {
-			weights_path = core_dir / custom_weights_path;
-		} else {
-			weights_path = custom_weights_path;
-		}
-	} else {
-		const std::filesystem::path qwen_w7b_1 = "models/qwen7b.axiom";
-		const std::filesystem::path qwen_w7b_2 = core_dir / "models" / "qwen7b.axiom";
-		const std::filesystem::path qwen_w1 = "models/qwen1_5b.axiom";
-		const std::filesystem::path qwen_w2 = core_dir / "models" / "qwen1_5b.axiom";
-		const std::filesystem::path default_weights = models_dir / config::weights_file;
-		const std::filesystem::path legacy_weights = core_dir / config::weights_file;
-
-		if (std::filesystem::exists(qwen_w7b_1)) {
-			weights_path = qwen_w7b_1;
-		} else if (std::filesystem::exists(qwen_w7b_2)) {
-			weights_path = qwen_w7b_2;
-		} else if (std::filesystem::exists(qwen_w1)) {
-			weights_path = qwen_w1;
-		} else if (std::filesystem::exists(qwen_w2)) {
-			weights_path = qwen_w2;
-		} else if (std::filesystem::exists(default_weights)) {
-			weights_path = default_weights;
-		} else if (std::filesystem::exists(legacy_weights)) {
-			weights_path = legacy_weights;
-		} else {
-			weights_path = default_weights;
-		}
+		llm_weights_path = custom_weights_path;
 	}
 
-	std::filesystem::path vocab_path;
+	std::filesystem::path llm_vocab_path = "models/qwen3b_vocab.axiom";
+	if (!std::filesystem::exists(llm_vocab_path) && std::filesystem::exists("models/qwen_vocab.axiom")) {
+		llm_vocab_path = "models/qwen_vocab.axiom";
+	} else if (!std::filesystem::exists(llm_vocab_path) && std::filesystem::exists(core_dir / "models" / "qwen3b_vocab.axiom")) {
+		llm_vocab_path = core_dir / "models" / "qwen3b_vocab.axiom";
+	}
 	if (!custom_vocab_path.empty()) {
-		if (std::filesystem::exists(custom_vocab_path)) {
-			vocab_path = custom_vocab_path;
-		} else if (std::filesystem::exists(core_dir / custom_vocab_path)) {
-			vocab_path = core_dir / custom_vocab_path;
-		} else {
-			vocab_path = custom_vocab_path;
-		}
-	} else {
-		const std::filesystem::path qwen_v1 = "models/qwen_vocab.axiom";
-		const std::filesystem::path qwen_v2 = core_dir / "models" / "qwen_vocab.axiom";
-		const std::filesystem::path default_vocab = models_dir / config::vocab_file;
-		const std::filesystem::path legacy_vocab = core_dir / config::vocab_file;
+		llm_vocab_path = custom_vocab_path;
+	}
 
-		if ((weights_path.filename().string().find("qwen") != std::string::npos) && std::filesystem::exists(qwen_v1)) {
-			vocab_path = qwen_v1;
-		} else if ((weights_path.filename().string().find("qwen") != std::string::npos) && std::filesystem::exists(qwen_v2)) {
-			vocab_path = qwen_v2;
-		} else if (std::filesystem::exists(default_vocab)) {
-			vocab_path = default_vocab;
-		} else if (std::filesystem::exists(legacy_vocab)) {
-			vocab_path = legacy_vocab;
-		} else {
-			vocab_path = default_vocab;
-		}
+	// 2. Training Paths (strictly used by Training sessions and Perceptron)
+	std::filesystem::path training_weights_path = training_dir / config::weights_file;
+	std::filesystem::path training_vocab_path = training_dir / config::vocab_file;
+	if (!custom_weights_path.empty()) {
+		training_weights_path = custom_weights_path;
+	}
+	if (!custom_vocab_path.empty()) {
+		training_vocab_path = custom_vocab_path;
 	}
 
 	const std::filesystem::path asset_dir =
@@ -1926,7 +1885,7 @@ int main(int argc, char* argv[]) {
 
 	if (!is_interactive && mode == AppMode::Chat) {
 		AI engine;
-		run_chat_engine(engine, weights_path, vocab_path);
+		run_chat_engine(engine, llm_weights_path, llm_vocab_path);
 		return 0;
 	}
 
@@ -1955,7 +1914,7 @@ int main(int argc, char* argv[]) {
 
 	if (!is_interactive) {
 		if (mode == AppMode::Chat) {
-			run_chat_engine(ai, weights_path, vocab_path);
+			run_chat_engine(ai, llm_weights_path, llm_vocab_path);
 			return 0;
 		}
 		if (mode == AppMode::Server) {
@@ -1964,11 +1923,11 @@ int main(int argc, char* argv[]) {
 		}
 		if (mode == AppMode::Test) {
 			const bool tests_ok = run_tests(embedded_path);
-			restore_brain(ai, ai_elements, weights_path);
+			restore_brain(ai, ai_elements, training_weights_path);
 			return tests_ok ? 0 : 1;
 		}
 		if (mode == AppMode::Use) {
-			run_inference_engine(ai, parser, input, weights_path, vocab_path);
+			run_inference_engine(ai, parser, input, training_weights_path, training_vocab_path);
 			return 0;
 		}
 		if (mode == AppMode::Benchmark) {
@@ -1983,8 +1942,8 @@ int main(int argc, char* argv[]) {
 								 parser,
 								 input,
 								 test,
-								 weights_path,
-								 vocab_path,
+								 training_weights_path,
+								 training_vocab_path,
 								 embedded_path,
 								 asset_dir,
 								 core_dir,
@@ -2012,7 +1971,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (selected_mode == AppMode::Chat) {
-			run_chat_engine(ai, weights_path, vocab_path);
+			run_chat_engine(ai, llm_weights_path, llm_vocab_path);
 			pause_menu();
 			continue;
 		}
@@ -2056,7 +2015,7 @@ int main(int argc, char* argv[]) {
 
 		if (selected_mode == AppMode::Test) {
 			run_tests(embedded_path);
-			restore_brain(ai, ai_elements, weights_path);
+			restore_brain(ai, ai_elements, training_weights_path);
 			pause_menu();
 			continue;
 		}
@@ -2068,7 +2027,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (selected_mode == AppMode::Use) {
-			run_inference_engine(ai, parser, session_input, weights_path, vocab_path);
+			run_inference_engine(ai, parser, session_input, training_weights_path, training_vocab_path);
 			pause_menu();
 			continue;
 		}
@@ -2082,8 +2041,8 @@ int main(int argc, char* argv[]) {
 						 parser,
 						 session_input,
 						 empty_test,
-						 weights_path,
-						 vocab_path,
+						 training_weights_path,
+						 training_vocab_path,
 						 embedded_path,
 						 asset_dir,
 						 core_dir,

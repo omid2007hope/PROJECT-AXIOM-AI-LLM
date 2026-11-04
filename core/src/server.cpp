@@ -187,21 +187,15 @@ static std::string build_qwen_chatml_prompt(const std::string& body) {
 
 static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
     if (!engine.has_transformer_model()) {
-        std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n";
-        std::string weights_p = "models/qwen7b.axiom";
-        std::string vocab_p = "models/qwen_vocab.axiom";
-        if (std::filesystem::exists("core/models/qwen7b.axiom")) {
-            weights_p = "core/models/qwen7b.axiom";
-            vocab_p = "core/models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("models/qwen7b.axiom")) {
-            weights_p = "models/qwen7b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
-            weights_p = "core/models/qwen1_5b.axiom";
-            vocab_p = "core/models/qwen_vocab.axiom";
-        } else {
-            weights_p = "models/qwen1_5b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
+        std::cout << "[..] Streaming Qwen 3B weights via Win32 DMA mmap...\n";
+        std::string weights_p = "models/qwen3b.axiom";
+        std::string vocab_p = "models/qwen3b_vocab.axiom";
+        if (std::filesystem::exists("core/models/qwen3b.axiom")) {
+            weights_p = "core/models/qwen3b.axiom";
+            vocab_p = std::filesystem::exists("core/models/qwen3b_vocab.axiom") ? "core/models/qwen3b_vocab.axiom" : "core/models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("models/qwen3b.axiom")) {
+            weights_p = "models/qwen3b.axiom";
+            vocab_p = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);
         bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());
@@ -372,8 +366,8 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 if (!is_background) std::cout << "[Server] GET /v1/models (Cline model discovery)\n" << std::flush;
                 std::string models_json =
                     "{\"object\":\"list\",\"data\":["
-                    "{\"id\":\"qwen2.5-coder-7b\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
-                    "{\"id\":\"qwen2.5-coder-1.5b\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
+                    "{\"id\":\"qwen2.5-coder:3b-instruct-fp16\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
+                    "{\"id\":\"qwen2.5-coder-3b\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
                     "{\"id\":\"qwen2.5-coder\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
                     "{\"id\":\"axiom\",\"object\":\"model\",\"owned_by\":\"axiom\"}"
                     "]}";
@@ -394,8 +388,8 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                     "{\"models\":["
                     "{\"name\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"model\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
                     "{\"name\":\"axiom\",\"model\":\"axiom\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
-                    "{\"name\":\"qwen2.5-coder-7b\",\"model\":\"qwen2.5-coder-7b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
-                    "{\"name\":\"qwen2.5-coder-1.5b\",\"model\":\"qwen2.5-coder-1.5b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"}"
+                    "{\"name\":\"qwen2.5-coder:3b-instruct-fp16\",\"model\":\"qwen2.5-coder:3b-instruct-fp16\",\"modified_at\":\"2026-11-04T00:00:00Z\",\"size\":6794207296,\"digest\":\"axiom\"},"
+                    "{\"name\":\"qwen2.5-coder-3b\",\"model\":\"qwen2.5-coder-3b\",\"modified_at\":\"2026-11-04T00:00:00Z\",\"size\":6794207296,\"digest\":\"axiom\"},"
                     "]}";
                 std::ostringstream resp;
                 resp << "HTTP/1.1 200 OK\r\n"
@@ -541,21 +535,15 @@ bool start_background_axiom_server(AI& engine, uint16_t port) {
     }
 
     if (!engine.has_transformer_model()) {
-        std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n";
-        std::string weights_p = "models/qwen7b.axiom";
-        std::string vocab_p = "models/qwen_vocab.axiom";
-        if (std::filesystem::exists("core/models/qwen7b.axiom")) {
-            weights_p = "core/models/qwen7b.axiom";
-            vocab_p = "core/models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("models/qwen7b.axiom")) {
-            weights_p = "models/qwen7b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
-            weights_p = "core/models/qwen1_5b.axiom";
-            vocab_p = "core/models/qwen_vocab.axiom";
-        } else {
-            weights_p = "models/qwen1_5b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
+        std::cout << "[..] Streaming Qwen 3B weights via Win32 DMA mmap...\n";
+        std::string weights_p = "models/qwen3b.axiom";
+        std::string vocab_p = "models/qwen3b_vocab.axiom";
+        if (std::filesystem::exists("core/models/qwen3b.axiom")) {
+            weights_p = "core/models/qwen3b.axiom";
+            vocab_p = std::filesystem::exists("core/models/qwen3b_vocab.axiom") ? "core/models/qwen3b_vocab.axiom" : "core/models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("models/qwen3b.axiom")) {
+            weights_p = "models/qwen3b.axiom";
+            vocab_p = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);
         bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());
