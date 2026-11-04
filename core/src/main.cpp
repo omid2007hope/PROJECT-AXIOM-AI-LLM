@@ -553,9 +553,9 @@ void run_chat_engine(AI& ai,
 	if (std::filesystem::exists("models/qwen3b.axiom")) {
 		target_weights = "models/qwen3b.axiom";
 		target_vocab = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
-	} else if (std::filesystem::exists("core/models/qwen3b.axiom")) {
-		target_weights = "core/models/qwen3b.axiom";
-		target_vocab = std::filesystem::exists("core/models/qwen3b_vocab.axiom") ? "core/models/qwen3b_vocab.axiom" : "core/models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
+		target_weights = "../models/qwen3b.axiom";
+		target_vocab = std::filesystem::exists("../models/qwen3b_vocab.axiom") ? "../models/qwen3b_vocab.axiom" : "../models/qwen_vocab.axiom";
 	}
 
 	if (!ai.has_transformer_model()) {
@@ -689,9 +689,9 @@ void run_inference_engine(AI& ai,
 		target_weights = "models/qwen3b.axiom";
 		target_vocab = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
 		is_transformer = true;
-	} else if (std::filesystem::exists("core/models/qwen3b.axiom")) {
-		target_weights = "core/models/qwen3b.axiom";
-		target_vocab = std::filesystem::exists("core/models/qwen3b_vocab.axiom") ? "core/models/qwen3b_vocab.axiom" : "core/models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
+		target_weights = "../models/qwen3b.axiom";
+		target_vocab = std::filesystem::exists("../models/qwen3b_vocab.axiom") ? "../models/qwen3b_vocab.axiom" : "../models/qwen_vocab.axiom";
 		is_transformer = true;
 	}
 
@@ -1664,9 +1664,10 @@ int main(int argc, char* argv[]) {
 			AI engine;
 			std::filesystem::path vocab_p = "models/qwen3b_vocab.axiom";
 			if (!std::filesystem::exists(vocab_p)) vocab_p = "models/qwen_vocab.axiom";
+			if (!std::filesystem::exists(vocab_p)) vocab_p = "../models/qwen3b_vocab.axiom";
 			std::filesystem::path weights_p = "models/qwen3b.axiom";
-			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("core/models/qwen3b.axiom")) {
-				weights_p = "core/models/qwen3b.axiom";
+			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen3b.axiom")) {
+				weights_p = "../models/qwen3b.axiom";
 			}
 			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
 			if (!custom_weights_path.empty()) weights_p = custom_weights_path;
@@ -1845,18 +1846,28 @@ int main(int argc, char* argv[]) {
 
 	// 1. LLM Model Paths (strictly used by Chat and Server)
 	std::filesystem::path llm_weights_path = "models/qwen3b.axiom";
-	if (!std::filesystem::exists(llm_weights_path) && std::filesystem::exists(core_dir / "models" / "qwen3b.axiom")) {
-		llm_weights_path = core_dir / "models" / "qwen3b.axiom";
+	if (!std::filesystem::exists(llm_weights_path)) {
+		if (std::filesystem::exists("../models/qwen3b.axiom")) {
+			llm_weights_path = "../models/qwen3b.axiom";
+		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen3b.axiom")) {
+			llm_weights_path = core_dir.parent_path() / "models" / "qwen3b.axiom";
+		}
 	}
 	if (!custom_weights_path.empty()) {
 		llm_weights_path = custom_weights_path;
 	}
 
 	std::filesystem::path llm_vocab_path = "models/qwen3b_vocab.axiom";
-	if (!std::filesystem::exists(llm_vocab_path) && std::filesystem::exists("models/qwen_vocab.axiom")) {
-		llm_vocab_path = "models/qwen_vocab.axiom";
-	} else if (!std::filesystem::exists(llm_vocab_path) && std::filesystem::exists(core_dir / "models" / "qwen3b_vocab.axiom")) {
-		llm_vocab_path = core_dir / "models" / "qwen3b_vocab.axiom";
+	if (!std::filesystem::exists(llm_vocab_path)) {
+		if (std::filesystem::exists("models/qwen_vocab.axiom")) {
+			llm_vocab_path = "models/qwen_vocab.axiom";
+		} else if (std::filesystem::exists("../models/qwen3b_vocab.axiom")) {
+			llm_vocab_path = "../models/qwen3b_vocab.axiom";
+		} else if (std::filesystem::exists("../models/qwen_vocab.axiom")) {
+			llm_vocab_path = "../models/qwen_vocab.axiom";
+		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen3b_vocab.axiom")) {
+			llm_vocab_path = core_dir.parent_path() / "models" / "qwen3b_vocab.axiom";
+		}
 	}
 	if (!custom_vocab_path.empty()) {
 		llm_vocab_path = custom_vocab_path;
