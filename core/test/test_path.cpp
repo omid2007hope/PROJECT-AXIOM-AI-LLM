@@ -12,13 +12,11 @@ bool test_path() {
 	std::filesystem::path asset_dir = core_dir / "asset_sample";
 	test_check(std::filesystem::exists(asset_dir), "asset_sample folder exists", s_pass, s_fail);
 
-	std::filesystem::path db_dir = core_dir / "database";
-	test_check(std::filesystem::exists(db_dir), "database folder exists", s_pass, s_fail);
+	std::filesystem::path models_dir = std::filesystem::exists("models") ? "models" : core_dir.parent_path() / "models";
+	test_check(std::filesystem::exists(models_dir), "models folder exists", s_pass, s_fail);
 
-	std::filesystem::path models_dir = db_dir / "models";
-	std::error_code ec;
-	std::filesystem::create_directories(models_dir, ec);
-	test_check(std::filesystem::exists(models_dir), "database/models folder exists", s_pass, s_fail);
+	std::filesystem::path training_dir = std::filesystem::exists("training") ? "training" : core_dir.parent_path() / "training";
+	test_check(std::filesystem::exists(training_dir), "training folder exists", s_pass, s_fail);
 
 	std::cout << "=== Path Resolution Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
 	return s_fail == 0;

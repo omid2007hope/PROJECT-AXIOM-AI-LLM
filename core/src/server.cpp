@@ -189,13 +189,13 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
     if (!engine.has_transformer_model()) {
         std::cout << "[..] Streaming Qwen 3B weights via Win32 DMA mmap...\n";
         std::string weights_p = "models/qwen3b.axiom";
-        std::string vocab_p = "models/qwen3b_vocab.axiom";
+        std::string vocab_p = "models/qwen_vocab.axiom";
         if (std::filesystem::exists("models/qwen3b.axiom")) {
             weights_p = "models/qwen3b.axiom";
-            vocab_p = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
         } else if (std::filesystem::exists("../models/qwen3b.axiom")) {
             weights_p = "../models/qwen3b.axiom";
-            vocab_p = std::filesystem::exists("../models/qwen3b_vocab.axiom") ? "../models/qwen3b_vocab.axiom" : "../models/qwen_vocab.axiom";
+            vocab_p = "../models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);
         bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());
@@ -537,13 +537,13 @@ bool start_background_axiom_server(AI& engine, uint16_t port) {
     if (!engine.has_transformer_model()) {
         std::cout << "[..] Streaming Qwen 3B weights via Win32 DMA mmap...\n";
         std::string weights_p = "models/qwen3b.axiom";
-        std::string vocab_p = "models/qwen3b_vocab.axiom";
+        std::string vocab_p = "models/qwen_vocab.axiom";
         if (std::filesystem::exists("models/qwen3b.axiom")) {
             weights_p = "models/qwen3b.axiom";
-            vocab_p = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
         } else if (std::filesystem::exists("../models/qwen3b.axiom")) {
             weights_p = "../models/qwen3b.axiom";
-            vocab_p = std::filesystem::exists("../models/qwen3b_vocab.axiom") ? "../models/qwen3b_vocab.axiom" : "../models/qwen_vocab.axiom";
+            vocab_p = "../models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);
         bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());

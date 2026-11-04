@@ -552,10 +552,10 @@ void run_chat_engine(AI& ai,
 
 	if (std::filesystem::exists("models/qwen3b.axiom")) {
 		target_weights = "models/qwen3b.axiom";
-		target_vocab = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
 	} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
 		target_weights = "../models/qwen3b.axiom";
-		target_vocab = std::filesystem::exists("../models/qwen3b_vocab.axiom") ? "../models/qwen3b_vocab.axiom" : "../models/qwen_vocab.axiom";
+		target_vocab = "../models/qwen_vocab.axiom";
 	}
 
 	if (!ai.has_transformer_model()) {
@@ -687,11 +687,11 @@ void run_inference_engine(AI& ai,
 		}
 	} else if (std::filesystem::exists("models/qwen3b.axiom")) {
 		target_weights = "models/qwen3b.axiom";
-		target_vocab = std::filesystem::exists("models/qwen3b_vocab.axiom") ? "models/qwen3b_vocab.axiom" : "models/qwen_vocab.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
 		is_transformer = true;
 	} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
 		target_weights = "../models/qwen3b.axiom";
-		target_vocab = std::filesystem::exists("../models/qwen3b_vocab.axiom") ? "../models/qwen3b_vocab.axiom" : "../models/qwen_vocab.axiom";
+		target_vocab = "../models/qwen_vocab.axiom";
 		is_transformer = true;
 	}
 
@@ -1857,16 +1857,12 @@ int main(int argc, char* argv[]) {
 		llm_weights_path = custom_weights_path;
 	}
 
-	std::filesystem::path llm_vocab_path = "models/qwen3b_vocab.axiom";
+	std::filesystem::path llm_vocab_path = "models/qwen_vocab.axiom";
 	if (!std::filesystem::exists(llm_vocab_path)) {
-		if (std::filesystem::exists("models/qwen_vocab.axiom")) {
-			llm_vocab_path = "models/qwen_vocab.axiom";
-		} else if (std::filesystem::exists("../models/qwen3b_vocab.axiom")) {
-			llm_vocab_path = "../models/qwen3b_vocab.axiom";
-		} else if (std::filesystem::exists("../models/qwen_vocab.axiom")) {
+		if (std::filesystem::exists("../models/qwen_vocab.axiom")) {
 			llm_vocab_path = "../models/qwen_vocab.axiom";
-		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen3b_vocab.axiom")) {
-			llm_vocab_path = core_dir.parent_path() / "models" / "qwen3b_vocab.axiom";
+		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen_vocab.axiom")) {
+			llm_vocab_path = core_dir.parent_path() / "models" / "qwen_vocab.axiom";
 		}
 	}
 	if (!custom_vocab_path.empty()) {
