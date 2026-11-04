@@ -389,7 +389,7 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                     "{\"name\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"model\":\"huihui_ai/qwen2.5-vl-abliterated:7b\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
                     "{\"name\":\"axiom\",\"model\":\"axiom\",\"modified_at\":\"2026-11-03T00:00:00Z\",\"size\":3800000000,\"digest\":\"axiom\"},"
                     "{\"name\":\"qwen2.5-coder:3b-instruct-fp16\",\"model\":\"qwen2.5-coder:3b-instruct-fp16\",\"modified_at\":\"2026-11-04T00:00:00Z\",\"size\":6794207296,\"digest\":\"axiom\"},"
-                    "{\"name\":\"qwen2.5-coder-3b\",\"model\":\"qwen2.5-coder-3b\",\"modified_at\":\"2026-11-04T00:00:00Z\",\"size\":6794207296,\"digest\":\"axiom\"},"
+                    "{\"name\":\"qwen2.5-coder-3b\",\"model\":\"qwen2.5-coder-3b\",\"modified_at\":\"2026-11-04T00:00:00Z\",\"size\":6794207296,\"digest\":\"axiom\"}"
                     "]}";
                 std::ostringstream resp;
                 resp << "HTTP/1.1 200 OK\r\n"
