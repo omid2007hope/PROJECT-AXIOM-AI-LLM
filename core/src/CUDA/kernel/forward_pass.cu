@@ -198,16 +198,25 @@ __global__ static void cutlass_gemm_bf16_kernel(
 		const __nv_bfloat16* x_row = X + static_cast<size_t>(row) * K;
 
 		float sum = 0.0f;
-		int k_pair_end = (K >> 6) << 6;
-		for (int base_k = 0; base_k < k_pair_end; base_k += 64) {
-			int cur_k = base_k + (lane << 1);
-			__nv_bfloat162 x2 = *reinterpret_cast<const __nv_bfloat162*>(x_row + cur_k);
-			__nv_bfloat162 w2 = *reinterpret_cast<const __nv_bfloat162*>(w_row + cur_k);
-			float2 f_x = __bfloat1622float2(x2);
-			float2 f_w = __bfloat1622float2(w2);
-			sum += f_x.x * f_w.x + f_x.y * f_w.y;
+		int k_vec_end = (K >> 8) << 8;
+		for (int base_k = 0; base_k < k_vec_end; base_k += 256) {
+			int cur_k = base_k + (lane << 3);
+			uint4 x4 = *reinterpret_cast<const uint4*>(x_row + cur_k);
+			uint4 w4 = *reinterpret_cast<const uint4*>(w_row + cur_k);
+			float2 f_x0 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.x));
+			float2 f_w0 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.x));
+			sum += f_x0.x * f_w0.x + f_x0.y * f_w0.y;
+			float2 f_x1 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.y));
+			float2 f_w1 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.y));
+			sum += f_x1.x * f_w1.x + f_x1.y * f_w1.y;
+			float2 f_x2 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.z));
+			float2 f_w2 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.z));
+			sum += f_x2.x * f_w2.x + f_x2.y * f_w2.y;
+			float2 f_x3 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.w));
+			float2 f_w3 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.w));
+			sum += f_x3.x * f_w3.x + f_x3.y * f_w3.y;
 		}
-		for (int cur_k = k_pair_end + lane; cur_k < K; cur_k += 32) {
+		for (int cur_k = k_vec_end + lane; cur_k < K; cur_k += 32) {
 			sum += __bfloat162float(x_row[cur_k]) * __bfloat162float(w_row[cur_k]);
 		}
 
@@ -269,16 +278,25 @@ __global__ static void tied_logits_bf16_kernel(
 		const __nv_bfloat16* x_row = X + static_cast<size_t>(m) * hidden_dim;
 
 		float sum = 0.0f;
-		int k_pair_end = (hidden_dim >> 6) << 6;
-		for (int base_k = 0; base_k < k_pair_end; base_k += 64) {
-			int cur_k = base_k + (lane << 1);
-			__nv_bfloat162 x2 = *reinterpret_cast<const __nv_bfloat162*>(x_row + cur_k);
-			__nv_bfloat162 w2 = *reinterpret_cast<const __nv_bfloat162*>(w_row + cur_k);
-			float2 f_x = __bfloat1622float2(x2);
-			float2 f_w = __bfloat1622float2(w2);
-			sum += f_x.x * f_w.x + f_x.y * f_w.y;
+		int k_vec_end = (hidden_dim >> 8) << 8;
+		for (int base_k = 0; base_k < k_vec_end; base_k += 256) {
+			int cur_k = base_k + (lane << 3);
+			uint4 x4 = *reinterpret_cast<const uint4*>(x_row + cur_k);
+			uint4 w4 = *reinterpret_cast<const uint4*>(w_row + cur_k);
+			float2 f_x0 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.x));
+			float2 f_w0 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.x));
+			sum += f_x0.x * f_w0.x + f_x0.y * f_w0.y;
+			float2 f_x1 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.y));
+			float2 f_w1 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.y));
+			sum += f_x1.x * f_w1.x + f_x1.y * f_w1.y;
+			float2 f_x2 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.z));
+			float2 f_w2 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.z));
+			sum += f_x2.x * f_w2.x + f_x2.y * f_w2.y;
+			float2 f_x3 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&x4.w));
+			float2 f_w3 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&w4.w));
+			sum += f_x3.x * f_w3.x + f_x3.y * f_w3.y;
 		}
-		for (int cur_k = k_pair_end + lane; cur_k < hidden_dim; cur_k += 32) {
+		for (int cur_k = k_vec_end + lane; cur_k < hidden_dim; cur_k += 32) {
 			sum += __bfloat162float(x_row[cur_k]) * __bfloat162float(w_row[cur_k]);
 		}
 
@@ -492,6 +510,19 @@ __global__ static void softmax_argmax_kernel(float* __restrict__ logits_and_prob
 	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
 		logits_and_probs[i] *= inv_sum;
 	}
+}
+
+extern "C" CUDA_API void launch_softmax_argmax(
+	float* d_logits_and_probs,
+	uint32_t* d_pred_id,
+	size_t n,
+	void* stream
+) {
+	softmax_argmax_kernel<<<1, 1024, 0, static_cast<cudaStream_t>(stream)>>>(
+		d_logits_and_probs,
+		d_pred_id,
+		n
+	);
 }
 
 extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_portion,

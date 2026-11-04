@@ -538,9 +538,13 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 void run_chat_engine(AI& ai,
                      const std::filesystem::path& weights_path,
                      const std::filesystem::path& vocab_path) {
-	std::cout << "\n========================================================\n"
-		  << "       AXIOM DIRECT CHAT (Qwen 28-Layer GQA Engine)     \n"
-		  << "========================================================\n";
+#ifdef _WIN32
+	HANDLE h_console = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD console_mode = 0;
+	if (GetConsoleMode(h_console, &console_mode)) {
+		SetConsoleMode(h_console, console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+	}
+#endif
 
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
@@ -560,33 +564,36 @@ void run_chat_engine(AI& ai,
 	}
 
 	if (!ai.has_transformer_model()) {
-		std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n" << std::flush;
+		std::cout << "\033[90m[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\033[0m\n" << std::flush;
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (!vocab_ok || !model_ok) {
-			std::cerr << "[!] Failed to load transformer weights from: " << target_weights << "\n" << std::flush;
+			std::cerr << "\033[31m[!] Failed to load transformer weights from: " << target_weights << "\033[0m\n" << std::flush;
 			return;
 		}
-		std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n" << std::flush;
+		std::cout << "\033[32m[OK] Stacked GQA Transformer weights loaded into VRAM.\033[0m\n\n" << std::flush;
 	}
 
-	std::cout << "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
-		  << "Layers            : " << ai.config_.num_layers << " stacked blocks\n"
-		  << "Hidden Dimension  : " << ai.config_.hidden_dim << " (Q Heads: "
-		  << ai.config_.num_q_heads << ", KV Heads: " << ai.config_.num_kv_heads << ")\n"
-		  << "Context Window    : " << ai.config_.max_seq_len << " tokens (Paged KV-Cache)\n"
-		  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
-		  << "Vocabulary Size   : " << ai.config_.vocab_size << " tokens (BPE exact code preserved)\n"
-		  << "--------------------------------------------------------\n"
-		  << "Speak directly with Axiom (type 'exit' to quit, 'clear' to reset):\n"
-		  << "--------------------------------------------------------\n";
+	std::cout << "\033[1;36m========================================================================\033[0m\n"
+		  << "\033[1;37m       PROJECT AXIOM — Ada Lovelace sm_89 Direct GQA Transformer        \033[0m\n"
+		  << "\033[1;36m========================================================================\033[0m\n"
+		  << "  Model Architecture : \033[1;32mStacked Grouped Query Attention (GQA)\033[0m\n"
+		  << "  Layer Count        : \033[1;33m" << ai.config_.num_layers << " stacked blocks\033[0m (Hidden: " << ai.config_.hidden_dim << ", FFN: " << ai.config_.ffn_dim << ")\n"
+		  << "  Attention Heads    : \033[1;33m" << ai.config_.num_q_heads << " Q-Heads / " << ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim << ")\n"
+		  << "  Context Window     : \033[1;33m" << ai.config_.max_seq_len << " tokens\033[0m (Paged Dynamic KV-Cache)\n"
+		  << "  Compute Hardware   : \033[1;32m128-Bit uint4 Coalesced Memory + GPU Softmax/Argmax\033[0m\n"
+		  << "  Vocabulary Size    : \033[1;33m" << ai.config_.vocab_size << " tokens\033[0m (BPE Exact Code Preserved)\n"
+		  << "\033[1;36m------------------------------------------------------------------------\033[0m\n"
+		  << "\033[90mCommands: 'exit' to quit | 'clear' to reset context | 'temp <val>' for sampling\033[0m\n"
+		  << "\033[1;36m------------------------------------------------------------------------\033[0m\n";
 
 	std::string conversation_history =
 		"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n";
+	float current_temp = 0.0f;
 
 	std::string user_input;
 	while (true) {
-		std::cout << "\nYou > ";
+		std::cout << "\n\033[1;36mYou ❯ \033[0m";
 		if (!std::getline(std::cin, user_input)) break;
 		strip_utf8_bom(user_input);
 		while (!user_input.empty() && (user_input.back() == '\r' || user_input.back() == ' ' || user_input.back() == '\t')) {
@@ -595,25 +602,55 @@ void run_chat_engine(AI& ai,
 
 		if (user_input.empty()) continue;
 		if (user_input == "exit" || user_input == "quit" || user_input == ":q") {
-			std::cout << "\nExiting chat session.\n";
+			std::cout << "\033[90mExiting chat session.\033[0m\n";
 			break;
 		}
 		if (user_input == "clear" || user_input == "reset") {
 			conversation_history =
 				"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n";
-			std::cout << "[Axiom] Context memory reset.\n";
+			std::cout << "\033[33m[Axiom] Context memory reset.\033[0m\n";
+			continue;
+		}
+		if (user_input.rfind("temp ", 0) == 0) {
+			try {
+				current_temp = std::stof(user_input.substr(5));
+				std::cout << "\033[33m[Axiom] Generation temperature set to: " << current_temp << "\033[0m\n";
+			} catch (...) {
+				std::cout << "\033[31m[!] Invalid temperature value.\033[0m\n";
+			}
 			continue;
 		}
 
 		conversation_history += "<|im_start|>user\n" + user_input + "<|im_end|>\n<|im_start|>assistant\n";
 
-		std::cout << "\nAxiom > ";
+		std::cout << "\n\033[1;32mAxiom ❯ \033[0m";
 		std::string assistant_reply;
-		ai.generate(conversation_history, 1024, 0.2f, 40, 0.9f, [&](const std::string& tok) {
+		auto t_start = std::chrono::steady_clock::now();
+		auto t_first = t_start;
+		bool first_token = true;
+		size_t token_count = 0;
+
+		ai.generate(conversation_history, 1024, current_temp, 40, 0.9f, [&](const std::string& tok) {
+			if (first_token) {
+				t_first = std::chrono::steady_clock::now();
+				first_token = false;
+			}
+			++token_count;
 			std::cout << tok << std::flush;
 			assistant_reply += tok;
 		});
 		std::cout << "\n";
+
+		auto t_end = std::chrono::steady_clock::now();
+		double ttft_ms = std::chrono::duration<double, std::milli>(t_first - t_start).count();
+		double gen_sec = std::chrono::duration<double>(t_end - t_first).count();
+		double tps = (gen_sec > 0.001 && token_count > 1) ? ((token_count - 1) / gen_sec) : 0.0;
+
+		std::cout << "\033[90m── [TTFT: " << std::fixed << std::setprecision(1) << ttft_ms << " ms"
+			  << " | Speed: " << std::fixed << std::setprecision(1) << tps << " t/s"
+			  << " | Generated: " << token_count << " tokens"
+			  << " | Temp: " << std::fixed << std::setprecision(2) << current_temp
+			  << "] ──\033[0m\n";
 
 		conversation_history += assistant_reply + "<|im_end|>\n";
 

@@ -122,6 +122,7 @@ AI::~AI() {
 	if (d_gate_buf_) { free_device_memory(d_gate_buf_); d_gate_buf_ = nullptr; }
 	if (d_up_buf_) { free_device_memory(d_up_buf_); d_up_buf_ = nullptr; }
 	if (d_act_buf_) { free_device_memory(d_act_buf_); d_act_buf_ = nullptr; }
+	if (d_pred_id_) { free_device_memory(d_pred_id_); d_pred_id_ = nullptr; }
 	if (d_block_table_) { free_device_memory(d_block_table_); d_block_table_ = nullptr; }
 	for (void* ptr : d_k_cache_) { if (ptr) free_device_memory(ptr); }
 	for (void* ptr : d_v_cache_) { if (ptr) free_device_memory(ptr); }
@@ -1252,9 +1253,11 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	if (d_gate_buf_)        free_device_memory(d_gate_buf_);
 	if (d_up_buf_)          free_device_memory(d_up_buf_);
 	if (d_act_buf_)         free_device_memory(d_act_buf_);
+	if (d_pred_id_)         free_device_memory(d_pred_id_);
 
 	d_curr_token_      = allocate_device_memory(sizeof(uint32_t));
 	d_curr_pos_        = allocate_device_memory(sizeof(int32_t));
+	d_pred_id_         = allocate_device_memory(sizeof(uint32_t));
 	d_residual_stream_ = allocate_device_memory(D * sizeof(uint16_t));
 	d_normed_x_        = allocate_device_memory(D * sizeof(uint16_t));
 	d_q_               = allocate_device_memory(Qd * sizeof(uint16_t));
@@ -1411,19 +1414,14 @@ bool AI::generate(const std::string& prompt,
 	for (size_t step = 0; step < max_new_tokens; ++step) {
 		if (current_pos >= static_cast<int>(config_.max_seq_len)) break;
 
-		download_device_buffer(h_logits.data(), d_logits, logits_bytes);
-
 		uint32_t next_token = 0;
-		if (temperature <= 0.01f) {
-			// Greedy
-			float max_val = -1e30f;
-			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
-				if (h_logits[v] > max_val) {
-					max_val = h_logits[v];
-					next_token = v;
-				}
-			}
+		if (temperature <= 0.01f && d_pred_id_) {
+			launch_softmax_argmax(d_logits, static_cast<uint32_t*>(d_pred_id_), config_.vocab_size, compute_stream_);
+			sync_cuda_stream(compute_stream_);
+			download_device_buffer(&h_pred_id_, d_pred_id_, sizeof(uint32_t));
+			next_token = h_pred_id_;
 		} else {
+			download_device_buffer(h_logits.data(), d_logits, logits_bytes);
 			// Temperature scaled
 			float inv_temp = 1.0f / temperature;
 			float max_val = -1e30f;

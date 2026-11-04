@@ -161,6 +161,11 @@ CUDA_API void launch_tied_logits_bf16(const void* d_normed_x,
 				      int hidden_dim,
 				      void* stream);
 
+CUDA_API void launch_softmax_argmax(float* d_logits_and_probs,
+				    uint32_t* d_pred_id,
+				    size_t n,
+				    void* stream);
+
 #ifdef __cplusplus
 }
 #endif

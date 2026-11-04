@@ -244,6 +244,8 @@ public:
 	void* d_up_buf_ = nullptr;
 	void* d_act_buf_ = nullptr;
 	void* d_block_table_ = nullptr;
+	void* d_pred_id_ = nullptr;
+	uint32_t h_pred_id_ = 0;
 
 	std::vector<void*> d_k_cache_;
 	std::vector<void*> d_v_cache_;
