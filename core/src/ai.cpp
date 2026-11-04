@@ -1172,8 +1172,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	}
 
 	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
-	if (config_.max_seq_len < 8192) {
-		config_.max_seq_len = 8192;
+	if (config_.max_seq_len > 4096) {
+		config_.max_seq_len = 4096;
 	}
 	const uint8_t* host_weights_ptr = mapped_base + 64;
 	size_t weights_bytes = total_bytes - 64;
@@ -1192,10 +1192,20 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		return false;
 	}
 
-	register_host_memory(const_cast<uint8_t*>(mapped_base), total_bytes);
-	upload_device_buffer_async(d_weights_arena_, host_weights_ptr, weights_bytes, compute_stream_);
-	sync_cuda_stream(compute_stream_);
-	unregister_host_memory(const_cast<uint8_t*>(mapped_base));
+	const size_t chunk_bytes = 256 * 1024 * 1024;
+	for (size_t offset = 0; offset < weights_bytes; offset += chunk_bytes) {
+		size_t to_copy = std::min(chunk_bytes, weights_bytes - offset);
+		if (!upload_device_buffer(static_cast<uint8_t*>(d_weights_arena_) + offset,
+		                          host_weights_ptr + offset,
+		                          to_copy)) {
+			std::cerr << "[Axiom Engine] Failed to upload weights chunk to VRAM at offset "
+			          << (offset >> 20) << " MB.\n";
+			UnmapViewOfFile(mapped_base);
+			CloseHandle(hMap);
+			CloseHandle(hFile);
+			return false;
+		}
+	}
 
 	UnmapViewOfFile(mapped_base);
 	CloseHandle(hMap);
@@ -1272,10 +1282,21 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	d_k_cache_.resize(config_.num_layers, nullptr);
 	d_v_cache_.resize(config_.num_layers, nullptr);
 
+	if (!d_curr_token_ || !d_curr_pos_ || !d_residual_stream_ || !d_normed_x_ ||
+	    !d_q_ || !d_k_ || !d_v_ || !d_attn_out_ || !d_proj_tmp_ ||
+	    !d_gate_buf_ || !d_up_buf_ || !d_act_buf_ || !d_block_table_) {
+		std::cerr << "[Axiom Engine] Out of VRAM: Activation buffer allocation failed.\n";
+		return false;
+	}
+
 	size_t kv_cache_bytes = static_cast<size_t>(config_.max_seq_len) * config_.num_kv_heads * config_.head_dim * sizeof(uint16_t);
 	for (uint32_t l = 0; l < config_.num_layers; ++l) {
 		d_k_cache_[l] = allocate_device_memory(kv_cache_bytes);
 		d_v_cache_[l] = allocate_device_memory(kv_cache_bytes);
+		if (!d_k_cache_[l] || !d_v_cache_[l]) {
+			std::cerr << "[Axiom Engine] Out of VRAM: KV cache allocation failed at layer " << l << "\n";
+			return false;
+		}
 	}
 
 	std::cout << "[Axiom Engine] Loaded model: " << config_.num_layers << " layers, hidden_dim="

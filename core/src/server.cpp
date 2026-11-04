@@ -188,11 +188,20 @@ static std::string build_qwen_chatml_prompt(const std::string& body) {
 static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
     if (!engine.has_transformer_model()) {
         std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n";
-        std::string weights_p = "models/qwen1_5b.axiom";
+        std::string weights_p = "models/qwen7b.axiom";
         std::string vocab_p = "models/qwen_vocab.axiom";
-        if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
+        if (std::filesystem::exists("core/models/qwen7b.axiom")) {
+            weights_p = "core/models/qwen7b.axiom";
+            vocab_p = "core/models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("models/qwen7b.axiom")) {
+            weights_p = "models/qwen7b.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
             weights_p = "core/models/qwen1_5b.axiom";
             vocab_p = "core/models/qwen_vocab.axiom";
+        } else {
+            weights_p = "models/qwen1_5b.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);
         bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());
@@ -527,11 +536,20 @@ bool start_background_axiom_server(AI& engine, uint16_t port) {
 
     if (!engine.has_transformer_model()) {
         std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n";
-        std::string weights_p = "models/qwen1_5b.axiom";
+        std::string weights_p = "models/qwen7b.axiom";
         std::string vocab_p = "models/qwen_vocab.axiom";
-        if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
+        if (std::filesystem::exists("core/models/qwen7b.axiom")) {
+            weights_p = "core/models/qwen7b.axiom";
+            vocab_p = "core/models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("models/qwen7b.axiom")) {
+            weights_p = "models/qwen7b.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
             weights_p = "core/models/qwen1_5b.axiom";
             vocab_p = "core/models/qwen_vocab.axiom";
+        } else {
+            weights_p = "models/qwen1_5b.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);
         bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());

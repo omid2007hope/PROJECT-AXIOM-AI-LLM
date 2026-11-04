@@ -545,7 +545,13 @@ void run_chat_engine(AI& ai,
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
 
-	if (std::filesystem::exists("models/qwen1_5b.axiom")) {
+	if (std::filesystem::exists("models/qwen7b.axiom")) {
+		target_weights = "models/qwen7b.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("core/models/qwen7b.axiom")) {
+		target_weights = "core/models/qwen7b.axiom";
+		target_vocab = "core/models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("models/qwen1_5b.axiom")) {
 		target_weights = "models/qwen1_5b.axiom";
 		target_vocab = "models/qwen_vocab.axiom";
 	} else if (std::filesystem::exists("core/models/qwen1_5b.axiom")) {
@@ -554,14 +560,14 @@ void run_chat_engine(AI& ai,
 	}
 
 	if (!ai.has_transformer_model()) {
-		std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n";
+		std::cout << "[..] Streaming Qwen 28-Layer weights via Win32 DMA mmap...\n" << std::flush;
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (!vocab_ok || !model_ok) {
-			std::cerr << "[!] Failed to load transformer weights from: " << target_weights << "\n";
+			std::cerr << "[!] Failed to load transformer weights from: " << target_weights << "\n" << std::flush;
 			return;
 		}
-		std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n";
+		std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n" << std::flush;
 	}
 
 	std::cout << "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
@@ -583,6 +589,9 @@ void run_chat_engine(AI& ai,
 		std::cout << "\nYou > ";
 		if (!std::getline(std::cin, user_input)) break;
 		strip_utf8_bom(user_input);
+		while (!user_input.empty() && (user_input.back() == '\r' || user_input.back() == ' ' || user_input.back() == '\t')) {
+			user_input.pop_back();
+		}
 
 		if (user_input.empty()) continue;
 		if (user_input == "exit" || user_input == "quit" || user_input == ":q") {
@@ -644,6 +653,14 @@ void run_inference_engine(AI& ai,
 				is_transformer = true;
 			}
 		}
+	} else if (std::filesystem::exists("models/qwen7b.axiom")) {
+		target_weights = "models/qwen7b.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
+		is_transformer = true;
+	} else if (std::filesystem::exists("core/models/qwen7b.axiom")) {
+		target_weights = "core/models/qwen7b.axiom";
+		target_vocab = "core/models/qwen_vocab.axiom";
+		is_transformer = true;
 	} else if (std::filesystem::exists("models/qwen1_5b.axiom")) {
 		target_weights = "models/qwen1_5b.axiom";
 		target_vocab = "models/qwen_vocab.axiom";
@@ -1618,7 +1635,10 @@ int main(int argc, char* argv[]) {
 			}
 			AI engine;
 			std::filesystem::path vocab_p = "models/qwen_vocab.axiom";
-			std::filesystem::path weights_p = "models/qwen1_5b.axiom";
+			std::filesystem::path weights_p = "models/qwen7b.axiom";
+			if (!std::filesystem::exists(weights_p) && !std::filesystem::exists("core/" + weights_p.string())) {
+				weights_p = "models/qwen1_5b.axiom";
+			}
 			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
 			if (!custom_weights_path.empty()) weights_p = custom_weights_path;
 
@@ -1804,12 +1824,18 @@ int main(int argc, char* argv[]) {
 			weights_path = custom_weights_path;
 		}
 	} else {
+		const std::filesystem::path qwen_w7b_1 = "models/qwen7b.axiom";
+		const std::filesystem::path qwen_w7b_2 = core_dir / "models" / "qwen7b.axiom";
 		const std::filesystem::path qwen_w1 = "models/qwen1_5b.axiom";
 		const std::filesystem::path qwen_w2 = core_dir / "models" / "qwen1_5b.axiom";
 		const std::filesystem::path default_weights = models_dir / config::weights_file;
 		const std::filesystem::path legacy_weights = core_dir / config::weights_file;
 
-		if (std::filesystem::exists(qwen_w1)) {
+		if (std::filesystem::exists(qwen_w7b_1)) {
+			weights_path = qwen_w7b_1;
+		} else if (std::filesystem::exists(qwen_w7b_2)) {
+			weights_path = qwen_w7b_2;
+		} else if (std::filesystem::exists(qwen_w1)) {
 			weights_path = qwen_w1;
 		} else if (std::filesystem::exists(qwen_w2)) {
 			weights_path = qwen_w2;
@@ -1860,6 +1886,12 @@ int main(int argc, char* argv[]) {
 			: (core_dir / config::asset_folder);
 
 	const std::vector<std::filesystem::path> asset_dirs = {asset_dir};
+
+	if (!is_interactive && mode == AppMode::Chat) {
+		AI engine;
+		run_chat_engine(engine, weights_path, vocab_path);
+		return 0;
+	}
 
 	Parser parser(developer_mode, embedded_path, asset_dirs);
 	Input input;
