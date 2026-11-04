@@ -314,6 +314,9 @@ extern "C" CUDA_API void* allocate_device_memory(size_t bytes) {
 	if (cudaMalloc(&ptr, bytes) == cudaSuccess) {
 		return ptr;
 	}
+	if (cudaMallocManaged(&ptr, bytes) == cudaSuccess) {
+		return ptr;
+	}
 	return nullptr;
 }
 

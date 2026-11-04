@@ -550,7 +550,13 @@ void run_chat_engine(AI& ai,
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
 
-	if (std::filesystem::exists("models/qwen3b.axiom")) {
+	if (std::filesystem::exists("models/qwen7b.axiom")) {
+		target_weights = "models/qwen7b.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("../models/qwen7b.axiom")) {
+		target_weights = "../models/qwen7b.axiom";
+		target_vocab = "../models/qwen_vocab.axiom";
+	} else if (std::filesystem::exists("models/qwen3b.axiom")) {
 		target_weights = "models/qwen3b.axiom";
 		target_vocab = "models/qwen_vocab.axiom";
 	} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
@@ -559,7 +565,7 @@ void run_chat_engine(AI& ai,
 	}
 
 	if (!ai.has_transformer_model()) {
-		std::cout << "\033[90m[..] Streaming Qwen 3B weights via Win32 DMA mmap...\033[0m\n" << std::flush;
+		std::cout << "\033[90m[..] Streaming Qwen weights via Win32 DMA mmap...\033[0m\n" << std::flush;
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (!vocab_ok || !model_ok) {
@@ -685,6 +691,14 @@ void run_inference_engine(AI& ai,
 				is_transformer = true;
 			}
 		}
+	} else if (std::filesystem::exists("models/qwen7b.axiom")) {
+		target_weights = "models/qwen7b.axiom";
+		target_vocab = "models/qwen_vocab.axiom";
+		is_transformer = true;
+	} else if (std::filesystem::exists("../models/qwen7b.axiom")) {
+		target_weights = "../models/qwen7b.axiom";
+		target_vocab = "../models/qwen_vocab.axiom";
+		is_transformer = true;
 	} else if (std::filesystem::exists("models/qwen3b.axiom")) {
 		target_weights = "models/qwen3b.axiom";
 		target_vocab = "models/qwen_vocab.axiom";
@@ -1662,11 +1676,16 @@ int main(int argc, char* argv[]) {
 				} catch (...) {}
 			}
 			AI engine;
-			std::filesystem::path vocab_p = "models/qwen3b_vocab.axiom";
-			if (!std::filesystem::exists(vocab_p)) vocab_p = "models/qwen_vocab.axiom";
+			std::filesystem::path vocab_p = "models/qwen_vocab.axiom";
+			if (!std::filesystem::exists(vocab_p)) vocab_p = "../models/qwen_vocab.axiom";
+			if (!std::filesystem::exists(vocab_p)) vocab_p = "models/qwen3b_vocab.axiom";
 			if (!std::filesystem::exists(vocab_p)) vocab_p = "../models/qwen3b_vocab.axiom";
-			std::filesystem::path weights_p = "models/qwen3b.axiom";
-			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen3b.axiom")) {
+			std::filesystem::path weights_p = "models/qwen7b.axiom";
+			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen7b.axiom")) {
+				weights_p = "../models/qwen7b.axiom";
+			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("models/qwen3b.axiom")) {
+				weights_p = "models/qwen3b.axiom";
+			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen3b.axiom")) {
 				weights_p = "../models/qwen3b.axiom";
 			}
 			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
@@ -1845,9 +1864,15 @@ int main(int argc, char* argv[]) {
 	std::filesystem::create_directories(training_dir, dir_ec);
 
 	// 1. LLM Model Paths (strictly used by Chat and Server)
-	std::filesystem::path llm_weights_path = "models/qwen3b.axiom";
+	std::filesystem::path llm_weights_path = "models/qwen7b.axiom";
 	if (!std::filesystem::exists(llm_weights_path)) {
-		if (std::filesystem::exists("../models/qwen3b.axiom")) {
+		if (std::filesystem::exists("../models/qwen7b.axiom")) {
+			llm_weights_path = "../models/qwen7b.axiom";
+		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen7b.axiom")) {
+			llm_weights_path = core_dir.parent_path() / "models" / "qwen7b.axiom";
+		} else if (std::filesystem::exists("models/qwen3b.axiom")) {
+			llm_weights_path = "models/qwen3b.axiom";
+		} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
 			llm_weights_path = "../models/qwen3b.axiom";
 		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen3b.axiom")) {
 			llm_weights_path = core_dir.parent_path() / "models" / "qwen3b.axiom";
