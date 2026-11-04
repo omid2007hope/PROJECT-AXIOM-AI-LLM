@@ -290,6 +290,10 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
         SOCKET client = accept(listen_sock, nullptr, nullptr);
         if (client == INVALID_SOCKET) continue;
 
+        DWORD timeout_ms = 5000;
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout_ms), sizeof(timeout_ms));
+        setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout_ms), sizeof(timeout_ms));
+
         std::string req;
         char chunk[4096];
         int content_length = -1;
@@ -328,7 +332,9 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                         size_t num_start = req.find_first_of("0123456789", cl_pos + 15);
                         if (num_start != std::string::npos && num_start < body_pos) {
                             try {
-                                content_length = std::stoi(req.substr(num_start));
+                                size_t cl_end = req.find_first_not_of("0123456789", num_start);
+                                size_t cl_len = (cl_end != std::string::npos) ? (cl_end - num_start) : (body_pos - num_start);
+                                content_length = std::stoi(req.substr(num_start, cl_len));
                             } catch (...) {
                                 content_length = 0;
                             }

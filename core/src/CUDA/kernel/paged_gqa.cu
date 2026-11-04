@@ -41,6 +41,7 @@ __global__ void paged_gqa_decode_kernel(
 	int head_dim,
 	float scale
 ) {
+	if (seq_len <= 0) return;
 	extern __shared__ float s_logits[];
 	int q_head    = blockIdx.x;
 	int tid       = threadIdx.x;
@@ -142,7 +143,9 @@ extern "C" CUDA_API void launch_paged_gqa_decode(
 	float scale,
 	void* stream
 ) {
+	if (seq_len <= 0) return;
 	size_t smem_bytes = static_cast<size_t>(seq_len) * sizeof(float);
+	if (smem_bytes < sizeof(float)) smem_bytes = sizeof(float);
 	paged_gqa_decode_kernel<<<num_q_heads, 128, smem_bytes, static_cast<cudaStream_t>(stream)>>>(
 		static_cast<const __nv_bfloat16*>(d_q),
 		static_cast<const __nv_bfloat16*>(d_k_cache),

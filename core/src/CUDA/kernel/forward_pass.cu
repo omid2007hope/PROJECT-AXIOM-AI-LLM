@@ -131,15 +131,8 @@ __global__ static void gather_embeddings_kernel(const uint32_t* __restrict__ tok
 		size_t token_idx = idx / embedding_dim;
 		size_t dim_idx = idx % embedding_dim;
 		uint32_t tok_id = token_ids[token_idx];
-		if (tok_id == 0) {
-			// PAD must contribute exactly 0.0 to X * W
-			context_window[idx] = __float2bfloat16(0.0f);
-			return;
-		}
-		if (tok_id >= vocab_size) {
-			tok_id = 1; // UNK fallback
-		}
-		context_window[idx] = table[tok_id * embedding_dim + dim_idx];
+		uint32_t safe_id = (tok_id < vocab_size) ? tok_id : 1u;
+		context_window[idx] = table[safe_id * embedding_dim + dim_idx];
 	}
 }
 
@@ -157,11 +150,7 @@ __global__ static void gather_embeddings_batched_kernel(
 	if (token_idx < total_tokens && dim_idx < hidden_dim) {
 		uint32_t id = d_token_ids[token_idx];
 		uint32_t safe_id = (id < vocab_size) ? id : 1u;
-		if (id == 0) {
-			d_output[token_idx * hidden_dim + dim_idx] = __float2bfloat16(0.0f);
-		} else {
-			d_output[token_idx * hidden_dim + dim_idx] = d_table[safe_id * hidden_dim + dim_idx];
-		}
+		d_output[token_idx * hidden_dim + dim_idx] = d_table[safe_id * hidden_dim + dim_idx];
 	}
 }
 
@@ -196,20 +185,43 @@ __global__ static void cutlass_gemm_bf16_kernel(
 	const __nv_bfloat16* __restrict__ B,
 	__nv_bfloat16* __restrict__ Y)
 {
-	int col = blockIdx.x * blockDim.x + threadIdx.x;
-	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int warp_id = threadIdx.x >> 5;
+	int lane    = threadIdx.x & 31;
+	int total   = M * N;
+	int idx     = blockIdx.x * 4 + warp_id;
 
-	if (row < M && col < N) {
-		float sum = 0.0f;
+	if (idx < total) {
+		int row = idx / N;
+		int col = idx % N;
+
 		const __nv_bfloat16* w_row = W + static_cast<size_t>(col) * K;
 		const __nv_bfloat16* x_row = X + static_cast<size_t>(row) * K;
-		for (int k = 0; k < K; ++k) {
-			sum += __bfloat162float(x_row[k]) * __bfloat162float(w_row[k]);
+
+		float sum = 0.0f;
+		int k_pair_end = (K >> 6) << 6;
+		for (int base_k = 0; base_k < k_pair_end; base_k += 64) {
+			int cur_k = base_k + (lane << 1);
+			__nv_bfloat162 x2 = *reinterpret_cast<const __nv_bfloat162*>(x_row + cur_k);
+			__nv_bfloat162 w2 = *reinterpret_cast<const __nv_bfloat162*>(w_row + cur_k);
+			float2 f_x = __bfloat1622float2(x2);
+			float2 f_w = __bfloat1622float2(w2);
+			sum += f_x.x * f_w.x + f_x.y * f_w.y;
 		}
-		if (B) {
-			sum += __bfloat162float(B[col]);
+		for (int cur_k = k_pair_end + lane; cur_k < K; cur_k += 32) {
+			sum += __bfloat162float(x_row[cur_k]) * __bfloat162float(w_row[cur_k]);
 		}
-		Y[static_cast<size_t>(row) * N + col] = __float2bfloat16(sum);
+
+		#pragma unroll
+		for (int offset = 16; offset > 0; offset >>= 1) {
+			sum += __shfl_down_sync(0xffffffff, sum, offset);
+		}
+
+		if (lane == 0) {
+			if (B) {
+				sum += __bfloat162float(B[col]);
+			}
+			Y[static_cast<size_t>(row) * N + col] = __float2bfloat16(sum);
+		}
 	}
 }
 
@@ -223,8 +235,10 @@ extern "C" CUDA_API void launch_cutlass_gemm_bf16(
 	void* d_y,
 	void* stream
 ) {
-	dim3 block(16, 16);
-	dim3 grid((N + block.x - 1) / block.x, (M + block.y - 1) / block.y);
+	int total = M * N;
+	int blocks = (total + 3) / 4;
+	dim3 block(128, 1);
+	dim3 grid(blocks, 1);
 	cutlass_gemm_bf16_kernel<<<grid, block, 0, static_cast<cudaStream_t>(stream)>>>(
 		M, N, K,
 		static_cast<const __nv_bfloat16*>(d_x),
@@ -242,17 +256,40 @@ __global__ static void tied_logits_bf16_kernel(
 	int vocab_size,
 	int hidden_dim)
 {
-	int v = blockIdx.x * blockDim.x + threadIdx.x;
-	int m = blockIdx.y * blockDim.y + threadIdx.y;
+	int warp_id = threadIdx.x >> 5;
+	int lane    = threadIdx.x & 31;
+	int total   = M * vocab_size;
+	int idx     = blockIdx.x * 4 + warp_id;
 
-	if (m < M && v < vocab_size) {
-		float sum = 0.0f;
+	if (idx < total) {
+		int m = idx / vocab_size;
+		int v = idx % vocab_size;
+
 		const __nv_bfloat16* w_row = W + static_cast<size_t>(v) * hidden_dim;
 		const __nv_bfloat16* x_row = X + static_cast<size_t>(m) * hidden_dim;
-		for (int k = 0; k < hidden_dim; ++k) {
-			sum += __bfloat162float(x_row[k]) * __bfloat162float(w_row[k]);
+
+		float sum = 0.0f;
+		int k_pair_end = (hidden_dim >> 6) << 6;
+		for (int base_k = 0; base_k < k_pair_end; base_k += 64) {
+			int cur_k = base_k + (lane << 1);
+			__nv_bfloat162 x2 = *reinterpret_cast<const __nv_bfloat162*>(x_row + cur_k);
+			__nv_bfloat162 w2 = *reinterpret_cast<const __nv_bfloat162*>(w_row + cur_k);
+			float2 f_x = __bfloat1622float2(x2);
+			float2 f_w = __bfloat1622float2(w2);
+			sum += f_x.x * f_w.x + f_x.y * f_w.y;
 		}
-		out_logits[static_cast<size_t>(m) * vocab_size + v] = sum;
+		for (int cur_k = k_pair_end + lane; cur_k < hidden_dim; cur_k += 32) {
+			sum += __bfloat162float(x_row[cur_k]) * __bfloat162float(w_row[cur_k]);
+		}
+
+		#pragma unroll
+		for (int offset = 16; offset > 0; offset >>= 1) {
+			sum += __shfl_down_sync(0xffffffff, sum, offset);
+		}
+
+		if (lane == 0) {
+			out_logits[static_cast<size_t>(m) * vocab_size + v] = sum;
+		}
 	}
 }
 
@@ -265,8 +302,10 @@ extern "C" CUDA_API void launch_tied_logits_bf16(
 	int hidden_dim,
 	void* stream
 ) {
-	dim3 block(256, 1);
-	dim3 grid((vocab_size + block.x - 1) / block.x, (M + block.y - 1) / block.y);
+	int total = M * vocab_size;
+	int blocks = (total + 3) / 4;
+	dim3 block(128, 1);
+	dim3 grid(blocks, 1);
 	tied_logits_bf16_kernel<<<grid, block, 0, static_cast<cudaStream_t>(stream)>>>(
 		static_cast<const __nv_bfloat16*>(d_normed_x),
 		static_cast<const __nv_bfloat16*>(d_lm_head_weight),
@@ -351,7 +390,7 @@ __global__ static void compute_tied_logits_kernel(const __nv_bfloat16* __restric
 			dot += __bfloat162float(y[d]) * __bfloat162float(emb_row[d]);
 		}
 
-		logits[v] = (v == 0) ? -1e30f : (dot * inv_temp); // PAD is never a prediction
+		logits[v] = dot * inv_temp;
 	}
 }
 

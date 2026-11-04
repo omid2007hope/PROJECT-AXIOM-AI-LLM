@@ -1111,7 +1111,7 @@ std::vector<uint32_t> Parser::tokenize_exact_code(const std::string& raw_prompt,
 	size_t pos = 0;
 	const size_t n = raw_prompt.size();
 	while (pos < n) {
-		size_t match_len = std::min<size_t>(64, n - pos);
+		size_t match_len = std::min<size_t>(32, n - pos);
 		uint32_t matched_id = 1;
 		bool found = false;
 		for (; match_len >= 1; --match_len) {

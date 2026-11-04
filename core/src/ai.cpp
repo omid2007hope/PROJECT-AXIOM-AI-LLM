@@ -1313,8 +1313,8 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
 
 	uint32_t u_token_id = static_cast<uint32_t>(token_id);
 	int32_t  s_token_pos = static_cast<int32_t>(token_pos);
-	upload_device_buffer_async(d_curr_token_, &u_token_id, sizeof(uint32_t), stream);
-	upload_device_buffer_async(d_curr_pos_, &s_token_pos, sizeof(int32_t), stream);
+	upload_device_buffer(d_curr_token_, &u_token_id, sizeof(uint32_t));
+	upload_device_buffer(d_curr_pos_, &s_token_pos, sizeof(int32_t));
 
 	launch_gather_embeddings_batched(
 		static_cast<const uint32_t*>(d_curr_token_),
@@ -1361,7 +1361,9 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
 	}
 
 	launch_rmsnorm_bf16(d_residual_stream_, d_final_norm_weight_, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
-	launch_tied_logits_bf16(d_normed_x_, d_lm_head_weight_, d_out_logits, 1, config_.vocab_size, D, stream);
+	if (d_out_logits) {
+		launch_tied_logits_bf16(d_normed_x_, d_lm_head_weight_, d_out_logits, 1, config_.vocab_size, D, stream);
+	}
 }
 
 bool AI::generate(const std::string& prompt,
@@ -1397,7 +1399,8 @@ bool AI::generate(const std::string& prompt,
 
 	// 1. Prefill prompt tokens
 	for (size_t i = 0; i < prompt_tokens.size(); ++i) {
-		forward_transformer_step(prompt_tokens[i], static_cast<int>(i), d_logits, compute_stream_);
+		float* target_logits = (i + 1 == prompt_tokens.size()) ? d_logits : nullptr;
+		forward_transformer_step(prompt_tokens[i], static_cast<int>(i), target_logits, compute_stream_);
 	}
 	sync_cuda_stream(compute_stream_);
 
