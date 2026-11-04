@@ -425,7 +425,7 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 }
 
                 std::string ollama_resp =
-                    "{\"model\":\"axiom\",\"response\":\"" + escape_json(generated_reply) + "\",\"done\":true,\"done_reason\":\"stop\"}";
+                    "{\"model\":\"axiom\",\"response\":\"" + escape_json(generated_reply) + "\",\"thinking\":\"\",\"done\":true,\"done_reason\":\"stop\",\"context\":[]}";
                 std::ostringstream resp;
                 resp << "HTTP/1.1 200 OK\r\n"
                      << "Content-Type: application/json\r\n"
