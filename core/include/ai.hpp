@@ -245,6 +245,7 @@ public:
 	void* d_act_buf_ = nullptr;
 	void* d_block_table_ = nullptr;
 	void* d_pred_id_ = nullptr;
+	void* d_logits_ = nullptr;
 	uint32_t h_pred_id_ = 0;
 
 	std::vector<void*> d_k_cache_;
@@ -254,6 +255,7 @@ public:
 
 	std::unordered_map<std::string, uint32_t> qwen_vocab_;
 	std::unordered_map<uint32_t, std::string> qwen_reverse_vocab_;
+	std::vector<uint32_t> cached_tokens_;
 	mutable std::mutex inference_mutex_;
 
 	bool load_vocabulary(const std::string& vocab_path);

@@ -798,15 +798,24 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         task_text.erase(at_pos, 2);
     }
 
-    // Detect Cline context compaction requests so they resolve in <1ms without stalling on 32k tokens
+    // If compaction prompt or native tools not requested, format full conversation into standard Qwen ChatML
     const std::string& final_msg_text = messages.back().second;
-    if (final_msg_text.find("### Goal") != std::string::npos &&
-        final_msg_text.find("### State") != std::string::npos &&
-        final_msg_text.find("### Highlights") != std::string::npos) {
-        cline_context.is_cline = true;
-        cline_context.is_compaction = true;
-        cline_context.target_path = target_path;
-        return "";
+    const bool is_compaction_prompt = (final_msg_text.find("### Goal") != std::string::npos &&
+                                       final_msg_text.find("### State") != std::string::npos &&
+                                       final_msg_text.find("### Highlights") != std::string::npos);
+    if (is_compaction_prompt || !cline_context.use_tool_calls) {
+        cline_context.use_tool_calls = false;
+        cline_context.has_file_target = false;
+        cline_context.is_compaction = false;
+        std::string prompt;
+        prompt.reserve(body.size() + 256);
+        for (const auto& [role, text] : messages) {
+            std::string mapped_role = (role == "developer" || role == "system") ? "system" :
+                                      (role == "assistant") ? "assistant" : "user";
+            prompt += "<|im_start|>" + mapped_role + "\n" + text + "<|im_end|>\n";
+        }
+        prompt += "<|im_start|>assistant\n";
+        return prompt;
     }
 
     // Check if the most recent turn is a tool result or successful file modification result from Cline
@@ -1292,23 +1301,7 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 std::string generated_reply;
                 bool sent_tool_call_response = false;
 
-                if (cline_context.is_compaction) {
-                    std::string target_file = (!cline_context.target_path.empty()) ? cline_context.target_path : "core/src/main.cpp";
-                    std::string compaction_summary =
-                        "### Goal\n"
-                        "Improve and maintain `" + target_file + "`.\n\n"
-                        "### State\n"
-                        "- Done: Loaded `" + target_file + "` context.\n"
-                        "- In Progress: Applying code updates to `" + target_file + "`.\n"
-                        "- Blocked: None.\n\n"
-                        "### Highlights\n"
-                        "- Reviewed target code in `" + target_file + "`.\n\n"
-                        "### Next\n"
-                        "- Apply the replacement code to `" + target_file + "` using the file editing tool.\n\n"
-                        "### Files\n"
-                        "Read: `" + target_file + "`\n";
-                    emit_delta(compaction_summary, generated_reply, emitted_any);
-                } else if (cline_context.has_file_target) {
+                if (cline_context.has_file_target) {
                     if (!cline_context.use_tool_calls) {
                         emit_delta(cline_context.initial_prefix, generated_reply, emitted_any);
                     }

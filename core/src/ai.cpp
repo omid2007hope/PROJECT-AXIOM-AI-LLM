@@ -1,6 +1,7 @@
 #include "../include/ai.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -59,7 +60,7 @@ AI::AI(size_t input_elements_x_total,
 
 	reset_weights(elements);
 	if (allocate_gpu_embeddings(&gpu_embeddings, vocab_size, embedding_dim)) {
-		download_embeddings(host_embeddings.data(), &gpu_embeddings);
+		upload_embeddings(host_embeddings.data(), &gpu_embeddings);
 	}
 	compute_stream_ = create_cuda_stream();
 }
@@ -124,6 +125,7 @@ AI::~AI() {
 	if (d_up_buf_) { free_device_memory(d_up_buf_); d_up_buf_ = nullptr; }
 	if (d_act_buf_) { free_device_memory(d_act_buf_); d_act_buf_ = nullptr; }
 	if (d_pred_id_) { free_device_memory(d_pred_id_); d_pred_id_ = nullptr; }
+	if (d_logits_) { free_device_memory(d_logits_); d_logits_ = nullptr; }
 	if (d_block_table_) { free_device_memory(d_block_table_); d_block_table_ = nullptr; }
 	for (void* ptr : d_k_cache_) { if (ptr) free_device_memory(ptr); }
 	for (void* ptr : d_v_cache_) { if (ptr) free_device_memory(ptr); }
@@ -1185,8 +1187,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		CloseHandle(hFile);
 		return false;
 	}
-	if (config_.max_seq_len > 8192) {
-		config_.max_seq_len = 8192;
+	if (config_.max_seq_len > 16384) {
+		config_.max_seq_len = 16384;
 	}
 	const uint8_t* host_weights_ptr = mapped_base + 64;
 	size_t weights_bytes = total_bytes - 64;
@@ -1278,10 +1280,12 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	if (d_up_buf_)          free_device_memory(d_up_buf_);
 	if (d_act_buf_)         free_device_memory(d_act_buf_);
 	if (d_pred_id_)         free_device_memory(d_pred_id_);
+	if (d_logits_)          free_device_memory(d_logits_);
 
 	d_curr_token_      = allocate_device_memory(sizeof(uint32_t));
 	d_curr_pos_        = allocate_device_memory(sizeof(int32_t));
 	d_pred_id_         = allocate_device_memory(sizeof(uint32_t));
+	d_logits_          = allocate_device_memory(config_.vocab_size * sizeof(float));
 	d_residual_stream_ = allocate_device_memory(D * sizeof(uint16_t));
 	d_normed_x_        = allocate_device_memory(D * sizeof(uint16_t));
 	d_q_               = allocate_device_memory(Qd * sizeof(uint16_t));
@@ -1294,8 +1298,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	d_act_buf_         = allocate_device_memory(FFN * sizeof(uint16_t));
 
 	// Allocate Paged KV Cache and physical block table
-	int num_blocks = static_cast<int>(config_.max_seq_len / 16);
-	if (num_blocks <= 0) num_blocks = 256;
+	int num_blocks = static_cast<int>((config_.max_seq_len + 15) / 16);
+	if (num_blocks <= 0) num_blocks = 512;
 	std::vector<int32_t> h_block_table(num_blocks);
 	for (int i = 0; i < num_blocks; ++i) {
 		h_block_table[i] = i;
@@ -1309,7 +1313,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	d_k_cache_.resize(config_.num_layers, nullptr);
 	d_v_cache_.resize(config_.num_layers, nullptr);
 
-	if (!d_curr_token_ || !d_curr_pos_ || !d_pred_id_ || !d_residual_stream_ || !d_normed_x_ ||
+	if (!d_curr_token_ || !d_curr_pos_ || !d_pred_id_ || !d_logits_ || !d_residual_stream_ || !d_normed_x_ ||
 	    !d_q_ || !d_k_ || !d_v_ || !d_attn_out_ || !d_proj_tmp_ ||
 	    !d_gate_buf_ || !d_up_buf_ || !d_act_buf_ || !d_block_table_) {
 		std::cerr << "[Axiom Engine] Out of VRAM: Activation buffer allocation failed.\n";
@@ -1325,6 +1329,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 			return false;
 		}
 	}
+
+	cached_tokens_.clear();
 
 	std::cout << "[Axiom Engine] Loaded model: " << config_.num_layers << " layers, hidden_dim="
 		  << config_.hidden_dim << ", ffn_dim=" << config_.ffn_dim << " ("
@@ -1410,46 +1416,50 @@ bool AI::generate(const std::string& prompt,
 		return false;
 	}
 
-	const size_t fallback_max_prompt = (config_.max_seq_len > 1) ? (config_.max_seq_len / 2) : 1;
-	const size_t raw_max_prompt = (config_.max_seq_len > max_new_tokens + 32)
-					    ? (config_.max_seq_len - max_new_tokens - 32)
-					    : fallback_max_prompt;
-	const size_t max_allowed_prompt = std::min<size_t>(1024, raw_max_prompt);
+	// Reserve room for generation while allowing full VRAM context window (up to max_seq_len)
+	const size_t reserve_tokens = std::min<size_t>(max_new_tokens + 64, config_.max_seq_len / 2);
+	const size_t max_allowed_prompt = (config_.max_seq_len > reserve_tokens)
+	                                      ? (config_.max_seq_len - reserve_tokens)
+	                                      : (config_.max_seq_len / 2);
+
 	if (prompt_tokens.size() > max_allowed_prompt) {
 		size_t excess = prompt_tokens.size() - max_allowed_prompt;
-		size_t system_end = 0;
-		for (size_t idx = 0; idx < prompt_tokens.size(); ++idx) {
-			if (prompt_tokens[idx] == 151645) {
-				system_end = idx + 1;
-				break;
-			}
-		}
-		const size_t tail_keep = std::min<size_t>(512, max_allowed_prompt / 4);
-		if (system_end > 0 && system_end + tail_keep < max_allowed_prompt &&
-		    prompt_tokens.size() > system_end + excess + tail_keep) {
-			prompt_tokens.erase(prompt_tokens.begin() + system_end,
-					    prompt_tokens.begin() + system_end + excess);
-		} else if (prompt_tokens.size() > excess + tail_keep) {
-			size_t cut_start = prompt_tokens.size() - excess - tail_keep;
-			prompt_tokens.erase(prompt_tokens.begin() + cut_start,
-					    prompt_tokens.begin() + cut_start + excess);
-		} else {
-			prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
-		}
+		// Keep the head (system instructions + tool schema) and the tail (active file context + user query)
+		const size_t head_keep = max_allowed_prompt / 3;
+		prompt_tokens.erase(prompt_tokens.begin() + head_keep,
+		                    prompt_tokens.begin() + head_keep + excess);
 	}
 
 	size_t logits_bytes = config_.vocab_size * sizeof(float);
-	float* d_logits = static_cast<float*>(allocate_device_memory(logits_bytes));
+	float* d_logits = static_cast<float*>(d_logits_);
+	bool allocated_local_logits = false;
+	if (!d_logits) {
+		d_logits = static_cast<float*>(allocate_device_memory(logits_bytes));
+		allocated_local_logits = true;
+	}
 	if (!d_logits) return false;
 
 	std::vector<float> h_logits(config_.vocab_size);
 
-	// 1. Prefill prompt tokens
-	for (size_t i = 0; i < prompt_tokens.size(); ++i) {
+	// KV Prefix Cache: reuse already-prefilled tokens across multi-turn Cline/ComfyUI requests
+	size_t prefix_match = 0;
+	const size_t max_prefix = std::min(cached_tokens_.size(), prompt_tokens.size());
+	while (prefix_match < max_prefix && cached_tokens_[prefix_match] == prompt_tokens[prefix_match]) {
+		++prefix_match;
+	}
+	// Always re-run at least the final prompt token to produce fresh d_logits
+	if (prefix_match >= prompt_tokens.size() && !prompt_tokens.empty()) {
+		prefix_match = prompt_tokens.size() - 1;
+	}
+
+	// 1. Prefill only the uncached suffix of the prompt
+	for (size_t i = prefix_match; i < prompt_tokens.size(); ++i) {
 		float* target_logits = (i + 1 == prompt_tokens.size()) ? d_logits : nullptr;
 		forward_transformer_step(prompt_tokens[i], static_cast<int>(i), target_logits, compute_stream_);
 	}
 	sync_cuda_stream(compute_stream_);
+
+	cached_tokens_ = prompt_tokens;
 
 	int current_pos = static_cast<int>(prompt_tokens.size());
 	std::random_device rd;
@@ -1487,28 +1497,42 @@ bool AI::generate(const std::string& prompt,
 			}
 			float inv_temp = 1.0f / std::max(temperature, 0.01f);
 			candidates.clear();
-			candidates.reserve(config_.vocab_size);
+
+			// Fast threshold filter: track running max to avoid sorting all 151,936 logits
+			float max_scaled = -1e30f;
 			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
 				if (std::isfinite(h_logits[v])) {
-					candidates.emplace_back(h_logits[v] * inv_temp, v);
+					float scaled = h_logits[v] * inv_temp;
+					if (scaled > max_scaled) max_scaled = scaled;
 				}
 			}
+			// Any logit more than 20.0 below max_scaled has exp(-20) < 2e-9 probability
+			const float cutoff_logit = max_scaled - 20.0f;
+			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
+				if (std::isfinite(h_logits[v])) {
+					float scaled = h_logits[v] * inv_temp;
+					if (scaled >= cutoff_logit) {
+						candidates.emplace_back(scaled, v);
+					}
+				}
+			}
+
 			if (candidates.empty()) {
 				next_token = 0;
 			} else {
 				const size_t effective_k = (top_k > 0)
 					? std::min(static_cast<size_t>(top_k), candidates.size())
-					: candidates.size();
+					: std::min<size_t>(64, candidates.size());
 				if (effective_k < candidates.size()) {
 					std::partial_sort(candidates.begin(),
-							  candidates.begin() + effective_k,
-							  candidates.end(),
-							  [](const auto& a, const auto& b) { return a.first > b.first; });
+					                  candidates.begin() + effective_k,
+					                  candidates.end(),
+					                  [](const auto& a, const auto& b) { return a.first > b.first; });
 					candidates.resize(effective_k);
 				} else {
 					std::sort(candidates.begin(),
-						  candidates.end(),
-						  [](const auto& a, const auto& b) { return a.first > b.first; });
+					          candidates.end(),
+					          [](const auto& a, const auto& b) { return a.first > b.first; });
 				}
 
 				float max_val = candidates[0].first;
@@ -1552,20 +1576,25 @@ bool AI::generate(const std::string& prompt,
 			break;
 		}
 
+		cached_tokens_.push_back(next_token);
+
 		auto it = qwen_reverse_vocab_.find(next_token);
 		if (it != qwen_reverse_vocab_.end()) {
 			generated_so_far += it->second;
 			if (token_callback) token_callback(it->second);
+
+			// ONLY stop on complete outer XML tool closing tags for Cline
 			if (generated_so_far.find("</replace_in_file>") != std::string::npos ||
 			    generated_so_far.find("</write_to_file>") != std::string::npos ||
 			    generated_so_far.find("</read_file>") != std::string::npos ||
+			    generated_so_far.find("</execute_command>") != std::string::npos ||
+			    generated_so_far.find("</search_files>") != std::string::npos ||
+			    generated_so_far.find("</list_files>") != std::string::npos ||
 			    generated_so_far.find("</attempt_completion>") != std::string::npos ||
-			    generated_so_far.find("</result>") != std::string::npos ||
-			    generated_so_far.find("</diff>") != std::string::npos ||
-			    generated_so_far.find("+++++++ REPLACE") != std::string::npos ||
-			    generated_so_far.find(">>>>>>> REPLACE") != std::string::npos ||
-			    generated_so_far.find("\";\n") != std::string::npos ||
-			    (generated_so_far.size() > 16 && generated_so_far.find("\n```") != std::string::npos)) {
+			    generated_so_far.find("</ask_followup_question>") != std::string::npos) {
+				// Feed the final token into KV cache before breaking so prefix cache stays valid
+				forward_transformer_step(next_token, current_pos, nullptr, compute_stream_);
+				sync_cuda_stream(compute_stream_);
 				break;
 			}
 		}
@@ -1575,6 +1604,8 @@ bool AI::generate(const std::string& prompt,
 		current_pos++;
 	}
 
-	free_device_memory(d_logits);
+	if (allocated_local_logits) {
+		free_device_memory(d_logits);
+	}
 	return true;
 }
