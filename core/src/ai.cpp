@@ -1411,9 +1411,10 @@ bool AI::generate(const std::string& prompt,
 	}
 
 	const size_t fallback_max_prompt = (config_.max_seq_len > 1) ? (config_.max_seq_len / 2) : 1;
-	const size_t max_allowed_prompt = (config_.max_seq_len > max_new_tokens + 32)
-						? (config_.max_seq_len - max_new_tokens - 32)
-						: fallback_max_prompt;
+	const size_t raw_max_prompt = (config_.max_seq_len > max_new_tokens + 32)
+					    ? (config_.max_seq_len - max_new_tokens - 32)
+					    : fallback_max_prompt;
+	const size_t max_allowed_prompt = std::min<size_t>(1024, raw_max_prompt);
 	if (prompt_tokens.size() > max_allowed_prompt) {
 		size_t excess = prompt_tokens.size() - max_allowed_prompt;
 		size_t system_end = 0;

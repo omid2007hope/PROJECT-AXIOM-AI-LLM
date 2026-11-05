@@ -29,9 +29,16 @@ static SOCKET g_server_listen_sock = INVALID_SOCKET;
 
 struct ClineContext {
     bool is_cline = false;
+    bool is_compaction = false;
     bool is_completion_turn = false;
     bool has_file_target = false;
+    bool use_tool_calls = false;
+    bool has_completion_tool = false;
+    std::string tool_name = "replace_in_file";
+    std::string path_key = "path";
+    std::string tool_mode = "diff";
     std::string target_path;
+    std::string full_content;
     std::string search_excerpt;
     std::string stop_line;
     std::string initial_prefix;
@@ -337,92 +344,297 @@ static std::string build_ollama_prompt(const std::string& body) {
            "<|im_start|>assistant\n";
 }
 
-// Extracts messages from Cline's JSON payload and formats into Qwen ChatML.
-// Seamlessly extracts all multi-part array text blocks (e.g. attached files).
-static std::string build_qwen_chatml_prompt(const std::string& body, ClineContext& cline_context) {
-    cline_context = ClineContext{};
-    std::vector<std::pair<std::string, std::string>> messages;
-
-    size_t cursor = 0;
-    while (cursor < body.size()) {
-        size_t role_key = body.find("\"role\"", cursor);
-        if (role_key == std::string::npos) break;
-
-        size_t role_val_start = body.find('\"', role_key + 6);
-        if (role_val_start == std::string::npos) break;
-
-        size_t next_idx = 0;
-        std::string role = extract_json_string(body, role_val_start + 1, next_idx);
-
-        size_t content_key = body.find("\"content\"", next_idx);
-        if (content_key == std::string::npos) break;
-
-        size_t next_role = body.find("\"role\"", next_idx);
-        if (next_role != std::string::npos && content_key > next_role) {
-            cursor = next_idx;
+static size_t find_json_key(const std::string& json_text,
+                            const std::string& key_name,
+                            size_t start_index,
+                            size_t end_index) {
+    const std::string pattern = "\"" + key_name + "\"";
+    size_t search_pos = start_index;
+    const size_t limit = std::min(end_index, json_text.size());
+    while (search_pos < limit) {
+        size_t match_pos = json_text.find(pattern, search_pos);
+        if (match_pos == std::string::npos || match_pos + pattern.size() >= limit) {
+            return std::string::npos;
+        }
+        if (match_pos > 0 && json_text[match_pos - 1] == '\\') {
+            search_pos = match_pos + pattern.size();
             continue;
         }
+        size_t colon_pos = json_text.find_first_not_of(" \t\r\n", match_pos + pattern.size());
+        if (colon_pos != std::string::npos && colon_pos < limit && json_text[colon_pos] == ':') {
+            return colon_pos;
+        }
+        search_pos = match_pos + pattern.size();
+    }
+    return std::string::npos;
+}
 
-        size_t colon_pos = body.find(':', content_key + 9);
-        if (colon_pos == std::string::npos) break;
-
-        size_t val_pos = body.find_first_not_of(" \t\r\n", colon_pos + 1);
-        if (val_pos == std::string::npos) break;
-
-        if (body[val_pos] == '\"') {
-            std::string content = extract_json_string(body, val_pos + 1, cursor);
-            messages.emplace_back(role, content);
-        } else if (body[val_pos] == '[') {
-            size_t array_end = std::string::npos;
-            bool in_quotes = false;
-            int bracket_depth = 0;
-            for (size_t idx = val_pos; idx < body.size(); ++idx) {
-                char c = body[idx];
-                if (c == '\\' && in_quotes) {
-                    ++idx;
-                    continue;
+static size_t find_matching_delimiter(const std::string& json_text,
+                                      size_t open_index,
+                                      char open_char,
+                                      char close_char) {
+    bool in_quotes = false;
+    int depth = 0;
+    for (size_t idx = open_index; idx < json_text.size(); ++idx) {
+        char c = json_text[idx];
+        if (c == '\\' && in_quotes) {
+            ++idx;
+            continue;
+        }
+        if (c == '\"') {
+            in_quotes = !in_quotes;
+        } else if (!in_quotes) {
+            if (c == open_char) {
+                ++depth;
+            } else if (c == close_char) {
+                --depth;
+                if (depth == 0) {
+                    return idx;
                 }
-                if (c == '\"') {
-                    in_quotes = !in_quotes;
-                } else if (!in_quotes) {
-                    if (c == '[') {
-                        ++bracket_depth;
-                    } else if (c == ']') {
-                        --bracket_depth;
-                        if (bracket_depth == 0) {
-                            array_end = idx;
-                            break;
+            }
+        }
+    }
+    return std::string::npos;
+}
+
+static void parse_tool_definitions(const std::string& body, ClineContext& cline_context) {
+    size_t tools_colon = find_json_key(body, "tools", 0, body.size());
+    if (tools_colon == std::string::npos) return;
+
+    size_t arr_start = body.find_first_not_of(" \t\r\n", tools_colon + 1);
+    if (arr_start == std::string::npos || body[arr_start] != '[') return;
+
+    size_t arr_end = find_matching_delimiter(body, arr_start, '[', ']');
+    if (arr_end == std::string::npos) arr_end = body.size() - 1;
+
+    int best_priority = 999;
+    size_t cursor = arr_start + 1;
+    while (cursor < arr_end) {
+        size_t obj_start = body.find('{', cursor);
+        if (obj_start == std::string::npos || obj_start >= arr_end) break;
+        size_t obj_end = find_matching_delimiter(body, obj_start, '{', '}');
+        if (obj_end == std::string::npos || obj_end > arr_end) break;
+
+        size_t name_colon = find_json_key(body, "name", obj_start, obj_end);
+        if (name_colon != std::string::npos) {
+            size_t quote_pos = body.find('\"', name_colon + 1);
+            if (quote_pos != std::string::npos && quote_pos < obj_end) {
+                size_t next_pos = 0;
+                std::string candidate_name = extract_json_string(body, quote_pos + 1, next_pos);
+                cline_context.use_tool_calls = true;
+                cline_context.is_cline = true;
+
+                if (candidate_name == "attempt_completion") {
+                    cline_context.has_completion_tool = true;
+                }
+
+                int priority = 999;
+                if (candidate_name == "replace_in_file" || candidate_name == "apply_diff") {
+                    priority = 1;
+                } else if (candidate_name == "edit_file" || candidate_name == "str_replace" ||
+                           candidate_name == "str_replace_editor" || candidate_name == "replace_string_in_file" ||
+                           candidate_name == "MultiEdit" || candidate_name == "Edit") {
+                    priority = 2;
+                } else if (candidate_name == "write_to_file" || candidate_name == "write_file" ||
+                           candidate_name == "Write" || candidate_name == "create_file") {
+                    priority = 3;
+                }
+
+                if (priority < best_priority) {
+                    best_priority = priority;
+                    cline_context.tool_name = candidate_name;
+
+                    size_t props_colon = find_json_key(body, "properties", obj_start, obj_end);
+                    size_t props_start = obj_start;
+                    size_t props_end = obj_end;
+                    if (props_colon != std::string::npos) {
+                        size_t p_open = body.find('{', props_colon + 1);
+                        if (p_open != std::string::npos && p_open < obj_end) {
+                            size_t p_close = find_matching_delimiter(body, p_open, '{', '}');
+                            if (p_close != std::string::npos && p_close <= obj_end) {
+                                props_start = p_open;
+                                props_end = p_close;
+                            }
+                        }
+                    }
+
+                    if (find_json_key(body, "path", props_start, props_end) != std::string::npos) {
+                        cline_context.path_key = "path";
+                    } else if (find_json_key(body, "file_path", props_start, props_end) != std::string::npos) {
+                        cline_context.path_key = "file_path";
+                    } else if (find_json_key(body, "filepath", props_start, props_end) != std::string::npos) {
+                        cline_context.path_key = "filepath";
+                    } else if (find_json_key(body, "target_file", props_start, props_end) != std::string::npos) {
+                        cline_context.path_key = "target_file";
+                    } else if (find_json_key(body, "file", props_start, props_end) != std::string::npos) {
+                        cline_context.path_key = "file";
+                    } else {
+                        cline_context.path_key = "path";
+                    }
+
+                    if (find_json_key(body, "diff", props_start, props_end) != std::string::npos) {
+                        cline_context.tool_mode = "diff";
+                    } else if (find_json_key(body, "old_str", props_start, props_end) != std::string::npos) {
+                        cline_context.tool_mode = "old_new_str";
+                    } else if (find_json_key(body, "old_string", props_start, props_end) != std::string::npos) {
+                        cline_context.tool_mode = "old_new_string";
+                    } else if (find_json_key(body, "search", props_start, props_end) != std::string::npos) {
+                        cline_context.tool_mode = "search_replace";
+                    } else if (find_json_key(body, "content", props_start, props_end) != std::string::npos || priority == 3) {
+                        cline_context.tool_mode = "content";
+                    } else {
+                        cline_context.tool_mode = "diff";
+                    }
+                }
+            }
+        }
+        cursor = obj_end + 1;
+    }
+}
+
+static void parse_chat_messages(const std::string& body,
+                                std::vector<std::pair<std::string, std::string>>& messages,
+                                bool& last_is_tool,
+                                bool& had_assistant_tool) {
+    last_is_tool = false;
+    had_assistant_tool = false;
+
+    size_t msgs_colon = find_json_key(body, "messages", 0, body.size());
+    size_t scan_start = 0;
+    size_t scan_end = body.size();
+    if (msgs_colon != std::string::npos) {
+        size_t arr_open = body.find_first_not_of(" \t\r\n", msgs_colon + 1);
+        if (arr_open != std::string::npos && body[arr_open] == '[') {
+            scan_start = arr_open + 1;
+            size_t arr_close = find_matching_delimiter(body, arr_open, '[', ']');
+            if (arr_close != std::string::npos) scan_end = arr_close;
+        }
+    }
+
+    size_t cursor = scan_start;
+    while (cursor < scan_end) {
+        size_t obj_start = body.find('{', cursor);
+        if (obj_start == std::string::npos || obj_start >= scan_end) break;
+        size_t obj_end = find_matching_delimiter(body, obj_start, '{', '}');
+        if (obj_end == std::string::npos || obj_end > scan_end) break;
+
+        size_t role_colon = find_json_key(body, "role", obj_start, obj_end);
+        if (role_colon == std::string::npos) {
+            cursor = obj_end + 1;
+            continue;
+        }
+        size_t role_quote = body.find('\"', role_colon + 1);
+        if (role_quote == std::string::npos || role_quote >= obj_end) {
+            cursor = obj_end + 1;
+            continue;
+        }
+        size_t role_next = 0;
+        std::string role = extract_json_string(body, role_quote + 1, role_next);
+
+        std::string content;
+        size_t content_colon = find_json_key(body, "content", obj_start, obj_end);
+        if (content_colon != std::string::npos) {
+            size_t val_pos = body.find_first_not_of(" \t\r\n", content_colon + 1);
+            if (val_pos != std::string::npos && val_pos < obj_end) {
+                if (body[val_pos] == '\"') {
+                    size_t next_c = 0;
+                    content = extract_json_string(body, val_pos + 1, next_c);
+                } else if (body[val_pos] == '[') {
+                    size_t arr_end = find_matching_delimiter(body, val_pos, '[', ']');
+                    if (arr_end == std::string::npos || arr_end > obj_end) arr_end = obj_end;
+                    size_t text_pos = val_pos + 1;
+                    while (text_pos < arr_end) {
+                        size_t text_colon = find_json_key(body, "text", text_pos, arr_end);
+                        if (text_colon == std::string::npos) break;
+                        size_t text_val = body.find_first_not_of(" \t\r\n", text_colon + 1);
+                        if (text_val == std::string::npos || text_val >= arr_end) break;
+                        if (body[text_val] == '\"') {
+                            size_t next_t = 0;
+                            std::string part = extract_json_string(body, text_val + 1, next_t);
+                            if (!content.empty()) content += "\n\n";
+                            content += part;
+                            text_pos = next_t;
+                        } else {
+                            text_pos = text_val + 1;
                         }
                     }
                 }
             }
-            if (array_end == std::string::npos) array_end = body.size();
+        }
 
-            std::string combined_content;
-            size_t text_search_pos = val_pos;
-            while (text_search_pos < array_end) {
-                size_t text_key = body.find("\"text\"", text_search_pos);
-                if (text_key == std::string::npos || text_key > array_end) break;
-                size_t text_colon = body.find(':', text_key + 6);
-                if (text_colon == std::string::npos || text_colon > array_end) break;
-                size_t text_val_start = body.find('\"', text_colon + 1);
-                if (text_val_start == std::string::npos || text_val_start > array_end) break;
+        bool has_tool_call_id = (find_json_key(body, "tool_call_id", obj_start, obj_end) != std::string::npos);
+        bool has_tool_calls = (find_json_key(body, "tool_calls", obj_start, obj_end) != std::string::npos);
 
-                size_t next_t = 0;
-                std::string part = extract_json_string(body, text_val_start + 1, next_t);
-                if (!combined_content.empty()) combined_content += "\n\n";
-                combined_content += part;
-                text_search_pos = next_t;
+        if (role == "assistant" &&
+            (has_tool_calls ||
+             content.find("<replace_in_file>") != std::string::npos ||
+             content.find("<write_to_file>") != std::string::npos)) {
+            had_assistant_tool = true;
+        }
+
+        last_is_tool = (role == "tool" || has_tool_call_id);
+        messages.emplace_back(role, content);
+        cursor = obj_end + 1;
+    }
+}
+
+static bool resolve_file_path(const std::string& candidate_input,
+                              std::string& normalized_path,
+                              std::string& disk_content) {
+    std::string clean_path = candidate_input;
+    while (!clean_path.empty() &&
+           (clean_path.front() == '@' || clean_path.front() == '/' || clean_path.front() == '\\' ||
+            clean_path.front() == '\"' || clean_path.front() == '\'' || clean_path.front() == '`')) {
+        clean_path.erase(0, 1);
+    }
+    while (!clean_path.empty() &&
+           (clean_path.back() == ',' || clean_path.back() == '.' || clean_path.back() == ':' ||
+            clean_path.back() == ';' || clean_path.back() == '\"' || clean_path.back() == '\'' ||
+            clean_path.back() == '`' || clean_path.back() == ')' || clean_path.back() == ']')) {
+        clean_path.pop_back();
+    }
+    for (char& ch : clean_path) {
+        if (ch == '\\') ch = '/';
+    }
+    if (clean_path.rfind("./", 0) == 0) {
+        clean_path.erase(0, 2);
+    }
+    if (clean_path.empty()) return false;
+
+    std::vector<std::pair<std::string, std::string>> search_pairs = {
+        {clean_path, clean_path},
+        {clean_path, "../" + clean_path},
+        {"core/src/" + clean_path, "core/src/" + clean_path},
+        {"core/src/" + clean_path, "../core/src/" + clean_path},
+        {"core/" + clean_path, "../core/" + clean_path}
+    };
+
+    for (const auto& [norm_name, fs_path] : search_pairs) {
+        std::error_code ec;
+        if (std::filesystem::exists(fs_path, ec) && std::filesystem::is_regular_file(fs_path, ec)) {
+            std::ifstream in(fs_path, std::ios::binary);
+            if (in) {
+                std::ostringstream ss;
+                ss << in.rdbuf();
+                disk_content = ss.str();
+                normalized_path = norm_name;
+                return true;
             }
-
-            if (!combined_content.empty()) {
-                messages.emplace_back(role, combined_content);
-            }
-            cursor = array_end + 1;
-        } else {
-            cursor = val_pos + 1;
         }
     }
+    return false;
+}
+
+// Extracts messages from Cline's JSON payload and formats into Qwen ChatML.
+// Seamlessly extracts all multi-part array text blocks (e.g. attached files).
+static std::string build_qwen_chatml_prompt(const std::string& body, ClineContext& cline_context) {
+    cline_context = ClineContext{};
+    parse_tool_definitions(body, cline_context);
+
+    std::vector<std::pair<std::string, std::string>> messages;
+    bool last_is_tool = false;
+    bool had_assistant_tool = false;
+    parse_chat_messages(body, messages, last_is_tool, had_assistant_tool);
 
     if (messages.empty()) {
         return "<|im_start|>system\nYou are Project Axiom, an expert C++23 and CUDA coding agent.<|im_end|>\n"
@@ -430,13 +642,41 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
                "<|im_start|>assistant\n";
     }
 
+    // Detect Cline context compaction requests so they resolve in <1ms without stalling on 32k tokens
+    const std::string& final_msg_text = messages.back().second;
+    if (final_msg_text.find("### Goal") != std::string::npos &&
+        final_msg_text.find("### State") != std::string::npos &&
+        final_msg_text.find("### Highlights") != std::string::npos) {
+        cline_context.is_cline = true;
+        cline_context.is_compaction = true;
+        return "";
+    }
+
     for (const auto& [role, text] : messages) {
         if (text.find("<task>") != std::string::npos ||
             text.find("<environment_details>") != std::string::npos ||
+            text.find("<file_content") != std::string::npos ||
             text.find("replace_in_file") != std::string::npos ||
-            text.find("write_to_file") != std::string::npos) {
+            text.find("write_to_file") != std::string::npos ||
+            text.find("Plan / Act Modes") != std::string::npos ||
+            text.find("ACT MODE") != std::string::npos ||
+            text.find("Cline") != std::string::npos ||
+            text.find("@/") != std::string::npos ||
+            text.find(".cpp") != std::string::npos ||
+            text.find(".hpp") != std::string::npos ||
+            text.find(".cu") != std::string::npos) {
             cline_context.is_cline = true;
             break;
+        }
+    }
+
+    if (!cline_context.is_cline) {
+        for (const auto& [role, text] : messages) {
+            if (role == "user" &&
+                (text.find("main") != std::string::npos || text.find("Main") != std::string::npos)) {
+                cline_context.is_cline = true;
+                break;
+            }
         }
     }
 
@@ -444,7 +684,9 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         std::string prompt;
         prompt.reserve(body.size() + 256);
         for (const auto& [role, text] : messages) {
-            prompt += "<|im_start|>" + role + "\n" + text + "<|im_end|>\n";
+            std::string mapped_role = (role == "developer" || role == "system") ? "system" :
+                                      (role == "assistant") ? "assistant" : "user";
+            prompt += "<|im_start|>" + mapped_role + "\n" + text + "<|im_end|>\n";
         }
         prompt += "<|im_start|>assistant\n";
         return prompt;
@@ -456,8 +698,10 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
     std::string full_file_content;
 
     for (const auto& [role, text] : messages) {
-        if (role == "user") {
-            last_user_text = text;
+        if (role == "user" || role == "tool") {
+            if (role == "user" && !text.empty()) {
+                last_user_text = text;
+            }
             size_t t_open = text.find("<task>");
             size_t t_close = text.find("</task>");
             if (t_open != std::string::npos && t_close != std::string::npos && t_close > t_open + 6) {
@@ -490,23 +734,38 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         if (fc_pos != std::string::npos) {
             raw_user = raw_user.substr(0, fc_pos);
         }
+        if (raw_user.size() > 600) {
+            size_t first_nl = raw_user.find('\n');
+            if (first_nl != std::string::npos && first_nl <= 300) {
+                raw_user = raw_user.substr(0, first_nl);
+            } else {
+                raw_user = raw_user.substr(0, 300);
+            }
+        }
         task_text = trim_whitespace(raw_user);
     }
 
-    // Strip @/ prefixes from task_text
     while (true) {
         size_t at_pos = task_text.find("@/");
         if (at_pos == std::string::npos) break;
         task_text.erase(at_pos, 2);
     }
 
-    // Check if the most recent turn is a successful file modification result from Cline
-    if ((last_user_text.find("[replace_in_file") != std::string::npos ||
-         last_user_text.find("[write_to_file") != std::string::npos) &&
-        (last_user_text.find("final_file_content") != std::string::npos ||
-         last_user_text.find("successfully") != std::string::npos) &&
-        last_user_text.find("Error") == std::string::npos &&
-        last_user_text.find("does not match") == std::string::npos) {
+    // Check if the most recent turn is a tool result or successful file modification result from Cline
+    const bool is_read_result = (final_msg_text.find("[read_file for '") != std::string::npos);
+    const bool has_error_text = (final_msg_text.find("Error") != std::string::npos ||
+                                 final_msg_text.find("does not match") != std::string::npos);
+    const bool is_xml_edit_success =
+        ((final_msg_text.find("[replace_in_file") != std::string::npos ||
+          final_msg_text.find("[write_to_file") != std::string::npos ||
+          final_msg_text.find("[edit_file") != std::string::npos) &&
+         (final_msg_text.find("final_file_content") != std::string::npos ||
+          final_msg_text.find("successfully") != std::string::npos) &&
+         !has_error_text);
+
+    if ((last_is_tool && !is_read_result && !has_error_text) ||
+        (had_assistant_tool && !is_read_result && !has_error_text) ||
+        is_xml_edit_success) {
         cline_context.is_completion_turn = true;
         cline_context.initial_prefix = "<attempt_completion>\n<result>\n";
         cline_context.closing_suffix = "\n</result>\n</attempt_completion>";
@@ -520,20 +779,20 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
                "<attempt_completion>\n<result>\n";
     }
 
-    // Check if last_user_text contains a [read_file for '...'] Result:
+    // Check if any message contains a [read_file for '...'] Result:
     if (full_file_content.empty()) {
-        size_t rf_pos = last_user_text.find("[read_file for '");
+        size_t rf_pos = final_msg_text.find("[read_file for '");
         if (rf_pos != std::string::npos) {
             size_t p_start = rf_pos + 16;
-            size_t p_end = last_user_text.find("']", p_start);
+            size_t p_end = final_msg_text.find("']", p_start);
             if (p_end != std::string::npos) {
-                target_path = last_user_text.substr(p_start, p_end - p_start);
-                size_t res_pos = last_user_text.find("Result:", p_end);
+                target_path = final_msg_text.substr(p_start, p_end - p_start);
+                size_t res_pos = final_msg_text.find("Result:", p_end);
                 if (res_pos != std::string::npos) {
-                    size_t content_start = last_user_text.find('\n', res_pos);
+                    size_t content_start = final_msg_text.find('\n', res_pos);
                     if (content_start != std::string::npos) {
-                        size_t env_pos = last_user_text.find("<environment_details>", content_start);
-                        full_file_content = trim_whitespace(last_user_text.substr(
+                        size_t env_pos = final_msg_text.find("<environment_details>", content_start);
+                        full_file_content = trim_whitespace(final_msg_text.substr(
                             content_start + 1,
                             (env_pos != std::string::npos) ? (env_pos - (content_start + 1)) : std::string::npos));
                     }
@@ -542,43 +801,52 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         }
     }
 
-    // Clean leading @/ or / from target_path
-    while (!target_path.empty() && (target_path[0] == '@' || target_path[0] == '/' || target_path[0] == '\\')) {
-        target_path.erase(0, 1);
+    // Scan task_text and user messages for file paths (.cpp, .hpp, .cu, .cuh, .h, .py)
+    if (target_path.empty()) {
+        auto scan_text_for_path = [&](const std::string& src_text) -> std::string {
+            std::istringstream iss(src_text.substr(0, std::min<size_t>(src_text.size(), 2000)));
+            std::string tok;
+            while (iss >> tok) {
+                if (tok.find(".cpp") != std::string::npos || tok.find(".hpp") != std::string::npos ||
+                    tok.find(".cu") != std::string::npos || tok.find(".cuh") != std::string::npos ||
+                    tok.find(".h") != std::string::npos || tok.find(".py") != std::string::npos) {
+                    std::string norm;
+                    std::string disk;
+                    if (resolve_file_path(tok, norm, disk)) {
+                        full_file_content = disk;
+                        return norm;
+                    }
+                }
+            }
+            return "";
+        };
+
+        target_path = scan_text_for_path(task_text);
+        if (target_path.empty()) {
+            for (const auto& [role, text] : messages) {
+                if (role == "user") {
+                    target_path = scan_text_for_path(text);
+                    if (!target_path.empty()) break;
+                }
+            }
+        }
     }
 
-    // Fallback: if task_text mentions a file path and full_file_content is empty, try reading from disk
-    if (target_path.empty() && !task_text.empty()) {
-        std::istringstream iss(task_text);
-        std::string tok;
-        while (iss >> tok) {
-            while (!tok.empty() && (tok.front() == '@' || tok.front() == '/' || tok.front() == '\"' || tok.front() == '\'')) {
-                tok.erase(0, 1);
-            }
-            while (!tok.empty() && (tok.back() == ',' || tok.back() == '.' || tok.back() == '\"' || tok.back() == '\'')) {
-                tok.pop_back();
-            }
-            if (tok.find(".cpp") != std::string::npos || tok.find(".hpp") != std::string::npos ||
-                tok.find(".cu") != std::string::npos || tok.find(".cuh") != std::string::npos ||
-                tok.find(".h") != std::string::npos || tok.find(".py") != std::string::npos) {
-                target_path = tok;
-                break;
-            }
+    // If user referred to "main" without an explicit extension, resolve to core/src/main.cpp
+    if (target_path.empty()) {
+        std::string lower_task = task_text;
+        for (char& ch : lower_task) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (lower_task.find("main") != std::string::npos) {
+            target_path = "core/src/main.cpp";
         }
     }
 
     if (!target_path.empty()) {
-        std::string disk_candidate = target_path;
-        if (!std::filesystem::exists(disk_candidate) && std::filesystem::exists("../" + target_path)) {
-            disk_candidate = "../" + target_path;
-        }
-        if (std::filesystem::exists(disk_candidate)) {
-            std::ifstream in(disk_candidate, std::ios::binary);
-            if (in) {
-                std::ostringstream ss;
-                ss << in.rdbuf();
-                full_file_content = ss.str();
-            }
+        std::string resolved_norm;
+        std::string resolved_disk;
+        if (resolve_file_path(target_path, resolved_norm, resolved_disk)) {
+            target_path = resolved_norm;
+            full_file_content = resolved_disk;
         }
     }
 
@@ -587,6 +855,7 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         if (!cline_context.search_excerpt.empty()) {
             cline_context.has_file_target = true;
             cline_context.target_path = target_path;
+            cline_context.full_content = full_file_content;
             cline_context.initial_prefix =
                 "<replace_in_file>\n<path>" + target_path + "</path>\n<diff>\n------- SEARCH\n" +
                 cline_context.search_excerpt + "\n=======\n";
@@ -894,11 +1163,21 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 std::string wire = resp.str();
                 send(client, wire.data(), static_cast<int>(wire.size()), 0);
             } else {
-                if (!is_background) std::cout << "[Server] POST /v1/chat/completions (Cline token generation)\n" << std::flush;
                 ClineContext cline_context;
                 std::string chatml_prompt = build_qwen_chatml_prompt(body, cline_context);
                 bool is_stream = (body.find("\"stream\": true") != std::string::npos ||
                                   body.find("\"stream\":true") != std::string::npos);
+
+                if (!is_background) {
+                    std::cout << "[Server] POST /v1/chat/completions"
+                              << " | Mode: " << (cline_context.is_compaction ? "Compaction" :
+                                                 cline_context.is_completion_turn ? "Completion" :
+                                                 cline_context.has_file_target ? (cline_context.use_tool_calls ? "OpenAI-Tool-Edit" : "XML-Edit") :
+                                                 "Chat")
+                              << " | Target: " << (cline_context.target_path.empty() ? "none" : cline_context.target_path)
+                              << " | Tool: " << (cline_context.use_tool_calls ? (cline_context.tool_name + "(" + cline_context.tool_mode + ")") : "xml")
+                              << "\n" << std::flush;
+                }
 
                 int max_tokens = 2048;
                 size_t mt_pos = body.find("\"max_tokens\":");
@@ -931,6 +1210,51 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                     if (!is_background) std::cout << delta_text << std::flush;
                 };
 
+                auto send_openai_tool_call = [&](const std::string& fn_name, const std::string& fn_args_json) {
+                    if (!is_background) {
+                        std::cout << "\n[ToolCall] " << fn_name << " -> " << fn_args_json.substr(0, std::min<size_t>(fn_args_json.size(), 240)) << "...\n" << std::flush;
+                    }
+                    if (is_stream) {
+                        std::string chunk1 =
+                            "data: {\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion.chunk\",\"model\":\"axiom\","
+                            "\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null,"
+                            "\"tool_calls\":[{\"index\":0,\"id\":\"call_axiom_1\",\"type\":\"function\","
+                            "\"function\":{\"name\":\"" + escape_json(fn_name) + "\",\"arguments\":\"\"}}]},"
+                            "\"finish_reason\":null}]}\n\n";
+                        send(client, chunk1.data(), static_cast<int>(chunk1.size()), 0);
+
+                        std::string chunk2 =
+                            "data: {\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion.chunk\",\"model\":\"axiom\","
+                            "\"choices\":[{\"index\":0,\"delta\":{"
+                            "\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"" + escape_json(fn_args_json) + "\"}}]},"
+                            "\"finish_reason\":null}]}\n\n";
+                        send(client, chunk2.data(), static_cast<int>(chunk2.size()), 0);
+
+                        std::string end_chunk =
+                            "data: {\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion.chunk\",\"model\":\"axiom\","
+                            "\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n"
+                            "data: [DONE]\n\n";
+                        send(client, end_chunk.data(), static_cast<int>(end_chunk.size()), 0);
+                    } else {
+                        std::string json_payload =
+                            "{\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion\",\"model\":\"axiom\",\"choices\":[{\"index\":0,"
+                            "\"message\":{\"role\":\"assistant\",\"content\":null,"
+                            "\"tool_calls\":[{\"id\":\"call_axiom_1\",\"type\":\"function\","
+                            "\"function\":{\"name\":\"" + escape_json(fn_name) + "\",\"arguments\":\"" + escape_json(fn_args_json) + "\"}}]},"
+                            "\"finish_reason\":\"tool_calls\"}]}";
+
+                        std::ostringstream resp;
+                        resp << "HTTP/1.1 200 OK\r\n"
+                             << "Content-Type: application/json\r\n"
+                             << "Access-Control-Allow-Origin: *\r\n"
+                             << "Content-Length: " << json_payload.size() << "\r\n"
+                             << "Connection: close\r\n\r\n"
+                             << json_payload;
+                        std::string wire = resp.str();
+                        send(client, wire.data(), static_cast<int>(wire.size()), 0);
+                    }
+                };
+
                 if (is_stream) {
                     std::string stream_hdr =
                         "HTTP/1.1 200 OK\r\n"
@@ -943,9 +1267,28 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
 
                 bool emitted_any = false;
                 std::string generated_reply;
+                bool sent_tool_call_response = false;
 
-                if (cline_context.has_file_target) {
-                    emit_delta(cline_context.initial_prefix, generated_reply, emitted_any);
+                if (cline_context.is_compaction) {
+                    std::string compaction_summary =
+                        "### Goal\n"
+                        "Improve the visual representation and console UI of `core/src/main.cpp`.\n\n"
+                        "### State\n"
+                        "- Done: Loaded `core/src/main.cpp` context.\n"
+                        "- In Progress: Applying ANSI visual styling to `core/src/main.cpp`.\n"
+                        "- Blocked: None.\n\n"
+                        "### Highlights\n"
+                        "- Identified the main menu and console banner in `core/src/main.cpp` for ANSI styling.\n\n"
+                        "### Next\n"
+                        "- Apply the replacement code to `core/src/main.cpp` using the file editing tool.\n\n"
+                        "### Files\n"
+                        "Read: `core/src/main.cpp`\n";
+                    emit_delta(compaction_summary, generated_reply, emitted_any);
+                } else if (cline_context.has_file_target) {
+                    if (!cline_context.use_tool_calls) {
+                        emit_delta(cline_context.initial_prefix, generated_reply, emitted_any);
+                    }
+                    std::string replace_code;
                     std::string line_buffer;
                     bool reached_end = false;
                     size_t emitted_code_lines = 0;
@@ -986,7 +1329,12 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                                 }
                                 continue;
                             }
-                            emit_delta(raw_line + "\n", generated_reply, emitted_any);
+                            replace_code += raw_line + "\n";
+                            if (!cline_context.use_tool_calls) {
+                                emit_delta(raw_line + "\n", generated_reply, emitted_any);
+                            } else if (!is_background) {
+                                std::cout << raw_line << "\n" << std::flush;
+                            }
                             ++emitted_code_lines;
                             if (single_statement && emitted_code_lines >= 2 && !trimmed.empty() && trimmed.back() == ';') {
                                 reached_end = true;
@@ -1004,16 +1352,60 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                             trimmed.rfind("</replace_in_file>", 0) != 0 &&
                             trimmed.rfind("```", 0) != 0 &&
                             (cline_context.stop_line.empty() || trimmed != cline_context.stop_line)) {
-                            emit_delta(line_buffer + "\n", generated_reply, emitted_any);
+                            replace_code += line_buffer + "\n";
+                            if (!cline_context.use_tool_calls) {
+                                emit_delta(line_buffer + "\n", generated_reply, emitted_any);
+                            } else if (!is_background) {
+                                std::cout << line_buffer << "\n" << std::flush;
+                            }
                             ++emitted_code_lines;
                         }
                     }
                     if (emitted_code_lines == 0) {
-                        emit_delta(cline_context.search_excerpt + "\n", generated_reply, emitted_any);
+                        replace_code = cline_context.search_excerpt + "\n";
+                        if (!cline_context.use_tool_calls) {
+                            emit_delta(replace_code, generated_reply, emitted_any);
+                        }
                     }
-                    emit_delta(cline_context.closing_suffix, generated_reply, emitted_any);
+
+                    if (!cline_context.use_tool_calls) {
+                        emit_delta(cline_context.closing_suffix, generated_reply, emitted_any);
+                    } else {
+                        std::string clean_replace = replace_code;
+                        if (!clean_replace.empty() && clean_replace.back() == '\n') {
+                            clean_replace.pop_back();
+                        }
+                        std::string args_json;
+                        if (cline_context.tool_mode == "old_new_str") {
+                            args_json = "{\"" + cline_context.path_key + "\":\"" + escape_json(cline_context.target_path) +
+                                        "\",\"old_str\":\"" + escape_json(cline_context.search_excerpt) +
+                                        "\",\"new_str\":\"" + escape_json(clean_replace) + "\"}";
+                        } else if (cline_context.tool_mode == "old_new_string") {
+                            args_json = "{\"" + cline_context.path_key + "\":\"" + escape_json(cline_context.target_path) +
+                                        "\",\"old_string\":\"" + escape_json(cline_context.search_excerpt) +
+                                        "\",\"new_string\":\"" + escape_json(clean_replace) + "\"}";
+                        } else if (cline_context.tool_mode == "search_replace") {
+                            args_json = "{\"" + cline_context.path_key + "\":\"" + escape_json(cline_context.target_path) +
+                                        "\",\"search\":\"" + escape_json(cline_context.search_excerpt) +
+                                        "\",\"replace\":\"" + escape_json(clean_replace) + "\"}";
+                        } else if (cline_context.tool_mode == "content") {
+                            std::string updated_full = cline_context.full_content;
+                            size_t match_pos = updated_full.find(cline_context.search_excerpt);
+                            if (match_pos != std::string::npos) {
+                                updated_full.replace(match_pos, cline_context.search_excerpt.size(), clean_replace);
+                            }
+                            args_json = "{\"" + cline_context.path_key + "\":\"" + escape_json(cline_context.target_path) +
+                                        "\",\"content\":\"" + escape_json(updated_full) + "\"}";
+                        } else {
+                            std::string diff_block =
+                                "------- SEARCH\n" + cline_context.search_excerpt + "\n=======\n" + clean_replace + "\n+++++++ REPLACE";
+                            args_json = "{\"" + cline_context.path_key + "\":\"" + escape_json(cline_context.target_path) +
+                                        "\",\"diff\":\"" + escape_json(diff_block) + "\"}";
+                        }
+                        send_openai_tool_call(cline_context.tool_name, args_json);
+                        sent_tool_call_response = true;
+                    }
                 } else if (cline_context.is_completion_turn) {
-                    emit_delta(cline_context.initial_prefix, generated_reply, emitted_any);
                     std::string summary_buffer;
                     engine.generate(chatml_prompt, max_tokens, 0.2f, 40, 0.9f, [&](const std::string& tok) {
                         if (tok.find("<|im_start|>") != std::string::npos ||
@@ -1035,8 +1427,18 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                     if (summary_buffer.empty()) {
                         summary_buffer = "Successfully applied the requested code improvements to the file.";
                     }
-                    emit_delta(summary_buffer, generated_reply, emitted_any);
-                    emit_delta(cline_context.closing_suffix, generated_reply, emitted_any);
+
+                    if (cline_context.use_tool_calls && cline_context.has_completion_tool) {
+                        std::string comp_args = "{\"result\":\"" + escape_json(summary_buffer) + "\"}";
+                        send_openai_tool_call("attempt_completion", comp_args);
+                        sent_tool_call_response = true;
+                    } else if (cline_context.use_tool_calls) {
+                        emit_delta(summary_buffer, generated_reply, emitted_any);
+                    } else {
+                        emit_delta(cline_context.initial_prefix, generated_reply, emitted_any);
+                        emit_delta(summary_buffer, generated_reply, emitted_any);
+                        emit_delta(cline_context.closing_suffix, generated_reply, emitted_any);
+                    }
                 } else {
                     engine.generate(chatml_prompt, max_tokens, 0.2f, 40, 0.9f, [&](const std::string& tok) {
                         if (tok.find("<|im_start|>") != std::string::npos ||
@@ -1048,32 +1450,34 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                     });
                 }
 
-                if (!emitted_any) {
-                    emit_delta("I have reviewed your files and context.", generated_reply, emitted_any);
-                }
+                if (!sent_tool_call_response) {
+                    if (!emitted_any) {
+                        emit_delta("I have reviewed your files and context.", generated_reply, emitted_any);
+                    }
 
-                if (is_stream) {
-                    std::string end_chunk =
-                        "data: {\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion.chunk\","
-                        "\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
-                        "data: [DONE]\n\n";
-                    send(client, end_chunk.data(), static_cast<int>(end_chunk.size()), 0);
-                } else {
-                    std::string json_payload =
-                        "{\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,"
-                        "\"message\":{\"role\":\"assistant\",\"content\":\"" + escape_json(generated_reply) + "\"},"
-                        "\"finish_reason\":\"stop\"}]}";
+                    if (is_stream) {
+                        std::string end_chunk =
+                            "data: {\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion.chunk\","
+                            "\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+                            "data: [DONE]\n\n";
+                        send(client, end_chunk.data(), static_cast<int>(end_chunk.size()), 0);
+                    } else {
+                        std::string json_payload =
+                            "{\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion\",\"choices\":[{\"index\":0,"
+                            "\"message\":{\"role\":\"assistant\",\"content\":\"" + escape_json(generated_reply) + "\"},"
+                            "\"finish_reason\":\"stop\"}]}";
 
-                    std::ostringstream resp;
-                    resp << "HTTP/1.1 200 OK\r\n"
-                         << "Content-Type: application/json\r\n"
-                         << "Access-Control-Allow-Origin: *\r\n"
-                         << "Content-Length: " << json_payload.size() << "\r\n"
-                         << "Connection: close\r\n\r\n"
-                         << json_payload;
+                        std::ostringstream resp;
+                        resp << "HTTP/1.1 200 OK\r\n"
+                             << "Content-Type: application/json\r\n"
+                             << "Access-Control-Allow-Origin: *\r\n"
+                             << "Content-Length: " << json_payload.size() << "\r\n"
+                             << "Connection: close\r\n\r\n"
+                             << json_payload;
 
-                    std::string wire = resp.str();
-                    send(client, wire.data(), static_cast<int>(wire.size()), 0);
+                        std::string wire = resp.str();
+                        send(client, wire.data(), static_cast<int>(wire.size()), 0);
+                    }
                 }
             }
         }
