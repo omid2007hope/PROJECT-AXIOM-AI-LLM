@@ -714,6 +714,55 @@ bool test_ai() {
 		test_check(max_diff_b < 1e-5f, "Gate 5: Bias gradient achieves 100% parity with analytical formula", s_pass, s_fail);
 
 		AutogradTape::get_instance().set_active(false);
+
+		// 12.5 Strided Non-Contiguous Tensor Matmul & Autograd Parity (transpose_matrix(0, 1))
+		AutogradTape::get_instance().set_active(true);
+
+		Tensor matrix_a_orig = Tensor::create_from_vector({1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f}, {3, 2}, DeviceType::CPU, true);
+		Tensor matrix_b_orig = Tensor::create_from_vector({7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f}, {2, 3}, DeviceType::CPU, true);
+
+		Tensor matrix_a = matrix_a_orig.transpose_matrix(0, 1);
+		Tensor matrix_b = matrix_b_orig.transpose_matrix(0, 1);
+
+		test_check_eq(matrix_a.strides()[0], static_cast<size_t>(1), "Transposed A row stride is 1 (non-contiguous)", s_pass, s_fail);
+		test_check_eq(matrix_a.strides()[1], static_cast<size_t>(2), "Transposed A col stride is 2", s_pass, s_fail);
+		test_check_eq(matrix_b.strides()[0], static_cast<size_t>(1), "Transposed B row stride is 1 (non-contiguous)", s_pass, s_fail);
+		test_check_eq(matrix_b.strides()[1], static_cast<size_t>(3), "Transposed B col stride is 3", s_pass, s_fail);
+
+		Tensor matrix_c = tensor_matmul(matrix_a, matrix_b);
+		test_check_eq(matrix_c.shape()[0], static_cast<size_t>(2), "C shape[0] == 2", s_pass, s_fail);
+		test_check_eq(matrix_c.shape()[1], static_cast<size_t>(2), "C shape[1] == 2", s_pass, s_fail);
+
+		const float* matrix_c_ptr = matrix_c.data_ptr();
+		test_check(std::abs(matrix_c_ptr[0] - 76.0f) < 1e-5f, "Non-contiguous matmul forward C[0,0] == 76.0", s_pass, s_fail);
+		test_check(std::abs(matrix_c_ptr[1] - 103.0f) < 1e-5f, "Non-contiguous matmul forward C[0,1] == 103.0", s_pass, s_fail);
+		test_check(std::abs(matrix_c_ptr[2] - 100.0f) < 1e-5f, "Non-contiguous matmul forward C[1,0] == 100.0", s_pass, s_fail);
+		test_check(std::abs(matrix_c_ptr[3] - 136.0f) < 1e-5f, "Non-contiguous matmul forward C[1,1] == 136.0", s_pass, s_fail);
+
+		Tensor gradient_output = Tensor::create_from_vector({1.0f, 0.5f, 2.0f, 1.5f}, {2, 2}, DeviceType::CPU, false);
+		matrix_c.set_gradient(gradient_output);
+		matrix_c.backward();
+
+		test_check(matrix_a.grad() != nullptr, "Non-contiguous Tensor A gradient computed", s_pass, s_fail);
+		test_check(matrix_b.grad() != nullptr, "Non-contiguous Tensor B gradient computed", s_pass, s_fail);
+
+		const float* gradient_a_ptr = matrix_a.grad()->data_as_float();
+		test_check(std::abs(gradient_a_ptr[0] - 12.0f) < 1e-5f, "Non-contiguous backward dA[0,0] == 12.0", s_pass, s_fail);
+		test_check(std::abs(gradient_a_ptr[1] - 13.5f) < 1e-5f, "Non-contiguous backward dA[0,1] == 13.5", s_pass, s_fail);
+		test_check(std::abs(gradient_a_ptr[2] - 15.0f) < 1e-5f, "Non-contiguous backward dA[0,2] == 15.0", s_pass, s_fail);
+		test_check(std::abs(gradient_a_ptr[3] - 29.0f) < 1e-5f, "Non-contiguous backward dA[1,0] == 29.0", s_pass, s_fail);
+		test_check(std::abs(gradient_a_ptr[4] - 32.5f) < 1e-5f, "Non-contiguous backward dA[1,1] == 32.5", s_pass, s_fail);
+		test_check(std::abs(gradient_a_ptr[5] - 36.0f) < 1e-5f, "Non-contiguous backward dA[1,2] == 36.0", s_pass, s_fail);
+
+		const float* gradient_b_ptr = matrix_b.grad()->data_as_float();
+		test_check(std::abs(gradient_b_ptr[0] - 5.0f) < 1e-5f, "Non-contiguous backward dB[0,0] == 5.0", s_pass, s_fail);
+		test_check(std::abs(gradient_b_ptr[1] - 3.5f) < 1e-5f, "Non-contiguous backward dB[0,1] == 3.5", s_pass, s_fail);
+		test_check(std::abs(gradient_b_ptr[2] - 11.0f) < 1e-5f, "Non-contiguous backward dB[1,0] == 11.0", s_pass, s_fail);
+		test_check(std::abs(gradient_b_ptr[3] - 7.5f) < 1e-5f, "Non-contiguous backward dB[1,1] == 7.5", s_pass, s_fail);
+		test_check(std::abs(gradient_b_ptr[4] - 17.0f) < 1e-5f, "Non-contiguous backward dB[2,0] == 17.0", s_pass, s_fail);
+		test_check(std::abs(gradient_b_ptr[5] - 11.5f) < 1e-5f, "Non-contiguous backward dB[2,1] == 11.5", s_pass, s_fail);
+
+		AutogradTape::get_instance().set_active(false);
 	}
 
 	// ── [13] Sparse Mixture of Experts (MoE) & Top-2 Routing Load Balance ─────
