@@ -480,6 +480,19 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         }
     }
 
+    if (task_text.empty() && !last_user_text.empty()) {
+        std::string raw_user = last_user_text;
+        size_t env_pos = raw_user.find("<environment_details>");
+        if (env_pos != std::string::npos) {
+            raw_user = raw_user.substr(0, env_pos);
+        }
+        size_t fc_pos = raw_user.find("<file_content");
+        if (fc_pos != std::string::npos) {
+            raw_user = raw_user.substr(0, fc_pos);
+        }
+        task_text = trim_whitespace(raw_user);
+    }
+
     // Strip @/ prefixes from task_text
     while (true) {
         size_t at_pos = task_text.find("@/");
@@ -554,7 +567,7 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         }
     }
 
-    if (!target_path.empty() && full_file_content.empty()) {
+    if (!target_path.empty()) {
         std::string disk_candidate = target_path;
         if (!std::filesystem::exists(disk_candidate) && std::filesystem::exists("../" + target_path)) {
             disk_candidate = "../" + target_path;
