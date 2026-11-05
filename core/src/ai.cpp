@@ -1417,19 +1417,21 @@ bool AI::generate(const std::string& prompt,
 	if (prompt_tokens.size() > max_allowed_prompt) {
 		size_t excess = prompt_tokens.size() - max_allowed_prompt;
 		size_t system_end = 0;
-		for (size_t idx = 0; idx < std::min(prompt_tokens.size(), static_cast<size_t>(3072)); ++idx) {
+		for (size_t idx = 0; idx < prompt_tokens.size(); ++idx) {
 			if (prompt_tokens[idx] == 151645) {
 				system_end = idx + 1;
 				break;
 			}
 		}
-		if (system_end > 0 && system_end < max_allowed_prompt) {
-			if (prompt_tokens.size() > system_end + excess) {
-				prompt_tokens.erase(prompt_tokens.begin() + system_end,
-						    prompt_tokens.begin() + system_end + excess);
-			} else {
-				prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
-			}
+		const size_t tail_keep = std::min<size_t>(512, max_allowed_prompt / 4);
+		if (system_end > 0 && system_end + tail_keep < max_allowed_prompt &&
+		    prompt_tokens.size() > system_end + excess + tail_keep) {
+			prompt_tokens.erase(prompt_tokens.begin() + system_end,
+					    prompt_tokens.begin() + system_end + excess);
+		} else if (prompt_tokens.size() > excess + tail_keep) {
+			size_t cut_start = prompt_tokens.size() - excess - tail_keep;
+			prompt_tokens.erase(prompt_tokens.begin() + cut_start,
+					    prompt_tokens.begin() + cut_start + excess);
 		} else {
 			prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
 		}
@@ -1452,6 +1454,7 @@ bool AI::generate(const std::string& prompt,
 	std::random_device rd;
 	std::mt19937 rng(rd());
 	std::vector<std::pair<float, uint32_t>> candidates;
+	std::string generated_so_far;
 
 	// 2. Autoregressive decode
 	for (size_t step = 0; step < max_new_tokens; ++step) {
@@ -1463,8 +1466,24 @@ bool AI::generate(const std::string& prompt,
 			sync_cuda_stream(compute_stream_);
 			download_device_buffer(&h_pred_id_, d_pred_id_, sizeof(uint32_t));
 			next_token = h_pred_id_;
+			if (step == 0 && (next_token == 151643 || next_token == 151644 || next_token == 151645)) {
+				download_device_buffer(h_logits.data(), d_logits, logits_bytes);
+				float best_val = -1e30f;
+				for (uint32_t v = 0; v < config_.vocab_size; ++v) {
+					if (v >= 151643 && v <= 151645) continue;
+					if (std::isfinite(h_logits[v]) && h_logits[v] > best_val) {
+						best_val = h_logits[v];
+						next_token = v;
+					}
+				}
+			}
 		} else {
 			download_device_buffer(h_logits.data(), d_logits, logits_bytes);
+			if (step == 0 && config_.vocab_size > 151645) {
+				h_logits[151643] = -1e30f;
+				h_logits[151644] = -1e30f;
+				h_logits[151645] = -1e30f;
+			}
 			float inv_temp = 1.0f / std::max(temperature, 0.01f);
 			candidates.clear();
 			candidates.reserve(config_.vocab_size);
@@ -1534,7 +1553,20 @@ bool AI::generate(const std::string& prompt,
 
 		auto it = qwen_reverse_vocab_.find(next_token);
 		if (it != qwen_reverse_vocab_.end()) {
+			generated_so_far += it->second;
 			if (token_callback) token_callback(it->second);
+			if (generated_so_far.find("</replace_in_file>") != std::string::npos ||
+			    generated_so_far.find("</write_to_file>") != std::string::npos ||
+			    generated_so_far.find("</read_file>") != std::string::npos ||
+			    generated_so_far.find("</attempt_completion>") != std::string::npos ||
+			    generated_so_far.find("</result>") != std::string::npos ||
+			    generated_so_far.find("</diff>") != std::string::npos ||
+			    generated_so_far.find("+++++++ REPLACE") != std::string::npos ||
+			    generated_so_far.find(">>>>>>> REPLACE") != std::string::npos ||
+			    generated_so_far.find("\";\n") != std::string::npos ||
+			    (generated_so_far.size() > 16 && generated_so_far.find("\n```") != std::string::npos)) {
+				break;
+			}
 		}
 
 		forward_transformer_step(next_token, current_pos, d_logits, compute_stream_);

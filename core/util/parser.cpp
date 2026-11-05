@@ -469,7 +469,8 @@ std::vector<uint32_t> Parser::tokenize_prompt(Input& input, const std::string& p
 	return tokens;
 }
 
-std::vector<uint32_t> Parser::tokenize_for_inference(const Input& input, const std::string& prompt) {
+std::vector<uint32_t> Parser::tokenize_for_inference(const Input& input,
+						     const std::string& prompt) {
 	std::vector<uint32_t> tokens;
 	std::istringstream iss(prompt);
 	std::string word;
@@ -514,7 +515,9 @@ std::vector<std::bfloat16_t> Parser::build_context_window(const Input& input,
 		if (it != input.embedding_table.end()) {
 			for (size_t d = 0; d < input.embedding_dim; ++d) {
 				window[(start_token_idx + i) * input.embedding_dim + d] =
-					(d < it->second.size()) ? it->second[d] : static_cast<std::bfloat16_t>(0.0f);
+					(d < it->second.size())
+						? it->second[d]
+						: static_cast<std::bfloat16_t>(0.0f);
 			}
 		}
 	}
@@ -608,18 +611,20 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			}
 			IdentifiedFile id_file = Identifier::identify(fpath);
 			bool is_text_ext =
-				(ext == ".txt" || ext == ".text" || ext == ".md" || ext == ".markdown" ||
-				 ext == ".json" || ext == ".csv" || ext == ".log" || ext == ".c" ||
-				 ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".cu" ||
-				 ext == ".cuh" || ext == ".py" || ext == ".html" || ext == ".htm" ||
-				 ext == ".xml" || ext == ".yaml" || ext == ".yml" || ext == ".ini" ||
+				(ext == ".txt" || ext == ".text" || ext == ".md" ||
+				 ext == ".markdown" || ext == ".json" || ext == ".csv" ||
+				 ext == ".log" || ext == ".c" || ext == ".cpp" || ext == ".h" ||
+				 ext == ".hpp" || ext == ".cu" || ext == ".cuh" || ext == ".py" ||
+				 ext == ".html" || ext == ".htm" || ext == ".xml" ||
+				 ext == ".yaml" || ext == ".yml" || ext == ".ini" ||
 				 ext == ".cfg" || ext == ".conf" || ext == ".sql" || ext == ".rs" ||
 				 ext == ".go" || ext == ".java" || ext == ".ts" || ext == ".js" ||
 				 ext == ".sh" || ext == ".bat" || ext == ".ps1");
-			bool is_doc = (id_file.modality == ModalityCategory::DOCUMENT || is_text_ext ||
-				       ext == ".pdf" || ext == ".docx");
+			bool is_doc = (id_file.modality == ModalityCategory::DOCUMENT ||
+				       is_text_ext || ext == ".pdf" || ext == ".docx");
 			if (is_doc) {
-				std::string extracted_text = DecompressDocument::extract_text(fpath);
+				std::string extracted_text =
+					DecompressDocument::extract_text(fpath);
 				std::istringstream iss(extracted_text);
 				std::string word;
 				while (iss >> word) {
@@ -634,12 +639,14 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		std::vector<std::pair<std::string, uint32_t>> eligible_words;
 		eligible_words.reserve(word_counts.size());
 		for (const auto& [word, count] : word_counts) {
-			if (count >= min_frequency && input.main_dictionary.find(word) == input.main_dictionary.end()) {
+			if (count >= min_frequency &&
+			    input.main_dictionary.find(word) == input.main_dictionary.end()) {
 				eligible_words.emplace_back(word, count);
 			}
 		}
 
-		std::sort(eligible_words.begin(), eligible_words.end(),
+		std::sort(eligible_words.begin(),
+			  eligible_words.end(),
 			  [](const auto& a, const auto& b) {
 				  if (a.second != b.second)
 					  return a.second > b.second;
@@ -659,9 +666,10 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		}
 
 		if (developer_mode || !eligible_words.empty()) {
-			std::cout << "  [+] Frequency Filter (count >= " << min_frequency << "): "
-				  << admitted_count << " terms admitted into vocabulary ("
-				  << (word_counts.size() - admitted_count) << " sub-threshold/overflow mapped to <UNK>)\n";
+			std::cout << "  [+] Frequency Filter (count >= " << min_frequency
+				  << "): " << admitted_count << " terms admitted into vocabulary ("
+				  << (word_counts.size() - admitted_count)
+				  << " sub-threshold/overflow mapped to <UNK>)\n";
 		}
 	}
 
@@ -764,7 +772,8 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				if (!clean.empty()) {
 					if (min_frequency > 1) {
 						auto it = input.main_dictionary.find(clean);
-						if (it != input.main_dictionary.end() && it->second <= vocab::TEXT_MAX_ID) {
+						if (it != input.main_dictionary.end() &&
+						    it->second <= vocab::TEXT_MAX_ID) {
 							input.tokenized_data.push_back(it->second);
 						} else {
 							input.tokenized_data.push_back(vocab::UNK);
@@ -999,7 +1008,8 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 	// 2. Read Size and Allocate
 	uint64_t vocab_size = 0;
 	in.read(reinterpret_cast<char*>(&vocab_size), sizeof(uint64_t));
-	if (vocab_size > 2000000ULL) return false;
+	if (vocab_size > 2000000ULL)
+		return false;
 	if (!in) {
 		std::cerr << "[!] Fatal: Corrupt vocabulary size header in "
 			  << filepath.filename().string() << "\n";
@@ -1022,7 +1032,8 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 	for (uint64_t i = 0; i < vocab_size; ++i) {
 		uint32_t word_len = 0;
 		in.read(reinterpret_cast<char*>(&word_len), sizeof(uint32_t));
-		if (word_len > 10485760U) return false;
+		if (word_len > 10485760U)
+			return false;
 		if (!in) {
 			std::cerr << "[!] Incomplete vocabulary entry length at index " << i
 				  << "\n";
@@ -1060,16 +1071,18 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 
 void Parser::init_reserved_vocabulary(Input& input) {
 	static const char* kX86Primitives[] = {
-		"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
-		"r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
-		"xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
-		"ymm0", "ymm1", "ymm2", "ymm3", "zmm0", "zmm1", "zmm2", "zmm3",
-		"mov", "lea", "add", "sub", "imul", "idiv", "xor", "and", "or", "shl", "shr",
-		"cmp", "test", "je", "jne", "jg", "jl", "jmp", "call", "ret", "push", "pop",
-		"vmovups", "vmovaps", "vfmadd231ps", "vbroadcastss", "vxorps", "vaddps",
-		"section", ".text", ".data", "global", "[intent]", "[var]",
-		"<|im_start|>", "<|im_end|>", "<|endoftext|>"
-	};
+		"rax",		"rbx",	      "rcx",	      "rdx",	      "rsi",	  "rdi",
+		"rbp",		"rsp",	      "r8",	      "r9",	      "r10",	  "r11",
+		"r12",		"r13",	      "r14",	      "r15",	      "xmm0",	  "xmm1",
+		"xmm2",		"xmm3",	      "xmm4",	      "xmm5",	      "xmm6",	  "xmm7",
+		"ymm0",		"ymm1",	      "ymm2",	      "ymm3",	      "zmm0",	  "zmm1",
+		"zmm2",		"zmm3",	      "mov",	      "lea",	      "add",	  "sub",
+		"imul",		"idiv",	      "xor",	      "and",	      "or",	  "shl",
+		"shr",		"cmp",	      "test",	      "je",	      "jne",	  "jg",
+		"jl",		"jmp",	      "call",	      "ret",	      "push",	  "pop",
+		"vmovups",	"vmovaps",    "vfmadd231ps",  "vbroadcastss", "vxorps",	  "vaddps",
+		"section",	".text",      ".data",	      "global",	      "[intent]", "[var]",
+		"<|im_start|>", "<|im_end|>", "<|endoftext|>"};
 
 	uint32_t next_id = 4;
 	for (const char* token_str : kX86Primitives) {
@@ -1082,7 +1095,8 @@ void Parser::init_reserved_vocabulary(Input& input) {
 	}
 }
 
-std::vector<uint32_t> Parser::tokenize_exact_code(const Input& input, const std::string& raw_prompt) const {
+std::vector<uint32_t> Parser::tokenize_exact_code(const Input& input,
+						  const std::string& raw_prompt) const {
 	std::vector<uint32_t> out_ids;
 	out_ids.reserve(raw_prompt.size() / 2);
 
@@ -1108,8 +1122,8 @@ std::vector<uint32_t> Parser::tokenize_exact_code(const Input& input, const std:
 	return out_ids;
 }
 
-std::vector<uint32_t> Parser::tokenize_exact_code(const std::string& raw_prompt,
-					  const std::unordered_map<std::string, uint32_t>& vocab) {
+std::vector<uint32_t> Parser::tokenize_exact_code(
+	const std::string& raw_prompt, const std::unordered_map<std::string, uint32_t>& vocab) {
 	std::vector<uint32_t> out_ids;
 	out_ids.reserve(raw_prompt.size() / 2);
 	size_t pos = 0;
@@ -1122,6 +1136,36 @@ std::vector<uint32_t> Parser::tokenize_exact_code(const std::string& raw_prompt,
 			std::string_view candidate(raw_prompt.data() + pos, match_len);
 			auto it = vocab.find(std::string(candidate));
 			if (it != vocab.end()) {
+				if (it->second == 151643) {
+					continue;
+				}
+				if (it->second == 151644) {
+					bool at_line_start =
+						(pos == 0 || raw_prompt[pos - 1] == '\n');
+					bool valid_role =
+						(pos + 19 <= n &&
+						 raw_prompt.compare(pos + 12, 7, "system\n") ==
+							 0) ||
+						(pos + 17 <= n &&
+						 raw_prompt.compare(pos + 12, 5, "user\n") == 0) ||
+						(pos + 22 <= n &&
+						 raw_prompt.compare(pos + 12, 10, "assistant\n") ==
+							 0);
+					if (!at_line_start || !valid_role) {
+						continue;
+					}
+				}
+				if (it->second == 151645) {
+					bool valid_end =
+						(pos + 10 < n && raw_prompt[pos + 10] == '\n') &&
+						(pos + 11 == n ||
+						 (pos + 23 <= n &&
+						  raw_prompt.compare(
+							  pos + 11, 12, "<|im_start|>") == 0));
+					if (!valid_end) {
+						continue;
+					}
+				}
 				matched_id = it->second;
 				found = true;
 				break;
