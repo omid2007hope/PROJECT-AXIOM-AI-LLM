@@ -16,7 +16,9 @@
 #include <chrono>
 #include <cctype>
 
+#ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")
+#endif
 
 static std::atomic<bool> g_server_stop_requested{false};
 static std::atomic<bool> g_server_is_active{false};
