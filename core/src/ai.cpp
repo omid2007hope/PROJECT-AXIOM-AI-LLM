@@ -1185,8 +1185,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		CloseHandle(hFile);
 		return false;
 	}
-	if (config_.max_seq_len > 4096) {
-		config_.max_seq_len = 4096;
+	if (config_.max_seq_len > 16384) {
+		config_.max_seq_len = 16384;
 	}
 	const uint8_t* host_weights_ptr = mapped_base + 64;
 	size_t weights_bytes = total_bytes - 64;
@@ -1416,7 +1416,23 @@ bool AI::generate(const std::string& prompt,
 						: fallback_max_prompt;
 	if (prompt_tokens.size() > max_allowed_prompt) {
 		size_t excess = prompt_tokens.size() - max_allowed_prompt;
-		prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
+		size_t system_end = 0;
+		for (size_t idx = 0; idx < std::min(prompt_tokens.size(), static_cast<size_t>(3072)); ++idx) {
+			if (prompt_tokens[idx] == 151645) {
+				system_end = idx + 1;
+				break;
+			}
+		}
+		if (system_end > 0 && system_end < max_allowed_prompt) {
+			if (prompt_tokens.size() > system_end + excess) {
+				prompt_tokens.erase(prompt_tokens.begin() + system_end,
+						    prompt_tokens.begin() + system_end + excess);
+			} else {
+				prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
+			}
+		} else {
+			prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
+		}
 	}
 
 	size_t logits_bytes = config_.vocab_size * sizeof(float);
@@ -1511,8 +1527,8 @@ bool AI::generate(const std::string& prompt,
 			}
 		}
 
-		// Check EOS (<|endoftext|> = 151643, <|im_end|> = 151645)
-		if (next_token == 151643 || next_token == 151645) {
+		// Check EOS (<|endoftext|> = 151643, <|im_start|> = 151644, <|im_end|> = 151645)
+		if (next_token == 151643 || next_token == 151644 || next_token == 151645) {
 			break;
 		}
 

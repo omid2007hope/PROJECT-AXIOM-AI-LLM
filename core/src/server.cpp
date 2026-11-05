@@ -28,14 +28,24 @@ static SOCKET g_server_listen_sock = INVALID_SOCKET;
 static std::string escape_json(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 16);
-    for (char c : s) {
+    for (unsigned char c : s) {
         switch (c) {
             case '\"': out += "\\\""; break;
             case '\\': out += "\\\\"; break;
             case '\n': out += "\\n";  break;
             case '\r': out += "\\r";  break;
             case '\t': out += "\\t";  break;
-            default:   out += c;      break;
+            case '\b': out += "\\b";  break;
+            case '\f': out += "\\f";  break;
+            default:
+                if (c < 0x20) {
+                    char hex_buf[8];
+                    snprintf(hex_buf, sizeof(hex_buf), "\\u%04x", c);
+                    out += hex_buf;
+                } else {
+                    out += static_cast<char>(c);
+                }
+                break;
         }
     }
     return out;
@@ -54,6 +64,33 @@ static std::string extract_json_string(const std::string& json, size_t start_pos
                 case 't': val += '\t'; break;
                 case '\"': val += '\"'; break;
                 case '\\': val += '\\'; break;
+                case '/': val += '/'; break;
+                case 'b': val += '\b'; break;
+                case 'f': val += '\f'; break;
+                case 'u': {
+                    if (i + 4 < json.size()) {
+                        std::string hex_str = json.substr(i + 1, 4);
+                        try {
+                            uint32_t codepoint = static_cast<uint32_t>(std::stoul(hex_str, nullptr, 16));
+                            if (codepoint <= 0x7F) {
+                                val += static_cast<char>(codepoint);
+                            } else if (codepoint <= 0x7FF) {
+                                val += static_cast<char>(0xC0 | ((codepoint >> 6) & 0x1F));
+                                val += static_cast<char>(0x80 | (codepoint & 0x3F));
+                            } else {
+                                val += static_cast<char>(0xE0 | ((codepoint >> 12) & 0x0F));
+                                val += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                                val += static_cast<char>(0x80 | (codepoint & 0x3F));
+                            }
+                            i += 4;
+                        } catch (...) {
+                            val += "\\u";
+                        }
+                    } else {
+                        val += "\\u";
+                    }
+                    break;
+                }
                 default:
                     val += '\\';
                     val += c;
@@ -212,19 +249,19 @@ static std::string build_qwen_chatml_prompt(const std::string& body) {
 static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
     if (!engine.has_transformer_model()) {
         std::cout << "[..] Streaming Qwen weights via Win32 DMA mmap...\n";
-        std::string weights_p = "models/qwen7b.axiom";
+        std::string weights_p = "models/qwen3b.axiom";
         std::string vocab_p = "models/qwen_vocab.axiom";
-        if (std::filesystem::exists("models/qwen7b.axiom")) {
-            weights_p = "models/qwen7b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("../models/qwen7b.axiom")) {
-            weights_p = "../models/qwen7b.axiom";
-            vocab_p = "../models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("models/qwen3b.axiom")) {
+        if (std::filesystem::exists("models/qwen3b.axiom")) {
             weights_p = "models/qwen3b.axiom";
             vocab_p = "models/qwen_vocab.axiom";
         } else if (std::filesystem::exists("../models/qwen3b.axiom")) {
             weights_p = "../models/qwen3b.axiom";
+            vocab_p = "../models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("models/qwen7b.axiom")) {
+            weights_p = "models/qwen7b.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("../models/qwen7b.axiom")) {
+            weights_p = "../models/qwen7b.axiom";
             vocab_p = "../models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);
@@ -478,12 +515,16 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 bool is_stream = (body.find("\"stream\": true") != std::string::npos ||
                                   body.find("\"stream\":true") != std::string::npos);
 
-                int max_tokens = 512;
+                int max_tokens = 2048;
                 size_t mt_pos = body.find("\"max_tokens\":");
+                if (mt_pos == std::string::npos) {
+                    mt_pos = body.find("\"max_completion_tokens\":");
+                    if (mt_pos != std::string::npos) mt_pos += 11;
+                }
                 if (mt_pos != std::string::npos) {
                     try {
                         int parsed = std::stoi(body.substr(mt_pos + 13));
-                        if (parsed > 0 && parsed <= 2048) max_tokens = parsed;
+                        if (parsed > 0 && parsed <= 8192) max_tokens = parsed;
                     } catch (...) {}
                 }
 
@@ -498,6 +539,11 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
 
                     bool emitted_any = false;
                     engine.generate(chatml_prompt, max_tokens, 0.2f, 40, 0.9f, [&](const std::string& tok) {
+                        if (tok.find("<|im_start|>") != std::string::npos ||
+                            tok.find("<|im_end|>") != std::string::npos ||
+                            tok.find("<|endoftext|>") != std::string::npos) {
+                            return;
+                        }
                         emitted_any = true;
                         std::string chunk =
                             "data: {\"id\":\"chatcmpl-axiom\",\"object\":\"chat.completion.chunk\","
@@ -522,6 +568,11 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 } else {
                     std::string generated_reply;
                     engine.generate(chatml_prompt, max_tokens, 0.2f, 40, 0.9f, [&](const std::string& tok) {
+                        if (tok.find("<|im_start|>") != std::string::npos ||
+                            tok.find("<|im_end|>") != std::string::npos ||
+                            tok.find("<|endoftext|>") != std::string::npos) {
+                            return;
+                        }
                         generated_reply += tok;
                         if (!is_background) std::cout << tok << std::flush;
                     });
@@ -574,19 +625,19 @@ bool start_background_axiom_server(AI& engine, uint16_t port) {
 
     if (!engine.has_transformer_model()) {
         std::cout << "[..] Streaming Qwen weights via Win32 DMA mmap...\n";
-        std::string weights_p = "models/qwen7b.axiom";
+        std::string weights_p = "models/qwen3b.axiom";
         std::string vocab_p = "models/qwen_vocab.axiom";
-        if (std::filesystem::exists("models/qwen7b.axiom")) {
-            weights_p = "models/qwen7b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("../models/qwen7b.axiom")) {
-            weights_p = "../models/qwen7b.axiom";
-            vocab_p = "../models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("models/qwen3b.axiom")) {
+        if (std::filesystem::exists("models/qwen3b.axiom")) {
             weights_p = "models/qwen3b.axiom";
             vocab_p = "models/qwen_vocab.axiom";
         } else if (std::filesystem::exists("../models/qwen3b.axiom")) {
             weights_p = "../models/qwen3b.axiom";
+            vocab_p = "../models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("models/qwen7b.axiom")) {
+            weights_p = "models/qwen7b.axiom";
+            vocab_p = "models/qwen_vocab.axiom";
+        } else if (std::filesystem::exists("../models/qwen7b.axiom")) {
+            weights_p = "../models/qwen7b.axiom";
             vocab_p = "../models/qwen_vocab.axiom";
         }
         bool v_ok = engine.load_vocabulary(vocab_p);

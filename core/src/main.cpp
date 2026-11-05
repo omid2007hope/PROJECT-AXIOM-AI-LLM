@@ -1685,13 +1685,13 @@ int main(int argc, char* argv[]) {
 			if (!std::filesystem::exists(vocab_p)) vocab_p = "../models/qwen_vocab.axiom";
 			if (!std::filesystem::exists(vocab_p)) vocab_p = "models/qwen3b_vocab.axiom";
 			if (!std::filesystem::exists(vocab_p)) vocab_p = "../models/qwen3b_vocab.axiom";
-			std::filesystem::path weights_p = "models/qwen7b.axiom";
-			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen7b.axiom")) {
-				weights_p = "../models/qwen7b.axiom";
-			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("models/qwen3b.axiom")) {
-				weights_p = "models/qwen3b.axiom";
-			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen3b.axiom")) {
+			std::filesystem::path weights_p = "models/qwen3b.axiom";
+			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen3b.axiom")) {
 				weights_p = "../models/qwen3b.axiom";
+			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("models/qwen7b.axiom")) {
+				weights_p = "models/qwen7b.axiom";
+			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen7b.axiom")) {
+				weights_p = "../models/qwen7b.axiom";
 			}
 			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
 			if (!custom_weights_path.empty()) weights_p = custom_weights_path;
