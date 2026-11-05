@@ -1185,8 +1185,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		CloseHandle(hFile);
 		return false;
 	}
-	if (config_.max_seq_len > 16384) {
-		config_.max_seq_len = 16384;
+	if (config_.max_seq_len > 8192) {
+		config_.max_seq_len = 8192;
 	}
 	const uint8_t* host_weights_ptr = mapped_base + 64;
 	size_t weights_bytes = total_bytes - 64;

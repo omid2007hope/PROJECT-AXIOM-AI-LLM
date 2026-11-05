@@ -144,6 +144,7 @@ extern "C" CUDA_API void launch_paged_gqa_decode(
 	void* stream
 ) {
 	if (seq_len <= 0) return;
+	if (seq_len > 12000) seq_len = 12000;
 	size_t smem_bytes = static_cast<size_t>(seq_len) * sizeof(float);
 	if (smem_bytes < sizeof(float)) smem_bytes = sizeof(float);
 	paged_gqa_decode_kernel<<<num_q_heads, 128, smem_bytes, static_cast<cudaStream_t>(stream)>>>(
