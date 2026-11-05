@@ -132,8 +132,8 @@ std::string DecompressDocument::decompress_pdf(const std::filesystem::path& file
 	// 2. Fallback: if no BT/ET blocks were found, extract printable sequences
 	if (!found_bt_et || extracted.str().empty()) {
 		std::string current_word;
-		for (size_t i = 0; i < n; ++i) {
-			unsigned char c = static_cast<unsigned char>(buffer[i]);
+		for (size_t i = 0; i <= n; ++i) {
+			unsigned char c = (i < n) ? static_cast<unsigned char>(buffer[i]) : 0;
 			if (std::isprint(c) && c != '<' && c != '>' && c != '[' && c != ']' &&
 			    c != '/' && c != '{' && c != '}') {
 				current_word += static_cast<char>(c);
@@ -173,12 +173,13 @@ std::string DecompressDocument::decompress_docx(const std::filesystem::path& fil
 	// Scan buffer for XML <w:t> tags
 	for (size_t i = 0; i + 4 < n; ++i) {
 		// Detect paragraph break <w:p>
-		if (buffer[i] == '<' && buffer[i + 1] == 'w' && buffer[i + 2] == ':' && buffer[i + 3] == 'p') {
+		// Detect paragraph break <w:p> or <w:p ...>
+		if (buffer[i] == '<' && buffer[i + 1] == 'w' && buffer[i + 2] == ':' && buffer[i + 3] == 'p' && (buffer[i + 4] == '>' || buffer[i + 4] == ' ' || buffer[i + 4] == '/')) {
 			extracted << "\n";
 		}
 
 		// Detect text tag <w:t> or <w:t ...>
-		if (buffer[i] == '<' && buffer[i + 1] == 'w' && buffer[i + 2] == ':' && buffer[i + 3] == 't') {
+		if (buffer[i] == '<' && buffer[i + 1] == 'w' && buffer[i + 2] == ':' && buffer[i + 3] == 't' && (buffer[i + 4] == '>' || buffer[i + 4] == ' ')) {
 			size_t tag_close = i + 4;
 			while (tag_close < n && buffer[tag_close] != '>') {
 				tag_close++;

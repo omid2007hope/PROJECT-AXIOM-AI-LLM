@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <limits>
+#include <sstream>
 #include <ios>
 #include <iostream>
 #include <stdfloat>
@@ -153,7 +156,7 @@ private:
 				}
 				dictionary[data] = byte_id;
 			} else {
-				dictionary[data] = next_id++;
+				if (next_id < vocab::VOCAB_SIZE) dictionary[data] = next_id++; else dictionary[data] = vocab::UNK;
 			}
 		}
 		input.tokenized_data.push_back(dictionary[data]);

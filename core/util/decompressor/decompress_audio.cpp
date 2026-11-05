@@ -56,8 +56,11 @@ DecodedAudio DecompressAudio::decompress_wav(const std::filesystem::path& file_p
 				in.seekg(chunk_size - 16, std::ios::cur);
 			}
 		} else if (std::memcmp(chunk_id, "data", 4) == 0) {
-			audio.pcm_bytes.resize(chunk_size);
-			in.read(reinterpret_cast<char*>(audio.pcm_bytes.data()), chunk_size);
+			const size_t max_pcm_alloc = 256 * 1024 * 1024;
+			const size_t safe_size = std::min<size_t>(chunk_size, max_pcm_alloc);
+			audio.pcm_bytes.resize(safe_size);
+			in.read(reinterpret_cast<char*>(audio.pcm_bytes.data()), safe_size);
+			audio.pcm_bytes.resize(static_cast<size_t>(in.gcount()));
 			found_data = true;
 			break;
 		} else {

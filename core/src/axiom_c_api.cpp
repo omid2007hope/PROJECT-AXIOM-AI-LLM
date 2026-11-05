@@ -63,7 +63,9 @@ __declspec(dllexport) bool axiom_load_model(const char* model_path, const char* 
         g_engine = new AI();
     }
     if (vocab_path && std::strlen(vocab_path) > 0) {
-        g_engine->load_vocabulary(vocab_path);
+        if (!g_engine->load_vocabulary(vocab_path)) {
+            return false;
+        }
     }
     if (model_path && std::strlen(model_path) > 0) {
         return g_engine->load_axiom_model_mmap(model_path);
@@ -73,6 +75,10 @@ __declspec(dllexport) bool axiom_load_model(const char* model_path, const char* 
 
 __declspec(dllexport) int axiom_generate_text(const char* prompt, char* out_buffer, int max_buffer_len, int max_new_tokens, float temperature) {
     if (!g_engine || !prompt || !out_buffer || max_buffer_len <= 0) return 0;
+    if (max_new_tokens <= 0) {
+        out_buffer[0] = '\0';
+        return 0;
+    }
     std::string result;
     bool ok = g_engine->generate(prompt, max_new_tokens, temperature, 40, 0.9f, [&](const std::string& tok) {
         result += tok;

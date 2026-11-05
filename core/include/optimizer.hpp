@@ -134,7 +134,7 @@ struct Portion {
 				pinned_alloc(context_window_size * sizeof(uint32_t)));
 
 			target_tokens[i] = static_cast<std::bfloat16_t*>(
-				pinned_alloc(target_elements * sizeof(std::bfloat16_t)));
+				pinned_alloc(std::max(target_elements * sizeof(std::bfloat16_t), sizeof(uint32_t))));
 
 			if (!context_window_tokens[i] || !context_token_ids[i] || !target_tokens[i]) {
 				std::cerr << "[Portion] pinned_alloc failed\n";

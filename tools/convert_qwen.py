@@ -29,6 +29,16 @@ def export_qwen_to_axiom(model_dir: str, out_weights: str, out_vocab: str):
             1e-6, 1000000.0
         )
 
+        def f32_to_bf16_rne_bytes(f32_arr: np.ndarray) -> bytes:
+            u32 = np.ascontiguousarray(f32_arr, dtype=np.float32).view(np.uint32)
+            is_nan = (u32 & 0x7FFFFFFF) > 0x7F800000
+            lsb = (u32 >> 16) & np.uint32(1)
+            rounded = u32 + (np.uint32(0x00007FFF) + lsb)
+            bf16 = (rounded >> 16).astype(np.uint16)
+            if np.any(is_nan):
+                bf16 = np.where(is_nan, np.uint16(0x7FC0), bf16)
+            return bf16.tobytes()
+
         def write_tensor_bf16(f_out, tensor_name: str):
             if tensor_name not in meta_table:
                 raise KeyError(f"Missing required tensor: {tensor_name}")
@@ -41,15 +51,11 @@ def export_qwen_to_axiom(model_dir: str, out_weights: str, out_vocab: str):
             if dtype == "BF16":
                 f_out.write(raw)
             elif dtype == "F32":
-                u32 = np.frombuffer(raw, dtype=np.uint32)
-                bf16 = (u32 >> 16).astype(np.uint16).tobytes()
-                f_out.write(bf16)
+                f32 = np.frombuffer(raw, dtype=np.float32)
+                f_out.write(f32_to_bf16_rne_bytes(f32))
             elif dtype == "F16":
                 f16 = np.frombuffer(raw, dtype=np.float16)
-                f32 = f16.astype(np.float32)
-                u32 = np.frombuffer(f32.tobytes(), dtype=np.uint32)
-                bf16 = (u32 >> 16).astype(np.uint16).tobytes()
-                f_out.write(bf16)
+                f_out.write(f32_to_bf16_rne_bytes(f16.astype(np.float32)))
             else:
                 raise ValueError(f"Unsupported tensor dtype {dtype} for {tensor_name}")
 
@@ -91,10 +97,31 @@ def export_qwen_to_axiom(model_dir: str, out_weights: str, out_vocab: str):
         for added in tok_data.get("added_tokens", []):
             vocab[added["content"]] = added["id"]
 
+        bs = (
+            list(range(ord("!"), ord("~") + 1))
+            + list(range(ord("¡"), ord("¬") + 1))
+            + list(range(ord("®"), ord("ÿ") + 1))
+        )
+        cs = bs[:]
+        n_bpe = 0
+        for b in range(256):
+            if b not in bs:
+                bs.append(b)
+                cs.append(256 + n_bpe)
+                n_bpe += 1
+        byte_decoder = {chr(c): b for b, c in zip(bs, cs)}
+        added_set = {a["content"] for a in tok_data.get("added_tokens", [])}
+
         with open(out_vocab, "wb") as vf:
             vf.write(struct.pack("<I", len(vocab)))
             for token_str, token_id in vocab.items():
-                raw_str = token_str.replace("Ġ", " ").replace("Ċ", "\n").encode("utf-8")
+                if token_str in added_set:
+                    raw_str = token_str.encode("utf-8")
+                else:
+                    try:
+                        raw_str = bytes(byte_decoder[ch] for ch in token_str)
+                    except KeyError:
+                        raw_str = token_str.encode("utf-8")
                 vf.write(struct.pack("<II", int(token_id), len(raw_str)))
                 vf.write(raw_str)
         print(f"[Axiom Converter] Vocabulary saved: {out_vocab} ({len(vocab)} tokens)")

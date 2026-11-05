@@ -39,6 +39,9 @@ DecodedVideo DecompressVideo::decompress_mp4(const std::filesystem::path& file_p
 			box_size = static_cast<uint32_t>(std::min<uint64_t>(large_size, len - pos));
 		}
 
+		if (box_size < 8) {
+			break;
+		}
 		if (pos + box_size > len) {
 			box_size = static_cast<uint32_t>(len - pos);
 		}
@@ -47,7 +50,7 @@ DecodedVideo DecompressVideo::decompress_mp4(const std::filesystem::path& file_p
 		if (std::memcmp(box_type, "moov", 4) == 0) {
 			size_t sub = pos + 8;
 			size_t moov_end = pos + box_size;
-			while (sub + 8 < moov_end) {
+			while (sub + 8 <= moov_end) {
 				uint32_t sub_size = (buffer[sub] << 24) | (buffer[sub + 1] << 16) |
 						    (buffer[sub + 2] << 8) | buffer[sub + 3];
 				if (sub_size < 8 || sub + sub_size > moov_end) break;
@@ -56,12 +59,13 @@ DecodedVideo DecompressVideo::decompress_mp4(const std::filesystem::path& file_p
 					// Inside trak, search for tkhd
 					size_t trak_sub = sub + 8;
 					size_t trak_end = sub + sub_size;
-					while (trak_sub + 8 < trak_end) {
+					while (trak_sub + 8 <= trak_end) {
 						uint32_t t_size = (buffer[trak_sub] << 24) | (buffer[trak_sub + 1] << 16) |
 								  (buffer[trak_sub + 2] << 8) | buffer[trak_sub + 3];
 						if (t_size < 8 || trak_sub + t_size > trak_end) break;
 
-						if (std::memcmp(buffer.data() + trak_sub + 4, "tkhd", 4) == 0 && t_size >= 84) {
+						if (std::memcmp(buffer.data() + trak_sub + 4, "tkhd", 4) == 0 &&
+						    t_size >= 86 && trak_sub + 86 <= len) {
 							// In tkhd (v0), width and height are fixed-point 16.16 at offsets 76 and 80
 							uint32_t w_fixed = (buffer[trak_sub + 80] << 8) | buffer[trak_sub + 81];
 							uint32_t h_fixed = (buffer[trak_sub + 84] << 8) | buffer[trak_sub + 85];

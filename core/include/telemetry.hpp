@@ -44,6 +44,9 @@ public:
 		query_hardware();
 	}
 
+	AxiomTelemetry(const AxiomTelemetry&) = delete;
+	AxiomTelemetry& operator=(const AxiomTelemetry&) = delete;
+
 	~AxiomTelemetry() {
 		if (start_event) {
 			destroy_cuda_event(start_event);

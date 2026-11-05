@@ -514,7 +514,7 @@ std::vector<std::bfloat16_t> Parser::build_context_window(const Input& input,
 		if (it != input.embedding_table.end()) {
 			for (size_t d = 0; d < input.embedding_dim; ++d) {
 				window[(start_token_idx + i) * input.embedding_dim + d] =
-					it->second[d];
+					(d < it->second.size()) ? it->second[d] : static_cast<std::bfloat16_t>(0.0f);
 			}
 		}
 	}
@@ -956,6 +956,8 @@ bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input&
 	out.close();
 	if (!out) {
 		std::cerr << "[!] Write failure during vocabulary serialization.\n";
+		std::error_code rm_ec;
+		std::filesystem::remove(tmp_filepath, rm_ec);
 		return false;
 	}
 
@@ -997,6 +999,7 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 	// 2. Read Size and Allocate
 	uint64_t vocab_size = 0;
 	in.read(reinterpret_cast<char*>(&vocab_size), sizeof(uint64_t));
+	if (vocab_size > 2000000ULL) return false;
 	if (!in) {
 		std::cerr << "[!] Fatal: Corrupt vocabulary size header in "
 			  << filepath.filename().string() << "\n";
@@ -1019,6 +1022,7 @@ bool Parser::load_vocabulary(const std::filesystem::path& filepath, Input& input
 	for (uint64_t i = 0; i < vocab_size; ++i) {
 		uint32_t word_len = 0;
 		in.read(reinterpret_cast<char*>(&word_len), sizeof(uint32_t));
+		if (word_len > 10485760U) return false;
 		if (!in) {
 			std::cerr << "[!] Incomplete vocabulary entry length at index " << i
 				  << "\n";

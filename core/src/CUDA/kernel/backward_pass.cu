@@ -243,12 +243,17 @@ __global__ static void backward_scatter_embeddings_kernel(
 		// PAD (ID 0) is a fixed zero vector and never learns
 		if (tok_id != 0 && tok_id < vocab_size) {
 			size_t table_idx = tok_id * embedding_dim + dim_idx;
-			atomicAdd(&table_master[table_idx], -learning_rate * dx_j);
-
-			float new_val = table_master[table_idx];
+			float delta = -learning_rate * dx_j;
+			float old_val = atomicAdd(&table_master[table_idx], delta);
+			float new_val = old_val + delta;
 			if (isfinite(new_val)) {
-				new_val = fmaxf(-5.0f, fminf(5.0f, new_val));
-				table_master[table_idx] = new_val;
+				if (new_val > 5.0f) {
+					new_val = 5.0f;
+					table_master[table_idx] = new_val;
+				} else if (new_val < -5.0f) {
+					new_val = -5.0f;
+					table_master[table_idx] = new_val;
+				}
 				table[table_idx] = __float2bfloat16(new_val);
 			}
 		}
@@ -266,7 +271,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 						      bool use_adamw) {
 
 	// Safe Guard
-	if (!gpu_portion || !gpu_weights || !gpu_activations ||
+	if (!gpu_portion || !gpu_weights || !gpu_activations || buffer_index < 0 || buffer_index >= 2 ||
 	    !gpu_portion->d_context_window[buffer_index] || !gpu_portion->d_target[buffer_index] ||
 	    !gpu_weights->d_weights || !gpu_weights->d_bias || !gpu_weights->d_weights_master ||
 	    !gpu_weights->d_bias_master || !gpu_activations->d_output || !gpu_activations->d_loss ||
@@ -773,13 +778,30 @@ extern "C" CUDA_API bool transformer_backward_block(const void* grad_output,
 	float* d_grad_k_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
 	float* d_grad_v_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
 
-	__nv_bfloat16* d_grad_bf16_temp = static_cast<__nv_bfloat16*>(allocate_vram(total_seq_ffn * sizeof(__nv_bfloat16), s));
+	size_t max_temp_elems = (total_seq_ffn > total_seq_dim) ? total_seq_ffn : total_seq_dim;
+	__nv_bfloat16* d_grad_bf16_temp = static_cast<__nv_bfloat16*>(allocate_vram(max_temp_elems * sizeof(__nv_bfloat16), s));
 
 	if (!d_grad_down_W || !d_grad_gate_W || !d_grad_up_W || !d_grad_out_W ||
 	    !d_grad_q_W || !d_grad_k_W || !d_grad_v_W || !d_grad_swiglu_float ||
 	    !d_grad_gate_float || !d_grad_up_float || !d_grad_mid_float ||
 	    !d_grad_attn_float || !d_grad_q_float || !d_grad_k_float || !d_grad_v_float ||
 	    !d_grad_bf16_temp) {
+		free_vram(d_grad_down_W, s);
+		free_vram(d_grad_gate_W, s);
+		free_vram(d_grad_up_W, s);
+		free_vram(d_grad_out_W, s);
+		free_vram(d_grad_q_W, s);
+		free_vram(d_grad_k_W, s);
+		free_vram(d_grad_v_W, s);
+		free_vram(d_grad_swiglu_float, s);
+		free_vram(d_grad_gate_float, s);
+		free_vram(d_grad_up_float, s);
+		free_vram(d_grad_mid_float, s);
+		free_vram(d_grad_attn_float, s);
+		free_vram(d_grad_q_float, s);
+		free_vram(d_grad_k_float, s);
+		free_vram(d_grad_v_float, s);
+		free_vram(d_grad_bf16_temp, s);
 		return false;
 	}
 
@@ -888,6 +910,7 @@ extern "C" CUDA_API bool transformer_backward_block(const void* grad_output,
 		S, D, D);
 
 	// 10. Update all 7 transformer parameter matrices using Fused AdamW
+	gpu_weights->step_count += 1;
 	uint64_t step = gpu_weights->step_count;
 	constexpr float beta1 = 0.9f;
 	constexpr float beta2 = 0.999f;

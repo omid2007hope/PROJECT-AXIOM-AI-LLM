@@ -11,7 +11,8 @@ extern "C" CUDA_API bool upload_to_gpu(const void* h_context,
 				       size_t target_elements,
 				       GpuPortion* gpu,
 				       int buffer_index) {
-	if (!gpu || !h_context || !h_target || context_elements == 0 || target_elements == 0) {
+	if (!gpu || !h_context || !h_target || context_elements == 0 || target_elements == 0 ||
+	    buffer_index < 0 || buffer_index >= 2) {
 		fprintf(stderr, "Invalid memory parameters in upload_to_gpu\n");
 		return false;
 	}
@@ -84,7 +85,8 @@ extern "C" CUDA_API bool upload_tokens_to_gpu(const uint32_t* h_token_ids,
 					       size_t target_elements,
 					       GpuPortion* gpu,
 					       int buffer_index) {
-	if (!gpu || !h_token_ids || !h_target || token_count == 0 || target_elements == 0) {
+	if (!gpu || !h_token_ids || !h_target || token_count == 0 || target_elements == 0 ||
+	    buffer_index < 0 || buffer_index >= 2) {
 		fprintf(stderr, "Invalid memory parameters in upload_tokens_to_gpu\n");
 		return false;
 	}
@@ -246,7 +248,7 @@ extern "C" CUDA_API bool upload_ai_weights(const float* h_weights,
 }
 
 extern "C" CUDA_API void synchronize_stream(GpuPortion* gpu, int buffer_index) {
-	if (gpu && gpu->stream[buffer_index]) {
+	if (gpu && buffer_index >= 0 && buffer_index < 2 && gpu->stream[buffer_index]) {
 		CUDA_CHECK(cudaStreamSynchronize((cudaStream_t)gpu->stream[buffer_index]));
 	}
 }
@@ -265,17 +267,17 @@ extern "C" CUDA_API bool init_gpu_portion(GpuPortion* gpu, size_t max_batch_toke
 		}
 
 		if (!gpu->d_token_ids[s])
-			cudaMalloc(&gpu->d_token_ids[s], max_batch_tokens * sizeof(uint32_t));
+			gpu->d_token_ids[s] = allocate_vram(max_batch_tokens * sizeof(uint32_t), gpu->stream[s]);
 		if (!gpu->d_context_window[s])
-			cudaMalloc(&gpu->d_context_window[s], max_batch_tokens * hidden_dim * sizeof(__nv_bfloat16));
+			gpu->d_context_window[s] = allocate_vram(max_batch_tokens * hidden_dim * sizeof(__nv_bfloat16), gpu->stream[s]);
 		if (!gpu->d_hidden_state[s])
-			cudaMalloc(&gpu->d_hidden_state[s], max_batch_tokens * hidden_dim * sizeof(__nv_bfloat16));
+			gpu->d_hidden_state[s] = allocate_vram(max_batch_tokens * hidden_dim * sizeof(__nv_bfloat16), gpu->stream[s]);
 		if (!gpu->d_loss_scalar[s])
-			cudaMalloc(&gpu->d_loss_scalar[s], sizeof(float));
+			gpu->d_loss_scalar[s] = static_cast<float*>(allocate_vram(sizeof(float), gpu->stream[s]));
 
 		if (!gpu->h_pinned_loss[s]) {
 			cudaHostAlloc(reinterpret_cast<void**>(&gpu->h_pinned_loss[s]), sizeof(float), cudaHostAllocPortable);
-			*(gpu->h_pinned_loss[s]) = 0.0f;
+			if (gpu->h_pinned_loss[s]) *(gpu->h_pinned_loss[s]) = 0.0f;
 		}
 	}
 	gpu->is_allocated = true;
@@ -283,7 +285,7 @@ extern "C" CUDA_API bool init_gpu_portion(GpuPortion* gpu, size_t max_batch_toke
 }
 
 extern "C" CUDA_API void upload_tokens_async(GpuPortion* gpu, int stream_idx, const uint32_t* h_pinned_tokens, size_t count) {
-	if (!gpu || !h_pinned_tokens || count == 0 || !gpu->d_token_ids[stream_idx]) return;
+	if (!gpu || !h_pinned_tokens || count == 0 || stream_idx < 0 || stream_idx >= 2 || !gpu->d_token_ids[stream_idx]) return;
 	cudaMemcpyAsync(
 		gpu->d_token_ids[stream_idx],
 		h_pinned_tokens,

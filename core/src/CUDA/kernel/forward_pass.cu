@@ -535,7 +535,8 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 
 	// Safe Guard
 	if (!gpu_portion || !gpu_weights || !gpu_activations || !gpu_weights->d_weights ||
-	    !gpu_weights->d_bias || input_dim == 0 || output_dim == 0) {
+	    !gpu_weights->d_bias || input_dim == 0 || output_dim == 0 ||
+	    buffer_index < 0 || buffer_index >= 2) {
 		return false;
 	}
 

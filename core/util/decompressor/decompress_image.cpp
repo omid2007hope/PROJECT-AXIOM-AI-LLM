@@ -31,12 +31,16 @@ DecodedImage DecompressImage::decompress_bmp(const std::filesystem::path& file_p
 	int32_t height = *reinterpret_cast<int32_t*>(&info_header[8]);
 	uint16_t bpp = *reinterpret_cast<uint16_t*>(&info_header[14]);
 
-	if (width <= 0 || height == 0 || (bpp != 24 && bpp != 32 && bpp != 8)) {
+	if (width <= 0 || width > 32768 || height == 0 || height == INT32_MIN ||
+	    (bpp != 24 && bpp != 32 && bpp != 8)) {
 		return img;
 	}
 
 	bool top_down = (height < 0);
-	height = std::abs(height);
+	height = (height < 0) ? -height : height;
+	if (height > 32768) {
+		return img;
+	}
 
 	img.width = width;
 	img.height = height;
@@ -120,8 +124,9 @@ DecodedImage DecompressImage::decompress_jpeg(const std::filesystem::path& file_
 		uint8_t marker = buffer[pos + 1];
 		pos += 2;
 
-		// Skip fill bytes
-		if (marker == 0xFF || marker == 0x00) {
+		// Skip fill bytes and standalone markers without length payload
+		if (marker == 0xFF || marker == 0x00 || marker == 0x01 ||
+		    (marker >= 0xD0 && marker <= 0xD8)) {
 			continue;
 		}
 
@@ -144,6 +149,9 @@ DecodedImage DecompressImage::decompress_jpeg(const std::filesystem::path& file_
 		// Variable length marker
 		if (pos + 2 <= len) {
 			uint16_t block_len = (buffer[pos] << 8) | buffer[pos + 1];
+			if (block_len < 2) {
+				break;
+			}
 			pos += block_len;
 		} else {
 			break;

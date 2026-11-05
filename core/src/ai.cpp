@@ -61,6 +61,7 @@ AI::AI(size_t input_elements_x_total,
 	if (allocate_gpu_embeddings(&gpu_embeddings, vocab_size, embedding_dim)) {
 		download_embeddings(host_embeddings.data(), &gpu_embeddings);
 	}
+	compute_stream_ = create_cuda_stream();
 }
 
 void AI::reset_weights(Elements& elements) {
@@ -903,6 +904,8 @@ bool AI::append_sequence_token(SequenceContext& sequence,
 			return false;
 		sequence.block_table.push_back(target_block);
 	} else {
+		if (sequence.block_table.empty())
+			return false;
 		target_block = sequence.block_table.back();
 		if (block_manager->get_reference_count(target_block) > 1) {
 			int new_block = block_manager->allocate_physical_block();
@@ -1115,7 +1118,7 @@ bool AI::load_vocabulary(const std::string& vocab_path) {
 		return false;
 	}
 	uint32_t count = 0;
-	if (!file.read(reinterpret_cast<char*>(&count), sizeof(uint32_t))) {
+	if (!file.read(reinterpret_cast<char*>(&count), sizeof(uint32_t)) || count > 2000000U) {
 		return false;
 	}
 	qwen_vocab_.clear();
@@ -1127,7 +1130,7 @@ bool AI::load_vocabulary(const std::string& vocab_path) {
 		uint32_t token_id = 0;
 		uint32_t str_len = 0;
 		if (!file.read(reinterpret_cast<char*>(&token_id), sizeof(uint32_t))) break;
-		if (!file.read(reinterpret_cast<char*>(&str_len), sizeof(uint32_t))) break;
+		if (!file.read(reinterpret_cast<char*>(&str_len), sizeof(uint32_t)) || str_len > 1048576U) break;
 		std::string token_str(str_len, '\0');
 		if (str_len > 0) {
 			if (!file.read(&token_str[0], str_len)) break;
@@ -1173,11 +1176,36 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	}
 
 	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
+	if (config_.magic != 0x4D4F4958U || config_.num_layers == 0 || config_.hidden_dim == 0 ||
+	    config_.head_dim == 0 || config_.num_q_heads == 0 || config_.num_kv_heads == 0 ||
+	    config_.ffn_dim == 0 || config_.vocab_size == 0 || config_.max_seq_len == 0) {
+		std::cerr << "[Axiom Engine] Invalid .axiom model header in: " << filepath << "\n";
+		UnmapViewOfFile(mapped_base);
+		CloseHandle(hMap);
+		CloseHandle(hFile);
+		return false;
+	}
 	if (config_.max_seq_len > 4096) {
 		config_.max_seq_len = 4096;
 	}
 	const uint8_t* host_weights_ptr = mapped_base + 64;
 	size_t weights_bytes = total_bytes - 64;
+
+	const size_t D   = config_.hidden_dim;
+	const size_t Qd  = config_.num_q_heads * config_.head_dim;
+	const size_t KVd = config_.num_kv_heads * config_.head_dim;
+	const size_t FFN = config_.ffn_dim;
+	const size_t V   = config_.vocab_size;
+	const size_t per_layer_elements =
+		D + (Qd * D) + Qd + (KVd * D) + KVd + (KVd * D) + KVd + (D * Qd) + D + (FFN * D) + (FFN * D) + (D * FFN);
+	const size_t min_required_elements = (V * D) + (static_cast<size_t>(config_.num_layers) * per_layer_elements) + D;
+	if (weights_bytes < min_required_elements * sizeof(uint16_t)) {
+		std::cerr << "[Axiom Engine] Truncated .axiom weights payload in: " << filepath << "\n";
+		UnmapViewOfFile(mapped_base);
+		CloseHandle(hMap);
+		CloseHandle(hFile);
+		return false;
+	}
 
 	if (d_weights_arena_) {
 		free_device_memory(d_weights_arena_);
@@ -1213,11 +1241,6 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	CloseHandle(hFile);
 
 	const uint16_t* cursor = static_cast<const uint16_t*>(d_weights_arena_);
-	const size_t D   = config_.hidden_dim;
-	const size_t Qd  = config_.num_q_heads * config_.head_dim;
-	const size_t KVd = config_.num_kv_heads * config_.head_dim;
-	const size_t FFN = config_.ffn_dim;
-	const size_t V   = config_.vocab_size;
 
 	d_embed_tokens_ = cursor; cursor += V * D;
 	layers_.resize(config_.num_layers);
@@ -1238,7 +1261,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	}
 
 	d_final_norm_weight_ = cursor; cursor += D;
-	d_lm_head_weight_    = cursor;
+	const size_t untied_elements = min_required_elements + (V * D);
+	d_lm_head_weight_ = (weights_bytes >= untied_elements * sizeof(uint16_t)) ? cursor : d_embed_tokens_;
 
 	// Allocate working activation buffers
 	if (d_curr_token_)      free_device_memory(d_curr_token_);
@@ -1285,7 +1309,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	d_k_cache_.resize(config_.num_layers, nullptr);
 	d_v_cache_.resize(config_.num_layers, nullptr);
 
-	if (!d_curr_token_ || !d_curr_pos_ || !d_residual_stream_ || !d_normed_x_ ||
+	if (!d_curr_token_ || !d_curr_pos_ || !d_pred_id_ || !d_residual_stream_ || !d_normed_x_ ||
 	    !d_q_ || !d_k_ || !d_v_ || !d_attn_out_ || !d_proj_tmp_ ||
 	    !d_gate_buf_ || !d_up_buf_ || !d_act_buf_ || !d_block_table_) {
 		std::cerr << "[Axiom Engine] Out of VRAM: Activation buffer allocation failed.\n";
@@ -1386,9 +1410,10 @@ bool AI::generate(const std::string& prompt,
 		return false;
 	}
 
+	const size_t fallback_max_prompt = (config_.max_seq_len > 1) ? (config_.max_seq_len / 2) : 1;
 	const size_t max_allowed_prompt = (config_.max_seq_len > max_new_tokens + 32)
 						? (config_.max_seq_len - max_new_tokens - 32)
-						: 2048;
+						: fallback_max_prompt;
 	if (prompt_tokens.size() > max_allowed_prompt) {
 		size_t excess = prompt_tokens.size() - max_allowed_prompt;
 		prompt_tokens.erase(prompt_tokens.begin(), prompt_tokens.begin() + excess);
@@ -1408,7 +1433,9 @@ bool AI::generate(const std::string& prompt,
 	sync_cuda_stream(compute_stream_);
 
 	int current_pos = static_cast<int>(prompt_tokens.size());
-	std::mt19937 rng(1337);
+	std::random_device rd;
+	std::mt19937 rng(rd());
+	std::vector<std::pair<float, uint32_t>> candidates;
 
 	// 2. Autoregressive decode
 	for (size_t step = 0; step < max_new_tokens; ++step) {
@@ -1422,26 +1449,64 @@ bool AI::generate(const std::string& prompt,
 			next_token = h_pred_id_;
 		} else {
 			download_device_buffer(h_logits.data(), d_logits, logits_bytes);
-			// Temperature scaled
-			float inv_temp = 1.0f / temperature;
-			float max_val = -1e30f;
+			float inv_temp = 1.0f / std::max(temperature, 0.01f);
+			candidates.clear();
+			candidates.reserve(config_.vocab_size);
 			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
-				h_logits[v] *= inv_temp;
-				if (h_logits[v] > max_val) max_val = h_logits[v];
+				if (std::isfinite(h_logits[v])) {
+					candidates.emplace_back(h_logits[v] * inv_temp, v);
+				}
 			}
-			float sum = 0.0f;
-			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
-				h_logits[v] = std::exp(h_logits[v] - max_val);
-				sum += h_logits[v];
-			}
-			std::uniform_real_distribution<float> dist(0.0f, sum);
-			float r = dist(rng);
-			float accum = 0.0f;
-			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
-				accum += h_logits[v];
-				if (accum >= r) {
-					next_token = v;
-					break;
+			if (candidates.empty()) {
+				next_token = 0;
+			} else {
+				const size_t effective_k = (top_k > 0)
+					? std::min(static_cast<size_t>(top_k), candidates.size())
+					: candidates.size();
+				if (effective_k < candidates.size()) {
+					std::partial_sort(candidates.begin(),
+							  candidates.begin() + effective_k,
+							  candidates.end(),
+							  [](const auto& a, const auto& b) { return a.first > b.first; });
+					candidates.resize(effective_k);
+				} else {
+					std::sort(candidates.begin(),
+						  candidates.end(),
+						  [](const auto& a, const auto& b) { return a.first > b.first; });
+				}
+
+				float max_val = candidates[0].first;
+				float sum_exp = 0.0f;
+				for (auto& c : candidates) {
+					c.first = std::exp(c.first - max_val);
+					sum_exp += c.first;
+				}
+				if (sum_exp > 0.0f && top_p > 0.0f && top_p < 1.0f) {
+					float cumulative = 0.0f;
+					size_t cutoff = candidates.size();
+					for (size_t idx = 0; idx < candidates.size(); ++idx) {
+						cumulative += candidates[idx].first / sum_exp;
+						if (cumulative >= top_p) {
+							cutoff = idx + 1;
+							break;
+						}
+					}
+					candidates.resize(cutoff);
+					sum_exp = 0.0f;
+					for (const auto& c : candidates) {
+						sum_exp += c.first;
+					}
+				}
+				std::uniform_real_distribution<float> dist(0.0f, sum_exp);
+				float r = dist(rng);
+				float accum = 0.0f;
+				next_token = candidates[0].second;
+				for (const auto& c : candidates) {
+					accum += c.first;
+					if (accum >= r) {
+						next_token = c.second;
+						break;
+					}
 				}
 			}
 		}

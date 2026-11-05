@@ -853,9 +853,12 @@ void run_inference_engine(AI& ai,
 			parser.token_to_string(input, predicted_token_id);
 		telemetry.end_inference(ai.host_weights.size());
 
-		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] ["
-			  << prediction[0] << ", " << prediction[1] << ", " << prediction[2] << ", "
-			  << prediction[3] << "]\n"
+		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] [";
+		for (size_t idx = 0; idx < std::min<size_t>(prediction.size(), 4); ++idx) {
+			if (idx > 0) std::cout << ", ";
+			std::cout << prediction[idx];
+		}
+		std::cout << "]\n"
 			  << "[Next Token ID] #" << predicted_token_id << "\n"
 			  << "[Prediction]    \"" << predicted_token_string << "\"\n";
 
@@ -969,10 +972,12 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 	if (run_cutlass_saturation_benchmark(
 		    sat_M, sat_N, sat_K, sat_iters, &sat_tflops, &sat_bw, &sat_avg_ms)) {
 		double best_bw = (vram_bw_gb_s > sat_bw) ? vram_bw_gb_s : sat_bw;
-		float best_bw_pct =
-			static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0);
-		float sat_mfu_pct =
-			static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0);
+		float best_bw_pct = (specs.peak_bandwidth_gb_s > 0.0)
+			? static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0)
+			: 0.0f;
+		float sat_mfu_pct = (specs.peak_dense_tflops > 0.0)
+			? static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0)
+			: 0.0f;
 		std::string arch_tag =
 			"sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
@@ -1107,7 +1112,7 @@ void run_training_loop(AI& ai,
 
 		if (status == TrainStatus::Failed) {
 			std::cerr << "\n[!] Training stopped: a GPU step failed.\n";
-			std::exit(1);
+			break;
 		}
 
 		if (status == TrainStatus::Trained) {
@@ -1566,7 +1571,7 @@ bool execute_training_session(AI& ai,
 
 			if (cleanup_choice == 2) {
 				const std::filesystem::path archive_dir =
-					(core_dir / config::asset_folder) / "archive";
+					asset_dir / "archive";
 				std::error_code ec;
 				std::filesystem::create_directories(archive_dir, ec);
 				size_t archived_count = 0;
@@ -1609,7 +1614,7 @@ bool execute_training_session(AI& ai,
 			} else if (cleanup_choice == 3) {
 				std::cout << "\n[!] WARNING: This will permanently delete "
 					  << bulk_files.size() << " file(s) from "
-					  << (core_dir / config::asset_folder).string() << "!\n"
+					  << asset_dir.string() << "!\n"
 					  << "Are you sure you want to proceed? (y/N): ";
 				char confirm = 0;
 				std::string confirm_line;

@@ -241,8 +241,9 @@ public:
 					 DeviceType dev = DeviceType::CPU,
 					 bool req_grad = false) {
 		auto impl = std::make_shared<TensorImplementation>(shape, DeviceType::CPU);
-		if (values.size() == impl->total_elements) {
-			std::copy(values.begin(), values.end(), impl->data_as_float());
+		if (!values.empty() && impl->data_as_float()) {
+			const size_t copy_elements = std::min(values.size(), impl->total_elements);
+			std::copy(values.begin(), values.begin() + copy_elements, impl->data_as_float());
 		}
 		if (dev == DeviceType::CUDA) {
 			auto cuda_impl = std::make_shared<TensorImplementation>(shape, DeviceType::CUDA);
@@ -329,6 +330,10 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 	if (K != K2) {
 		throw std::runtime_error("tensor_matmul dimension mismatch");
 	}
+	const size_t a_stride_row = a.strides()[0];
+	const size_t a_stride_col = a.strides()[1];
+	const size_t b_stride_row = b.strides()[0];
+	const size_t b_stride_col = b.strides()[1];
 
 	Tensor result = Tensor::create_tensor({M, N}, a.device(), a.requires_grad || b.requires_grad);
 	float* c_ptr = result.data_ptr();
@@ -339,7 +344,8 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 		for (size_t j = 0; j < N; ++j) {
 			float sum = 0.0f;
 			for (size_t k = 0; k < K; ++k) {
-				sum += a_ptr[i * K + k] * b_ptr[k * N + j];
+				sum += a_ptr[i * a_stride_row + k * a_stride_col] *
+				       b_ptr[k * b_stride_row + j * b_stride_col];
 			}
 			c_ptr[i * N + j] = sum;
 		}
@@ -348,7 +354,7 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 	if (AutogradTape::get_instance().is_active() && (a.requires_grad || b.requires_grad)) {
 		TapeNode node;
 		node.operation_name = "tensor_matmul";
-		node.backward_closure = [a, b, result]() mutable {
+		node.backward_closure = [a, b, result, a_stride_row, a_stride_col, b_stride_row, b_stride_col]() mutable {
 			if (!result.grad()) return;
 			const float* dL_dC = result.grad()->data_as_float();
 			size_t M_dim = a.shape()[0];
@@ -364,7 +370,7 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 					for (size_t k = 0; k < K_dim; ++k) {
 						float sum = 0.0f;
 						for (size_t j = 0; j < N_dim; ++j) {
-							sum += dL_dC[i * N_dim + j] * b_data[k * N_dim + j];
+							sum += dL_dC[i * N_dim + j] * b_data[k * b_stride_row + j * b_stride_col];
 						}
 						da_ptr[i * K_dim + k] = sum;
 					}
@@ -381,7 +387,7 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 					for (size_t j = 0; j < N_dim; ++j) {
 						float sum = 0.0f;
 						for (size_t i = 0; i < M_dim; ++i) {
-							sum += a_data[i * K_dim + k] * dL_dC[i * N_dim + j];
+							sum += a_data[i * a_stride_row + k * a_stride_col] * dL_dC[i * N_dim + j];
 						}
 						db_ptr[k * N_dim + j] = sum;
 					}
@@ -396,8 +402,14 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 }
 
 inline Tensor tensor_add(const Tensor& a, const Tensor& b) {
+	if (a.shape().empty() || b.shape().empty()) {
+		throw std::runtime_error("tensor_add requires non-empty shapes");
+	}
 	size_t elements = a.num_elements();
 	bool is_broadcast_bias = (b.num_elements() == a.shape().back());
+	if (!is_broadcast_bias && b.num_elements() < elements) {
+		throw std::runtime_error("tensor_add dimension mismatch");
+	}
 
 	Tensor result = Tensor::create_tensor(a.shape(), a.device(), a.requires_grad || b.requires_grad);
 	float* c_ptr = result.data_ptr();

@@ -146,7 +146,29 @@ static std::string build_qwen_chatml_prompt(const std::string& body) {
             prompt += "<|im_start|>" + role + "\n" + content + "<|im_end|>\n";
             found_any_message = true;
         } else if (body[val_pos] == '[') {
-            size_t array_end = body.find(']', val_pos);
+            size_t array_end = std::string::npos;
+            bool in_quotes = false;
+            int bracket_depth = 0;
+            for (size_t idx = val_pos; idx < body.size(); ++idx) {
+                char c = body[idx];
+                if (c == '\\' && in_quotes) {
+                    ++idx;
+                    continue;
+                }
+                if (c == '\"') {
+                    in_quotes = !in_quotes;
+                } else if (!in_quotes) {
+                    if (c == '[') {
+                        ++bracket_depth;
+                    } else if (c == ']') {
+                        --bracket_depth;
+                        if (bracket_depth == 0) {
+                            array_end = idx;
+                            break;
+                        }
+                    }
+                }
+            }
             if (array_end == std::string::npos) array_end = body.size();
 
             std::string combined_content;
@@ -299,10 +321,15 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
         int content_length = -1;
         size_t body_pos = std::string::npos;
 
+        constexpr size_t MAX_HTTP_REQUEST_BYTES = 16 * 1024 * 1024;
         while (true) {
             int bytes = recv(client, chunk, sizeof(chunk), 0);
             if (bytes <= 0) break;
             req.append(chunk, bytes);
+            if (req.size() > MAX_HTTP_REQUEST_BYTES) {
+                req.clear();
+                break;
+            }
 
             if (body_pos == std::string::npos) {
                 body_pos = req.find("\r\n\r\n");
@@ -329,12 +356,14 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                         }
                     }
                     if (cl_pos != std::string::npos) {
-                        size_t num_start = req.find_first_of("0123456789", cl_pos + 15);
-                        if (num_start != std::string::npos && num_start < body_pos) {
+                        size_t val_start = req.find_first_not_of(" \t", cl_pos + 15);
+                        if (val_start != std::string::npos && val_start < body_pos &&
+                            req[val_start] >= '0' && req[val_start] <= '9') {
                             try {
-                                size_t cl_end = req.find_first_not_of("0123456789", num_start);
-                                size_t cl_len = (cl_end != std::string::npos) ? (cl_end - num_start) : (body_pos - num_start);
-                                content_length = std::stoi(req.substr(num_start, cl_len));
+                                size_t cl_end = req.find_first_not_of("0123456789", val_start);
+                                size_t cl_len = (cl_end != std::string::npos) ? (cl_end - val_start) : (body_pos - val_start);
+                                int parsed_cl = std::stoi(req.substr(val_start, cl_len));
+                                content_length = (parsed_cl >= 0 && static_cast<size_t>(parsed_cl) <= MAX_HTTP_REQUEST_BYTES) ? parsed_cl : 0;
                             } catch (...) {
                                 content_length = 0;
                             }
@@ -521,9 +550,10 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
         closesocket(client);
     }
 
-    if (listen_sock != INVALID_SOCKET) {
-        closesocket(listen_sock);
+    if (g_server_listen_sock != INVALID_SOCKET) {
+        SOCKET sock_to_close = g_server_listen_sock;
         g_server_listen_sock = INVALID_SOCKET;
+        closesocket(sock_to_close);
     }
     WSACleanup();
 }

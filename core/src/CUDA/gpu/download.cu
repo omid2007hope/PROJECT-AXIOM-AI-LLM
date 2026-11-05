@@ -11,7 +11,7 @@ extern "C" CUDA_API bool download_from_gpu(void* h_context,
 					   size_t target_elements,
 					   const GpuPortion* gpu,
 					   int buffer_index) {
-	if (!gpu)
+	if (!gpu || buffer_index < 0 || buffer_index >= 2)
 		return false;
 
 	if (h_context && gpu->d_context_window[buffer_index] &&
@@ -180,7 +180,7 @@ extern "C" CUDA_API bool download_probabilities(const GpuActivations* gpu_activa
 }
 
 extern "C" CUDA_API void enqueue_loss_download(GpuPortion* gpu, int stream_idx) {
-	if (!gpu || !gpu->h_pinned_loss[stream_idx] || !gpu->d_loss_scalar[stream_idx] || !gpu->stream[stream_idx]) return;
+	if (!gpu || stream_idx < 0 || stream_idx >= 2 || !gpu->h_pinned_loss[stream_idx] || !gpu->d_loss_scalar[stream_idx] || !gpu->stream[stream_idx]) return;
 	cudaMemcpyAsync(
 		gpu->h_pinned_loss[stream_idx],
 		gpu->d_loss_scalar[stream_idx],
@@ -194,7 +194,7 @@ extern "C" CUDA_API void enqueue_loss_download(GpuPortion* gpu, int stream_idx) 
 }
 
 extern "C" CUDA_API bool poll_loss_nonblocking(GpuPortion* gpu, int stream_idx, float* out_loss) {
-	if (!gpu || !out_loss || !gpu->h_pinned_loss[stream_idx] || !gpu->loss_ready_event[stream_idx]) return false;
+	if (!gpu || !out_loss || stream_idx < 0 || stream_idx >= 2 || !gpu->h_pinned_loss[stream_idx] || !gpu->loss_ready_event[stream_idx]) return false;
 	if (cudaEventQuery(static_cast<cudaEvent_t>(gpu->loss_ready_event[stream_idx])) == cudaSuccess) {
 		*out_loss = *(gpu->h_pinned_loss[stream_idx]);
 		return true;

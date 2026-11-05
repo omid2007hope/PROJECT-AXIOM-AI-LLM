@@ -36,10 +36,12 @@ private:
 			(request_size > DEFAULT_ARENA_SIZE) ? request_size : DEFAULT_ARENA_SIZE;
 		cudaError_t err = cudaMalloc(&arena_base, target_size);
 		if (err != cudaSuccess) {
+			cudaGetLastError();
 			// Fallback to smaller 16 MB arena if GPU VRAM is heavily constrained
 			target_size = 16 * 1024 * 1024;
 			err = cudaMalloc(&arena_base, target_size);
 			if (err != cudaSuccess) {
+				cudaGetLastError();
 				arena_base = nullptr;
 				arena_size = 0;
 				return false;
