@@ -429,15 +429,17 @@ static void parse_tool_definitions(const std::string& body, ClineContext& cline_
                 }
 
                 int priority = 999;
-                if (candidate_name == "replace_in_file" || candidate_name == "apply_diff") {
+                if (candidate_name == "editor") {
                     priority = 1;
+                } else if (candidate_name == "replace_in_file" || candidate_name == "apply_diff") {
+                    priority = 2;
                 } else if (candidate_name == "edit_file" || candidate_name == "str_replace" ||
                            candidate_name == "str_replace_editor" || candidate_name == "replace_string_in_file" ||
-                           candidate_name == "MultiEdit" || candidate_name == "Edit") {
-                    priority = 2;
+                           candidate_name == "apply_patch" || candidate_name == "MultiEdit" || candidate_name == "Edit") {
+                    priority = 3;
                 } else if (candidate_name == "write_to_file" || candidate_name == "write_file" ||
                            candidate_name == "Write" || candidate_name == "create_file") {
-                    priority = 3;
+                    priority = 4;
                 }
 
                 if (priority < best_priority) {
@@ -472,7 +474,9 @@ static void parse_tool_definitions(const std::string& body, ClineContext& cline_
                         cline_context.path_key = "path";
                     }
 
-                    if (find_json_key(body, "diff", props_start, props_end) != std::string::npos) {
+                    if (find_json_key(body, "old_text", props_start, props_end) != std::string::npos) {
+                        cline_context.tool_mode = "old_new_text";
+                    } else if (find_json_key(body, "diff", props_start, props_end) != std::string::npos) {
                         cline_context.tool_mode = "diff";
                     } else if (find_json_key(body, "old_str", props_start, props_end) != std::string::npos) {
                         cline_context.tool_mode = "old_new_str";
@@ -480,7 +484,7 @@ static void parse_tool_definitions(const std::string& body, ClineContext& cline_
                         cline_context.tool_mode = "old_new_string";
                     } else if (find_json_key(body, "search", props_start, props_end) != std::string::npos) {
                         cline_context.tool_mode = "search_replace";
-                    } else if (find_json_key(body, "content", props_start, props_end) != std::string::npos || priority == 3) {
+                    } else if (find_json_key(body, "content", props_start, props_end) != std::string::npos || priority == 4) {
                         cline_context.tool_mode = "content";
                     } else {
                         cline_context.tool_mode = "diff";
@@ -758,9 +762,12 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
     const bool is_xml_edit_success =
         ((final_msg_text.find("[replace_in_file") != std::string::npos ||
           final_msg_text.find("[write_to_file") != std::string::npos ||
-          final_msg_text.find("[edit_file") != std::string::npos) &&
+          final_msg_text.find("[edit_file") != std::string::npos ||
+          final_msg_text.find("[editor") != std::string::npos ||
+          final_msg_text.find("Edited ") != std::string::npos) &&
          (final_msg_text.find("final_file_content") != std::string::npos ||
-          final_msg_text.find("successfully") != std::string::npos) &&
+          final_msg_text.find("successfully") != std::string::npos ||
+          final_msg_text.find("```diff") != std::string::npos) &&
          !has_error_text);
 
     if ((last_is_tool && !is_read_result && !has_error_text) ||
@@ -1376,7 +1383,11 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                             clean_replace.pop_back();
                         }
                         std::string args_json;
-                        if (cline_context.tool_mode == "old_new_str") {
+                        if (cline_context.tool_mode == "old_new_text") {
+                            args_json = "{\"" + cline_context.path_key + "\":\"" + escape_json(cline_context.target_path) +
+                                        "\",\"old_text\":\"" + escape_json(cline_context.search_excerpt) +
+                                        "\",\"new_text\":\"" + escape_json(clean_replace) + "\"}";
+                        } else if (cline_context.tool_mode == "old_new_str") {
                             args_json = "{\"" + cline_context.path_key + "\":\"" + escape_json(cline_context.target_path) +
                                         "\",\"old_str\":\"" + escape_json(cline_context.search_excerpt) +
                                         "\",\"new_str\":\"" + escape_json(clean_replace) + "\"}";
