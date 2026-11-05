@@ -498,10 +498,8 @@ static void parse_tool_definitions(const std::string& body, ClineContext& cline_
 
 static void parse_chat_messages(const std::string& body,
                                 std::vector<std::pair<std::string, std::string>>& messages,
-                                bool& last_is_tool,
-                                bool& had_assistant_tool) {
+                                bool& last_is_tool) {
     last_is_tool = false;
-    had_assistant_tool = false;
 
     size_t msgs_colon = find_json_key(body, "messages", 0, body.size());
     size_t scan_start = 0;
@@ -567,14 +565,6 @@ static void parse_chat_messages(const std::string& body,
         }
 
         bool has_tool_call_id = (find_json_key(body, "tool_call_id", obj_start, obj_end) != std::string::npos);
-        bool has_tool_calls = (find_json_key(body, "tool_calls", obj_start, obj_end) != std::string::npos);
-
-        if (role == "assistant" &&
-            (has_tool_calls ||
-             content.find("<replace_in_file>") != std::string::npos ||
-             content.find("<write_to_file>") != std::string::npos)) {
-            had_assistant_tool = true;
-        }
 
         last_is_tool = (role == "tool" || has_tool_call_id);
         messages.emplace_back(role, content);
@@ -637,8 +627,7 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
 
     std::vector<std::pair<std::string, std::string>> messages;
     bool last_is_tool = false;
-    bool had_assistant_tool = false;
-    parse_chat_messages(body, messages, last_is_tool, had_assistant_tool);
+    parse_chat_messages(body, messages, last_is_tool);
 
     if (messages.empty()) {
         return "<|im_start|>system\nYou are Project Axiom, an expert C++23 and CUDA coding agent.<|im_end|>\n"
@@ -646,14 +635,12 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
                "<|im_start|>assistant\n";
     }
 
-    // Detect Cline context compaction requests so they resolve in <1ms without stalling on 32k tokens
-    const std::string& final_msg_text = messages.back().second;
-    if (final_msg_text.find("### Goal") != std::string::npos &&
-        final_msg_text.find("### State") != std::string::npos &&
-        final_msg_text.find("### Highlights") != std::string::npos) {
-        cline_context.is_cline = true;
-        cline_context.is_compaction = true;
-        return "";
+    std::string latest_user_text;
+    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+        if (it->first == "user" && !it->second.empty()) {
+            latest_user_text = it->second;
+            break;
+        }
     }
 
     for (const auto& [role, text] : messages) {
@@ -674,13 +661,10 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         }
     }
 
-    if (!cline_context.is_cline) {
-        for (const auto& [role, text] : messages) {
-            if (role == "user" &&
-                (text.find("main") != std::string::npos || text.find("Main") != std::string::npos)) {
-                cline_context.is_cline = true;
-                break;
-            }
+    if (!cline_context.is_cline && !latest_user_text.empty()) {
+        if (latest_user_text.find("main") != std::string::npos ||
+            latest_user_text.find("Main") != std::string::npos) {
+            cline_context.is_cline = true;
         }
     }
 
@@ -697,56 +681,115 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
     }
 
     std::string task_text;
-    std::string last_user_text;
     std::string target_path;
     std::string full_file_content;
 
-    for (const auto& [role, text] : messages) {
-        if (role == "user" || role == "tool") {
-            if (role == "user" && !text.empty()) {
-                last_user_text = text;
+    if (!latest_user_text.empty()) {
+        size_t t_open = latest_user_text.find("<task>");
+        size_t t_close = latest_user_text.find("</task>");
+        if (t_open != std::string::npos && t_close != std::string::npos && t_close > t_open + 6) {
+            task_text = trim_whitespace(latest_user_text.substr(t_open + 6, t_close - (t_open + 6)));
+        } else {
+            std::string raw_user = latest_user_text;
+            size_t env_pos = raw_user.find("<environment_details>");
+            if (env_pos != std::string::npos) {
+                raw_user = raw_user.substr(0, env_pos);
             }
-            size_t t_open = text.find("<task>");
-            size_t t_close = text.find("</task>");
-            if (t_open != std::string::npos && t_close != std::string::npos && t_close > t_open + 6) {
-                task_text = trim_whitespace(text.substr(t_open + 6, t_close - (t_open + 6)));
+            size_t fc_pos = raw_user.find("<file_content");
+            if (fc_pos != std::string::npos) {
+                raw_user = raw_user.substr(0, fc_pos);
             }
+            if (raw_user.size() > 600) {
+                size_t first_nl = raw_user.find('\n');
+                if (first_nl != std::string::npos && first_nl <= 300) {
+                    raw_user = raw_user.substr(0, first_nl);
+                } else {
+                    raw_user = raw_user.substr(0, 300);
+                }
+            }
+            task_text = trim_whitespace(raw_user);
+        }
 
-            size_t fc_open = text.find("<file_content path=\"");
-            if (fc_open != std::string::npos) {
-                size_t path_start = fc_open + 20;
-                size_t path_end = text.find('\"', path_start);
-                if (path_end != std::string::npos) {
-                    target_path = text.substr(path_start, path_end - path_start);
-                    size_t tag_close = text.find('>', path_end);
-                    size_t fc_end = text.find("</file_content>", path_end);
-                    if (tag_close != std::string::npos && fc_end != std::string::npos && fc_end > tag_close + 1) {
-                        full_file_content = trim_whitespace(text.substr(tag_close + 1, fc_end - (tag_close + 1)));
-                    }
+        size_t fc_open = latest_user_text.find("<file_content path=\"");
+        if (fc_open != std::string::npos) {
+            size_t path_start = fc_open + 20;
+            size_t path_end = latest_user_text.find('\"', path_start);
+            if (path_end != std::string::npos) {
+                target_path = latest_user_text.substr(path_start, path_end - path_start);
+                size_t tag_close = latest_user_text.find('>', path_end);
+                size_t fc_end = latest_user_text.find("</file_content>", path_end);
+                if (tag_close != std::string::npos && fc_end != std::string::npos && fc_end > tag_close + 1) {
+                    full_file_content = trim_whitespace(latest_user_text.substr(tag_close + 1, fc_end - (tag_close + 1)));
                 }
             }
         }
     }
 
-    if (task_text.empty() && !last_user_text.empty()) {
-        std::string raw_user = last_user_text;
-        size_t env_pos = raw_user.find("<environment_details>");
-        if (env_pos != std::string::npos) {
-            raw_user = raw_user.substr(0, env_pos);
-        }
-        size_t fc_pos = raw_user.find("<file_content");
-        if (fc_pos != std::string::npos) {
-            raw_user = raw_user.substr(0, fc_pos);
-        }
-        if (raw_user.size() > 600) {
-            size_t first_nl = raw_user.find('\n');
-            if (first_nl != std::string::npos && first_nl <= 300) {
-                raw_user = raw_user.substr(0, first_nl);
-            } else {
-                raw_user = raw_user.substr(0, 300);
+    auto scan_text_path = [&](const std::string& src_text) -> std::string {
+        std::istringstream iss(src_text.substr(0, std::min<size_t>(src_text.size(), 4000)));
+        std::string tok;
+        while (iss >> tok) {
+            if (tok.find(".cpp") != std::string::npos || tok.find(".hpp") != std::string::npos ||
+                tok.find(".cu") != std::string::npos || tok.find(".cuh") != std::string::npos ||
+                tok.find(".h") != std::string::npos || tok.find(".py") != std::string::npos) {
+                std::string norm;
+                std::string disk;
+                if (resolve_file_path(tok, norm, disk)) {
+                    full_file_content = disk;
+                    return norm;
+                }
             }
         }
-        task_text = trim_whitespace(raw_user);
+        return "";
+    };
+
+    if (target_path.empty() && !latest_user_text.empty()) {
+        target_path = scan_text_path(latest_user_text);
+    }
+
+    if (target_path.empty()) {
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+            if (it->first == "user") {
+                target_path = scan_text_path(it->second);
+                if (!target_path.empty()) break;
+            }
+        }
+    }
+
+    if (target_path.empty()) {
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+            size_t fc_open = it->second.find("<file_content path=\"");
+            if (fc_open != std::string::npos) {
+                size_t path_start = fc_open + 20;
+                size_t path_end = it->second.find('\"', path_start);
+                if (path_end != std::string::npos) {
+                    target_path = it->second.substr(path_start, path_end - path_start);
+                    size_t tag_close = it->second.find('>', path_end);
+                    size_t fc_end = it->second.find("</file_content>", path_end);
+                    if (tag_close != std::string::npos && fc_end != std::string::npos && fc_end > tag_close + 1) {
+                        full_file_content = trim_whitespace(it->second.substr(tag_close + 1, fc_end - (tag_close + 1)));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if (target_path.empty() && !latest_user_text.empty()) {
+        std::string lower_user = latest_user_text;
+        for (char& ch : lower_user) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (lower_user.find("main") != std::string::npos) {
+            target_path = "core/src/main.cpp";
+        }
+    }
+
+    if (!target_path.empty()) {
+        std::string resolved_norm;
+        std::string resolved_disk;
+        if (resolve_file_path(target_path, resolved_norm, resolved_disk)) {
+            target_path = resolved_norm;
+            full_file_content = resolved_disk;
+        }
     }
 
     while (true) {
@@ -755,12 +798,26 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         task_text.erase(at_pos, 2);
     }
 
+    // Detect Cline context compaction requests so they resolve in <1ms without stalling on 32k tokens
+    const std::string& final_msg_text = messages.back().second;
+    if (final_msg_text.find("### Goal") != std::string::npos &&
+        final_msg_text.find("### State") != std::string::npos &&
+        final_msg_text.find("### Highlights") != std::string::npos) {
+        cline_context.is_cline = true;
+        cline_context.is_compaction = true;
+        cline_context.target_path = target_path;
+        return "";
+    }
+
     // Check if the most recent turn is a tool result or successful file modification result from Cline
+    const std::string& last_role = messages.back().first;
+    const bool is_user_turn = (last_role == "user");
     const bool is_read_result = (final_msg_text.find("[read_file for '") != std::string::npos);
     const bool has_error_text = (final_msg_text.find("Error") != std::string::npos ||
                                  final_msg_text.find("does not match") != std::string::npos);
-    const bool is_xml_edit_success =
-        ((final_msg_text.find("[replace_in_file") != std::string::npos ||
+    const bool is_edit_success =
+        (!is_user_turn &&
+         (final_msg_text.find("[replace_in_file") != std::string::npos ||
           final_msg_text.find("[write_to_file") != std::string::npos ||
           final_msg_text.find("[edit_file") != std::string::npos ||
           final_msg_text.find("[editor") != std::string::npos ||
@@ -770,9 +827,7 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
           final_msg_text.find("```diff") != std::string::npos) &&
          !has_error_text);
 
-    if ((last_is_tool && !is_read_result && !has_error_text) ||
-        (had_assistant_tool && !is_read_result && !has_error_text) ||
-        is_xml_edit_success) {
+    if (!is_user_turn && ((last_is_tool && !is_read_result && !has_error_text) || is_edit_success)) {
         cline_context.is_completion_turn = true;
         cline_context.initial_prefix = "<attempt_completion>\n<result>\n";
         cline_context.closing_suffix = "\n</result>\n</attempt_completion>";
@@ -808,55 +863,6 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
         }
     }
 
-    // Scan task_text and user messages for file paths (.cpp, .hpp, .cu, .cuh, .h, .py)
-    if (target_path.empty()) {
-        auto scan_text_for_path = [&](const std::string& src_text) -> std::string {
-            std::istringstream iss(src_text.substr(0, std::min<size_t>(src_text.size(), 2000)));
-            std::string tok;
-            while (iss >> tok) {
-                if (tok.find(".cpp") != std::string::npos || tok.find(".hpp") != std::string::npos ||
-                    tok.find(".cu") != std::string::npos || tok.find(".cuh") != std::string::npos ||
-                    tok.find(".h") != std::string::npos || tok.find(".py") != std::string::npos) {
-                    std::string norm;
-                    std::string disk;
-                    if (resolve_file_path(tok, norm, disk)) {
-                        full_file_content = disk;
-                        return norm;
-                    }
-                }
-            }
-            return "";
-        };
-
-        target_path = scan_text_for_path(task_text);
-        if (target_path.empty()) {
-            for (const auto& [role, text] : messages) {
-                if (role == "user") {
-                    target_path = scan_text_for_path(text);
-                    if (!target_path.empty()) break;
-                }
-            }
-        }
-    }
-
-    // If user referred to "main" without an explicit extension, resolve to core/src/main.cpp
-    if (target_path.empty()) {
-        std::string lower_task = task_text;
-        for (char& ch : lower_task) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-        if (lower_task.find("main") != std::string::npos) {
-            target_path = "core/src/main.cpp";
-        }
-    }
-
-    if (!target_path.empty()) {
-        std::string resolved_norm;
-        std::string resolved_disk;
-        if (resolve_file_path(target_path, resolved_norm, resolved_disk)) {
-            target_path = resolved_norm;
-            full_file_content = resolved_disk;
-        }
-    }
-
     if (!target_path.empty() && !full_file_content.empty()) {
         select_file_excerpt(full_file_content, task_text, cline_context.search_excerpt, cline_context.stop_line);
         if (!cline_context.search_excerpt.empty()) {
@@ -872,12 +878,23 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
                 task_text = "Improve the code block in " + target_path;
             }
 
+            std::string prompt_rules;
+            if (target_path.find("main.cpp") != std::string::npos) {
+                prompt_rules =
+                    "Rules:\n"
+                    "- Output valid, compilable C++23 code ending with a semicolon (;).\n"
+                    "- For visual or UI improvements, add ANSI color codes (\\033[1;36m, \\033[1;32m, \\033[1;33m, \\033[0m) and clean visual styling while keeping all menu numbers [1]-[5] intact.\n";
+            } else {
+                prompt_rules =
+                    "Rules:\n"
+                    "- Output valid, compilable C++23 / CUDA code ending with a semicolon (;).\n"
+                    "- Preserve original function signatures and surrounding logic.\n";
+            }
+
             return "<|im_start|>system\n"
                    "You are Cline, an expert C++23 and CUDA software engineer.\n"
-                   "Write ONLY the improved replacement C++23 code for the ------- SEARCH block, then output +++++++ REPLACE.\n"
-                   "Rules:\n"
-                   "- Output valid, compilable C++23 code ending with a semicolon (;).\n"
-                   "- For visual or UI improvements, add ANSI color codes (\\033[1;36m, \\033[1;32m, \\033[1;33m, \\033[0m) and clean visual styling while keeping all menu numbers [1]-[5] intact.\n"
+                   "Write ONLY the improved replacement C++23 code for the ------- SEARCH block, then output +++++++ REPLACE.\n" +
+                   prompt_rules +
                    "- End the replacement block immediately with +++++++ REPLACE.\n"
                    "</diff>\n"
                    "</replace_in_file><|im_end|>\n"
@@ -888,14 +905,13 @@ static std::string build_qwen_chatml_prompt(const std::string& body, ClineContex
                    "```cpp\n" +
                    cline_context.search_excerpt + "\n"
                    "```\n\n"
-                   "Write the improved ANSI-styled C++ replacement code for this block and finish with +++++++ REPLACE:<|im_end|>\n"
-                   "<|im_start|>assistant\n" +
-                   cline_context.initial_prefix;
+                   "Provide the improved replacement code for this block.<|im_end|>\n"
+                   "<|im_start|>assistant\n";
         }
     }
 
     // Fallback Cline prompt when no file is attached yet
-    std::string clean_user = task_text.empty() ? last_user_text : task_text;
+    std::string clean_user = task_text.empty() ? latest_user_text : task_text;
     size_t env_idx = clean_user.find("<environment_details>");
     if (env_idx != std::string::npos) {
         clean_user = trim_whitespace(clean_user.substr(0, env_idx));
@@ -1277,19 +1293,20 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 bool sent_tool_call_response = false;
 
                 if (cline_context.is_compaction) {
+                    std::string target_file = (!cline_context.target_path.empty()) ? cline_context.target_path : "core/src/main.cpp";
                     std::string compaction_summary =
                         "### Goal\n"
-                        "Improve the visual representation and console UI of `core/src/main.cpp`.\n\n"
+                        "Improve and maintain `" + target_file + "`.\n\n"
                         "### State\n"
-                        "- Done: Loaded `core/src/main.cpp` context.\n"
-                        "- In Progress: Applying ANSI visual styling to `core/src/main.cpp`.\n"
+                        "- Done: Loaded `" + target_file + "` context.\n"
+                        "- In Progress: Applying code updates to `" + target_file + "`.\n"
                         "- Blocked: None.\n\n"
                         "### Highlights\n"
-                        "- Identified the main menu and console banner in `core/src/main.cpp` for ANSI styling.\n\n"
+                        "- Reviewed target code in `" + target_file + "`.\n\n"
                         "### Next\n"
-                        "- Apply the replacement code to `core/src/main.cpp` using the file editing tool.\n\n"
+                        "- Apply the replacement code to `" + target_file + "` using the file editing tool.\n\n"
                         "### Files\n"
-                        "Read: `core/src/main.cpp`\n";
+                        "Read: `" + target_file + "`\n";
                     emit_delta(compaction_summary, generated_reply, emitted_any);
                 } else if (cline_context.has_file_target) {
                     if (!cline_context.use_tool_calls) {
