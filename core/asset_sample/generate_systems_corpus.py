@@ -686,6 +686,368 @@ def build_debugging_profiling_corpus() -> List[Dict[str, str]]:
     return examples
 
 
+def build_c_corpus() -> List[Dict[str, str]]:
+    """Category E: Low-Level C Programming, Memory Alignment & System Primitives."""
+    examples = []
+
+    examples.append({
+        "prompt": "How do you implement a cache-line aligned arena allocator in pure C for deterministic high-throughput systems?",
+        "response": """In latency-sensitive C engineering, standard `malloc` introduces heap fragmentation and nondeterministic allocation pauses. An arena allocator (linear allocator) reserves a contiguous memory region up front and dispenses aligned blocks via pointer incrementation.
+
+### Implementation Pattern:
+```c
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#define CACHE_LINE_SIZE 64
+
+typedef struct {
+    uint8_t* buffer;
+    size_t capacity;
+    size_t offset;
+} MemoryArena;
+
+bool arena_initialize(MemoryArena* arena, size_t capacity) {
+    // Allocate buffer aligned to 64-byte hardware cache line boundary
+    #if defined(_WIN32)
+    arena->buffer = (uint8_t*)_aligned_malloc(capacity, CACHE_LINE_SIZE);
+    #else
+    if (posix_memalign((void**)&arena->buffer, CACHE_LINE_SIZE, capacity) != 0) {
+        arena->buffer = NULL;
+    }
+    #endif
+    if (!arena->buffer) return false;
+
+    arena->capacity = capacity;
+    arena->offset   = 0;
+    return true;
+}
+
+void* arena_allocate(MemoryArena* arena, size_t size, size_t alignment) {
+    uintptr_t current_address = (uintptr_t)(arena->buffer + arena->offset);
+    uintptr_t aligned_address = (current_address + (alignment - 1)) & ~(uintptr_t)(alignment - 1);
+    size_t padding = aligned_address - current_address;
+
+    if (arena->offset + padding + size > arena->capacity) {
+        return NULL; // Out of arena memory
+    }
+
+    arena->offset += padding + size;
+    return (void*)aligned_address;
+}
+
+void arena_reset(MemoryArena* arena) {
+    arena->offset = 0; // Deterministic O(1) deallocation
+}
+
+void arena_free(MemoryArena* arena) {
+    #if defined(_WIN32)
+    _aligned_free(arena->buffer);
+    #else
+    free(arena->buffer);
+    #endif
+    arena->buffer   = NULL;
+    arena->capacity = 0;
+    arena->offset   = 0;
+}
+```
+
+### Architectural Rationale:
+1. **O(1) Allocation & Release:** Allocation is a single addition and bitwise alignment mask; deallocation is a simple offset reset.
+2. **Cache Coherency:** Aligning buffers to 64 bytes prevents false sharing across CPU cores and optimizes L1/L2 cache line fills."""
+    })
+
+    return examples
+
+
+def build_kernel_corpus() -> List[Dict[str, str]]:
+    """Category F: Kernel Architecture, Virtual Memory & Interrupt Handling."""
+    examples = []
+
+    examples.append({
+        "prompt": "Explain x86-64 four-level page table translation and hardware page fault resolution in operating system kernels.",
+        "response": """In x86-64 long mode, virtual addresses (48-bit canonical) map to 52-bit physical addresses using a hierarchical four-level radix tree:
+
+### 1. Radix Tree Structure:
+The CPU hardware Memory Management Unit (MMU) reads the physical base address of the Level 4 table from the `CR3` control register:
+- **PML4 (Page Map Level 4):** Bits [47:39] (9 bits, 512 entries of 8 bytes).
+- **PDPT (Page Directory Pointer Table):** Bits [38:30] (9 bits, 512 entries).
+- **PD (Page Directory):** Bits [29:21] (9 bits, 512 entries).
+- **PT (Page Table):** Bits [20:12] (9 bits, 512 entries).
+- **Physical Offset:** Bits [11:0] (12 bits, indexing within the 4 KB page).
+
+```
+Virtual Address [48-bit Canonical]:
+[ PML4 (9b) | PDPT (9b) | PD (9b) | PT (9b) | Offset (12b) ]
+      |          |         |         |             |
+     CR3      PML4[i]   PDPT[j]    PD[k]        PT[m] -> Physical Page + Offset
+```
+
+### 2. Page Fault Handling (`#PF` Exception 14):
+When the MMU attempts translation and encounters:
+- Present bit (`P=0`): Page is swapped to disk or lazily allocated.
+- Write violation (`W/R=0` when writing): Copy-on-Write (CoW) page or write protection.
+- User/Supervisor (`U/S=0` accessed from Ring 3): Privilege violation.
+
+The processor pushes an error code onto the kernel stack and saves the faulting virtual address into the `CR2` register. The kernel Interrupt Service Routine (ISR):
+1. Reads faulting address from `CR2`.
+2. Inspects `VMA` (Virtual Memory Area) metadata in the process descriptor.
+3. Allocates physical frame or pages in data from disk.
+4. Writes physical frame into the corresponding Page Table Entry (PTE) with `Present=1`.
+5. Executes `INVLPG` instruction to invalidate the stale TLB entry and resumes execution via `IRETQ`."""
+    })
+
+    return examples
+
+
+def build_rust_corpus() -> List[Dict[str, str]]:
+    """Category G: Modern Rust Systems Programming, Lifetimes & Concurrency."""
+    examples = []
+
+    examples.append({
+        "prompt": "Explain Rust ownership, borrow checker mechanics, and how Unsafe Rust interfaces with lock-free atomic invariants.",
+        "response": """Rust achieves memory safety without a garbage collector through compile-time ownership invariants enforced by the affine type system:
+
+### 1. Ownership & Borrowing Invariants:
+1. **Single Owner:** Each value in Rust has exactly one owning variable. When the owner goes out of scope, the value is dropped (RAII).
+2. **Aliasing XOR Mutability:** At any execution point, you may have either:
+   - Any number of immutable references (`&T`), OR
+   - Exactly one mutable reference (`&mut T`), but never both simultaneously.
+3. **Lifetimes (`'a`):** Generic lifetime parameters ensure references never outlive the data they point to, preventing dangling pointers at compile time.
+
+### 2. Unsafe Rust & Atomic Invariants:
+The `unsafe` keyword does not disable the type checker; it grants access to five specific operations: dereferencing raw pointers, calling unsafe functions, implementing unsafe traits, mutating mutable statics, and accessing union fields.
+
+```rust
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::ptr;
+
+pub struct LockFreeSingleNodeStack<T> {
+    head: AtomicPtr<Node<T>>,
+}
+
+struct Node<T> {
+    data: T,
+    next: *mut Node<T>,
+}
+
+impl<T> LockFreeSingleNodeStack<T> {
+    pub fn new() -> Self {
+        Self {
+            head: AtomicPtr::new(ptr::null_mut()),
+        }
+    }
+
+    pub fn push(&self, value: T) {
+        let new_node = Box::into_raw(Box::new(Node {
+            data: value,
+            next: ptr::null_mut(),
+        }));
+
+        let mut current_head = self.head.load(Ordering::Relaxed);
+        loop {
+            // Unsafe: reading and writing raw pointer within allocated node
+            unsafe {
+                (*new_node).next = current_head;
+            }
+
+            // Atomic CAS with Release ordering guarantees visibility of node data
+            match self.head.compare_exchange_weak(
+                current_head,
+                new_node,
+                Ordering::Release,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(observed_head) => current_head = observed_head,
+            }
+        }
+    }
+}
+```
+
+### Safety Guarantee:
+`Ordering::Release` ensures the node's initialization write completes in hardware memory hierarchy before the pointer becomes globally visible to other threads."""
+    })
+
+    return examples
+
+
+def build_enterprise_corpus() -> List[Dict[str, str]]:
+    """Category H: Application & Enterprise Engineering (C#, Java, Python, Lua, COBOL)."""
+    examples = []
+
+    # 1. C# CLR & Generational GC
+    examples.append({
+        "prompt": "Explain C# CLR Generational Garbage Collection and high-performance memory allocation with ValueTask and Span<T>.",
+        "response": """The .NET Common Language Runtime (CLR) uses an automatic, generational, tracing garbage collector:
+
+### 1. Generational Memory Architecture:
+- **Generation 0 (Gen 0):** Short-lived objects (temporary local variables). Collection is extremely fast (ephemeral GC).
+- **Generation 1 (Gen 1):** Buffer generation between short-lived and long-lived objects.
+- **Generation 2 (Gen 2):** Long-lived objects (singletons, static caches).
+- **Large Object Heap (LOH):** Objects $\\ge$ 85,000 bytes allocated directly on LOH to avoid compaction costs.
+
+### 2. Allocation-Free Systems with `ValueTask<T>` and `Span<T>`:
+```csharp
+using System;
+using System.Threading.Tasks;
+
+public sealed class PacketProcessor
+{
+    private readonly byte[] _cacheBuffer = new byte[4096];
+
+    // ValueTask avoids heap allocation when result is already synchronously available
+    public ValueTask<int> ProcessPacketAsync(ReadOnlySpan<byte> packetData)
+    {
+        if (packetData.IsEmpty)
+        {
+            return ValueTask.FromResult(0); // Zero heap allocation
+        }
+
+        int checksum = 0;
+        for (int i = 0; i < packetData.Length; i++)
+        {
+            checksum ^= packetData[i];
+        }
+
+        return ValueTask.FromResult(checksum);
+    }
+}
+```
+`Span<T>` allows contiguous memory slicing across managed arrays, native stack memory (`stackalloc`), or unmanaged heap pointers without allocating heap objects."""
+    })
+
+    # 2. Java JVM Architecture & Project Loom
+    examples.append({
+        "prompt": "Detail the JVM execution model, JIT compilation tiers (C1 vs C2), and Virtual Threads in Java.",
+        "response": """The Java Virtual Machine (JVM) interprets Java bytecode (`.class`) and applies adaptive Just-In-Time (JIT) compilation:
+
+### 1. Tiered JIT Compilation Pipeline:
+- **Interpreter:** Fast startup, zero compilation pause.
+- **Tier 1-3 (C1 Client Compiler):** Produces moderately optimized machine code with profiling counters.
+- **Tier 4 (C2 Server Compiler):** Performs aggressive optimization: escape analysis, method inlining, loop vectorization, and devirtualization.
+
+### 2. Project Loom (Virtual Threads):
+Traditional Java threads (`java.lang.Thread`) map 1:1 to operating system kernel threads (OS threads), consuming ~1 MB of memory stack space and incurring costly context-switch overhead.
+Virtual Threads are user-mode lightweight threads scheduled cooperatively on top of a small pool of carrier OS threads (ForkJoinPool):
+
+```java
+import java.util.concurrent.Executors;
+
+public class HighConcurrencyServer {
+    public static void run() {
+        // Creates a thread-per-task executor utilizing virtual threads
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < 100_000; i++) {
+                final int taskId = i;
+                executor.submit(() -> {
+                    // Blocking I/O operation unmounts the virtual thread from carrier thread
+                    Thread.sleep(100); 
+                    return taskId;
+                });
+            }
+        } // Auto-awaits completion
+    }
+}
+```
+When a virtual thread executes blocking I/O, the JVM unmounts its stack from the carrier OS thread, allowing the carrier thread to process other tasks."""
+    })
+
+    # 3. Python CPython Internals & Asyncio
+    examples.append({
+        "prompt": "Explain CPython memory management (PyObject, pymalloc) and the Global Interpreter Lock (GIL) mechanism.",
+        "response": """CPython implements all objects as C structures inheriting from `PyObject`:
+
+### 1. `PyObject` Structure:
+```c
+struct _object {
+    _PyObject_HEAD_EXTRA
+    Py_ssize_t ob_refcnt;          // Reference counter
+    struct _typeobject *ob_type;   // Pointer to type descriptor
+};
+```
+- **Reference Counting:** When `ob_refcnt` drops to zero, the object is immediately deallocated.
+- **Cyclic Garbage Collector:** A generational doubly-linked list tracker detects unreachable reference cycles (e.g., `a.b = b; b.a = a`).
+
+### 2. CPython Small Object Allocator (`pymalloc`):
+- Objects $\\le$ 512 bytes are managed by `pymalloc` in 256 KB arenas divided into 4 KB pools of uniform size classes, bypassing the host operating system `malloc` to prevent fragmentation.
+
+### 3. The Global Interpreter Lock (GIL):
+The GIL is a mutual exclusion lock protecting CPython internal state from concurrent thread access. While threads can run concurrently for I/O operations (which release the GIL), CPU-bound Python threads serialize on the GIL. True multi-core parallelism requires multiprocessing, native C extensions (`C++/CUDA`), or Python 3.13+ free-threaded builds (`--disable-gil`)."""
+    })
+
+    # 4. Lua C API & Metatables
+    examples.append({
+        "prompt": "How does Lua interface with C via its virtual stack, and how do metatables enable object-oriented patterns?",
+        "response": """Lua is designed for high-performance C embedding, communicating through an explicit virtual stack:
+
+### 1. The Lua C API Virtual Stack:
+All value passing between C and Lua occurs via an index-based stack:
+- Positive indices `[1, 2, ...]` address elements from bottom to top.
+- Negative indices `[-1, -2, ...]` address elements from top to bottom.
+
+```c
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+
+static int c_calculate_vector_dot(lua_State* L) {
+    double ax = luaL_checknumber(L, 1);
+    double ay = luaL_checknumber(L, 2);
+    double bx = luaL_checknumber(L, 3);
+    double by = luaL_checknumber(L, 4);
+
+    double dot = (ax * bx) + (ay * by);
+    lua_pushnumber(L, dot); // Push return value
+    return 1; // 1 return value
+}
+```
+
+### 2. Metatables & Object-Oriented Patterns:
+Lua achieves object orientation through tables and the `__index` metamethod:
+```lua
+local Vector = {}
+Vector.__index = Vector
+
+function Vector.new(x, y)
+    local self = setmetatable({}, Vector)
+    self.x = x
+    self.y = y
+    return self
+end
+
+function Vector:magnitude()
+    return math.sqrt(self.x * self.x + self.y * self.y)
+end
+```
+When `v:magnitude()` is called, if key `'magnitude'` is missing from table `v`, Lua falls back to inspecting `Vector.__index`."""
+    })
+
+    # 5. COBOL Enterprise Architecture
+    examples.append({
+        "prompt": "Explain the architectural division structure of COBOL, PICTURE clauses, and packed-decimal COMP-3 arithmetic.",
+        "response": """COBOL (Common Business-Oriented Language) executes mission-critical financial, banking, and mainframe systems:
+
+### 1. Four Structural Divisions:
+1. `IDENTIFICATION DIVISION.` Declares program identity, author, and security metadata.
+2. `ENVIRONMENT DIVISION.` Configures physical machine environment and associates logical file handles with physical datasets (`ASSIGN TO`).
+3. `DATA DIVISION.` Defines all working storage, file buffers, and linkage parameters (`FILE SECTION`, `WORKING-STORAGE SECTION`).
+4. `PROCEDURE DIVISION.` Contains executable procedural logic and paragraphs.
+
+### 2. PICTURE (PIC) Clauses & Packed Decimal (`COMP-3`):
+Financial computation cannot tolerate binary floating-point rounding errors ($0.1 + 0.2 \\ne 0.3$). COBOL enforces exact base-10 arithmetic:
+- `PIC 9(5)V99`: Unpacked decimal holding up to 5 integer digits and 2 fractional decimal places.
+- `PIC S9(7)V99 COMP-3`: Packed Decimal format. Two decimal digits are packed into each byte, with the trailing half-byte (nibble) storing the mathematical sign (`C` for positive, `D` for negative, `F` for unsigned):
+  $$\\text{Byte Length} = \\lfloor (\\text{Digits} + 1) / 2 \\rfloor$$
+  A 9-digit packed field requires only 5 bytes of mainframe storage, offering exact transactional precision."""
+    })
+
+    return examples
+
+
 def format_chatml(prompt: str, response: str) -> str:
     """Encodes a QA pair into Qwen ChatML standard conversational format."""
     return f"<|im_start|>user\n{prompt.strip()}<|im_end|>\n<|im_start|>assistant\n{response.strip()}<|im_end|>\n"
@@ -696,6 +1058,10 @@ def generate_corpus(output_path: Path, repeat_multiplier: int = 1) -> int:
     all_examples = []
     all_examples.extend(build_cuda_kernel_corpus())
     all_examples.extend(build_cpp23_systems_corpus())
+    all_examples.extend(build_c_corpus())
+    all_examples.extend(build_kernel_corpus())
+    all_examples.extend(build_rust_corpus())
+    all_examples.extend(build_enterprise_corpus())
     all_examples.extend(build_math_proofs_corpus())
     all_examples.extend(build_debugging_profiling_corpus())
 
@@ -729,7 +1095,7 @@ def main():
     parser.add_argument(
         "--archive-old-asm",
         action="store_true",
-        default=True,
+        default=False,
         help="Archive existing assembly_training_corpus.txt into core/asset_sample/archive/"
     )
     args = parser.parse_args()
