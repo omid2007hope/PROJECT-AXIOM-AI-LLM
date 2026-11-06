@@ -1220,10 +1220,10 @@ bool AI::load_vocabulary(const std::string& vocab_path) {
 	if (!file.read(reinterpret_cast<char*>(&count), sizeof(uint32_t)) || count > 2000000U) {
 		return false;
 	}
-	qwen_vocab_.clear();
-	qwen_reverse_vocab_.clear();
-	qwen_vocab_.reserve(count);
-	qwen_reverse_vocab_.reserve(count);
+	axiom_vocab_.clear();
+	axiom_reverse_vocab_.clear();
+	axiom_vocab_.reserve(count);
+	axiom_reverse_vocab_.reserve(count);
 
 	for (uint32_t i = 0; i < count; ++i) {
 		uint32_t token_id = 0;
@@ -1234,11 +1234,11 @@ bool AI::load_vocabulary(const std::string& vocab_path) {
 		if (str_len > 0) {
 			if (!file.read(&token_str[0], str_len)) break;
 		}
-		qwen_vocab_[token_str] = token_id;
-		qwen_reverse_vocab_[token_id] = token_str;
+		axiom_vocab_[token_str] = token_id;
+		axiom_reverse_vocab_[token_id] = token_str;
 	}
-	std::cout << "[Axiom Engine] Successfully loaded " << qwen_vocab_.size() << " vocabulary entries.\n";
-	return !qwen_vocab_.empty();
+	std::cout << "[Axiom Engine] Successfully loaded " << axiom_vocab_.size() << " vocabulary entries.\n";
+	return !axiom_vocab_.empty();
 }
 
 bool AI::load_axiom_model_mmap(const char* filepath) {
@@ -1503,12 +1503,12 @@ bool AI::generate(const std::string& prompt,
 		  float top_p,
 		  std::function<void(const std::string&)> token_callback) {
 	std::lock_guard<std::mutex> lock(inference_mutex_);
-	if (!d_weights_arena_ || qwen_vocab_.empty()) {
+	if (!d_weights_arena_ || axiom_vocab_.empty()) {
 		std::cerr << "[Axiom Engine] Cannot generate: model or vocabulary not loaded.\n";
 		return false;
 	}
 
-	std::vector<uint32_t> prompt_tokens = Parser::tokenize_exact_code(prompt, qwen_vocab_);
+	std::vector<uint32_t> prompt_tokens = Parser::tokenize_exact_code(prompt, axiom_vocab_);
 	if (prompt_tokens.empty()) {
 		return false;
 	}
@@ -1675,8 +1675,8 @@ bool AI::generate(const std::string& prompt,
 
 		cached_tokens_.push_back(next_token);
 
-		auto it = qwen_reverse_vocab_.find(next_token);
-		if (it != qwen_reverse_vocab_.end()) {
+		auto it = axiom_reverse_vocab_.find(next_token);
+		if (it != axiom_reverse_vocab_.end()) {
 			generated_so_far += it->second;
 			if (token_callback) token_callback(it->second);
 		}

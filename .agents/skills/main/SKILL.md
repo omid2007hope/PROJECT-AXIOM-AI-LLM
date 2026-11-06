@@ -18,9 +18,8 @@ Project Axiom is a low-latency C++23 and CUDA high-performance computing system 
   - `paged_gqa.cu`: Dynamic shared-memory Paged Grouped Query Attention decoder.
   - `forward_pass.cu`: Fused GQA kernels, RoPE, RMSNorm, SwiGLU, and Cutlass GEMM.
 - `models/`: Weights and tokenizers:
-  - `models/qwen3b.axiom`: 3B parameter FP16 weights (~6.48 GB VRAM). Fits 100% in 12GB laptop GPUs.
-  - `models/qwen7b.axiom`: 7B parameter BF16 weights (~15.2 GB).
-  - `models/qwen_vocab.axiom`: 151,936-token vocabulary file.
+  - `models/axiom.axiom`: Native Axiom Stacked GQA Transformer weights.
+  - `models/axiom_vocab.axiom`: Exact code-preserving BPE vocabulary file.
 - `.agents/skills/`: Workspace agent skills:
   - `axiom-server`: Dual server endpoints, lifecycle management, and IDE tool integration.
 

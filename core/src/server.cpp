@@ -234,7 +234,7 @@ static void parse_chat_messages(const std::string& body,
     }
 }
 
-static std::string build_qwen_chatml_prompt(const std::string& body) {
+static std::string build_chatml_prompt(const std::string& body) {
     std::vector<std::pair<std::string, std::string>> messages;
     parse_chat_messages(body, messages);
 
@@ -257,22 +257,44 @@ static std::string build_qwen_chatml_prompt(const std::string& body) {
 
 static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
     if (!engine.has_transformer_model()) {
-        std::cout << "[..] Streaming Qwen weights via Win32 DMA mmap...\n";
-        std::string weights_p = "models/qwen3b.axiom";
-        std::string vocab_p = "models/qwen_vocab.axiom";
-        if (std::filesystem::exists("models/qwen3b.axiom")) {
-            weights_p = "models/qwen3b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("../models/qwen3b.axiom")) {
-            weights_p = "../models/qwen3b.axiom";
-            vocab_p = "../models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("models/qwen7b.axiom")) {
-            weights_p = "models/qwen7b.axiom";
-            vocab_p = "models/qwen_vocab.axiom";
-        } else if (std::filesystem::exists("../models/qwen7b.axiom")) {
-            weights_p = "../models/qwen7b.axiom";
-            vocab_p = "../models/qwen_vocab.axiom";
+        std::cout << "[..] Streaming Axiom weights via Win32 DMA mmap...\n";
+        std::string weights_p = "models/axiom.axiom";
+        std::string vocab_p = "models/axiom_vocab.axiom";
+
+        const std::vector<std::string> weights_candidates = {
+            "models/axiom.axiom",
+            "../models/axiom.axiom",
+            "models/axiom3b.axiom",
+            "../models/axiom3b.axiom",
+            "training/weights.axiom",
+            "../training/weights.axiom",
+            "models/weights.axiom",
+            "../models/weights.axiom"
+        };
+
+        const std::vector<std::string> vocab_candidates = {
+            "models/axiom_vocab.axiom",
+            "../models/axiom_vocab.axiom",
+            "training/vocab.axiom",
+            "../training/vocab.axiom",
+            "models/vocab.axiom",
+            "../models/vocab.axiom"
+        };
+
+        for (const auto& candidate : weights_candidates) {
+            if (std::filesystem::exists(candidate)) {
+                weights_p = candidate;
+                break;
+            }
         }
+
+        for (const auto& candidate : vocab_candidates) {
+            if (std::filesystem::exists(candidate)) {
+                vocab_p = candidate;
+                break;
+            }
+        }
+
         bool v_ok = engine.load_vocabulary(vocab_p);
         bool m_ok = engine.load_axiom_model_mmap(weights_p.c_str());
         if (!v_ok || !m_ok) {
@@ -449,10 +471,9 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
                 if (!is_background) std::cout << "[Server] GET /v1/models\n" << std::flush;
                 std::string models_json =
                     "{\"object\":\"list\",\"data\":["
-                    "{\"id\":\"qwen2.5-coder:3b-instruct-fp16\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
-                    "{\"id\":\"qwen2.5-coder-3b\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
-                    "{\"id\":\"qwen2.5-coder\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
-                    "{\"id\":\"axiom\",\"object\":\"model\",\"owned_by\":\"axiom\"}"
+                    "{\"id\":\"axiom\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
+                    "{\"id\":\"axiom-chat\",\"object\":\"model\",\"owned_by\":\"axiom\"},"
+                    "{\"id\":\"axiom-coder\",\"object\":\"model\",\"owned_by\":\"axiom\"}"
                     "]}";
                 std::ostringstream resp;
                 resp << "HTTP/1.1 200 OK\r\n"
@@ -467,7 +488,7 @@ static void execute_server_loop(AI& engine, uint16_t port, bool is_background) {
             // Handle POST /chat/completions
             else if (req.rfind("POST /v1/chat/completions", 0) == 0 || req.rfind("POST /chat/completions", 0) == 0) {
                 if (!is_background) std::cout << "[Server] POST /v1/chat/completions\n" << std::flush;
-                std::string chatml_prompt = build_qwen_chatml_prompt(body);
+                std::string chatml_prompt = build_chatml_prompt(body);
                 bool is_stream = (body.find("\"stream\": true") != std::string::npos ||
                                   body.find("\"stream\":true") != std::string::npos);
 

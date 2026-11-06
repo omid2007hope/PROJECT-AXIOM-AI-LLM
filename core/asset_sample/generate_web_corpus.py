@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
 
 
 def format_chatml(prompt: str, response: str) -> str:
-    """Encodes a QA pair into Qwen ChatML standard conversational format."""
+    """Encodes a QA pair into Axiom ChatML standard conversational format."""
     return f"<|im_start|>user\n{prompt.strip()}<|im_end|>\n<|im_start|>assistant\n{response.strip()}<|im_end|>\n"
 
 

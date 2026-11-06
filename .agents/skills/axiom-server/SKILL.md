@@ -11,7 +11,7 @@ Project Axiom exposes a lightweight Win32 socket HTTP server on `http://127.0.0.
 
 | Endpoint | Protocol | Purpose | Handler Function |
 | :--- | :--- | :--- | :--- |
-| `POST /v1/chat/completions` | OpenAI API (SSE + JSON) | Local chat completion inference | `build_qwen_chatml_prompt`, `execute_server_loop` |
+| `POST /v1/chat/completions` | OpenAI API (SSE + JSON) | Local chat completion inference | `build_chatml_prompt`, `execute_server_loop` |
 | `GET /v1/models` | OpenAI API (JSON) | Model discovery | `execute_server_loop` |
 
 ---

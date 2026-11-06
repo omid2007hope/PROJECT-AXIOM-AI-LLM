@@ -308,7 +308,7 @@ AppMode collect_user_input(Input& input) {
 		std::cout << "======================================\n"
 			  << "           Welcome to AXIOM           \n"
 			  << "======================================\n"
-			  << "[1] Chat with Axiom (Direct Qwen LLM)\n"
+			  << "[1] Chat with Axiom (Native GQA LLM)\n"
 			  << "[2] Train it (Training)\n"
 			  << "[3] Run Tests\n"
 			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
@@ -534,7 +534,7 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 }
 
 // *****************************************************************************
-// Direct Chat Engine (Interactive Qwen 28-Layer GQA)
+// Direct Chat Engine (Native GQA Transformer)
 // *****************************************************************************
 void run_chat_engine(AI& ai,
                      const std::filesystem::path& weights_path,
@@ -550,22 +550,42 @@ void run_chat_engine(AI& ai,
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
 
-	if (std::filesystem::exists("models/qwen3b.axiom")) {
-		target_weights = "models/qwen3b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
-	} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
-		target_weights = "../models/qwen3b.axiom";
-		target_vocab = "../models/qwen_vocab.axiom";
-	} else if (std::filesystem::exists("models/qwen7b.axiom")) {
-		target_weights = "models/qwen7b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
-	} else if (std::filesystem::exists("../models/qwen7b.axiom")) {
-		target_weights = "../models/qwen7b.axiom";
-		target_vocab = "../models/qwen_vocab.axiom";
+	const std::vector<std::filesystem::path> weights_candidates = {
+		"models/axiom.axiom",
+		"../models/axiom.axiom",
+		"models/axiom3b.axiom",
+		"../models/axiom3b.axiom",
+		"training/weights.axiom",
+		"../training/weights.axiom",
+		"models/weights.axiom",
+		"../models/weights.axiom"
+	};
+
+	const std::vector<std::filesystem::path> vocab_candidates = {
+		"models/axiom_vocab.axiom",
+		"../models/axiom_vocab.axiom",
+		"training/vocab.axiom",
+		"../training/vocab.axiom",
+		"models/vocab.axiom",
+		"../models/vocab.axiom"
+	};
+
+	for (const auto& candidate : weights_candidates) {
+		if (std::filesystem::exists(candidate)) {
+			target_weights = candidate;
+			break;
+		}
+	}
+
+	for (const auto& candidate : vocab_candidates) {
+		if (std::filesystem::exists(candidate)) {
+			target_vocab = candidate;
+			break;
+		}
 	}
 
 	if (!ai.has_transformer_model()) {
-		std::cout << "\033[90m[..] Streaming Qwen weights via Win32 DMA mmap...\033[0m\n" << std::flush;
+		std::cout << "\033[90m[..] Streaming Axiom weights via Win32 DMA mmap...\033[0m\n" << std::flush;
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (!vocab_ok || !model_ok) {
@@ -691,22 +711,38 @@ void run_inference_engine(AI& ai,
 				is_transformer = true;
 			}
 		}
-	} else if (std::filesystem::exists("models/qwen7b.axiom")) {
-		target_weights = "models/qwen7b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
-		is_transformer = true;
-	} else if (std::filesystem::exists("../models/qwen7b.axiom")) {
-		target_weights = "../models/qwen7b.axiom";
-		target_vocab = "../models/qwen_vocab.axiom";
-		is_transformer = true;
-	} else if (std::filesystem::exists("models/qwen3b.axiom")) {
-		target_weights = "models/qwen3b.axiom";
-		target_vocab = "models/qwen_vocab.axiom";
-		is_transformer = true;
-	} else if (std::filesystem::exists("../models/qwen3b.axiom")) {
-		target_weights = "../models/qwen3b.axiom";
-		target_vocab = "../models/qwen_vocab.axiom";
-		is_transformer = true;
+	} else {
+		const std::vector<std::filesystem::path> weights_candidates = {
+			"models/axiom.axiom",
+			"../models/axiom.axiom",
+			"models/axiom3b.axiom",
+			"../models/axiom3b.axiom",
+			"training/weights.axiom",
+			"../training/weights.axiom",
+			"models/weights.axiom",
+			"../models/weights.axiom"
+		};
+		const std::vector<std::filesystem::path> vocab_candidates = {
+			"models/axiom_vocab.axiom",
+			"../models/axiom_vocab.axiom",
+			"training/vocab.axiom",
+			"../training/vocab.axiom",
+			"models/vocab.axiom",
+			"../models/vocab.axiom"
+		};
+		for (const auto& candidate : weights_candidates) {
+			if (std::filesystem::exists(candidate)) {
+				target_weights = candidate;
+				is_transformer = true;
+				break;
+			}
+		}
+		for (const auto& candidate : vocab_candidates) {
+			if (std::filesystem::exists(candidate)) {
+				target_vocab = candidate;
+				break;
+			}
+		}
 	}
 
 	if (is_transformer) {
@@ -1773,17 +1809,38 @@ int main(int argc, char* argv[]) {
 				} catch (...) {}
 			}
 			AI engine;
-			std::filesystem::path vocab_p = "models/qwen_vocab.axiom";
-			if (!std::filesystem::exists(vocab_p)) vocab_p = "../models/qwen_vocab.axiom";
-			if (!std::filesystem::exists(vocab_p)) vocab_p = "models/qwen3b_vocab.axiom";
-			if (!std::filesystem::exists(vocab_p)) vocab_p = "../models/qwen3b_vocab.axiom";
-			std::filesystem::path weights_p = "models/qwen3b.axiom";
-			if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen3b.axiom")) {
-				weights_p = "../models/qwen3b.axiom";
-			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("models/qwen7b.axiom")) {
-				weights_p = "models/qwen7b.axiom";
-			} else if (!std::filesystem::exists(weights_p) && std::filesystem::exists("../models/qwen7b.axiom")) {
-				weights_p = "../models/qwen7b.axiom";
+			std::filesystem::path vocab_p = "models/axiom_vocab.axiom";
+			const std::vector<std::filesystem::path> vocab_candidates = {
+				"models/axiom_vocab.axiom",
+				"../models/axiom_vocab.axiom",
+				"training/vocab.axiom",
+				"../training/vocab.axiom",
+				"models/vocab.axiom",
+				"../models/vocab.axiom"
+			};
+			for (const auto& candidate : vocab_candidates) {
+				if (std::filesystem::exists(candidate)) {
+					vocab_p = candidate;
+					break;
+				}
+			}
+
+			std::filesystem::path weights_p = "models/axiom.axiom";
+			const std::vector<std::filesystem::path> weights_candidates = {
+				"models/axiom.axiom",
+				"../models/axiom.axiom",
+				"models/axiom3b.axiom",
+				"../models/axiom3b.axiom",
+				"training/weights.axiom",
+				"../training/weights.axiom",
+				"models/weights.axiom",
+				"../models/weights.axiom"
+			};
+			for (const auto& candidate : weights_candidates) {
+				if (std::filesystem::exists(candidate)) {
+					weights_p = candidate;
+					break;
+				}
 			}
 			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
 			if (!custom_weights_path.empty()) weights_p = custom_weights_path;
@@ -1807,7 +1864,7 @@ int main(int argc, char* argv[]) {
 				<< "Usage: app.exe [OPTION] [FLAGS]\n\n"
 				<< "Execution Modes:\n"
 				<< "  (no argument)       Interactive console menu\n"
-				<< "  --chat              Speak directly with Axiom (Interactive Qwen 28-Layer GQA)\n"
+				<< "  --chat              Speak directly with Axiom (Native GQA Transformer)\n"
 				<< "  --serve [port]      Start native OpenAI-compatible chat server (default: 8080)\n"
 				<< "  --use               Run direct forward inference ('Use it')\n"
 				<< "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
@@ -1982,30 +2039,43 @@ int main(int argc, char* argv[]) {
 	std::filesystem::create_directories(training_dir, dir_ec);
 
 	// 1. LLM Model Paths (strictly used by Chat and Server)
-	std::filesystem::path llm_weights_path = "models/qwen3b.axiom";
-	if (!std::filesystem::exists(llm_weights_path)) {
-		if (std::filesystem::exists("../models/qwen3b.axiom")) {
-			llm_weights_path = "../models/qwen3b.axiom";
-		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen3b.axiom")) {
-			llm_weights_path = core_dir.parent_path() / "models" / "qwen3b.axiom";
-		} else if (std::filesystem::exists("models/qwen7b.axiom")) {
-			llm_weights_path = "models/qwen7b.axiom";
-		} else if (std::filesystem::exists("../models/qwen7b.axiom")) {
-			llm_weights_path = "../models/qwen7b.axiom";
-		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen7b.axiom")) {
-			llm_weights_path = core_dir.parent_path() / "models" / "qwen7b.axiom";
+	std::filesystem::path llm_weights_path = "models/axiom.axiom";
+	const std::vector<std::filesystem::path> llm_weights_candidates = {
+		"models/axiom.axiom",
+		"../models/axiom.axiom",
+		core_dir.parent_path() / "models" / "axiom.axiom",
+		"models/axiom3b.axiom",
+		"../models/axiom3b.axiom",
+		core_dir.parent_path() / "models" / "axiom3b.axiom",
+		"training/weights.axiom",
+		"../training/weights.axiom",
+		"models/weights.axiom",
+		"../models/weights.axiom"
+	};
+	for (const auto& candidate : llm_weights_candidates) {
+		if (std::filesystem::exists(candidate)) {
+			llm_weights_path = candidate;
+			break;
 		}
 	}
 	if (!custom_weights_path.empty()) {
 		llm_weights_path = custom_weights_path;
 	}
 
-	std::filesystem::path llm_vocab_path = "models/qwen_vocab.axiom";
-	if (!std::filesystem::exists(llm_vocab_path)) {
-		if (std::filesystem::exists("../models/qwen_vocab.axiom")) {
-			llm_vocab_path = "../models/qwen_vocab.axiom";
-		} else if (std::filesystem::exists(core_dir.parent_path() / "models" / "qwen_vocab.axiom")) {
-			llm_vocab_path = core_dir.parent_path() / "models" / "qwen_vocab.axiom";
+	std::filesystem::path llm_vocab_path = "models/axiom_vocab.axiom";
+	const std::vector<std::filesystem::path> llm_vocab_candidates = {
+		"models/axiom_vocab.axiom",
+		"../models/axiom_vocab.axiom",
+		core_dir.parent_path() / "models" / "axiom_vocab.axiom",
+		"training/vocab.axiom",
+		"../training/vocab.axiom",
+		"models/vocab.axiom",
+		"../models/vocab.axiom"
+	};
+	for (const auto& candidate : llm_vocab_candidates) {
+		if (std::filesystem::exists(candidate)) {
+			llm_vocab_path = candidate;
+			break;
 		}
 	}
 	if (!custom_vocab_path.empty()) {

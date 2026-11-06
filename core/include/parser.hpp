@@ -357,7 +357,7 @@ public:
 	// Pre-seeds x86_64 primitives and control tokens into vocabulary
 	void init_reserved_vocabulary(Input& input);
 
-	// Exact case-preserving longest-match tokenizer for Qwen / Code prompts
+	// Exact case-preserving longest-match tokenizer for native Axiom BPE vocabulary
 	std::vector<uint32_t> tokenize_exact_code(const Input& input, const std::string& raw_prompt) const;
 	static std::vector<uint32_t> tokenize_exact_code(const std::string& raw_prompt,
 							 const std::unordered_map<std::string, uint32_t>& vocab);

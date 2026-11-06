@@ -629,7 +629,7 @@ __global__ void rmsnorm_backward_kernel(
 Group elements of vector $q \in \mathbb{R}^d$ into pairs:
 $$z_k = (q_{2k}, q_{2k+1}) \equiv q_{2k} + i q_{2k+1} \in \mathbb{C}$$
 
-Define position rotation angle $\theta_k = \Theta^{-2k/d}$ (where $\Theta = 10^6$ in modern architectures like Qwen).
+Define position rotation angle $\theta_k = \Theta^{-2k/d}$ (where $\Theta = 10^6$ in modern architectures like Axiom).
 At token position $m$, rotate the vector by $e^{i m \theta_k}$:
 $$R_m(z_k) = z_k \cdot e^{i m \theta_k} = (q_{2k} + i q_{2k+1})(\cos(m\theta_k) + i\sin(m\theta_k))$$
 
@@ -1049,7 +1049,7 @@ Financial computation cannot tolerate binary floating-point rounding errors ($0.
 
 
 def format_chatml(prompt: str, response: str) -> str:
-    """Encodes a QA pair into Qwen ChatML standard conversational format."""
+    """Encodes a QA pair into Axiom ChatML standard conversational format."""
     return f"<|im_start|>user\n{prompt.strip()}<|im_end|>\n<|im_start|>assistant\n{response.strip()}<|im_end|>\n"
 
 

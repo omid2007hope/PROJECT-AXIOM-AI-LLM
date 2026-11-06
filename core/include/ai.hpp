@@ -238,7 +238,7 @@ public:
 				    size_t total_tokens,
 				    size_t num_experts = 8);
 
-	// ── Qwen2.5 / Multi-Layer Stacked Pipeline ──────────────────────────────────
+	// ── Axiom Native Stacked Pipeline ───────────────────────────────────────────
 	AxiomModelConfig config_;
 	std::vector<TransformerLayerWeights> layers_;
 
@@ -269,8 +269,8 @@ public:
 
 	void* compute_stream_ = nullptr;
 
-	std::unordered_map<std::string, uint32_t> qwen_vocab_;
-	std::unordered_map<uint32_t, std::string> qwen_reverse_vocab_;
+	std::unordered_map<std::string, uint32_t> axiom_vocab_;
+	std::unordered_map<uint32_t, std::string> axiom_reverse_vocab_;
 	std::vector<uint32_t> cached_tokens_;
 	mutable std::mutex inference_mutex_;
 
