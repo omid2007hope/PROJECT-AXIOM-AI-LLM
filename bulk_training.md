@@ -3,13 +3,13 @@
 ## Core Engine Functions & Architecture
 
 ### 1. Initialization & Persistence
-- **`execute_training_session`** (`core/src/main.cpp:1375`)
+- **`execute_training_session`** (`core/src/main.cpp:1374`)
   ```cpp
   bool execute_training_session(AI& ai,
   ```
   *Role: Primary entry point for the training pipeline; coordinates corpus tokenization, 90/10 train/validation split, pinned memory setup, checkpoint verification, and the training loop.*
 
-- **`load_weights`** (`core/src/ai.cpp:477`)
+- **`load_weights`** (`core/src/ai.cpp:480`)
   ```cpp
   bool AI::load_weights(const std::string& path) {
   ```

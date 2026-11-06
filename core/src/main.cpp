@@ -1438,6 +1438,8 @@ bool execute_training_session(AI& ai,
 	}
 
 	// Repeat sequence if shorter than one full context window + target to enable continuous training
+	const bool has_validation_corpus =
+		(input.tokenized_data.size() >= config::context_window_size * 4);
 	const size_t min_training_tokens = config::context_window_size + 1;
 	if (input.tokenized_data.size() < min_training_tokens) {
 		std::cout
@@ -1513,9 +1515,9 @@ bool execute_training_session(AI& ai,
 		ai.active_vocab_size = input.next_text_id;
 	}
 
-	// Hold out a disjoint 10% validation split when the corpus spans at least 4 context windows
+	// Hold out a disjoint 10% validation split when the un-repeated corpus spans at least 4 context windows
 	portion.validation_token_ids.clear();
-	if (input.tokenized_data.size() >= config::context_window_size * 4) {
+	if (has_validation_corpus) {
 		const size_t min_val_tokens = config::context_window_size + 1;
 		const size_t val_tokens =
 			std::max(min_val_tokens, input.tokenized_data.size() / 10);

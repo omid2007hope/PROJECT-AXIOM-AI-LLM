@@ -229,6 +229,9 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
 			break;
 		}
 		const uint32_t target_id = validation_tokens[start + window_size];
+		if (target_id == 0 || target_id >= vocab_bound) {
+			continue;
+		}
 
 		if (!upload_tokens_to_gpu(validation_tokens.data() + start,
 					  window_size,
