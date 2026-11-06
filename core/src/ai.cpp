@@ -1538,7 +1538,7 @@ bool AI::generate(const std::string& prompt,
 
 	std::vector<float> h_logits(config_.vocab_size);
 
-	// KV Prefix Cache: reuse already-prefilled tokens across multi-turn Cline/ComfyUI requests
+	// KV Prefix Cache: reuse already-prefilled tokens across multi-turn requests
 	size_t prefix_match = 0;
 	const size_t max_prefix = std::min(cached_tokens_.size(), prompt_tokens.size());
 	while (prefix_match < max_prefix && cached_tokens_[prefix_match] == prompt_tokens[prefix_match]) {
@@ -1679,21 +1679,6 @@ bool AI::generate(const std::string& prompt,
 		if (it != qwen_reverse_vocab_.end()) {
 			generated_so_far += it->second;
 			if (token_callback) token_callback(it->second);
-
-			// ONLY stop on complete outer XML tool closing tags for Cline
-			if (generated_so_far.find("</replace_in_file>") != std::string::npos ||
-			    generated_so_far.find("</write_to_file>") != std::string::npos ||
-			    generated_so_far.find("</read_file>") != std::string::npos ||
-			    generated_so_far.find("</execute_command>") != std::string::npos ||
-			    generated_so_far.find("</search_files>") != std::string::npos ||
-			    generated_so_far.find("</list_files>") != std::string::npos ||
-			    generated_so_far.find("</attempt_completion>") != std::string::npos ||
-			    generated_so_far.find("</ask_followup_question>") != std::string::npos) {
-				// Feed the final token into KV cache before breaking so prefix cache stays valid
-				forward_transformer_step(next_token, current_pos, nullptr, compute_stream_);
-				sync_cuda_stream(compute_stream_);
-				break;
-			}
 		}
 
 		forward_transformer_step(next_token, current_pos, d_logits, compute_stream_);

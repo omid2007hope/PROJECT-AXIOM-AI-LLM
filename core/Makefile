@@ -52,7 +52,7 @@ $(APP_TARGET): $(APP_SRCS) $(CUDA_DLL)
 $(TEST_TARGET): $(TEST_SRCS) $(CUDA_DLL)
 	$(CXX) $(CXXFLAGS) $(TEST_SRCS) $(CUDA_LINK) -o $(TEST_TARGET) -lpsapi -lws2_32
 
-# ─── Shared library DLL target for Python / ComfyUI ───────────────────────────
+# ─── Shared library DLL target for Python bindings ───────────────────────────
 dll: $(CUDA_DLL)
 	@mkdir -p build ../build
 	$(CXX) $(CXXFLAGS) -shared -o $(DLL_TARGET) $(DLL_SRCS) $(CUDA_LINK) -lpsapi -lws2_32

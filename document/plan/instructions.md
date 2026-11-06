@@ -1,4 +1,4 @@
-Switching Cline CLI to run Qwen inference directly on Project Axiom requires upgrading your single-layer execution loop into a stacked 28-layer Grouped Query Attention (GQA) pipeline, preserving code punctuation in the tokenizer, streaming the converted `.safetensors` weights into VRAM via Win32 memory mapping, and exposing a local OpenAI-compatible `/v1/chat/completions` endpoint.
+Running Qwen inference directly on Project Axiom requires upgrading your single-layer execution loop into a stacked 28-layer Grouped Query Attention (GQA) pipeline, preserving code punctuation in the tokenizer, streaming the converted `.safetensors` weights into VRAM via Win32 memory mapping, and exposing a local OpenAI-compatible `/v1/chat/completions` endpoint.
 
 ## Master Execution Order
 
@@ -9,8 +9,8 @@ Switching Cline CLI to run Qwen inference directly on Project Axiom requires upg
 | 3     | Transformer Kernels    | rmsnorm.cu, rope.cu, swiglu.cu, paged_gqa.cu | Native BF16 operators    | Numerical parity   |
 | 4     | Stacked Pipeline       | ai.hpp, ai.cpp                               | 28-layer forward loop    | Coherent decode    |
 | 5     | Weight Streaming       | convert_qwen.py, ai.cpp                      | Win32 mmap DMA loader    | Sub-0.8s load      |
-| 6     | Cline & ComfyUI ABI    | server.cpp, axiom_c_api.cpp, Makefile        | HTTP server and DLL      | Live JSON response |
-| 7     | Cutover & Verification | Terminal & Cline CLI config                  | Local coding agent       | 429 tests green    |
+| 6     | HTTP Server & C ABI    | server.cpp, axiom_c_api.cpp, Makefile        | HTTP server and DLL      | Live JSON response |
+| 7     | Cutover & Verification | Terminal & API test config                   | Local LLM server         | 429 tests green    |
 
 The table above sequences the build so low-level VRAM and stream fixes land before multi-layer tensor operations and external API bridges are compiled.
 
@@ -150,7 +150,7 @@ public:
 
 ## Stage 2: Code-Safe Tokenizer & Batched 2D Gather ($M = 32$)
 
-Cline CLI sends large system prompts containing source code, indentation, and Qwen ChatML control tags (`<|im_start|>`, `<|im_end|>`). Your existing sanitizer strips punctuation and lowercases ASCII, which destroys C++ syntax (`{`, `}`, `->`, `;`) and corrupts Qwen token IDs.
+LLM chat clients send large system prompts containing source code, indentation, and Qwen ChatML control tags (`<|im_start|>`, `<|im_end|>`). Your existing sanitizer strips punctuation and lowercases ASCII, which destroys C++ syntax (`{`, `}`, `->`, `;`) and corrupts Qwen token IDs.
 
 ### Step 2.1: Add Code-Preserving BPE Mode & x86_64 Primitives in core/util/parser.cpp
 
@@ -209,7 +209,7 @@ std::vector<uint32_t> Parser::tokenize_exact_code(const std::string& raw_prompt)
 
 ### Step 2.2: Upgrade Gather Kernel to 2D Batched Grid in core/src/CUDA/kernel/forward_pass.cu
 
-When Cline CLI sends a 1,500-token file context, running $M=1$ takes 1,500 serial passes. Upgrading **core/src/CUDA/kernel/forward_pass.cu** to a 2D grid processes all prompt tokens in parallel across Ada Lovelace Tensor Cores:
+When handling a large 1,500-token prompt context, running $M=1$ takes 1,500 serial passes. Upgrading **core/src/CUDA/kernel/forward_pass.cu** to a 2D grid processes all prompt tokens in parallel across Ada Lovelace Tensor Cores:
 
 ```cpp
 __global__ void gather_embeddings_batched_kernel(
@@ -799,11 +799,11 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 
 ```
 
-## Stage 6: Connect Project Axiom to Cline CLI (And ComfyUI)
+## Stage 6: Build the Native OpenAI-Compatible HTTP Server
 
-Cline CLI communicates via the OpenAI `/v1/chat/completions` HTTP protocol. Rather than introducing a heavy Python server, build a zero-dependency C++23 WinSock2 HTTP endpoint directly inside **core/src/server.cpp** alongside **core/src/axiom_c_api.cpp**.
+Project Axiom implements an integrated, zero-dependency C++23 WinSock2 HTTP endpoint directly inside **core/src/server.cpp** alongside **core/src/axiom_c_api.cpp**.
 
-### Step 6.1: Create the Native C++23 OpenAI Server for Cline CLI in core/src/server.cpp
+### Step 6.1: Create the Native C++23 OpenAI Server in core/src/server.cpp
 
 ```cpp
 #include "../include/ai.hpp"
@@ -831,7 +831,7 @@ static std::string escape_json(const std::string& s) {
     return out;
 }
 
-// Extracts the last user message from Cline's JSON payload and wraps in Qwen ChatML
+// Extracts user message from JSON payload and wraps in Qwen ChatML
 static std::string build_qwen_chatml_prompt(const std::string& body) {
     std::string content = "Write clean C++23 and CUDA code.";
     size_t pos = body.rfind("\"content\"");
@@ -862,7 +862,7 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
     bind(listen_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
     listen(listen_sock, SOMAXCONN);
 
-    std::cout << "[Axiom Server] Listening for Cline CLI on http://127.0.0.1:" << port << "/v1/chat/completions\n";
+    std::cout << "[Axiom Server] Listening on http://127.0.0.1:" << port << "/v1/chat/completions\n";
 
     std::vector<char> recv_buf(65536);
     while (true) {
@@ -907,7 +907,7 @@ void run_axiom_openai_server(AI& engine, uint16_t port) {
 
 ### Step 6.2: Wire the `--serve` Flag in core/src/main.cpp
 
-Open **core/src/main.cpp** and add the `--serve` CLI branch so `.\app.exe --serve 8080` boots the model into VRAM and starts listening for Cline CLI requests:
+Open **core/src/main.cpp** and add the `--serve` CLI branch so `.\app.exe --serve 8080` boots the model into VRAM and starts listening for HTTP requests:
 
 ```cpp
 if (arg == "--serve") {
@@ -923,7 +923,7 @@ if (arg == "--serve") {
 
 ### Step 6.3: Add the Server & Shared DLL Targets in core/Makefile
 
-Open **core/Makefile** and link `-lws2_32` for the native OpenAI server while preserving the `dll` target for ComfyUI (`build/axiom_core.dll` + **ComfyUI/custom_nodes/ComfyUI-ProjectAxiom/axiom_node.py**):
+Open **core/Makefile** and link `-lws2_32` for the native OpenAI server while preserving the `dll` target for Python C-bindings (`build/axiom_core.dll`):
 
 ```makefile
 CUDA_KERNELS := src/CUDA/kernel/forward_pass.cu \
@@ -945,7 +945,7 @@ dll:
 
 ```
 
-## Stage 7: Build, Launch & Cut Over Cline CLI to Project Axiom
+## Stage 7: Build, Launch & Verify Local Inference
 
 Execute these commands in order from your Project Axiom root directory in PowerShell:
 
@@ -973,11 +973,12 @@ mingw32-make all
 
 ```
 
-4. Point Cline CLI to Project Axiom as its compute backend:
+4. Test inference via curl or Python:
 
-- Set **API Provider** to `OpenAI Compatible`.
-- Set **Base URL** to `[http://127.0.0.1:8080/v1](http://127.0.0.1:8080/v1)`.
-- Set **API Key** to `axiom-local`.
-- Set **Model ID** to `axiom-qwen-coder`.
+```powershell
+curl http://127.0.0.1:8080/v1/chat/completions `
+  -H "Content-Type: application/json" `
+  -d '{"messages":[{"role":"user","content":"Hello Axiom"}],"stream":false}'
+```
 
 Want to start by dropping the four new CUDA kernels (`rmsnorm.cu`, `rope.cu`, `swiglu.cu`, `paged_gqa.cu`) into **core/src/CUDA/kernel/** and running a quick `nvcc` compile check?

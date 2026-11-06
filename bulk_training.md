@@ -5,7 +5,7 @@
 ### 1. Initialization & Persistence
 - **`execute_training_session`** (`core/src/main.cpp:1374`)
   ```cpp
-  bool execute_training_session(AI& ai,
+  bool execute_training_session(AI& ai, size_t max_steps, const std::string& custom_data_dir);
   ```
   *Role: Primary entry point for the training pipeline; coordinates corpus tokenization, 90/10 train/validation split, pinned memory setup, checkpoint verification, and the training loop.*
 

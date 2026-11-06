@@ -688,7 +688,7 @@ PROJECT-AXIOM/
 ├── tools/                           # Standalone conversion & automation toolchain
 │   └── convert_qwen.py              # Zero-dependency safetensors-to-Axiom binary streaming converter
 ├── build/                           # Shared runtime binaries
-│   └── axiom_core.dll               # Pure C ABI dynamic library (ComfyUI / Python bindings)
+│   └── axiom_core.dll               # Pure C ABI dynamic library (Python / C bindings)
 ├── core/
 │   ├── Makefile                     # Unified build system (NVCC sm_89 + MSVC + GCC UCRT64)
 │   ├── cuda_transfer.dll            # Compiled bare-metal CUDA backend DLL
@@ -980,45 +980,32 @@ constexpr uint64_t fibonacci(uint32_t n) {
 
 ---
 
-### 5. Local Dual Server for Cline VS Code & ComfyUI Desktop (`--serve`)
+### 5. Local OpenAI-Compatible Server (`--serve`)
 
-Axiom includes an integrated, zero-dependency C++23 Winsock2 HTTP and SSE streaming server that concurrently serves **OpenAI API** (`/v1/models`, `/v1/chat/completions`) and **Ollama API** (`/api/tags`, `/api/generate`) endpoints on port 8080.
+Axiom includes an integrated, zero-dependency C++23 Winsock2 HTTP and SSE streaming server that serves standard **OpenAI API** endpoints (`GET /v1/models`, `POST /v1/chat/completions`) on port 8080.
 
 ```powershell
 # Start server in foreground (default port 8080):
-.\\app.exe --serve 8080
+.\app.exe --serve 8080
 
 # Or launch interactively and select background mode:
-.\\app.exe
+.\app.exe
 # Select [6] -> [1] Start Background Server (keeps server alive while you chat in Option [1]!)
 ```
 
 #### Key Architecture & Resilience Features:
-- **Zero-Copy DMA Streaming:** Directly maps `qwen1_5b.axiom` into VRAM via Win32 DMA memory-mapped IO before opening the listening socket.
-- **8,192 Token Context Window & Paged KV-Cache:** Supports deep code review and long multi-file reasoning with 12 Q-Heads and 2 KV-Heads in hardware BF16.
-- **Sliding Context Window Guard:** Automatically clamps overflowing prompt prefixes when massive multi-file attachments (e.g. `@/core/src/main.cpp`) are sent, preventing CUDA KV buffer overflows and eliminating "Model returned empty response" errors.
-- **Multi-Part JSON Parser:** Parses complex multi-part message content arrays (`[{"type":"text", "text":"..."}]`) without dropping file attachments or secondary instructions.
+- **Zero-Copy DMA Streaming:** Directly maps transformer weights into VRAM via Win32 DMA memory-mapped IO before opening the listening socket.
+- **8,192 Token Context Window & Paged KV-Cache:** Supports deep reasoning and long context in hardware BF16.
+- **Multi-Part JSON Parser:** Parses both string content and multi-part content arrays (`[{"type":"text", "text":"..."}]`) with full escape sequence decoding.
 - **Port Conflict Diagnostic:** Uses `SO_EXCLUSIVEADDRUSE` to prevent socket collision, providing clear actionable diagnostics if the port is already bound.
 - **Non-Blocking Background Threading:** Can be spawned in a dedicated background `std::thread`, leaving the interactive console free for Option `[1]` direct chat with full thread-safe `std::mutex` serialization.
 
-#### Configuring Cline CLI / VS Code Extension:
-1. Open **Cline Settings** $	o$ **API Configuration**.
-2. Set **API Provider**: `OpenAI Compatible`.
-3. Set **Base URL**: `http://127.0.0.1:8080/v1`.
-4. Set **API Key**: `axiom` (or any non-empty placeholder string).
-5. Set **Model ID**: `axiom` (or `qwen2.5-coder-7b` / `qwen2.5-coder-1.5b`).
-6. Click **▼ ADVANCED**:
-   - Set **Model Context Window**: `8000` (or `8192`).
-   - Set **Max Output Tokens**: `2048` or `4096`.
-7. Click **Done**. Cline will now stream tokens directly from your Ada Lovelace GPU.
-
-#### Configuring ComfyUI Desktop:
-In your ComfyUI workflow (using `ComfyUI-Ollama` / `OllamaConnectivityV2`):
-1. In Node **1. Ollama Connection (`OllamaConnectivityV2`)**:
-   - Set **`url`**: `http://127.0.0.1:8080` (or run server on port 11434 with `.\\app.exe --serve 11434`).
-   - Set **`model`**: `huihui_ai/qwen2.5-vl-abliterated:7b` (or `axiom`).
-   - Click **`🔄 Reconnect`**.
-2. Connect to **`OllamaGenerateV2`** to trigger autonomous, high-speed prompt expansions and negative conditioning before the diffusion model renders your image.
+#### Querying via HTTP:
+```powershell
+curl http://127.0.0.1:8080/v1/chat/completions `
+  -H "Content-Type: application/json" `
+  -d '{"messages":[{"role":"user","content":"Explain GPU Tensor Cores in C++."}],"stream":false}'
+```
 
 ---
 
@@ -1090,7 +1077,7 @@ Launching without arguments presents the full interactive terminal dashboard:
 ```
 
 #### Server Controller Sub-Menu (Option `[6]`):
-- **`[1] Start Background Server`**: Launches the server in a non-blocking background thread. Returns to the menu immediately so you can chat in Option `[1]` while Cline and ComfyUI connect continuously over port 8080.
+- **`[1] Start Background Server`**: Launches the server in a non-blocking background thread. Returns to the menu immediately so you can chat in Option `[1]` while background HTTP requests process over port 8080.
 - **`[2] Start Foreground Server`**: Launches the server with real-time console request streaming. Press `'q'` or `Esc` anytime to cleanly shutdown and return to the menu.
 - **`[3] Stop Background Server`**: Shuts down the background socket, releases the port, and safely joins the background thread.
 
@@ -1121,62 +1108,38 @@ No deep learning degree required. Here is how to run every feature in under 60 s
 
 ---
 
-#### 🤖 Scenario 2: Use Axiom as Your Free Local AI Coding Assistant in Cline (VS Code)
-*You want Cline in VS Code to write code, review files, and build software using your local RTX GPU instead of paying for OpenAI or Anthropic API keys.*
+#### 🌐 Scenario 2: Query Axiom via Local HTTP API (`curl` / Python requests)
+*You want to query Axiom's neural engine via standard REST requests from any local script or tool.*
 
 1. **Start the Axiom Server:**
    ```powershell
    cd "core"
-   .\app.exe
+   .\app.exe --serve 8080
    ```
-   - Type **`6`** (OpenAI Server).
-   - Type **`1`** (*Start Background Server*).
-   - You will see: `[OK] Project Axiom server running in background on http://127.0.0.1:8080`.
-2. **Configure Cline in VS Code:**
-   - Click the **Cline Gear Icon ⚙️** (Settings) $\to$ **API Configuration**.
-   - **API Provider:** Select `OpenAI Compatible`.
-   - **Base URL:** Enter `http://127.0.0.1:8080/v1`
-   - **API Key:** Enter `axiom` (or any letters).
-   - **Model ID:** Enter `axiom` (or `qwen2.5-coder-7b`).
-   - Click **▼ ADVANCED**:
-     - **Model Context Window:** `8000` (or `8192`).
-     - **Max Output Tokens:** `2048` (or `4096`).
-   - Click **Done**.
-3. **Start Coding:** Open any file in VS Code and tell Cline what to do. Tokens will stream from your local GPU at zero cost!
+2. **Send a Chat Completion Request:**
+   ```powershell
+   curl http://127.0.0.1:8080/v1/chat/completions `
+     -H "Content-Type: application/json" `
+     -d '{"messages":[{"role":"user","content":"Explain GPU Tensor Cores in C++."}],"stream":false}'
+   ```
+3. Tokens return directly as standard OpenAI-compatible JSON.
 
 ---
 
-#### 🎨 Scenario 3: Connect ComfyUI to Project Axiom (Fast Prompt Expander & Brain)
-*You want ComfyUI to use Axiom to expand short ideas into vivid, detailed positive & negative prompts before your diffusion model renders images.*
-
-1. Make sure Axiom's background server is running on port **8080** (from Scenario 2).
-2. Open **ComfyUI Desktop**.
-3. In your workflow, locate the **Ollama Connection** node (`OllamaConnectivityV2`):
-   - **`url`:** Change `http://127.0.0.1:11434` to:
-     ```text
-     http://127.0.0.1:8080
-     ```
-   - **`model`:** Keep as `huihui_ai/qwen2.5-vl-abliterated:7b` (or `axiom`).
-   - Click **`🔄 Reconnect`**.
-4. Connect the output to **`OllamaGenerateV2`** and wire the resulting text into your CLIP text encoder.
-5. Queue your prompt: Axiom expands your scene descriptions instantly without touching internet APIs.
-
----
-
-#### ⚡ Scenario 4: Chat in Terminal AND Use Cline / ComfyUI Concurrently
-*You want the server running for Cline and ComfyUI, but you ALSO want to chat with Axiom directly in your terminal at the same time.*
+#### ⚡ Scenario 3: Chat in Terminal AND Run HTTP Server Concurrently
+*You want the server running in the background, but you ALSO want to chat with Axiom directly in your terminal at the same time.*
 
 1. Run `core\app.exe`.
 2. Type **`6`** $\to$ Type **`1`** (*Start Background Server*).
 3. Press **Enter** to return to the main menu.
 4. Notice Option 6 now says:
-   `[6] OpenAI/Ollama Server: [RUNNING on port 8080] (Select to Stop or Switch)`
+   `[6] HTTP Server: [RUNNING on port 8080] (Select to Stop or Switch)`
 5. Now choose Option **`[1]`** to chat in the terminal!
-6. You can type and chat freely in the console while Cline and ComfyUI make background requests. Axiom's internal thread-safe GPU lock automatically synchronizes access so neither crashes!
+6. You can type and chat freely in the console while the background server handles incoming HTTP requests. Axiom's internal thread-safe GPU lock automatically synchronizes access so neither crashes!
 
 ---
 
-#### 🧠 Scenario 5: Train Your Own AI Model (Your Own Weights!)
+#### 🧠 Scenario 4: Train Your Own AI Model (Your Own Weights!)
 *You want to teach Axiom new concepts, your own writing style, or custom domain data.*
 
 ##### Method A: Quick Interactive Training
@@ -1249,7 +1212,7 @@ No deep learning degree required. Here is how to run every feature in under 60 s
 | :----------------------------------- | :-------------------------- | :----------------------------------------------------------- | :---------------------------------------------------------- |
 | **`.\app.exe`**                      | Interactive Dashboard       | All (Chat, Training, Server, Benchmarking, Tests)            | Real-time terminal menus, HUDs, and token streams           |
 | **`.\app.exe --chat`**               | Conversational coding agent | Multi-turn text & code chat with full context memory         | Live token streaming (tok/s), ChatML dialogue loop          |
-| **`.\\app.exe --serve [port]`**       | OpenAI & Ollama Dual Server | OpenAI JSON, Ollama `/api/generate`, SSE streaming          | Cline VS Code & ComfyUI autonomous LLM backend             |
+| **`.\app.exe --serve [port]`**       | Local OpenAI HTTP Server    | OpenAI JSON, SSE streaming                                   | Local REST & SSE chat completions server                    |
 | **`.\app.exe --use`**                | Low-latency inference       | Text prompts (autoregressive 128 tokens)                     | TTFT, decode throughput (tok/s), predicted token ID & word  |
 | **`.\app.exe --use --vocab <file>`** | Custom vocabulary inference | Text prompts & domain vocabularies                           | Restores custom `.vocab` file, $O(1)$ reverse text decoding |
 | **`.\app.exe --train [N]`**          | Batch/continuous training   | Interactive prompt / sample data                             | Step-by-step MSE loss reduction, % convergence              |

@@ -11,7 +11,7 @@ Project Axiom is a low-latency C++23 and CUDA high-performance computing system 
 
 - `core/include/`: C++23 header definitions (`ai.hpp`, `server.hpp`, `cuda_transfer.hpp`, `parser.hpp`, `identifier.hpp`, `transfer.hpp`, `optimizer.hpp`).
 - `core/src/`: Core implementation sources:
-  - `server.cpp`: Dual OpenAI + Ollama HTTP server with native IDE tool calling (`editor`, `replace_in_file`).
+  - `server.cpp`: Local OpenAI-compatible HTTP server (`/v1/models`, `/v1/chat/completions`).
   - `ai.cpp`: Stacked GQA Transformer forward pass, autoregressive token generator, and prefill management.
   - `main.cpp`: Interactive CLI console, telemetry HUD, test runners, and server controller.
 - `core/src/CUDA/kernel/`: Custom CUDA kernels:

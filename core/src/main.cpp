@@ -314,9 +314,9 @@ AppMode collect_user_input(Input& input) {
 			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
 			  << "[5] Bulk Training (asset_sample)\n";
 		if (is_background_axiom_server_running()) {
-			std::cout << "[6] OpenAI/Ollama Server: [RUNNING on port 8080] (Select to Stop or Switch)\n";
+			std::cout << "[6] HTTP Server: [RUNNING on port 8080] (Select to Stop or Switch)\n";
 		} else {
-			std::cout << "[6] Launch OpenAI Server (Cline / ComfyUI / Port 8080)\n";
+			std::cout << "[6] Launch HTTP Server (OpenAI API / Port 8080)\n";
 		}
 		std::cout << "[7] Single-Layer Perceptron (Legacy Inference)\n"
 			  << "[8] Exit\n"
@@ -716,14 +716,14 @@ void run_inference_engine(AI& ai,
 		if (vocab_ok && model_ok) {
 			std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n";
 		} else {
-			std::cerr << "[!] Failed to map transformer model weights.\n\n";
-		}
-	} else if (std::filesystem::exists(target_weights)) {
-		std::cout << "[..] Loading model weights from: " << target_weights.filename().string()
-			  << "\n";
-		if (ai.load_weights(target_weights.string())) {
-			std::cout << "[OK] Model weights successfully loaded into VRAM.\n\n";
-		} else {
+				std::cerr << "\033[1;31m[!] Failed to map transformer model weights.\033[0m\n\n";
+			}
+		} else if (std::filesystem::exists(target_weights)) {
+			std::cout << "\033[1;36m[..] Loading model weights from: " << target_weights.filename().string()
+			   << "\033[0m\n";
+			if (ai.load_weights(target_weights.string())) {
+				std::cout << "\033[1;32m[OK] Model weights successfully loaded into VRAM.\033[0m\n\n";
+			} else {
 			std::cerr
 				<< "[!] Failed to load model weights. Using baseline weights.\n\n";
 		}
@@ -2149,7 +2149,7 @@ int main(int argc, char* argv[]) {
 				std::cout << "\n=========================================\n"
 					  << "      PROJECT AXIOM SERVER CONTROLLER    \n"
 					  << "=========================================\n"
-					  << "[1] Start Background Server (Recommended: chat in app while Cline/ComfyUI connect)\n"
+					  << "[1] Start Background Server (Recommended: chat in app while server runs in background)\n"
 					  << "[2] Start Foreground Server (Live stream request logs, press 'q' to stop)\n"
 					  << "[3] Back to Main Menu\n"
 					  << "> ";
@@ -2157,7 +2157,7 @@ int main(int argc, char* argv[]) {
 				if (s_choice == 1) {
 					if (start_background_axiom_server(ai, 8080)) {
 						std::cout << "\n[OK] Project Axiom server running in background on http://127.0.0.1:8080\n"
-							  << "[OK] Cline and ComfyUI can now connect continuously!\n"
+							  << "[OK] HTTP server listening on port 8080!\n"
 							  << "[OK] You can select Option [1] anytime to chat directly in this app.\n\n";
 					}
 				} else if (s_choice == 2) {

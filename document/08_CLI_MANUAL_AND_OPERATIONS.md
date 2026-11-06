@@ -17,7 +17,7 @@ The executable accepts standard UNIX-style command-line flags:
 | Flag | Argument | Description |
 | :--- | :--- | :--- |
 | **`--chat`** | _None_ | Launches direct interactive conversation with Project Axiom (Qwen 28-Layer GQA LLM) in the console with full multi-turn context memory. |
-| **`--serve`** | `[PORT]` (Optional) | Starts the native OpenAI-compatible REST & SSE chat completions server (default port: `8080`) for Cline CLI & VS Code extension. |
+| **`--serve`** | `[PORT]` (Optional) | Starts the native OpenAI-compatible REST & SSE chat completions server (default port: `8080`). |
 | **`--use`** | _None_ | Launches the interactive local inference console. Automatically loads weights checkpoint for zero-latency prompt evaluation with live HUD telemetry. |
 | **`--train`** | `[STEPS]` (Optional) | Executes the continuous training loop on sample prompt data. Takes an optional step count integer (defaults to continuous if omitted). |
 | **`--bulk`** | `[STEPS]` (Optional) | Automatically scans and trains on all assets inside `asset_sample` (Text, PDF, Images, Video, Audio, 3D models). Takes an optional step count limit. |
@@ -43,7 +43,7 @@ If [`app.exe`](file:///c:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/cor
 [3] Run Tests
 [4] Benchmark Hardware (Telemetry HUD)
 [5] Bulk Training (asset_sample)
-[6] Launch OpenAI Server (Cline / Port 8080)
+[6] Launch HTTP Server (Port 8080)
 [7] Single-Layer Perceptron (Legacy Inference)
 [8] Exit
 > 
@@ -88,25 +88,21 @@ Axiom > Here is a modern C++23 function using std::ranges:
 
 ---
 
-## 3. Local OpenAI Server for Cline & VS Code (`--serve` or Menu Option `[6]`)
+## 3. Local OpenAI-Compatible Server (`--serve` or Menu Option `[6]`)
 
 Project Axiom embeds a bare-metal C++23 Winsock2 HTTP and SSE streaming server compliant with the OpenAI REST specification (`/v1/models` and `/v1/chat/completions`).
 
 ```powershell
-# Start OpenAI server on default port 8080:
+# Start HTTP server on default port 8080:
 .\app.exe --serve 8080
 ```
 
-### Configuring Cline CLI or VS Code Extension:
-1. Open Cline **Settings** $\to$ **API Configuration**.
-2. **API Provider**: `OpenAI Compatible`.
-3. **Base URL**: `http://127.0.0.1:8080/v1`.
-4. **API Key**: `.....` (any non-empty placeholder).
-5. **Model ID**: `axiom` or `qwen2.5-coder-7b` or `qwen2.5-coder-1.5b`.
-6. Click **▼ ADVANCED**:
-   - Set **Model Context Window** to `8000` (or `8192`).
-   - Set **Max Output Tokens** to `2048` or `4096`.
-7. Click **Done**. Cline will stream responses directly from your GPU!
+### Querying via curl or REST API:
+```powershell
+curl http://127.0.0.1:8080/v1/chat/completions `
+  -H "Content-Type: application/json" `
+  -d '{"messages":[{"role":"user","content":"Explain GPU Tensor Cores in C++."}],"stream":false}'
+```
 
 ---
 
