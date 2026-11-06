@@ -41,21 +41,27 @@ extern "C" CUDA_API bool download_from_gpu(void* h_context,
 	return true;
 }
 
-// Phase 2.2: Non-Blocking Loss Telemetry via 4-byte pinned slot and stream event query
-extern "C" CUDA_API bool download_loss(GpuActivations* gpu_activations, float* h_loss_sum) {
-	if (!gpu_activations || !h_loss_sum)
+// Phase 2.2: Non-Blocking Loss & Activation Telemetry via pinned slot and stream event query
+extern "C" CUDA_API bool download_telemetry(GpuActivations* gpu_activations, float* h_telemetry) {
+	if (!gpu_activations || !h_telemetry)
 		return false;
 
-	*h_loss_sum = 0.0f;
+	const size_t telemetry_bytes = telemetry_slot_count * sizeof(float);
+	for (size_t i = 0; i < telemetry_slot_count; ++i) {
+		h_telemetry[i] = 0.0f;
+	}
 
 	if (!gpu_activations->d_loss)
 		return true;
 
 	if (!gpu_activations->h_pinned_loss) {
-		gpu_activations->h_pinned_loss = pinned_alloc(sizeof(float));
+		gpu_activations->h_pinned_loss = pinned_alloc(telemetry_bytes);
 		if (!gpu_activations->h_pinned_loss)
 			return false;
-		*static_cast<float*>(gpu_activations->h_pinned_loss) = 0.0f;
+		float* pinned_slots = static_cast<float*>(gpu_activations->h_pinned_loss);
+		for (size_t i = 0; i < telemetry_slot_count; ++i) {
+			pinned_slots[i] = 0.0f;
+		}
 	}
 
 	if (gpu_activations->loss_event) {
@@ -71,12 +77,27 @@ extern "C" CUDA_API bool download_loss(GpuActivations* gpu_activations, float* h
 	if (!CUDA_CHECK(cudaMemcpy(
 		    gpu_activations->h_pinned_loss,
 		    gpu_activations->d_loss,
-		    sizeof(float),
+		    telemetry_bytes,
 		    cudaMemcpyDeviceToHost)))
 		return false;
 
-	*h_loss_sum = *static_cast<float*>(gpu_activations->h_pinned_loss);
-	return CUDA_CHECK(cudaMemset(gpu_activations->d_loss, 0, sizeof(float)));
+	const float* pinned_slots = static_cast<const float*>(gpu_activations->h_pinned_loss);
+	for (size_t i = 0; i < telemetry_slot_count; ++i) {
+		h_telemetry[i] = pinned_slots[i];
+	}
+	return CUDA_CHECK(cudaMemset(gpu_activations->d_loss, 0, telemetry_bytes));
+}
+
+extern "C" CUDA_API bool download_loss(GpuActivations* gpu_activations, float* h_loss_sum) {
+	if (!gpu_activations || !h_loss_sum)
+		return false;
+
+	float slots[telemetry_slot_count] = {};
+	if (!download_telemetry(gpu_activations, slots))
+		return false;
+
+	*h_loss_sum = slots[telemetry_loss];
+	return true;
 }
 
 extern "C" CUDA_API bool poll_loss_telemetry(GpuActivations* gpu_activations,
@@ -93,8 +114,9 @@ extern "C" CUDA_API bool poll_loss_telemetry(GpuActivations* gpu_activations,
 		return true;
 	}
 
+	const size_t telemetry_bytes = telemetry_slot_count * sizeof(float);
 	if (!gpu_activations->h_pinned_loss) {
-		gpu_activations->h_pinned_loss = pinned_alloc(sizeof(float));
+		gpu_activations->h_pinned_loss = pinned_alloc(telemetry_bytes);
 		if (!gpu_activations->h_pinned_loss)
 			return false;
 		*static_cast<float*>(gpu_activations->h_pinned_loss) = 0.0f;
@@ -118,7 +140,7 @@ extern "C" CUDA_API bool poll_loss_telemetry(GpuActivations* gpu_activations,
 		return false;
 
 	*h_loss_sum = *static_cast<float*>(gpu_activations->h_pinned_loss);
-	CUDA_CHECK(cudaMemset(gpu_activations->d_loss, 0, sizeof(float)));
+	CUDA_CHECK(cudaMemset(gpu_activations->d_loss, 0, telemetry_bytes));
 	*is_ready = true;
 	return true;
 }

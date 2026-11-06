@@ -43,6 +43,15 @@ enum class TrainStatus {
 	Failed	 // a CUDA step failed (already reported on stderr)
 };
 
+struct TrainingTelemetry {
+	double mean_loss = 0.0;
+	double gradient_norm = 0.0;
+	double activation_magnitude = 0.0;
+	double dead_fraction = 0.0;
+	size_t nonfinite_count = 0;
+	size_t steps = 0;
+};
+
 struct SamplingConfig {
 	float temperature = 0.7f;
 	int top_k = 40;
@@ -106,6 +115,7 @@ public:
 	size_t vocab_size = 65536;
 	size_t embedding_dim = 4;
 	size_t active_vocab_size = 0;
+	uint32_t random_seed = 1337U;
 
 	// Milestone 3: Discrete Autoregressive Token Classification
 	uint32_t last_predicted_token_id = 0;
@@ -159,6 +169,12 @@ public:
 	// over the steps since the previous call. `steps` receives how many that was.
 	// Waits for the GPU to finish, so call it once per report interval, not per step.
 	bool read_loss(double& mean_loss, size_t& steps);
+
+	bool read_telemetry(TrainingTelemetry& telemetry);
+
+	bool evaluate_validation(const std::vector<uint32_t>& validation_tokens,
+				 size_t window_size,
+				 double& validation_loss);
 
 	// Weight persistence methods
 	bool save_weights(const std::string& path = "weights.axiom");

@@ -148,14 +148,25 @@ struct GpuWeights {
 	void* d_expert_down_v = nullptr;
 };
 
+// Layout of the d_loss telemetry block (floats, summed over the steps since the
+// last download). Slot 0 stays the loss so existing single-float readers keep working.
+enum TelemetrySlot {
+	telemetry_loss = 0,	      // sum of per-step loss
+	telemetry_gradient_square = 1, // sum of ||dz||^2 measured before clipping
+	telemetry_nonfinite = 2,	      // count of NaN/Inf seen in loss, dz or activations
+	telemetry_dead_output = 3,     // count of output activations with |y| < 1e-6
+	telemetry_activation_square = 4, // sum of y^2 over output activations
+	telemetry_slot_count = 5
+};
+
 // GPU-side activations buffer
 struct GpuActivations {
 	void* d_output = nullptr; // device ptr to __nv_bfloat16
 	size_t output_elements = 0;
 
-	// device ptr to float: running sum of loss over the steps since the
-	// last download_loss(). Measured before each update, so it is the loss on a
-	// sample the network has not trained on yet.
+	// device ptr to float[telemetry_slot_count]: running sums over the steps since
+	// the last download. Slot 0 is the loss, measured before each update, so it is
+	// the loss on a sample the network has not trained on yet.
 	void* d_loss = nullptr;
 
 	// Milestone 3: Discrete Autoregressive Token Classification

@@ -69,10 +69,8 @@ void AI::reset_weights(Elements& elements) {
 	elements.weight_elements = input_elements_x_total * target_elements_y_total;
 	elements.bias_elements = target_elements_y_total;
 
-	// Initialize with Chaos (Symmetry Breaking)
-	// We use the Mersenne Twister engine for high-quality random numbers
-	std::random_device rd;
-	std::mt19937 gen(rd());
+	// Initialize with Chaos (Symmetry Breaking) using deterministic seed
+	std::mt19937 gen(random_seed);
 
 	// Uniform distribution between weight_min and weight_max
 	std::uniform_real_distribution<float> dis(weight_min, weight_max);
@@ -161,17 +159,113 @@ bool AI::download_weights() {
 	return true;
 }
 
-bool AI::read_loss(double& mean_loss, size_t& steps) {
-	float loss_sum = 0.0f;
+bool AI::read_telemetry(TrainingTelemetry& telemetry) {
+	float slots[telemetry_slot_count] = {};
 
-	if (!download_loss(&gpu_activations, &loss_sum)) {
+	if (!download_telemetry(&gpu_activations, slots)) {
 		return false;
 	}
 
-	steps = pending_steps;
+	telemetry.steps = pending_steps;
 	pending_steps = 0;
-	mean_loss = (steps > 0) ? static_cast<double>(loss_sum) / static_cast<double>(steps) : 0.0;
 
+	const double step_count =
+		(telemetry.steps > 0) ? static_cast<double>(telemetry.steps) : 1.0;
+	const double output_count = static_cast<double>(
+		(telemetry.steps > 0 ? telemetry.steps : 1) *
+		(target_elements_y_total > 0 ? target_elements_y_total : 1));
+
+	telemetry.mean_loss =
+		(telemetry.steps > 0) ? static_cast<double>(slots[telemetry_loss]) / step_count : 0.0;
+	telemetry.gradient_norm =
+		std::sqrt(static_cast<double>(slots[telemetry_gradient_square]) / step_count);
+	telemetry.nonfinite_count = static_cast<size_t>(slots[telemetry_nonfinite]);
+	telemetry.dead_fraction =
+		static_cast<double>(slots[telemetry_dead_output]) / output_count;
+	telemetry.activation_magnitude =
+		std::sqrt(static_cast<double>(slots[telemetry_activation_square]) / output_count);
+
+	return true;
+}
+
+bool AI::read_loss(double& mean_loss, size_t& steps) {
+	TrainingTelemetry telemetry {};
+	if (!read_telemetry(telemetry)) {
+		return false;
+	}
+	mean_loss = telemetry.mean_loss;
+	steps = telemetry.steps;
+	return true;
+}
+
+bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
+			     size_t window_size,
+			     double& validation_loss) {
+	if (window_size == 0 || validation_tokens.size() <= window_size ||
+	    gpu_embeddings.d_table == nullptr) {
+		return false;
+	}
+
+	synchronize_stream(&gpu_portion, 0);
+	synchronize_stream(&gpu_portion, 1);
+
+	const size_t total_windows = validation_tokens.size() - window_size;
+	const size_t max_windows = std::min<size_t>(8, total_windows);
+	const size_t stride = (total_windows > max_windows) ? (total_windows / max_windows) : 1;
+	const size_t vocab_bound = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
+
+	std::vector<std::bfloat16_t> dummy_target(target_elements_y_total,
+						  static_cast<std::bfloat16_t>(0.0f));
+	std::vector<float> probabilities(vocab_bound, 0.0f);
+
+	double total_loss = 0.0;
+	size_t evaluated = 0;
+
+	gpu_embeddings.active_vocab_size = active_vocab_size;
+
+	for (size_t idx = 0; idx < max_windows; ++idx) {
+		const size_t start = idx * stride;
+		if (start + window_size >= validation_tokens.size()) {
+			break;
+		}
+		const uint32_t target_id = validation_tokens[start + window_size];
+
+		if (!upload_tokens_to_gpu(validation_tokens.data() + start,
+					  window_size,
+					  dummy_target.data(),
+					  dummy_target.size(),
+					  &gpu_portion,
+					  0)) {
+			return false;
+		}
+
+		if (!forward_pass_with_embeddings(&gpu_portion,
+						  &gpu_embeddings,
+						  &gpu_weights,
+						  &gpu_activations,
+						  input_elements_x_total,
+						  target_elements_y_total,
+						  0)) {
+			return false;
+		}
+
+		synchronize_stream(&gpu_portion, 0);
+
+		if (!download_probabilities(&gpu_activations, probabilities.data(), vocab_bound)) {
+			return false;
+		}
+
+		const uint32_t safe_target = (target_id < vocab_bound) ? target_id : 0U;
+		const float target_prob = std::max(probabilities[safe_target], 1e-12f);
+		total_loss += static_cast<double>(-std::log(target_prob));
+		++evaluated;
+	}
+
+	if (evaluated == 0) {
+		return false;
+	}
+
+	validation_loss = total_loss / static_cast<double>(evaluated);
 	return true;
 }
 

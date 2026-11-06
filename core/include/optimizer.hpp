@@ -114,10 +114,17 @@ struct Portion {
 	// RAM buffer for uint32_t token IDs
 	std::vector<uint32_t> ram_buffer_token_ids = {};
 
+	// Disjoint held-out validation token IDs for generalization monitoring
+	std::vector<uint32_t> validation_token_ids = {};
+
 	// Start index of every sliding window, reshuffled at the start of each epoch
 	// (offset == 0). Windows are visited as window_order[offset].
 	std::vector<uint32_t> window_order = {};
-	std::mt19937 shuffle_engine {std::random_device {}()};
+	std::mt19937 shuffle_engine {1337U};
+
+	void seed_shuffle(uint32_t seed) {
+		shuffle_engine.seed(seed);
+	}
 
 	// Allocate the pinned buffers. Must be called once before the training loop.
 	// Returns false if the CUDA DLL reports an allocation failure.

@@ -1040,6 +1040,8 @@ void run_training_loop(AI& ai,
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
 	std::optional<double> first_loss;
+	std::optional<double> best_validation_loss;
+	size_t validation_stall_checks = 0;
 
 	while (true) {
 		// Check for interactive user commands without blocking
@@ -1078,10 +1080,13 @@ void run_training_loop(AI& ai,
 		if (ch != 0) {
 			if (ch == 'r' || ch == 'R') {
 				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
+				++ai.random_seed;
 				ai.reset_weights(elements);
 				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
 					first_loss.reset();
+					best_validation_loss.reset();
+					validation_stall_checks = 0;
 					std::cout
 						<< "[!] Brain wipe complete. Resuming training.\n\n";
 				} else {
@@ -1121,10 +1126,39 @@ void run_training_loop(AI& ai,
 			double current_loss = 0.0;
 			if (step == 1 || step % config::loss_report_interval == 0 ||
 			    step >= target_steps) {
-				size_t loss_steps = 0;
-				if (ai.read_loss(current_loss, loss_steps)) {
+				TrainingTelemetry telemetry {};
+				if (ai.read_telemetry(telemetry)) {
+					current_loss = telemetry.mean_loss;
+					if (telemetry.nonfinite_count > 0 ||
+					    !std::isfinite(current_loss)) {
+						std::cerr
+							<< "\n[!] Training aborted at step " << step
+							<< ": non-finite gradient or activation detected ("
+							<< telemetry.nonfinite_count
+							<< " events). Existing checkpoint preserved.\n";
+						break;
+					}
+
 					if (!first_loss) {
 						first_loss = current_loss;
+					}
+
+					double validation_loss = 0.0;
+					const bool has_validation =
+						!portion.validation_token_ids.empty() &&
+						ai.evaluate_validation(
+							portion.validation_token_ids,
+							portion.context_window_size,
+							validation_loss);
+
+					if (has_validation) {
+						if (!best_validation_loss ||
+						    validation_loss < *best_validation_loss - 1e-3) {
+							best_validation_loss = validation_loss;
+							validation_stall_checks = 0;
+						} else {
+							++validation_stall_checks;
+						}
 					}
 
 					const double pct =
@@ -1157,10 +1191,41 @@ void run_training_loop(AI& ai,
 						double delta_pct = (current_loss - *first_loss) /
 								   *first_loss * 100.0;
 						std::cout << " (" << std::showpos
-							  << std::setprecision(1) << delta_pct
-							  << "% vs 1st)" << std::noshowpos;
+						          << std::setprecision(1) << delta_pct
+						          << "% vs 1st)" << std::noshowpos;
+					}
+					std::cout << " | |Grad|: " << std::setprecision(3)
+						  << telemetry.gradient_norm
+						  << " | Dead: " << std::setprecision(1)
+						  << (telemetry.dead_fraction * 100.0) << "%";
+					if (has_validation) {
+						std::cout << " | Val: " << std::setprecision(4)
+							  << validation_loss;
 					}
 					std::cout << "   " << std::flush;
+
+					// Automated early stopping in the Cross-Entropy sweet spot [1.5, 2.5]
+					// or when held-out validation loss ceases to improve inside the band
+					const bool in_sweet_spot =
+						(step >= config::loss_report_interval) &&
+						(current_loss >= 1.5 && current_loss <= 2.5) &&
+						(!has_validation || validation_loss <= 2.5 ||
+						 validation_stall_checks >= 2);
+					if (in_sweet_spot && step < target_steps) {
+						std::cout
+							<< "\n\n[OK] Early stopping triggered at step "
+							<< step << " (Loss " << std::setprecision(4)
+							<< current_loss
+							<< " in target sweet spot [1.5, 2.5]).\n"
+							<< "[!] Automatically saving model checkpoint...\n"
+							<< std::flush;
+						ai.save_weights(weights_path.string());
+						parser.save_vocabulary(vocab_path, input);
+						std::cout << "[OK] Model checkpoint saved to "
+							  << weights_path.filename().string()
+							  << "\n";
+						break;
+					}
 				}
 			}
 
@@ -1291,6 +1356,7 @@ struct EmbeddedDataCleanup {
 		optimizer.close_stream();
 		portion.ram_buffer_tokens.clear();
 		portion.ram_buffer_token_ids.clear();
+		portion.validation_token_ids.clear();
 		portion.offset = 0;
 
 		std::error_code ec;
@@ -1448,6 +1514,24 @@ bool execute_training_session(AI& ai,
 		ai.active_vocab_size = input.next_text_id;
 	}
 
+	// Hold out a disjoint 10% validation split when the corpus spans at least 4 context windows
+	portion.validation_token_ids.clear();
+	if (input.tokenized_data.size() >= config::context_window_size * 4) {
+		const size_t min_val_tokens = config::context_window_size + 1;
+		const size_t val_tokens =
+			std::max(min_val_tokens, input.tokenized_data.size() / 10);
+		if (input.tokenized_data.size() > val_tokens + min_val_tokens) {
+			const size_t split_index = input.tokenized_data.size() - val_tokens;
+			portion.validation_token_ids.assign(
+				input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(split_index),
+				input.tokenized_data.end());
+			input.tokenized_data.resize(split_index);
+			std::cout << "[OK] Generalization split: " << input.tokenized_data.size()
+				  << " train tokens | " << portion.validation_token_ids.size()
+				  << " held-out validation tokens.\n";
+		}
+	}
+
 	// Phase 4.1: Invert Host-to-Device Dataflow
 	// Stream token IDs directly via portion.ram_buffer_token_ids for 512-byte PCIe transfers and CUDA gather
 	portion.ram_buffer_token_ids = std::move(input.tokenized_data);
@@ -1476,7 +1560,12 @@ bool execute_training_session(AI& ai,
 		std::cout << "[..] Pre-existing weights found at "
 			  << weights_path.filename().string() << ". Loading checkpoint...\n"
 			  << std::flush;
-		ai.load_weights(weights_path.string());
+		if (!ai.load_weights(weights_path.string())) {
+			std::cerr << "[!] Checkpoint load failed for " << weights_path.string()
+				  << ". Aborting training to prevent overwriting existing file.\n";
+			portion.free_pinned();
+			return false;
+		}
 	}
 
 	print_hardware_telemetry(portion);
@@ -1670,6 +1759,8 @@ int main(int argc, char* argv[]) {
 	bool auto_purge = false;
 	size_t max_steps = 0;
 	uint32_t min_frequency = 3;
+	uint32_t random_seed = 1337U;
+	bool custom_seed_set = false;
 
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
@@ -1805,6 +1896,27 @@ int main(int argc, char* argv[]) {
 				std::cerr << "Error: --min-count requires an integer value.\n";
 				return 1;
 			}
+		} else if (a == "--seed") {
+			if (i + 1 < argc) {
+				try {
+					random_seed = static_cast<uint32_t>(std::stoul(argv[++i]));
+					custom_seed_set = true;
+				} catch (...) {
+					std::cerr << "Error: --seed requires an integer value.\n";
+					return 1;
+				}
+			} else {
+				std::cerr << "Error: --seed requires an integer value.\n";
+				return 1;
+			}
+		} else if (a.rfind("--seed=", 0) == 0) {
+			try {
+				random_seed = static_cast<uint32_t>(std::stoul(a.substr(7)));
+				custom_seed_set = true;
+			} catch (...) {
+				std::cerr << "Error: --seed requires an integer value.\n";
+				return 1;
+			}
 		} else if (a == "--archive") {
 			auto_archive = true;
 		} else if (a == "--purge") {
@@ -1933,6 +2045,7 @@ int main(int argc, char* argv[]) {
 
 	// Instantiate the required objects for the AI
 	Portion portion(config::ram_buffer_size, config::token_dim, config::context_window_size);
+	portion.seed_shuffle(random_seed);
 	Optimizer optimizer(embedded_path, learning_rate);
 	Elements ai_elements;
 	AI ai(portion.all_elements,
@@ -1940,6 +2053,10 @@ int main(int argc, char* argv[]) {
 	      config::weight_min,
 	      config::weight_max,
 	      ai_elements);
+	if (custom_seed_set) {
+		ai.random_seed = random_seed;
+		ai.reset_weights(ai_elements);
+	}
 
 	if (!ai.upload_weights()) {
 		std::cerr << "[!] Failed to upload the AI weights to VRAM.\n";

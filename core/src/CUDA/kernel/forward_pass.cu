@@ -643,12 +643,13 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 		gpu_activations->output_elements = output_dim;
 	}
 
-	// The loss accumulator is written by the backward pass; it starts at zero
+	// The telemetry block is written by the backward pass; it starts at zero
 	if (!gpu_activations->d_loss) {
-		gpu_activations->d_loss = allocate_vram(sizeof(float), stream);
+		const size_t telemetry_bytes = telemetry_slot_count * sizeof(float);
+		gpu_activations->d_loss = allocate_vram(telemetry_bytes, stream);
 		if (!gpu_activations->d_loss)
 			return false;
-		if (!CUDA_CHECK(cudaMemsetAsync(gpu_activations->d_loss, 0, sizeof(float), stream)))
+		if (!CUDA_CHECK(cudaMemsetAsync(gpu_activations->d_loss, 0, telemetry_bytes, stream)))
 			return false;
 	}
 

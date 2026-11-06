@@ -3801,3 +3801,223 @@ events:
         - "C:/Program Files/CMake"
         - "C:/Program Files (x86)/CUTLASS"
 ...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:1328 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCUDACompiler.cmake:99 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "CUDA.cmake:40 (enable_language)"
+      - "CMakeLists.txt:74 (include)"
+    message: |
+      Checking whether the CUDA compiler is NVIDIA using "" matched "nvcc: [^
+      ]+ Cuda compiler driver":
+      nvcc: NVIDIA (R) Cuda compiler driver
+      Copyright (c) 2005-2026 NVIDIA Corporation
+      Built on Tue_Jun__9_14:30:19_Pacific_Daylight_Time_2026
+      Cuda compilation tools, release 13.3, V13.3.73
+      Build cuda_13.3.r13.3/compiler.38244171_0
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:501 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:538 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:53 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCUDACompiler.cmake:163 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CUDA.cmake:40 (enable_language)"
+      - "CMakeLists.txt:74 (include)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCUDACompilerId.cu.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeCUDACompilerId.cu.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:\\msys64\\usr\\bin"
+        - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin/x64"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.3\\bin"
+        - "C:/Windows/system32"
+        - "C:\\Windows"
+        - "C:/Windows/System32/Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:/Windows/System32/OpenSSH/"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:/Program Files/dotnet/"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR"
+        - "C:/Program Files/nodejs/"
+        - "C:/ProgramData/chocolatey/bin"
+        - "C:/msys64/mingw64/bin"
+        - "C:/msys64/usr/bin"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:/Program Files/LLVM/bin"
+        - "H:\\IDEs\\bin"
+        - "C:/Program Files/CMake/bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2026.2.1\\"
+        - "C:/Users/Omid/AppData/Local/Programs/Python/Python312/Scripts/"
+        - "C:\\Users\\Omid\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:/Users/Omid/AppData/Local/Programs/Python/Launcher/"
+        - "C:\\Users\\Omid\\AppData\\Local\\agy\\bin"
+        - "C:/Python314/Scripts/"
+        - "C:\\Python314\\"
+        - "C:/Windows/system32"
+        - "C:\\Windows"
+        - "C:/Windows/System32/Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:/Windows/System32/OpenSSH/"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:/Program Files/dotnet/"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\ProgramData\\chocolatey\\bin"
+        - "C:\\msys64\\mingw64\\bin"
+        - "C:\\msys64\\usr\\bin"
+        - "C:/Users/Omid/.local/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:/Users/Omid/AppData/Roaming/npm"
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:/Users/Omid/AppData/Local/devin/cli/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Programs\\Antigravity IDE\\bin"
+        - "H:/IDEs/Anti Gravity/Antigravity IDE/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Microsoft\\WinGet\\Packages\\ggml.llamacpp_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "H:/IDEs/Microsoft VS Code/bin"
+        - "H:\\IDEs\\Antigravity IDE\\bin"
+        - "C:/Users/Omid/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.1-full_build/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Programs\\Ollama"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/CUTLASS"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "C:/msys64/ucrt64"
+        - "C:/Program Files"
+        - "C:/Program Files (x86)"
+        - "C:/Program Files/CMake"
+        - "C:/Program Files (x86)/CUTLASS"
+...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:1328 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCUDACompiler.cmake:99 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "CUDA.cmake:40 (enable_language)"
+      - "CMakeLists.txt:74 (include)"
+    message: |
+      Checking whether the CUDA compiler is NVIDIA using "" matched "nvcc: [^
+      ]+ Cuda compiler driver":
+      nvcc: NVIDIA (R) Cuda compiler driver
+      Copyright (c) 2005-2026 NVIDIA Corporation
+      Built on Tue_Jun__9_14:30:19_Pacific_Daylight_Time_2026
+      Cuda compilation tools, release 13.3, V13.3.73
+      Build cuda_13.3.r13.3/compiler.38244171_0
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:501 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:538 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCompilerId.cmake:53 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeDetermineCUDACompiler.cmake:163 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CUDA.cmake:40 (enable_language)"
+      - "CMakeLists.txt:74 (include)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCUDACompilerId.cu.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.4/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.4/Modules/CMakeCUDACompilerId.cu.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:\\msys64\\usr\\bin"
+        - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin/x64"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.3\\bin"
+        - "C:/Windows/system32"
+        - "C:\\Windows"
+        - "C:/Windows/System32/Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:/Windows/System32/OpenSSH/"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:/Program Files/dotnet/"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR"
+        - "C:/Program Files/nodejs/"
+        - "C:/ProgramData/chocolatey/bin"
+        - "C:/msys64/mingw64/bin"
+        - "C:/msys64/usr/bin"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:/Program Files/LLVM/bin"
+        - "H:\\IDEs\\bin"
+        - "C:/Program Files/CMake/bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2026.2.1\\"
+        - "C:/Users/Omid/AppData/Local/Programs/Python/Python312/Scripts/"
+        - "C:\\Users\\Omid\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:/Users/Omid/AppData/Local/Programs/Python/Launcher/"
+        - "C:\\Users\\Omid\\AppData\\Local\\agy\\bin"
+        - "C:/Python314/Scripts/"
+        - "C:\\Python314\\"
+        - "C:/Windows/system32"
+        - "C:\\Windows"
+        - "C:/Windows/System32/Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:/Windows/System32/OpenSSH/"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:/Program Files/dotnet/"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\ProgramData\\chocolatey\\bin"
+        - "C:\\msys64\\mingw64\\bin"
+        - "C:\\msys64\\usr\\bin"
+        - "C:/Users/Omid/.local/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:/Users/Omid/AppData/Roaming/npm"
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:/Users/Omid/AppData/Local/devin/cli/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Programs\\Antigravity IDE\\bin"
+        - "H:/IDEs/Anti Gravity/Antigravity IDE/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Microsoft\\WinGet\\Packages\\ggml.llamacpp_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "H:/IDEs/Microsoft VS Code/bin"
+        - "H:\\IDEs\\Antigravity IDE\\bin"
+        - "C:/Users/Omid/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.1-full_build/bin"
+        - "C:\\Users\\Omid\\AppData\\Local\\Programs\\Ollama"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/CUTLASS"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "C:/msys64/ucrt64"
+        - "C:/Program Files"
+        - "C:/Program Files (x86)"
+        - "C:/Program Files/CMake"
+        - "C:/Program Files (x86)/CUTLASS"
+...

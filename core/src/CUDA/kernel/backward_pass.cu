@@ -20,13 +20,26 @@ __global__ static void compute_loss_and_dz_kernel(
 	const __nv_bfloat16* __restrict__ target,
 	const __nv_bfloat16* __restrict__ emb_table,
 	float* __restrict__ dz,
-	float* __restrict__ loss,
+	float* __restrict__ loss, // telemetry block, see TelemetrySlot
 	size_t out_dim,
 	size_t vocab_size,
 	size_t emb_dim,
 	bool is_token_training) {
 
 	size_t row = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+
+	// Output activation health: necrosis (|y| ~ 0), saturation (y^2) and NaN/Inf
+	if (row < out_dim) {
+		float activation = __bfloat162float(y[row]);
+		if (!isfinite(activation)) {
+			atomicAdd(&loss[telemetry_nonfinite], 1.0f);
+		} else {
+			if (fabsf(activation) < 1e-6f) {
+				atomicAdd(&loss[telemetry_dead_output], 1.0f);
+			}
+			atomicAdd(&loss[telemetry_activation_square], activation * activation);
+		}
+	}
 
 	if (is_token_training && probs != nullptr) {
 		uint32_t target_tok_id = *reinterpret_cast<const uint32_t*>(target);
@@ -38,7 +51,9 @@ __global__ static void compute_loss_and_dz_kernel(
 			float p_target = probs[target_tok_id];
 			float ce_loss = -logf(fmaxf(p_target, 1e-12f));
 			if (isfinite(ce_loss)) {
-				atomicAdd(loss, ce_loss);
+				atomicAdd(&loss[telemetry_loss], ce_loss);
+			} else {
+				atomicAdd(&loss[telemetry_nonfinite], 1.0f);
 			}
 		}
 
@@ -59,6 +74,12 @@ __global__ static void compute_loss_and_dz_kernel(
 				}
 			}
 
+			if (isfinite(dz_val)) {
+				atomicAdd(&loss[telemetry_gradient_square], dz_val * dz_val);
+			} else {
+				atomicAdd(&loss[telemetry_nonfinite], 1.0f);
+				dz_val = 0.0f;
+			}
 			dz_val = fmaxf(-1.0f, fminf(1.0f, dz_val));
 			dz[row] = dz_val;
 		}
@@ -67,7 +88,10 @@ __global__ static void compute_loss_and_dz_kernel(
 			float y_val = __bfloat162float(y[row]);
 			float t_val = __bfloat162float(target[row]);
 			float dy = y_val - t_val;
-			if (isnan(dy) || isinf(dy)) {
+			if (isfinite(dy)) {
+				atomicAdd(&loss[telemetry_gradient_square], dy * dy);
+			} else {
+				atomicAdd(&loss[telemetry_nonfinite], 1.0f);
 				dy = 0.0f;
 			}
 			float dz_val = fmaxf(-1.0f, fminf(1.0f, dy));
@@ -83,7 +107,7 @@ __global__ static void compute_loss_and_dz_kernel(
 						mse_loss += 0.5f * d * d;
 					}
 				}
-				atomicAdd(loss, mse_loss);
+				atomicAdd(&loss[telemetry_loss], mse_loss);
 			}
 		}
 	}

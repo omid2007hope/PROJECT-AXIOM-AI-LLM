@@ -126,6 +126,15 @@ public:
 
 		err = cudaMalloc(&async_ptr, aligned_bytes);
 		if (err == cudaSuccess) {
+			static bool fallback_warned = false;
+			if (!fallback_warned) {
+				fallback_warned = true;
+				std::fprintf(stderr,
+					     "[CachingAllocator] Arena exhausted (%zu / %zu bytes); fell back to cudaMalloc(%zu).\n",
+					     allocated_bytes,
+					     arena_size,
+					     aligned_bytes);
+			}
 			return async_ptr;
 		}
 		cudaGetLastError();
