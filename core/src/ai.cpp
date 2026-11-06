@@ -69,8 +69,8 @@ void AI::reset_weights(Elements& elements) {
 	elements.weight_elements = input_elements_x_total * target_elements_y_total;
 	elements.bias_elements = target_elements_y_total;
 
-	// Initialize with Chaos (Symmetry Breaking) using deterministic seed
-	std::mt19937 gen(random_seed);
+	// Initialize with Chaos (Symmetry Breaking) using deterministic seed progression
+	std::mt19937 gen(random_seed++);
 
 	// Uniform distribution between weight_min and weight_max
 	std::uniform_real_distribution<float> dis(weight_min, weight_max);

@@ -1080,7 +1080,6 @@ void run_training_loop(AI& ai,
 		if (ch != 0) {
 			if (ch == 'r' || ch == 'R') {
 				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
-				++ai.random_seed;
 				ai.reset_weights(elements);
 				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
