@@ -88,13 +88,16 @@ struct GpuWeights {
 
 	// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN Weights
 	void* d_query_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
-	void* d_key_weights = nullptr;    // device ptr to __nv_bfloat16 (dim * dim)
+	void* d_key_weights = nullptr;	  // device ptr to __nv_bfloat16 (dim * dim)
 	void* d_value_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
 	void* d_output_weights = nullptr; // device ptr to __nv_bfloat16 (dim * dim)
 
-	void* d_gate_weights = nullptr; // device ptr to __nv_bfloat16 (dim * ffn_dim)
-	void* d_up_weights = nullptr;   // device ptr to __nv_bfloat16 (dim * ffn_dim)
-	void* d_down_weights = nullptr; // device ptr to __nv_bfloat16 (ffn_dim * dim)
+	void* d_gate_weights =
+		nullptr; // device ptr to __nv_bfloat16 (dim * feedforward_network_dimension)
+	void* d_up_weights =
+		nullptr; // device ptr to __nv_bfloat16 (dim * feedforward_network_dimension)
+	void* d_down_weights =
+		nullptr; // device ptr to __nv_bfloat16 (feedforward_network_dimension * dim)
 
 	// FP32 Master copies for transformer weights
 	void* d_query_master = nullptr;
@@ -129,12 +132,15 @@ struct GpuWeights {
 	size_t expert_count = 8;
 	void* d_router_weights = nullptr; // device ptr to __nv_bfloat16 (dim * expert_count)
 	void* d_router_master = nullptr;  // device ptr to float (dim * expert_count)
-	void* d_router_m = nullptr;       // device ptr to float (dim * expert_count)
-	void* d_router_v = nullptr;       // device ptr to float (dim * expert_count)
+	void* d_router_m = nullptr;	  // device ptr to float (dim * expert_count)
+	void* d_router_v = nullptr;	  // device ptr to float (dim * expert_count)
 
-	void* d_expert_gate = nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * ffn_dim)
-	void* d_expert_up = nullptr;   // device ptr to __nv_bfloat16 (expert_count * dim * ffn_dim)
-	void* d_expert_down = nullptr; // device ptr to __nv_bfloat16 (expert_count * ffn_dim * dim)
+	void* d_expert_gate =
+		nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * feedforward_network_dimension)
+	void* d_expert_up =
+		nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * feedforward_network_dimension)
+	void* d_expert_down =
+		nullptr; // device ptr to __nv_bfloat16 (expert_count * feedforward_network_dimension * dim)
 
 	void* d_expert_gate_master = nullptr;
 	void* d_expert_up_master = nullptr;
@@ -151,10 +157,10 @@ struct GpuWeights {
 // Layout of the d_loss telemetry block (floats, summed over the steps since the
 // last download). Slot 0 stays the loss so existing single-float readers keep working.
 enum TelemetrySlot {
-	telemetry_loss = 0,	      // sum of per-step loss
-	telemetry_gradient_square = 1, // sum of ||dz||^2 measured before clipping
-	telemetry_nonfinite = 2,	      // count of NaN/Inf seen in loss, dz or activations
-	telemetry_dead_output = 3,     // count of output activations with |y| < 1e-6
+	telemetry_loss = 0,		 // sum of per-step loss
+	telemetry_gradient_square = 1,	 // sum of ||dz||^2 measured before clipping
+	telemetry_nonfinite = 2,	 // count of NaN/Inf seen in loss, dz or activations
+	telemetry_dead_output = 3,	 // count of output activations with |y| < 1e-6
 	telemetry_activation_square = 4, // sum of y^2 over output activations
 	telemetry_slot_count = 5
 };
@@ -182,31 +188,37 @@ struct GpuActivations {
 	bool loss_pending = false;     // async transfer in flight flag
 
 	// Phase 3: Transformer Block Intermediate Activations
-	void* d_query = nullptr;               // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_key = nullptr;                 // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_value = nullptr;               // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_attention_output = nullptr;    // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_intermediate_gate = nullptr;   // device ptr to __nv_bfloat16 (seq * ffn_dim)
-	void* d_intermediate_up = nullptr;     // device ptr to __nv_bfloat16 (seq * ffn_dim)
-	void* d_intermediate_swiglu = nullptr; // device ptr to __nv_bfloat16 (seq * ffn_dim)
-	void* d_ffn_output = nullptr;          // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_residual_mid = nullptr;        // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_residual_out = nullptr;        // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_query = nullptr;	    // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_key = nullptr;		    // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_value = nullptr;	    // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_attention_output = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_intermediate_gate =
+		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
+	void* d_intermediate_up =
+		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
+	void* d_intermediate_swiglu =
+		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
+	void* d_ffn_output = nullptr;	// device ptr to __nv_bfloat16 (seq * dim)
+	void* d_residual_mid = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_residual_out = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
 
 	// Phase 6: Sparse Mixture of Experts Routing State
-	void* d_router_logits = nullptr;    // device ptr to float (seq_len * expert_count)
-	void* d_expert_first = nullptr;     // device ptr to int32_t (seq_len): top-1 expert ID
-	void* d_expert_second = nullptr;    // device ptr to int32_t (seq_len): top-2 expert ID
-	void* d_weight_first = nullptr;     // device ptr to float (seq_len): top-1 normalized weight
-	void* d_weight_second = nullptr;    // device ptr to float (seq_len): top-2 normalized weight
-	void* d_expert_histogram = nullptr; // device ptr to int32_t (expert_count): token load counts
+	void* d_router_logits = nullptr; // device ptr to float (seq_len * expert_count)
+	void* d_expert_first = nullptr;	 // device ptr to int32_t (seq_len): top-1 expert ID
+	void* d_expert_second = nullptr; // device ptr to int32_t (seq_len): top-2 expert ID
+	void* d_weight_first = nullptr;	 // device ptr to float (seq_len): top-1 normalized weight
+	void* d_weight_second = nullptr; // device ptr to float (seq_len): top-2 normalized weight
+	void* d_expert_histogram =
+		nullptr; // device ptr to int32_t (expert_count): token load counts
 };
 
 // Phase 4: PagedAttention KV-Cache Physical Page Pool
 struct GpuPagedCache {
-	void* d_key_blocks = nullptr;   // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
-	void* d_value_blocks = nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
-	void* d_block_table = nullptr;  // device ptr to int (staged sequence block table)
+	void* d_key_blocks =
+		nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
+	void* d_value_blocks =
+		nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
+	void* d_block_table = nullptr; // device ptr to int (staged sequence block table)
 	size_t total_blocks = 0;
 	size_t block_size = 16;
 	size_t hidden_dimension = 32;
@@ -215,9 +227,9 @@ struct GpuPagedCache {
 
 // Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
 struct GpuGraphExecution {
-	void* graph = nullptr;      // cudaGraph_t
+	void* graph = nullptr;	    // cudaGraph_t
 	void* graph_exec = nullptr; // cudaGraphExec_t
-	void* stream = nullptr;     // cudaStream_t
+	void* stream = nullptr;	    // cudaStream_t
 	bool is_instantiated = false;
 	float launch_latency_ms = 0.0f;
 };

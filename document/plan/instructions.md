@@ -568,7 +568,7 @@ struct AxiomModelConfig {
     uint32_t num_q_heads    = 12;
     uint32_t num_kv_heads   = 2;
     uint32_t head_dim       = 128;
-    uint32_t ffn_dim        = 8960;
+    uint32_t feedforward_network_dimension        = 8960;
     uint32_t vocab_size     = 151936;
     uint32_t max_seq_len    = 4096;
     float    rms_norm_eps   = 1e-6f;
@@ -599,7 +599,7 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
     const uint32_t D   = config_.hidden_dim;
     const uint32_t Qd  = config_.num_q_heads * config_.head_dim;
     const uint32_t KVd = config_.num_kv_heads * config_.head_dim;
-    const uint32_t FFN = config_.ffn_dim;
+    const uint32_t FFN = config_.feedforward_network_dimension;
 
     cudaMemcpyAsync(d_curr_token_, &token_id, sizeof(uint32_t), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(d_curr_pos_, &token_pos, sizeof(int32_t), cudaMemcpyHostToDevice, stream);
@@ -771,7 +771,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
     const size_t D   = config_.hidden_dim;
     const size_t Qd  = config_.num_q_heads * config_.head_dim;
     const size_t KVd = config_.num_kv_heads * config_.head_dim;
-    const size_t FFN = config_.ffn_dim;
+    const size_t FFN = config_.feedforward_network_dimension;
     const size_t V   = config_.vocab_size;
 
     d_embed_tokens_ = cursor; cursor += V * D;

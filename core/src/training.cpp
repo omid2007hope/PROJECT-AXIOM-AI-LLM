@@ -1,13 +1,13 @@
-#include "../include/ai.hpp"
-#include "../include/optimizer.hpp"
-#include "../src/CUDA/transfer.cuh"
-
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+
+#include "../include/ai.hpp"
+#include "../include/optimizer.hpp"
+#include "../src/CUDA/transfer.cuh"
 
 TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 	// Sync the stream to ensure the GPU is done with this buffer before we overwrite it.
@@ -23,8 +23,7 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 
 	if (portion.has_token_ids && portion.context_token_ids[buffer_index] != nullptr &&
 	    gpu_embeddings.d_table != nullptr) {
-		const size_t sequence_length =
-			std::min<size_t>(portion.context_window_size, 2048);
+		const size_t sequence_length = std::min<size_t>(portion.context_window_size, 2048);
 
 		// Transfer token IDs across PCIe per context window
 		if (!upload_tokens_to_gpu(portion.context_token_ids[buffer_index],
@@ -49,14 +48,15 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 			if (model_dim / heads > 64 && model_dim % 64 == 0) {
 				heads = model_dim / 64;
 			}
-			const size_t ffn_dim =
+			const size_t feedforward_network_dimension =
 				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim)
 					? ffn_dimension
 					: (model_dim * 4);
 
 			if (gpu_weights.d_query_weights == nullptr ||
 			    gpu_weights.transformer_dim != model_dim) {
-				if (!build_transformer_block(model_dim, heads, ffn_dim)) {
+				if (!build_transformer_block(
+					    model_dim, heads, feedforward_network_dimension)) {
 					std::cerr
 						<< "[AI Brain] Failed to build transformer block.\n";
 					return TrainStatus::Failed;
@@ -121,7 +121,7 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 						       sequence_length,
 						       model_dim,
 						       heads,
-						       ffn_dim,
+						       feedforward_network_dimension,
 						       stream)) {
 				std::cerr << "[AI Brain] Transformer forward block failed.\n";
 				return TrainStatus::Failed;
@@ -165,7 +165,7 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 							sequence_length,
 							model_dim,
 							heads,
-							ffn_dim,
+							feedforward_network_dimension,
 							learning_rate,
 							stream)) {
 				std::cerr << "[AI Brain] Transformer backward block failed.\n";
@@ -372,17 +372,17 @@ bool AI::read_telemetry(TrainingTelemetry& telemetry) {
 
 	const double step_count =
 		(telemetry.steps > 0) ? static_cast<double>(telemetry.steps) : 1.0;
-	const double output_count = static_cast<double>(
-		(telemetry.steps > 0 ? telemetry.steps : 1) *
-		(target_elements_y_total > 0 ? target_elements_y_total : 1));
+	const double output_count =
+		static_cast<double>((telemetry.steps > 0 ? telemetry.steps : 1) *
+				    (target_elements_y_total > 0 ? target_elements_y_total : 1));
 
-	telemetry.mean_loss =
-		(telemetry.steps > 0) ? static_cast<double>(slots[telemetry_loss]) / step_count : 0.0;
+	telemetry.mean_loss = (telemetry.steps > 0)
+				      ? static_cast<double>(slots[telemetry_loss]) / step_count
+				      : 0.0;
 	telemetry.gradient_norm =
 		std::sqrt(static_cast<double>(slots[telemetry_gradient_square]) / step_count);
 	telemetry.nonfinite_count = static_cast<size_t>(slots[telemetry_nonfinite]);
-	telemetry.dead_fraction =
-		static_cast<double>(slots[telemetry_dead_output]) / output_count;
+	telemetry.dead_fraction = static_cast<double>(slots[telemetry_dead_output]) / output_count;
 	telemetry.activation_magnitude =
 		std::sqrt(static_cast<double>(slots[telemetry_activation_square]) / output_count);
 
@@ -442,7 +442,7 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
 			if (model_dim / heads > 64 && model_dim % 64 == 0) {
 				heads = model_dim / 64;
 			}
-			const size_t ffn_dim =
+			const size_t feedforward_network_dimension =
 				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim)
 					? ffn_dimension
 					: (model_dim * 4);
@@ -462,7 +462,7 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
 						       window_size,
 						       model_dim,
 						       heads,
-						       ffn_dim,
+						       feedforward_network_dimension,
 						       gpu_portion.stream[0])) {
 				return false;
 			}

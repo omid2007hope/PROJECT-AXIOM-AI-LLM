@@ -100,7 +100,7 @@ class AxiomModelConfig:
     num_q_heads: int
     num_kv_heads: int
     head_dim: int
-    ffn_dim: int
+    feedforward_network_dimension: int
     vocab_size: int
     max_seq_len: int
     rms_norm_eps: float
@@ -115,7 +115,7 @@ class AxiomModelConfig:
             self.num_q_heads,
             self.num_kv_heads,
             self.head_dim,
-            self.ffn_dim,
+            self.feedforward_network_dimension,
             self.vocab_size,
             self.max_seq_len,
             float(self.rms_norm_eps),
@@ -633,7 +633,7 @@ def extract_axiom_config(reader: GGUFReader) -> Tuple[AxiomModelConfig, str]:
     num_q_heads = int(get_req("attention.head_count"))
     num_kv_heads = int(get_req("attention.head_count_kv", num_q_heads))
     head_dim = int(get_req("attention.key_length", hidden_dim // num_q_heads))
-    ffn_dim = int(get_req("feed_forward_length"))
+    feedforward_network_dimension = int(get_req("feed_forward_length"))
     max_seq_len = int(get_req("context_length", 8192))
     rms_norm_eps = float(get_req("attention.layer_norm_rms_epsilon", 1e-6))
     rope_theta = float(get_req("rope.freq_base", 1000000.0))
@@ -651,7 +651,7 @@ def extract_axiom_config(reader: GGUFReader) -> Tuple[AxiomModelConfig, str]:
         num_q_heads=num_q_heads,
         num_kv_heads=num_kv_heads,
         head_dim=head_dim,
-        ffn_dim=ffn_dim,
+        feedforward_network_dimension=feedforward_network_dimension,
         vocab_size=vocab_size,
         max_seq_len=max_seq_len,
         rms_norm_eps=rms_norm_eps,
@@ -737,7 +737,7 @@ def convert_gguf_to_axiom(
         print(f"Layers            : {cfg.num_layers}")
         print(f"Hidden Dim        : {cfg.hidden_dim}")
         print(f"Attention Heads   : {cfg.num_q_heads} Q / {cfg.num_kv_heads} KV (head_dim={cfg.head_dim})")
-        print(f"SwiGLU FFN Dim    : {cfg.ffn_dim}")
+        print(f"SwiGLU FFN Dim    : {cfg.feedforward_network_dimension}")
         print(f"Vocab Size        : {cfg.vocab_size}")
         print(f"Max Seq Len       : {cfg.max_seq_len}")
         print(f"RMSNorm Eps       : {cfg.rms_norm_eps:g}")
@@ -772,9 +772,9 @@ def convert_gguf_to_axiom(
                     (f"{prefix}.attn_v.bias", kv_dim, True),
                     (f"{prefix}.attn_output.weight", q_dim * cfg.hidden_dim, False),
                     (f"{prefix}.ffn_norm.weight", cfg.hidden_dim, False),
-                    (f"{prefix}.ffn_gate.weight", cfg.hidden_dim * cfg.ffn_dim, False),
-                    (f"{prefix}.ffn_up.weight", cfg.hidden_dim * cfg.ffn_dim, False),
-                    (f"{prefix}.ffn_down.weight", cfg.ffn_dim * cfg.hidden_dim, False),
+                    (f"{prefix}.ffn_gate.weight", cfg.hidden_dim * cfg.feedforward_network_dimension, False),
+                    (f"{prefix}.ffn_up.weight", cfg.hidden_dim * cfg.feedforward_network_dimension, False),
+                    (f"{prefix}.ffn_down.weight", cfg.feedforward_network_dimension * cfg.hidden_dim, False),
                 ]
 
                 types_used = set()

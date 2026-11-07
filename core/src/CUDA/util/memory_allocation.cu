@@ -6,8 +6,8 @@
 #include <cuda_runtime.h>
 #include <random>
 
-#include "cuda_utils.cuh"
 #include "caching_allocator.cuh"
+#include "cuda_utils.cuh"
 #include "memory_allocation.cuh"
 
 __global__ static void float_to_bf16_array_kernel(const float* __restrict__ src,
@@ -117,15 +117,16 @@ extern "C" CUDA_API void free_gpu_weights(GpuWeights* gpu) {
 
 	// Free Transformer weights
 	void** xform_weights[] = {
-		&gpu->d_query_weights, &gpu->d_key_weights, &gpu->d_value_weights, &gpu->d_output_weights,
-		&gpu->d_gate_weights, &gpu->d_up_weights, &gpu->d_down_weights,
-		&gpu->d_query_master, &gpu->d_key_master, &gpu->d_value_master, &gpu->d_output_master,
-		&gpu->d_gate_master, &gpu->d_up_master, &gpu->d_down_master,
-		&gpu->d_query_m, &gpu->d_query_v, &gpu->d_key_m, &gpu->d_key_v,
-		&gpu->d_value_m, &gpu->d_value_v, &gpu->d_output_m, &gpu->d_output_v,
-		&gpu->d_gate_m, &gpu->d_gate_v, &gpu->d_up_m, &gpu->d_up_v,
-		&gpu->d_down_m, &gpu->d_down_v
-	};
+		&gpu->d_query_weights,	&gpu->d_key_weights,   &gpu->d_value_weights,
+		&gpu->d_output_weights, &gpu->d_gate_weights,  &gpu->d_up_weights,
+		&gpu->d_down_weights,	&gpu->d_query_master,  &gpu->d_key_master,
+		&gpu->d_value_master,	&gpu->d_output_master, &gpu->d_gate_master,
+		&gpu->d_up_master,	&gpu->d_down_master,   &gpu->d_query_m,
+		&gpu->d_query_v,	&gpu->d_key_m,	       &gpu->d_key_v,
+		&gpu->d_value_m,	&gpu->d_value_v,       &gpu->d_output_m,
+		&gpu->d_output_v,	&gpu->d_gate_m,	       &gpu->d_gate_v,
+		&gpu->d_up_m,		&gpu->d_up_v,	       &gpu->d_down_m,
+		&gpu->d_down_v};
 	for (void** ptr : xform_weights) {
 		if (*ptr) {
 			cudaFree(*ptr);
@@ -184,7 +185,10 @@ extern "C" CUDA_API bool allocate_gpu_embeddings(GpuEmbeddings* gpu_emb,
 	}
 	std::fill(h_chaos, h_chaos + embedding_dim, 0.0f); // PAD row
 
-	cudaMemcpy(gpu_emb->d_table_master, h_chaos, total_elements * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(gpu_emb->d_table_master,
+		   h_chaos,
+		   total_elements * sizeof(float),
+		   cudaMemcpyHostToDevice);
 	free(h_chaos);
 
 	int threads = 256;
@@ -288,13 +292,22 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 	}
 
 	// Free Transformer intermediate activations
-	void** xform_acts[] = {
-		&gpu->d_query, &gpu->d_key, &gpu->d_value, &gpu->d_attention_output,
-		&gpu->d_intermediate_gate, &gpu->d_intermediate_up, &gpu->d_intermediate_swiglu,
-		&gpu->d_ffn_output, &gpu->d_residual_mid, &gpu->d_residual_out,
-		&gpu->d_router_logits, &gpu->d_expert_first, &gpu->d_expert_second,
-		&gpu->d_weight_first, &gpu->d_weight_second, &gpu->d_expert_histogram
-	};
+	void** xform_acts[] = {&gpu->d_query,
+			       &gpu->d_key,
+			       &gpu->d_value,
+			       &gpu->d_attention_output,
+			       &gpu->d_intermediate_gate,
+			       &gpu->d_intermediate_up,
+			       &gpu->d_intermediate_swiglu,
+			       &gpu->d_ffn_output,
+			       &gpu->d_residual_mid,
+			       &gpu->d_residual_out,
+			       &gpu->d_router_logits,
+			       &gpu->d_expert_first,
+			       &gpu->d_expert_second,
+			       &gpu->d_weight_first,
+			       &gpu->d_weight_second,
+			       &gpu->d_expert_histogram};
 	for (void** ptr : xform_acts) {
 		if (*ptr) {
 			free_vram(*ptr, 0);
@@ -356,12 +369,14 @@ extern "C" CUDA_API bool download_device_buffer(void* dst, const void* src, size
 }
 
 extern "C" CUDA_API bool register_host_memory(void* ptr, size_t bytes) {
-	if (!ptr || bytes == 0) return false;
+	if (!ptr || bytes == 0)
+		return false;
 	return CUDA_CHECK(cudaHostRegister(ptr, bytes, cudaHostRegisterReadOnly));
 }
 
 extern "C" CUDA_API void unregister_host_memory(void* ptr) {
-	if (ptr) cudaHostUnregister(ptr);
+	if (ptr)
+		cudaHostUnregister(ptr);
 }
 
 extern "C" CUDA_API void* create_cuda_stream() {
@@ -373,42 +388,59 @@ extern "C" CUDA_API void* create_cuda_stream() {
 }
 
 extern "C" CUDA_API void destroy_cuda_stream(void* stream) {
-	if (stream) cudaStreamDestroy(static_cast<cudaStream_t>(stream));
+	if (stream)
+		cudaStreamDestroy(static_cast<cudaStream_t>(stream));
 }
 
 extern "C" CUDA_API void sync_cuda_stream(void* stream) {
-	if (stream) cudaStreamSynchronize(static_cast<cudaStream_t>(stream));
+	if (stream)
+		cudaStreamSynchronize(static_cast<cudaStream_t>(stream));
 }
 
-extern "C" CUDA_API bool upload_device_buffer_async(void* dst, const void* src, size_t bytes, void* stream) {
-	if (!dst || !src || bytes == 0) return false;
-	return CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyHostToDevice, static_cast<cudaStream_t>(stream)));
+extern "C" CUDA_API bool upload_device_buffer_async(void* dst,
+						    const void* src,
+						    size_t bytes,
+						    void* stream) {
+	if (!dst || !src || bytes == 0)
+		return false;
+	return CUDA_CHECK(cudaMemcpyAsync(
+		dst, src, bytes, cudaMemcpyHostToDevice, static_cast<cudaStream_t>(stream)));
 }
 
-extern "C" CUDA_API bool download_device_buffer_async(void* dst, const void* src, size_t bytes, void* stream) {
-	if (!dst || !src || bytes == 0) return false;
-	return CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToHost, static_cast<cudaStream_t>(stream)));
+extern "C" CUDA_API bool download_device_buffer_async(void* dst,
+						      const void* src,
+						      size_t bytes,
+						      void* stream) {
+	if (!dst || !src || bytes == 0)
+		return false;
+	return CUDA_CHECK(cudaMemcpyAsync(
+		dst, src, bytes, cudaMemcpyDeviceToHost, static_cast<cudaStream_t>(stream)));
 }
 
 extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
 						      size_t hidden_dim,
-						      size_t ffn_dim) {
-	if (!gpu || hidden_dim == 0 || ffn_dim == 0)
+						      size_t feedforward_network_dimension) {
+	if (!gpu || hidden_dim == 0 || feedforward_network_dimension == 0)
 		return false;
 	gpu->transformer_dim = hidden_dim;
-	gpu->transformer_ffn = ffn_dim;
+	gpu->transformer_ffn = feedforward_network_dimension;
 
 	size_t dd_bytes = hidden_dim * hidden_dim * sizeof(float);
-	size_t df_bytes = hidden_dim * ffn_dim * sizeof(float);
+	size_t df_bytes = hidden_dim * feedforward_network_dimension * sizeof(float);
 	size_t dd_bf16 = hidden_dim * hidden_dim * sizeof(__nv_bfloat16);
-	size_t df_bf16 = hidden_dim * ffn_dim * sizeof(__nv_bfloat16);
+	size_t df_bf16 = hidden_dim * feedforward_network_dimension * sizeof(__nv_bfloat16);
 
 	std::mt19937 gen(42);
 	float bound = 1.0f / sqrtf(static_cast<float>(hidden_dim));
 	std::uniform_real_distribution<float> dis(-bound, bound);
 
-	auto allocate_and_init = [&](void** d_w, void** d_master, void** d_m, void** d_v,
-				     size_t elements, size_t bf16_bytes, size_t float_bytes) {
+	auto allocate_and_init = [&](void** d_w,
+				     void** d_master,
+				     void** d_m,
+				     void** d_v,
+				     size_t elements,
+				     size_t bf16_bytes,
+				     size_t float_bytes) {
 		cudaMalloc(d_w, bf16_bytes);
 		cudaMalloc(d_master, float_bytes);
 		cudaMalloc(d_m, float_bytes);
@@ -430,44 +462,79 @@ extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
 			elements);
 	};
 
-	allocate_and_init(&gpu->d_query_weights, &gpu->d_query_master, &gpu->d_query_m, &gpu->d_query_v,
-			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
-	allocate_and_init(&gpu->d_key_weights, &gpu->d_key_master, &gpu->d_key_m, &gpu->d_key_v,
-			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
-	allocate_and_init(&gpu->d_value_weights, &gpu->d_value_master, &gpu->d_value_m, &gpu->d_value_v,
-			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
-	allocate_and_init(&gpu->d_output_weights, &gpu->d_output_master, &gpu->d_output_m, &gpu->d_output_v,
-			  hidden_dim * hidden_dim, dd_bf16, dd_bytes);
+	allocate_and_init(&gpu->d_query_weights,
+			  &gpu->d_query_master,
+			  &gpu->d_query_m,
+			  &gpu->d_query_v,
+			  hidden_dim * hidden_dim,
+			  dd_bf16,
+			  dd_bytes);
+	allocate_and_init(&gpu->d_key_weights,
+			  &gpu->d_key_master,
+			  &gpu->d_key_m,
+			  &gpu->d_key_v,
+			  hidden_dim * hidden_dim,
+			  dd_bf16,
+			  dd_bytes);
+	allocate_and_init(&gpu->d_value_weights,
+			  &gpu->d_value_master,
+			  &gpu->d_value_m,
+			  &gpu->d_value_v,
+			  hidden_dim * hidden_dim,
+			  dd_bf16,
+			  dd_bytes);
+	allocate_and_init(&gpu->d_output_weights,
+			  &gpu->d_output_master,
+			  &gpu->d_output_m,
+			  &gpu->d_output_v,
+			  hidden_dim * hidden_dim,
+			  dd_bf16,
+			  dd_bytes);
 
-	allocate_and_init(&gpu->d_gate_weights, &gpu->d_gate_master, &gpu->d_gate_m, &gpu->d_gate_v,
-			  hidden_dim * ffn_dim, df_bf16, df_bytes);
-	allocate_and_init(&gpu->d_up_weights, &gpu->d_up_master, &gpu->d_up_m, &gpu->d_up_v,
-			  hidden_dim * ffn_dim, df_bf16, df_bytes);
-	allocate_and_init(&gpu->d_down_weights, &gpu->d_down_master, &gpu->d_down_m, &gpu->d_down_v,
-			  ffn_dim * hidden_dim, df_bf16, df_bytes);
+	allocate_and_init(&gpu->d_gate_weights,
+			  &gpu->d_gate_master,
+			  &gpu->d_gate_m,
+			  &gpu->d_gate_v,
+			  hidden_dim * feedforward_network_dimension,
+			  df_bf16,
+			  df_bytes);
+	allocate_and_init(&gpu->d_up_weights,
+			  &gpu->d_up_master,
+			  &gpu->d_up_m,
+			  &gpu->d_up_v,
+			  hidden_dim * feedforward_network_dimension,
+			  df_bf16,
+			  df_bytes);
+	allocate_and_init(&gpu->d_down_weights,
+			  &gpu->d_down_master,
+			  &gpu->d_down_m,
+			  &gpu->d_down_v,
+			  feedforward_network_dimension * hidden_dim,
+			  df_bf16,
+			  df_bytes);
 
 	return CUDA_CHECK(cudaGetLastError());
 }
 
 extern "C" CUDA_API bool allocate_expert_weights(GpuWeights* gpu,
 						 size_t hidden_dim,
-						 size_t ffn_dim,
+						 size_t feedforward_network_dimension,
 						 size_t num_experts) {
-	if (!gpu || hidden_dim == 0 || ffn_dim == 0 || num_experts == 0)
+	if (!gpu || hidden_dim == 0 || feedforward_network_dimension == 0 || num_experts == 0)
 		return false;
 
 	gpu->enable_moe = true;
 	gpu->expert_count = num_experts;
 	gpu->transformer_dim = hidden_dim;
-	gpu->transformer_ffn = ffn_dim;
+	gpu->transformer_ffn = feedforward_network_dimension;
 
 	size_t router_elements = hidden_dim * num_experts;
 	size_t router_bf16_bytes = router_elements * sizeof(__nv_bfloat16);
 	size_t router_float_bytes = router_elements * sizeof(float);
 
-	size_t gate_elements = num_experts * hidden_dim * ffn_dim;
-	size_t up_elements = num_experts * hidden_dim * ffn_dim;
-	size_t down_elements = num_experts * ffn_dim * hidden_dim;
+	size_t gate_elements = num_experts * hidden_dim * feedforward_network_dimension;
+	size_t up_elements = num_experts * hidden_dim * feedforward_network_dimension;
+	size_t down_elements = num_experts * feedforward_network_dimension * hidden_dim;
 
 	size_t gate_bf16 = gate_elements * sizeof(__nv_bfloat16);
 	size_t gate_float = gate_elements * sizeof(float);
@@ -480,8 +547,13 @@ extern "C" CUDA_API bool allocate_expert_weights(GpuWeights* gpu,
 	float bound = 1.0f / sqrtf(static_cast<float>(hidden_dim));
 	std::uniform_real_distribution<float> dis(-bound, bound);
 
-	auto allocate_and_init = [&](void** d_w, void** d_master, void** d_m, void** d_v,
-				     size_t elements, size_t bf16_bytes, size_t float_bytes) {
+	auto allocate_and_init = [&](void** d_w,
+				     void** d_master,
+				     void** d_m,
+				     void** d_v,
+				     size_t elements,
+				     size_t bf16_bytes,
+				     size_t float_bytes) {
 		cudaMalloc(d_w, bf16_bytes);
 		cudaMalloc(d_master, float_bytes);
 		cudaMalloc(d_m, float_bytes);
@@ -503,17 +575,37 @@ extern "C" CUDA_API bool allocate_expert_weights(GpuWeights* gpu,
 			elements);
 	};
 
-	allocate_and_init(&gpu->d_router_weights, &gpu->d_router_master, &gpu->d_router_m, &gpu->d_router_v,
-			  router_elements, router_bf16_bytes, router_float_bytes);
+	allocate_and_init(&gpu->d_router_weights,
+			  &gpu->d_router_master,
+			  &gpu->d_router_m,
+			  &gpu->d_router_v,
+			  router_elements,
+			  router_bf16_bytes,
+			  router_float_bytes);
 
-	allocate_and_init(&gpu->d_expert_gate, &gpu->d_expert_gate_master, &gpu->d_expert_gate_m, &gpu->d_expert_gate_v,
-			  gate_elements, gate_bf16, gate_float);
+	allocate_and_init(&gpu->d_expert_gate,
+			  &gpu->d_expert_gate_master,
+			  &gpu->d_expert_gate_m,
+			  &gpu->d_expert_gate_v,
+			  gate_elements,
+			  gate_bf16,
+			  gate_float);
 
-	allocate_and_init(&gpu->d_expert_up, &gpu->d_expert_up_master, &gpu->d_expert_up_m, &gpu->d_expert_up_v,
-			  up_elements, up_bf16, up_float);
+	allocate_and_init(&gpu->d_expert_up,
+			  &gpu->d_expert_up_master,
+			  &gpu->d_expert_up_m,
+			  &gpu->d_expert_up_v,
+			  up_elements,
+			  up_bf16,
+			  up_float);
 
-	allocate_and_init(&gpu->d_expert_down, &gpu->d_expert_down_master, &gpu->d_expert_down_m, &gpu->d_expert_down_v,
-			  down_elements, down_bf16, down_float);
+	allocate_and_init(&gpu->d_expert_down,
+			  &gpu->d_expert_down_master,
+			  &gpu->d_expert_down_m,
+			  &gpu->d_expert_down_v,
+			  down_elements,
+			  down_bf16,
+			  down_float);
 
 	return CUDA_CHECK(cudaGetLastError());
 }
@@ -522,12 +614,22 @@ extern "C" CUDA_API void free_expert_weights(GpuWeights* gpu) {
 	if (!gpu)
 		return;
 
-	void** moe_weights[] = {
-		&gpu->d_router_weights, &gpu->d_router_master, &gpu->d_router_m, &gpu->d_router_v,
-		&gpu->d_expert_gate, &gpu->d_expert_gate_master, &gpu->d_expert_gate_m, &gpu->d_expert_gate_v,
-		&gpu->d_expert_up, &gpu->d_expert_up_master, &gpu->d_expert_up_m, &gpu->d_expert_up_v,
-		&gpu->d_expert_down, &gpu->d_expert_down_master, &gpu->d_expert_down_m, &gpu->d_expert_down_v
-	};
+	void** moe_weights[] = {&gpu->d_router_weights,
+				&gpu->d_router_master,
+				&gpu->d_router_m,
+				&gpu->d_router_v,
+				&gpu->d_expert_gate,
+				&gpu->d_expert_gate_master,
+				&gpu->d_expert_gate_m,
+				&gpu->d_expert_gate_v,
+				&gpu->d_expert_up,
+				&gpu->d_expert_up_master,
+				&gpu->d_expert_up_m,
+				&gpu->d_expert_up_v,
+				&gpu->d_expert_down,
+				&gpu->d_expert_down_master,
+				&gpu->d_expert_down_m,
+				&gpu->d_expert_down_v};
 	for (void** ptr : moe_weights) {
 		if (*ptr) {
 			cudaFree(*ptr);

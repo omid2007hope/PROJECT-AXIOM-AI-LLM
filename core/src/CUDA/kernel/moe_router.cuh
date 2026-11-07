@@ -7,6 +7,7 @@
 #endif
 #include <cstddef>
 #include <cstdint>
+
 #include "../util/gpu_types.cuh"
 
 #ifdef __cplusplus
@@ -18,7 +19,7 @@ CUDA_API bool forward_mixture_experts(void* hidden_states,
 				      GpuActivations* gpu_activations,
 				      size_t sequence_length,
 				      size_t embedding_dim,
-				      size_t ffn_dim,
+				      size_t feedforward_network_dimension,
 				      void* stream);
 
 CUDA_API bool download_expert_counts(const GpuActivations* gpu_activations,
@@ -34,4 +35,3 @@ CUDA_API bool reset_expert_histogram(GpuActivations* gpu_activations,
 #endif
 
 #endif // MOE_ROUTER_CUH
-

@@ -591,7 +591,7 @@ void run_chat_engine(AI& ai,
 		<< "  Model Architecture : \033[1;32mStacked Grouped Query Attention (GQA)\033[0m\n"
 		<< "  Layer Count        : \033[1;33m" << ai.config_.num_layers
 		<< " stacked blocks\033[0m (Hidden: " << ai.config_.hidden_dim
-		<< ", FFN: " << ai.config_.ffn_dim << ")\n"
+		<< ", FFN: " << ai.config_.feedforward_network_dimension << ")\n"
 		<< "  Attention Heads    : \033[1;33m" << ai.config_.num_q_heads << " Q-Heads / "
 		<< ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim
 		<< ")\n"
@@ -1238,21 +1238,28 @@ bool run_training_loop(AI& ai,
 					// Calculate throughput and time until finish
 					const auto current_time = std::chrono::steady_clock::now();
 					const double elapsed_seconds =
-						std::chrono::duration<double>(current_time - session_start_time).count();
+						std::chrono::duration<double>(current_time -
+									      session_start_time)
+							.count();
 					const double steps_per_second =
-						(elapsed_seconds > 0.0) ? (static_cast<double>(step) / elapsed_seconds) : 0.0;
+						(elapsed_seconds > 0.0)
+							? (static_cast<double>(step) /
+							   elapsed_seconds)
+							: 0.0;
 					const size_t remaining_steps =
 						(target_steps > step) ? (target_steps - step) : 0;
 					const uint64_t eta_seconds =
 						(steps_per_second > 0.0)
-							? static_cast<uint64_t>(remaining_steps / steps_per_second)
+							? static_cast<uint64_t>(remaining_steps /
+										steps_per_second)
 							: 0;
 
 					std::cout << "\r  [..] Learning " << bar << " "
 						  << std::fixed << std::setprecision(1) << pct
 						  << "% | Step " << step << "/" << target_steps
 						  << " | ETA: " << format_duration(eta_seconds)
-						  << " (" << std::setprecision(1) << steps_per_second << " stp/s)"
+						  << " (" << std::setprecision(1)
+						  << steps_per_second << " stp/s)"
 						  << " | Loss: " << std::setprecision(4)
 						  << current_loss;
 					if (*first_loss > 0.0) {
@@ -1284,8 +1291,8 @@ bool run_training_loop(AI& ai,
 
 					// 2. EARLY STOPPING (1.5 - 3.0 Sweet Spot with Warmup Guard)
 					if (step >= config::loss_report_interval &&
-					    current_loss <= target_stop_loss && current_loss > 0.0 &&
-					    step < target_steps) {
+					    current_loss <= target_stop_loss &&
+					    current_loss > 0.0 && step < target_steps) {
 						std::cout
 							<< "\n[!] Target loss threshold reached ("
 							<< std::setprecision(4) << current_loss
@@ -2060,7 +2067,8 @@ int main(int argc, char* argv[]) {
 				try {
 					target_stop_loss = std::stod(argv[++i]);
 				} catch (...) {
-					std::cerr << "Error: --target-loss requires a float value.\n";
+					std::cerr
+						<< "Error: --target-loss requires a float value.\n";
 					return 1;
 				}
 			} else {

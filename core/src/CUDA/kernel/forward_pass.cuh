@@ -58,11 +58,8 @@ CUDA_API bool fused_causal_attention(const void* query,
 				     size_t num_heads,
 				     void* stream);
 
-CUDA_API bool swiglu_forward(const void* gate,
-			     const void* up,
-			     void* output,
-			     size_t total_elements,
-			     void* stream);
+CUDA_API bool swiglu_forward(
+	const void* gate, const void* up, void* output, size_t total_elements, void* stream);
 
 CUDA_API bool transformer_forward_block(void* hidden_states,
 					const GpuWeights* gpu_weights,
@@ -70,7 +67,7 @@ CUDA_API bool transformer_forward_block(void* hidden_states,
 					size_t sequence_length,
 					size_t embedding_dim,
 					size_t num_heads,
-					size_t ffn_dim,
+					size_t feedforward_network_dimension,
 					void* stream);
 
 

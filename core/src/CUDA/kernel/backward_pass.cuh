@@ -54,7 +54,7 @@ CUDA_API bool transformer_backward_block(const void* grad_output,
 					 size_t sequence_length,
 					 size_t embedding_dim,
 					 size_t num_heads,
-					 size_t ffn_dim,
+					 size_t feedforward_network_dimension,
 					 float learning_rate,
 					 void* stream);
 

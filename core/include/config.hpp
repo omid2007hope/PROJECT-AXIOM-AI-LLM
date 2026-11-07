@@ -115,7 +115,7 @@ struct AxiomModelConfig {
 	uint32_t num_q_heads = 12;
 	uint32_t num_kv_heads = 2;
 	uint32_t head_dim = 128;
-	uint32_t ffn_dim = 8960;
+	uint32_t feedforward_network_dimension = 8960;
 	uint32_t vocab_size = 151936;
 	uint32_t max_seq_len = 8192;
 	float rms_norm_eps = 1e-6f;

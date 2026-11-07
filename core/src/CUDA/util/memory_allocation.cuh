@@ -10,7 +10,9 @@ extern "C" {
 CUDA_API void free_gpu(GpuPortion* gpu);
 CUDA_API void free_gpu_weights(GpuWeights* gpu);
 CUDA_API void free_gpu_activations(GpuActivations* gpu);
-CUDA_API bool allocate_gpu_embeddings(GpuEmbeddings* gpu_emb, size_t vocab_size, size_t embedding_dim);
+CUDA_API bool allocate_gpu_embeddings(GpuEmbeddings* gpu_emb,
+				      size_t vocab_size,
+				      size_t embedding_dim);
 CUDA_API void free_gpu_embeddings(GpuEmbeddings* gpu_emb);
 CUDA_API bool upload_embeddings(const float* h_embeddings, GpuEmbeddings* gpu_emb);
 CUDA_API bool download_embeddings(float* h_embeddings, const GpuEmbeddings* gpu_emb);
@@ -29,8 +31,13 @@ CUDA_API void destroy_cuda_stream(void* stream);
 CUDA_API void sync_cuda_stream(void* stream);
 CUDA_API bool upload_device_buffer_async(void* dst, const void* src, size_t bytes, void* stream);
 CUDA_API bool download_device_buffer_async(void* dst, const void* src, size_t bytes, void* stream);
-CUDA_API bool allocate_transformer_weights(GpuWeights* gpu, size_t hidden_dim, size_t ffn_dim);
-CUDA_API bool allocate_expert_weights(GpuWeights* gpu, size_t hidden_dim, size_t ffn_dim, size_t num_experts);
+CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
+					   size_t hidden_dim,
+					   size_t feedforward_network_dimension);
+CUDA_API bool allocate_expert_weights(GpuWeights* gpu,
+				      size_t hidden_dim,
+				      size_t feedforward_network_dimension,
+				      size_t num_experts);
 CUDA_API void free_expert_weights(GpuWeights* gpu);
 
 #ifdef __cplusplus

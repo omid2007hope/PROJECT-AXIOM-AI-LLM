@@ -126,7 +126,9 @@ public:
 		      std::function<void(const std::string&)> token_callback = nullptr);
 
 	// Phase 3: Transformer Block Construction and Execution
-	bool build_transformer_block(size_t hidden_dim, size_t heads = 4, size_t ffn_dim = 64);
+	bool build_transformer_block(size_t hidden_dim,
+				     size_t heads = 4,
+				     size_t feedforward_network_dimension = 64);
 
 	bool forward_transformer(std::vector<std::bfloat16_t>& hidden_states,
 				 size_t sequence_length);
@@ -157,7 +159,9 @@ public:
 	float benchmark_graph_launch_latency(int iterations = 100);
 
 	// Phase 6: Sparse Mixture of Experts (MoE) Routing
-	bool build_expert_layers(size_t hidden_dim, size_t ffn_dim, size_t num_experts = 8);
+	bool build_expert_layers(size_t hidden_dim,
+				 size_t feedforward_network_dimension,
+				 size_t num_experts = 8);
 	bool forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
 				     size_t sequence_length,
 				     std::vector<int>& routing_histogram);

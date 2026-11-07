@@ -329,14 +329,17 @@ bool AI::load_weights(const std::string& path) {
 }
 
 
-bool AI::build_transformer_block(size_t hidden_dim, size_t heads, size_t ffn_dim) {
-	if (hidden_dim == 0 || heads == 0 || ffn_dim == 0)
+bool AI::build_transformer_block(size_t hidden_dim,
+				 size_t heads,
+				 size_t feedforward_network_dimension) {
+	if (hidden_dim == 0 || heads == 0 || feedforward_network_dimension == 0)
 		return false;
 	this->num_heads = heads;
-	this->ffn_dimension = ffn_dim;
+	this->ffn_dimension = feedforward_network_dimension;
 	this->enable_transformer = true;
 
-	return allocate_transformer_weights(&gpu_weights, hidden_dim, ffn_dim);
+	return allocate_transformer_weights(
+		&gpu_weights, hidden_dim, feedforward_network_dimension);
 }
 
 bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length) {
@@ -415,11 +418,14 @@ bool AI::backward_transformer(const std::vector<float>& grad_output,
 	return ok;
 }
 
-bool AI::build_expert_layers(size_t hidden_dim, size_t ffn_dim, size_t num_experts) {
-	if (hidden_dim == 0 || ffn_dim == 0 || num_experts == 0)
+bool AI::build_expert_layers(size_t hidden_dim,
+			     size_t feedforward_network_dimension,
+			     size_t num_experts) {
+	if (hidden_dim == 0 || feedforward_network_dimension == 0 || num_experts == 0)
 		return false;
-	this->ffn_dimension = ffn_dim;
-	return allocate_expert_weights(&gpu_weights, hidden_dim, ffn_dim, num_experts);
+	this->ffn_dimension = feedforward_network_dimension;
+	return allocate_expert_weights(
+		&gpu_weights, hidden_dim, feedforward_network_dimension, num_experts);
 }
 
 bool AI::forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
@@ -561,7 +567,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
 	if (config_.magic != 0x4D4F4958U || config_.num_layers == 0 || config_.hidden_dim == 0 ||
 	    config_.head_dim == 0 || config_.num_q_heads == 0 || config_.num_kv_heads == 0 ||
-	    config_.ffn_dim == 0 || config_.vocab_size == 0 || config_.max_seq_len == 0) {
+	    config_.feedforward_network_dimension == 0 || config_.vocab_size == 0 ||
+	    config_.max_seq_len == 0) {
 		std::cerr << "[Axiom Engine] Invalid .axiom model header in: " << filepath << "\n";
 		UnmapViewOfFile(mapped_base);
 		CloseHandle(hMap);
@@ -577,7 +584,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	const size_t D = config_.hidden_dim;
 	const size_t Qd = config_.num_q_heads * config_.head_dim;
 	const size_t KVd = config_.num_kv_heads * config_.head_dim;
-	const size_t FFN = config_.ffn_dim;
+	const size_t FFN = config_.feedforward_network_dimension;
 	const size_t V = config_.vocab_size;
 	const size_t per_layer_elements = D + (Qd * D) + Qd + (KVd * D) + KVd + (KVd * D) + KVd +
 					  (D * Qd) + D + (FFN * D) + (FFN * D) + (D * FFN);
@@ -756,7 +763,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	cached_tokens_.clear();
 
 	std::cout << "[Axiom Engine] Loaded model: " << config_.num_layers
-		  << " layers, hidden_dim=" << config_.hidden_dim << ", ffn_dim=" << config_.ffn_dim
+		  << " layers, hidden_dim=" << config_.hidden_dim
+		  << ", feedforward_network_dimension=" << config_.feedforward_network_dimension
 		  << " (" << (weights_bytes >> 20) << " MB VRAM)\n";
 	return true;
 }
@@ -765,7 +773,7 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
 	const uint32_t D = config_.hidden_dim;
 	const uint32_t Qd = config_.num_q_heads * config_.head_dim;
 	const uint32_t KVd = config_.num_kv_heads * config_.head_dim;
-	const uint32_t FFN = config_.ffn_dim;
+	const uint32_t FFN = config_.feedforward_network_dimension;
 
 	uint32_t u_token_id = static_cast<uint32_t>(token_id);
 	int32_t s_token_pos = static_cast<int32_t>(token_pos);
