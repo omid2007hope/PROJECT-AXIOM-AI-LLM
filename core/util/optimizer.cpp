@@ -147,9 +147,17 @@ bool Optimizer::load_context_window(Portion& portion) {
 		}
 
 		if (!portion.ram_buffer_token_ids.empty()) {
-			const size_t total_windows =
+			const size_t window_stride =
+				(portion.context_window_size > 0)
+					? std::min<size_t>(portion.context_window_size, 2048)
+					: 1;
+			const size_t available_span =
 				(portion.ram_buffer_token_ids.size() > portion.context_window_size)
-					? portion.ram_buffer_token_ids.size() - portion.context_window_size
+					? (portion.ram_buffer_token_ids.size() - portion.context_window_size)
+					: 0;
+			const size_t total_windows =
+				(available_span > 0)
+					? ((available_span - 1) / window_stride + 1)
 					: 0;
 
 			if (portion.offset == 0 || portion.window_order.size() != total_windows) {
@@ -161,7 +169,8 @@ bool Optimizer::load_context_window(Portion& portion) {
 			}
 
 			if (portion.offset < total_windows) {
-				const size_t window_start = portion.window_order[portion.offset];
+				const size_t window_start =
+					portion.window_order[portion.offset] * window_stride;
 				if (portion.context_token_ids[buffer_index]) {
 					std::memcpy(portion.context_token_ids[buffer_index],
 						    portion.ram_buffer_token_ids.data() + window_start,

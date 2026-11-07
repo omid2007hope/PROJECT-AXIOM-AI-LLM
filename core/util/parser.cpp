@@ -598,6 +598,10 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 
 	// Phase 1.3: Frequency filtering pass (when min_frequency > 1)
 	if (min_frequency > 1) {
+		input.main_dictionary.clear();
+		input.reverse_main_dictionary.clear();
+		input.next_text_id = vocab::TEXT_START_ID;
+
 		std::unordered_map<std::string, uint32_t> word_counts;
 		size_t scan_count = 0;
 		for (const auto& fpath : files) {

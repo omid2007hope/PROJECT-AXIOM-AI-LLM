@@ -238,6 +238,7 @@ __global__ static void backward_scatter_embeddings_kernel(
 	const float* __restrict__ W_master,
 	const float* __restrict__ dz_vector,
 	const float* __restrict__ inv_rms_ptr,
+	float* __restrict__ dx_out,
 	size_t num_tokens,
 	size_t embedding_dim,
 	size_t vocab_size,
@@ -259,6 +260,10 @@ __global__ static void backward_scatter_embeddings_kernel(
 		float inv_rms = (inv_rms_ptr && isfinite(*inv_rms_ptr)) ? *inv_rms_ptr : 1.0f;
 		dx_j *= inv_rms;
 		dx_j = fmaxf(-1.0f, fminf(1.0f, dx_j));
+
+		if (dx_out) {
+			dx_out[j] = dx_j;
+		}
 
 		// Accumulate gradient into FP32 master table with atomicAdd
 		size_t token_idx = j / embedding_dim;
@@ -428,6 +433,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 			static_cast<const float*>(gpu_weights->d_weights_master),
 			static_cast<const float*>(non_const_act->d_dz),
 			static_cast<const float*>(gpu_activations->d_inv_rms),
+			static_cast<float*>(gpu_portion->d_dx[buffer_index]),
 			num_tok,
 			emb_dim,
 			gpu_embeddings->vocab_size,
@@ -503,66 +509,59 @@ __global__ static void fused_causal_backward_kernel(
 	const __nv_bfloat16* q_vec = query + i * embedding_dim + head_offset;
 	const __nv_bfloat16* do_vec = grad_output + i * embedding_dim + head_offset;
 
-	// 1. Recompute attention scores S_{i, j} and softmax weights P_{i, j} for j <= i
+	float q_local[64];
+	float do_local[64];
+	float dq_local[64] = {0.0f};
+	for (size_t d = 0; d < head_dim && d < 64; ++d) {
+		q_local[d] = __bfloat162float(q_vec[d]);
+		do_local[d] = __bfloat162float(do_vec[d]);
+	}
+
+	// Pass 1: Online softmax statistics (max_score, sum_exp, and weighted dP sum D_i)
 	float max_score = -1e30f;
-	float scores[128];
-	if (sequence_length > 128)
-		return;
+	float sum_exp = 0.0f;
+	float weighted_dp = 0.0f;
 
 	for (size_t j = 0; j <= i; ++j) {
 		const __nv_bfloat16* k_vec = key + j * embedding_dim + head_offset;
-		float dot = 0.0f;
-		for (size_t d = 0; d < head_dim && d < 64; ++d) {
-			dot += __bfloat162float(q_vec[d]) * __bfloat162float(k_vec[d]);
-		}
-		float score = dot * scale;
-		scores[j] = score;
-		if (score > max_score) {
-			max_score = score;
-		}
-	}
-
-	float sum_exp = 0.0f;
-	float probs[128];
-	for (size_t j = 0; j <= i; ++j) {
-		float exp_s = expf(scores[j] - max_score);
-		probs[j] = exp_s;
-		sum_exp += exp_s;
-	}
-	float inv_sum = 1.0f / (sum_exp > 1e-12f ? sum_exp : 1.0f);
-	for (size_t j = 0; j <= i; ++j) {
-		probs[j] *= inv_sum;
-	}
-
-	// 2. Compute dP_{i, j} and D_i
-	float dP[128];
-	float D_i = 0.0f;
-	for (size_t j = 0; j <= i; ++j) {
 		const __nv_bfloat16* v_vec = value + j * embedding_dim + head_offset;
+		float dot = 0.0f;
 		float dp_val = 0.0f;
 		for (size_t d = 0; d < head_dim && d < 64; ++d) {
-			float do_val = __bfloat162float(do_vec[d]);
-			float v_val = __bfloat162float(v_vec[d]);
-			dp_val += do_val * v_val;
-
-			atomicAdd(&grad_value[j * embedding_dim + head_offset + d], probs[j] * do_val);
+			dot += q_local[d] * __bfloat162float(k_vec[d]);
+			dp_val += do_local[d] * __bfloat162float(v_vec[d]);
 		}
-		dP[j] = dp_val;
-		D_i += probs[j] * dp_val;
+		float score = dot * scale;
+		float new_max = fmaxf(max_score, score);
+		float exp_prev = expf(max_score - new_max);
+		float exp_curr = expf(score - new_max);
+
+		sum_exp = sum_exp * exp_prev + exp_curr;
+		weighted_dp = weighted_dp * exp_prev + exp_curr * dp_val;
+		max_score = new_max;
 	}
 
-	// 3. Compute dS_{i, j} and accumulate into dQ_{i, d} and dK_{j, d}
-	float dq_local[64] = {0.0f};
+	float inv_sum = 1.0f / (sum_exp > 1e-12f ? sum_exp : 1.0f);
+	float D_i = weighted_dp * inv_sum;
+
+	// Pass 2: Recompute probabilities and accumulate dV, dQ, and dK for arbitrary sequence_length
 	for (size_t j = 0; j <= i; ++j) {
-		float dS = probs[j] * (dP[j] - D_i) * scale;
 		const __nv_bfloat16* k_vec = key + j * embedding_dim + head_offset;
+		const __nv_bfloat16* v_vec = value + j * embedding_dim + head_offset;
+		float dot = 0.0f;
+		float dp_val = 0.0f;
+		for (size_t d = 0; d < head_dim && d < 64; ++d) {
+			dot += q_local[d] * __bfloat162float(k_vec[d]);
+			dp_val += do_local[d] * __bfloat162float(v_vec[d]);
+		}
+		float prob = expf(dot * scale - max_score) * inv_sum;
+		float dS = prob * (dp_val - D_i) * scale;
 
 		for (size_t d = 0; d < head_dim && d < 64; ++d) {
 			float k_val = __bfloat162float(k_vec[d]);
-			float q_val = __bfloat162float(q_vec[d]);
-
+			atomicAdd(&grad_value[j * embedding_dim + head_offset + d], prob * do_local[d]);
 			dq_local[d] += dS * k_val;
-			atomicAdd(&grad_key[j * embedding_dim + head_offset + d], dS * q_val);
+			atomicAdd(&grad_key[j * embedding_dim + head_offset + d], dS * q_local[d]);
 		}
 	}
 
@@ -626,16 +625,33 @@ __global__ static void batched_weight_gradient_kernel(
 	float* __restrict__ grad_W,
 	int S, int OutDim, int InDim) {
 
-	int in_col = blockIdx.x * blockDim.x + threadIdx.x;
-	int out_row = blockIdx.y * blockDim.y + threadIdx.y;
+	__shared__ float tile_dz[16][16];
+	__shared__ float tile_x[16][16];
+
+	int in_col = blockIdx.x * 16 + threadIdx.x;
+	int out_row = blockIdx.y * 16 + threadIdx.y;
+
+	float sum = 0.0f;
+	for (int base_s = 0; base_s < S; base_s += 16) {
+		int s_dz = base_s + threadIdx.x;
+		int s_x = base_s + threadIdx.y;
+
+		tile_dz[threadIdx.y][threadIdx.x] =
+			(s_dz < S && out_row < OutDim) ? grad_out[s_dz * OutDim + out_row] : 0.0f;
+		tile_x[threadIdx.y][threadIdx.x] =
+			(s_x < S && in_col < InDim) ? __bfloat162float(input[s_x * InDim + in_col]) : 0.0f;
+
+		__syncthreads();
+
+		#pragma unroll
+		for (int k = 0; k < 16; ++k) {
+			sum += tile_dz[threadIdx.y][k] * tile_x[k][threadIdx.x];
+		}
+
+		__syncthreads();
+	}
 
 	if (out_row < OutDim && in_col < InDim) {
-		float sum = 0.0f;
-		for (int s = 0; s < S; ++s) {
-			float dz = grad_out[s * OutDim + out_row];
-			float x = __bfloat162float(input[s * InDim + in_col]);
-			sum += dz * x;
-		}
 		grad_W[out_row * InDim + in_col] = sum;
 	}
 }
@@ -646,16 +662,33 @@ __global__ static void batched_input_gradient_kernel(
 	float* __restrict__ grad_X,
 	int S, int OutDim, int InDim) {
 
-	int s = blockIdx.y * blockDim.y + threadIdx.y;
-	int in_col = blockIdx.x * blockDim.x + threadIdx.x;
+	__shared__ float tile_dz[16][16];
+	__shared__ float tile_w[16][16];
+
+	int s = blockIdx.y * 16 + threadIdx.y;
+	int in_col = blockIdx.x * 16 + threadIdx.x;
+
+	float sum = 0.0f;
+	for (int base_o = 0; base_o < OutDim; base_o += 16) {
+		int o_dz = base_o + threadIdx.x;
+		int o_w = base_o + threadIdx.y;
+
+		tile_dz[threadIdx.y][threadIdx.x] =
+			(s < S && o_dz < OutDim) ? grad_out[s * OutDim + o_dz] : 0.0f;
+		tile_w[threadIdx.y][threadIdx.x] =
+			(o_w < OutDim && in_col < InDim) ? W_master[o_w * InDim + in_col] : 0.0f;
+
+		__syncthreads();
+
+		#pragma unroll
+		for (int k = 0; k < 16; ++k) {
+			sum += tile_dz[threadIdx.y][k] * tile_w[k][threadIdx.x];
+		}
+
+		__syncthreads();
+	}
 
 	if (s < S && in_col < InDim) {
-		float sum = 0.0f;
-		for (int o = 0; o < OutDim; ++o) {
-			float dz = grad_out[s * OutDim + o];
-			float w = W_master[o * InDim + in_col];
-			sum += dz * w;
-		}
 		grad_X[s * InDim + in_col] = sum;
 	}
 }

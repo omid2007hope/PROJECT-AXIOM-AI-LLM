@@ -23,9 +23,12 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 
 	if (portion.has_token_ids && portion.context_token_ids[buffer_index] != nullptr &&
 	    gpu_embeddings.d_table != nullptr) {
-		// Transfer only 128 uint32_t token IDs across PCIe per context window (512 bytes!)
+		const size_t sequence_length =
+			std::min<size_t>(portion.context_window_size, 2048);
+
+		// Transfer token IDs across PCIe per context window
 		if (!upload_tokens_to_gpu(portion.context_token_ids[buffer_index],
-					  portion.context_window_size,
+					  sequence_length,
 					  portion.target_tokens[buffer_index],
 					  portion.target_elements,
 					  &gpu_portion,
@@ -34,31 +37,166 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 			return TrainStatus::Failed;
 		}
 
-		// Launch CUDA gather kernel + CUTLASS EVT GEMM forward pass
 		gpu_embeddings.active_vocab_size = active_vocab_size;
-		if (!forward_pass_with_embeddings(&gpu_portion,
-						  &gpu_embeddings,
-						  &gpu_weights,
-						  &gpu_activations,
-						  input_elements_x_total,
-						  target_elements_y_total,
-						  buffer_index)) {
-			std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
-			return TrainStatus::Failed;
-		}
 
-		// Launch CUDA fused AdamW + backward scatter embedding update
-		if (!backward_pass_with_embeddings(&gpu_portion,
-						   &gpu_embeddings,
-						   &gpu_weights,
-						   &gpu_activations,
-						   input_elements_x_total,
-						   target_elements_y_total,
-						   learning_rate,
-						   buffer_index,
-						   true /* use_adamw */)) {
-			std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
-			return TrainStatus::Failed;
+		if (enable_transformer) {
+			synchronize_stream(&gpu_portion, 1 - buffer_index);
+
+			const size_t model_dim =
+				embedding_dim > 0 ? embedding_dim : target_elements_y_total;
+			size_t heads =
+				(num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
+			if (model_dim / heads > 64 && model_dim % 64 == 0) {
+				heads = model_dim / 64;
+			}
+			const size_t ffn_dim =
+				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim)
+					? ffn_dimension
+					: (model_dim * 4);
+
+			if (gpu_weights.d_query_weights == nullptr ||
+			    gpu_weights.transformer_dim != model_dim) {
+				if (!build_transformer_block(model_dim, heads, ffn_dim)) {
+					std::cerr
+						<< "[AI Brain] Failed to build transformer block.\n";
+					return TrainStatus::Failed;
+				}
+			}
+
+			void* stream = gpu_portion.stream[buffer_index];
+			const size_t sequence_elements = sequence_length * model_dim;
+
+			for (size_t i = 0; i < gpu_portion.context_ptr; ++i) {
+				if (gpu_portion.context_elements != input_elements_x_total ||
+				    !gpu_portion.d_context_window[i]) {
+					if (gpu_portion.d_context_window[i]) {
+						free_vram(gpu_portion.d_context_window[i],
+							  gpu_portion.stream[i]);
+					}
+					gpu_portion.d_context_window[i] = allocate_vram(
+						input_elements_x_total * sizeof(std::bfloat16_t),
+						gpu_portion.stream[i]);
+				}
+			}
+			gpu_portion.context_elements = input_elements_x_total;
+
+			if (!gpu_portion.d_hidden_state[buffer_index]) {
+				gpu_portion.d_hidden_state[buffer_index] = allocate_vram(
+					sequence_elements * sizeof(std::bfloat16_t), stream);
+			}
+			if (!gpu_portion.d_dx[buffer_index]) {
+				gpu_portion.d_dx[buffer_index] =
+					allocate_vram(sequence_elements * sizeof(float), stream);
+			}
+			if (!gpu_portion.d_context_window[buffer_index] ||
+			    !gpu_portion.d_hidden_state[buffer_index] ||
+			    !gpu_portion.d_dx[buffer_index]) {
+				std::cerr
+					<< "[AI Brain] Failed to allocate sequence buffers in VRAM.\n";
+				return TrainStatus::Failed;
+			}
+
+			// Gather [M = S x D] token embeddings into context and saved hidden_state buffers
+			launch_gather_embeddings_batched(
+				static_cast<const uint32_t*>(gpu_portion.d_token_ids[buffer_index]),
+				gpu_embeddings.d_table,
+				gpu_portion.d_context_window[buffer_index],
+				static_cast<uint32_t>(sequence_length),
+				static_cast<uint32_t>(model_dim),
+				static_cast<uint32_t>(vocab_size),
+				stream);
+			launch_gather_embeddings_batched(
+				static_cast<const uint32_t*>(gpu_portion.d_token_ids[buffer_index]),
+				gpu_embeddings.d_table,
+				gpu_portion.d_hidden_state[buffer_index],
+				static_cast<uint32_t>(sequence_length),
+				static_cast<uint32_t>(model_dim),
+				static_cast<uint32_t>(vocab_size),
+				stream);
+
+			// Sequence-parallel Transformer Forward Block (M = S)
+			if (!transformer_forward_block(gpu_portion.d_context_window[buffer_index],
+						       &gpu_weights,
+						       &gpu_activations,
+						       sequence_length,
+						       model_dim,
+						       heads,
+						       ffn_dim,
+						       stream)) {
+				std::cerr << "[AI Brain] Transformer forward block failed.\n";
+				return TrainStatus::Failed;
+			}
+
+			// Preserve transformed [S x D] activations during readout forward projection
+			gpu_portion.token_ids_active[buffer_index] = false;
+			const bool fwd_ok = forward_pass_with_embeddings(&gpu_portion,
+									 &gpu_embeddings,
+									 &gpu_weights,
+									 &gpu_activations,
+									 input_elements_x_total,
+									 target_elements_y_total,
+									 buffer_index);
+			gpu_portion.token_ids_active[buffer_index] = true;
+			if (!fwd_ok) {
+				std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
+				return TrainStatus::Failed;
+			}
+
+			// Readout loss, telemetry, and upstream gradient d_dx computation
+			if (!backward_pass_with_embeddings(&gpu_portion,
+							   &gpu_embeddings,
+							   &gpu_weights,
+							   &gpu_activations,
+							   input_elements_x_total,
+							   target_elements_y_total,
+							   learning_rate,
+							   buffer_index,
+							   true /* use_adamw */)) {
+				std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
+				return TrainStatus::Failed;
+			}
+
+			// Sequence-parallel Transformer Backward Block (M = S)
+			if (!transformer_backward_block(gpu_portion.d_dx[buffer_index],
+							nullptr,
+							gpu_portion.d_hidden_state[buffer_index],
+							&gpu_weights,
+							&gpu_activations,
+							sequence_length,
+							model_dim,
+							heads,
+							ffn_dim,
+							learning_rate,
+							stream)) {
+				std::cerr << "[AI Brain] Transformer backward block failed.\n";
+				return TrainStatus::Failed;
+			}
+		} else {
+			// Launch CUDA gather kernel + CUTLASS EVT GEMM forward pass
+			if (!forward_pass_with_embeddings(&gpu_portion,
+							  &gpu_embeddings,
+							  &gpu_weights,
+							  &gpu_activations,
+							  input_elements_x_total,
+							  target_elements_y_total,
+							  buffer_index)) {
+				std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
+				return TrainStatus::Failed;
+			}
+
+			// Launch CUDA fused AdamW + backward scatter embedding update
+			if (!backward_pass_with_embeddings(&gpu_portion,
+							   &gpu_embeddings,
+							   &gpu_weights,
+							   &gpu_activations,
+							   input_elements_x_total,
+							   target_elements_y_total,
+							   learning_rate,
+							   buffer_index,
+							   true /* use_adamw */)) {
+				std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
+				return TrainStatus::Failed;
+			}
 		}
 	} else {
 		// Fallback for float-based training
@@ -295,13 +433,59 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
 			return false;
 		}
 
-		if (!forward_pass_with_embeddings(&gpu_portion,
-						  &gpu_embeddings,
-						  &gpu_weights,
-						  &gpu_activations,
-						  input_elements_x_total,
-						  target_elements_y_total,
-						  0)) {
+		if (enable_transformer && gpu_weights.d_query_weights != nullptr &&
+		    gpu_portion.d_context_window[0] != nullptr) {
+			const size_t model_dim =
+				embedding_dim > 0 ? embedding_dim : target_elements_y_total;
+			size_t heads =
+				(num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
+			if (model_dim / heads > 64 && model_dim % 64 == 0) {
+				heads = model_dim / 64;
+			}
+			const size_t ffn_dim =
+				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim)
+					? ffn_dimension
+					: (model_dim * 4);
+
+			launch_gather_embeddings_batched(
+				static_cast<const uint32_t*>(gpu_portion.d_token_ids[0]),
+				gpu_embeddings.d_table,
+				gpu_portion.d_context_window[0],
+				static_cast<uint32_t>(window_size),
+				static_cast<uint32_t>(model_dim),
+				static_cast<uint32_t>(vocab_size),
+				gpu_portion.stream[0]);
+
+			if (!transformer_forward_block(gpu_portion.d_context_window[0],
+						       &gpu_weights,
+						       &gpu_activations,
+						       window_size,
+						       model_dim,
+						       heads,
+						       ffn_dim,
+						       gpu_portion.stream[0])) {
+				return false;
+			}
+
+			gpu_portion.token_ids_active[0] = false;
+			const bool fwd_ok = forward_pass_with_embeddings(&gpu_portion,
+									 &gpu_embeddings,
+									 &gpu_weights,
+									 &gpu_activations,
+									 input_elements_x_total,
+									 target_elements_y_total,
+									 0);
+			gpu_portion.token_ids_active[0] = true;
+			if (!fwd_ok) {
+				return false;
+			}
+		} else if (!forward_pass_with_embeddings(&gpu_portion,
+							 &gpu_embeddings,
+							 &gpu_weights,
+							 &gpu_activations,
+							 input_elements_x_total,
+							 target_elements_y_total,
+							 0)) {
 			return false;
 		}
 

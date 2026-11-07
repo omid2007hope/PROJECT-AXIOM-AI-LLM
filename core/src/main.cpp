@@ -1068,9 +1068,15 @@ void run_training_loop(AI& ai,
 	if (total_dataset_tokens == 0 && !ec && file_bytes > 0) {
 		total_dataset_tokens = file_bytes / (portion.token_dim * sizeof(std::bfloat16_t));
 	}
-	size_t total_dataset_steps = (total_dataset_tokens > portion.context_window_size)
-					     ? (total_dataset_tokens - portion.context_window_size)
-					     : 0;
+	const size_t available_span = (total_dataset_tokens > portion.context_window_size)
+					      ? (total_dataset_tokens - portion.context_window_size)
+					      : 0;
+	const size_t window_stride =
+		(!portion.ram_buffer_token_ids.empty() && portion.context_window_size > 0)
+			? std::min<size_t>(portion.context_window_size, 2048)
+			: 1;
+	size_t total_dataset_steps =
+		(available_span > 0) ? ((available_span - 1) / window_stride + 1) : 0;
 
 	size_t target_steps =
 		(max_steps > 0)
@@ -1452,8 +1458,9 @@ bool execute_training_session(AI& ai,
 			      uint32_t min_frequency = 3,
 			      double target_stop_loss = 2.0) {
 	parser.developer_mode = developer_mode;
+	ai.enable_transformer = true;
 
-	if (std::filesystem::exists(vocab_path)) {
+	if (mode != AppMode::BulkTrain && std::filesystem::exists(vocab_path)) {
 		std::cout << "[..] Pre-existing vocabulary found at "
 			  << vocab_path.filename().string()
 			  << ". Loading vocabulary checkpoint...\n";

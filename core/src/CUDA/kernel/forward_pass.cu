@@ -121,6 +121,50 @@ using GemmKernel = typename cutlass::gemm::kernel::DefaultGemmWithVisitor<
 
 using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
+using CutlassBatchedEpilogue = cutlass::epilogue::thread::LinearCombination<
+	ElementIn,
+	AlignmentIn,
+	ElementAccumulator,
+	ElementCompute>;
+
+using CutlassBatchedGemm = cutlass::gemm::device::GemmUniversal<
+	ElementIn,
+	cutlass::layout::RowMajor,
+	ElementIn,
+	cutlass::layout::RowMajor,
+	ElementIn,
+	cutlass::layout::RowMajor,
+	ElementAccumulator,
+	cutlass::arch::OpClassTensorOp,
+	cutlass::arch::Sm80,
+	ThreadblockShape,
+	WarpShape,
+	InstructionShape,
+	CutlassBatchedEpilogue,
+	cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>,
+	NumStages,
+	AlignmentIn,
+	AlignmentIn>;
+
+using CutlassBatchedGemmTransB = cutlass::gemm::device::GemmUniversal<
+	ElementIn,
+	cutlass::layout::RowMajor,
+	ElementIn,
+	cutlass::layout::ColumnMajor,
+	ElementIn,
+	cutlass::layout::RowMajor,
+	ElementAccumulator,
+	cutlass::arch::OpClassTensorOp,
+	cutlass::arch::Sm80,
+	ThreadblockShape,
+	WarpShape,
+	InstructionShape,
+	CutlassBatchedEpilogue,
+	cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>,
+	NumStages,
+	AlignmentIn,
+	AlignmentIn>;
+
 } // namespace
 
 __global__ static void gather_embeddings_kernel(const uint32_t* __restrict__ token_ids,
@@ -1054,18 +1098,44 @@ __global__ static void batched_gemm_multiply_kernel(
 	bool transpose_A,
 	bool transpose_B) {
 
-	int col = blockIdx.x * blockDim.x + threadIdx.x;
-	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	__shared__ float tile_a[16][16];
+	__shared__ float tile_b[16][16];
+
+	int col = blockIdx.x * 16 + threadIdx.x;
+	int row = blockIdx.y * 16 + threadIdx.y;
+
+	float sum = 0.0f;
+	for (int base_k = 0; base_k < K; base_k += 16) {
+		int a_k = base_k + threadIdx.x;
+		int b_k = base_k + threadIdx.y;
+
+		if (row < M && a_k < K) {
+			tile_a[threadIdx.y][threadIdx.x] =
+				transpose_A ? __bfloat162float(A[a_k * M + row])
+					    : __bfloat162float(A[row * K + a_k]);
+		} else {
+			tile_a[threadIdx.y][threadIdx.x] = 0.0f;
+		}
+
+		if (b_k < K && col < N) {
+			tile_b[threadIdx.y][threadIdx.x] =
+				transpose_B ? __bfloat162float(B[col * K + b_k])
+					    : __bfloat162float(B[b_k * N + col]);
+		} else {
+			tile_b[threadIdx.y][threadIdx.x] = 0.0f;
+		}
+
+		__syncthreads();
+
+		#pragma unroll
+		for (int k = 0; k < 16; ++k) {
+			sum += tile_a[threadIdx.y][k] * tile_b[k][threadIdx.x];
+		}
+
+		__syncthreads();
+	}
 
 	if (row < M && col < N) {
-		float sum = 0.0f;
-		for (int k = 0; k < K; ++k) {
-			float a_val = transpose_A ? __bfloat162float(A[k * M + row])
-						  : __bfloat162float(A[row * K + k]);
-			float b_val = transpose_B ? __bfloat162float(B[col * K + k])
-						  : __bfloat162float(B[k * N + col]);
-			sum += a_val * b_val;
-		}
 		C[row * N + col] = __float2bfloat16(sum);
 	}
 }
@@ -1084,6 +1154,62 @@ extern "C" CUDA_API bool batched_gemm_multiply(const void* matrix_a,
 	}
 
 	cudaStream_t s = (cudaStream_t)stream;
+
+	// Fast-path: CUTLASS sm_89 Tensor Core MMA (m16n8k16 BF16 -> FP32 accumulate)
+	if (!transpose_a && !transpose_b && (common_dim % AlignmentIn == 0) &&
+	    (cols_b % AlignmentIn == 0)) {
+		cutlass::gemm::GemmCoord problem_size(rows_a, cols_b, common_dim);
+		typename CutlassBatchedGemm::Arguments args(
+			cutlass::gemm::GemmUniversalMode::kGemm,
+			problem_size,
+			1,
+			{ElementCompute(1.0f), ElementCompute(0.0f)},
+			reinterpret_cast<const ElementIn*>(matrix_a),
+			reinterpret_cast<const ElementIn*>(matrix_b),
+			reinterpret_cast<const ElementIn*>(matrix_c),
+			reinterpret_cast<ElementIn*>(matrix_c),
+			static_cast<int64_t>(rows_a) * common_dim,
+			static_cast<int64_t>(common_dim) * cols_b,
+			static_cast<int64_t>(rows_a) * cols_b,
+			static_cast<int64_t>(rows_a) * cols_b,
+			common_dim,
+			cols_b,
+			cols_b,
+			cols_b);
+		CutlassBatchedGemm gemm_op;
+		if (gemm_op.can_implement(args) == cutlass::Status::kSuccess &&
+		    gemm_op.initialize(args, nullptr, s) == cutlass::Status::kSuccess &&
+		    gemm_op.run(s) == cutlass::Status::kSuccess) {
+			return CUDA_CHECK(cudaGetLastError());
+		}
+	} else if (!transpose_a && transpose_b && (common_dim % AlignmentIn == 0) &&
+		   (cols_b % AlignmentIn == 0)) {
+		cutlass::gemm::GemmCoord problem_size(rows_a, cols_b, common_dim);
+		typename CutlassBatchedGemmTransB::Arguments args(
+			cutlass::gemm::GemmUniversalMode::kGemm,
+			problem_size,
+			1,
+			{ElementCompute(1.0f), ElementCompute(0.0f)},
+			reinterpret_cast<const ElementIn*>(matrix_a),
+			reinterpret_cast<const ElementIn*>(matrix_b),
+			reinterpret_cast<const ElementIn*>(matrix_c),
+			reinterpret_cast<ElementIn*>(matrix_c),
+			static_cast<int64_t>(rows_a) * common_dim,
+			static_cast<int64_t>(cols_b) * common_dim,
+			static_cast<int64_t>(rows_a) * cols_b,
+			static_cast<int64_t>(rows_a) * cols_b,
+			common_dim,
+			common_dim,
+			cols_b,
+			cols_b);
+		CutlassBatchedGemmTransB gemm_op;
+		if (gemm_op.can_implement(args) == cutlass::Status::kSuccess &&
+		    gemm_op.initialize(args, nullptr, s) == cutlass::Status::kSuccess &&
+		    gemm_op.run(s) == cutlass::Status::kSuccess) {
+			return CUDA_CHECK(cudaGetLastError());
+		}
+	}
+
 	dim3 block_dim(16, 16);
 	dim3 grid_dim((cols_b + block_dim.x - 1) / block_dim.x,
 		      (rows_a + block_dim.y - 1) / block_dim.y);
@@ -1253,6 +1379,9 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			total_seq_dim * sizeof(__nv_bfloat16), cudaMemcpyDeviceToDevice, s);
 
 	// 2. Pre-Norm: RMSNorm on X
+	if (!gpu_activations->d_inv_rms) {
+		gpu_activations->d_inv_rms = allocate_vram(sizeof(float), s);
+	}
 	if (gpu_activations->d_inv_rms) {
 		rms_norm_forward_kernel<<<1, 1024, 0, s>>>(
 			static_cast<__nv_bfloat16*>(hidden_states),
