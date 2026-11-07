@@ -7,22 +7,10 @@
 #include <fstream>
 #include <iostream>
 #include <random>
-
-#include "../include/parser.hpp"
-#include "../include/transfer.hpp"
-#include "CUDA/kernel/forward_pass.cuh"
-#include "CUDA/kernel/rmsnorm.cuh"
-#include "CUDA/kernel/rope.cuh"
-#include "CUDA/kernel/swiglu.cuh"
-#include "CUDA/kernel/paged_gqa.cuh"
-#include "CUDA/util/memory_allocation.cuh"
 #include <windows.h>
 
 AI::AI()
-    : input_elements_x_total(512),
-      target_elements_y_total(4),
-      weight_min(-0.1f),
-      weight_max(0.1f) {
+    : input_elements_x_total(512), target_elements_y_total(4), weight_min(-0.1f), weight_max(0.1f) {
 	vocab_size = 151936;
 	embedding_dim = 1536;
 	compute_stream_ = create_cuda_stream();
@@ -38,7 +26,6 @@ AI::AI(size_t input_elements_x_total,
       target_elements_y_total(target_elements_y_total),
       weight_min(weight_min),
       weight_max(weight_max) {
-
 	// input_elements_x_total = token * dim = 512
 	// target_elements_y_total = target * dim = 4
 
@@ -109,27 +96,84 @@ AI::~AI() {
 	free_gpu_activations(&gpu_activations);
 	free_gpu_embeddings(&gpu_embeddings);
 
-	if (d_weights_arena_) { free_device_memory(d_weights_arena_); d_weights_arena_ = nullptr; }
-	if (d_curr_token_) { free_device_memory(d_curr_token_); d_curr_token_ = nullptr; }
-	if (d_curr_pos_) { free_device_memory(d_curr_pos_); d_curr_pos_ = nullptr; }
-	if (d_residual_stream_) { free_device_memory(d_residual_stream_); d_residual_stream_ = nullptr; }
-	if (d_normed_x_) { free_device_memory(d_normed_x_); d_normed_x_ = nullptr; }
-	if (d_q_) { free_device_memory(d_q_); d_q_ = nullptr; }
-	if (d_k_) { free_device_memory(d_k_); d_k_ = nullptr; }
-	if (d_v_) { free_device_memory(d_v_); d_v_ = nullptr; }
-	if (d_attn_out_) { free_device_memory(d_attn_out_); d_attn_out_ = nullptr; }
-	if (d_proj_tmp_) { free_device_memory(d_proj_tmp_); d_proj_tmp_ = nullptr; }
-	if (d_gate_buf_) { free_device_memory(d_gate_buf_); d_gate_buf_ = nullptr; }
-	if (d_up_buf_) { free_device_memory(d_up_buf_); d_up_buf_ = nullptr; }
-	if (d_act_buf_) { free_device_memory(d_act_buf_); d_act_buf_ = nullptr; }
-	if (d_pred_id_) { free_device_memory(d_pred_id_); d_pred_id_ = nullptr; }
-	if (d_logits_) { free_device_memory(d_logits_); d_logits_ = nullptr; }
-	if (d_block_table_) { free_device_memory(d_block_table_); d_block_table_ = nullptr; }
-	for (void* ptr : d_k_cache_) { if (ptr) free_device_memory(ptr); }
-	for (void* ptr : d_v_cache_) { if (ptr) free_device_memory(ptr); }
+	if (d_weights_arena_) {
+		free_device_memory(d_weights_arena_);
+		d_weights_arena_ = nullptr;
+	}
+	if (d_curr_token_) {
+		free_device_memory(d_curr_token_);
+		d_curr_token_ = nullptr;
+	}
+	if (d_curr_pos_) {
+		free_device_memory(d_curr_pos_);
+		d_curr_pos_ = nullptr;
+	}
+	if (d_residual_stream_) {
+		free_device_memory(d_residual_stream_);
+		d_residual_stream_ = nullptr;
+	}
+	if (d_normed_x_) {
+		free_device_memory(d_normed_x_);
+		d_normed_x_ = nullptr;
+	}
+	if (d_q_) {
+		free_device_memory(d_q_);
+		d_q_ = nullptr;
+	}
+	if (d_k_) {
+		free_device_memory(d_k_);
+		d_k_ = nullptr;
+	}
+	if (d_v_) {
+		free_device_memory(d_v_);
+		d_v_ = nullptr;
+	}
+	if (d_attn_out_) {
+		free_device_memory(d_attn_out_);
+		d_attn_out_ = nullptr;
+	}
+	if (d_proj_tmp_) {
+		free_device_memory(d_proj_tmp_);
+		d_proj_tmp_ = nullptr;
+	}
+	if (d_gate_buf_) {
+		free_device_memory(d_gate_buf_);
+		d_gate_buf_ = nullptr;
+	}
+	if (d_up_buf_) {
+		free_device_memory(d_up_buf_);
+		d_up_buf_ = nullptr;
+	}
+	if (d_act_buf_) {
+		free_device_memory(d_act_buf_);
+		d_act_buf_ = nullptr;
+	}
+	if (d_pred_id_) {
+		free_device_memory(d_pred_id_);
+		d_pred_id_ = nullptr;
+	}
+	if (d_logits_) {
+		free_device_memory(d_logits_);
+		d_logits_ = nullptr;
+	}
+	if (d_block_table_) {
+		free_device_memory(d_block_table_);
+		d_block_table_ = nullptr;
+	}
+	for (void* ptr : d_k_cache_) {
+		if (ptr)
+			free_device_memory(ptr);
+	}
+	for (void* ptr : d_v_cache_) {
+		if (ptr)
+			free_device_memory(ptr);
+	}
 	d_k_cache_.clear();
 	d_v_cache_.clear();
-	if (compute_stream_) { destroy_cuda_stream(compute_stream_); compute_stream_ = nullptr; }
+	if (compute_stream_) {
+		destroy_cuda_stream(compute_stream_);
+		compute_stream_ = nullptr;
+	}
 }
 
 bool AI::upload_weights() {
@@ -156,324 +200,6 @@ bool AI::download_weights() {
 			return false;
 		}
 	}
-	return true;
-}
-
-bool AI::read_telemetry(TrainingTelemetry& telemetry) {
-	float slots[telemetry_slot_count] = {};
-
-	if (!download_telemetry(&gpu_activations, slots)) {
-		return false;
-	}
-
-	telemetry.steps = pending_steps;
-	pending_steps = 0;
-
-	const double step_count =
-		(telemetry.steps > 0) ? static_cast<double>(telemetry.steps) : 1.0;
-	const double output_count = static_cast<double>(
-		(telemetry.steps > 0 ? telemetry.steps : 1) *
-		(target_elements_y_total > 0 ? target_elements_y_total : 1));
-
-	telemetry.mean_loss =
-		(telemetry.steps > 0) ? static_cast<double>(slots[telemetry_loss]) / step_count : 0.0;
-	telemetry.gradient_norm =
-		std::sqrt(static_cast<double>(slots[telemetry_gradient_square]) / step_count);
-	telemetry.nonfinite_count = static_cast<size_t>(slots[telemetry_nonfinite]);
-	telemetry.dead_fraction =
-		static_cast<double>(slots[telemetry_dead_output]) / output_count;
-	telemetry.activation_magnitude =
-		std::sqrt(static_cast<double>(slots[telemetry_activation_square]) / output_count);
-
-	return true;
-}
-
-bool AI::read_loss(double& mean_loss, size_t& steps) {
-	TrainingTelemetry telemetry {};
-	if (!read_telemetry(telemetry)) {
-		return false;
-	}
-	mean_loss = telemetry.mean_loss;
-	steps = telemetry.steps;
-	return true;
-}
-
-bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
-			     size_t window_size,
-			     double& validation_loss) {
-	if (window_size == 0 || validation_tokens.size() <= window_size ||
-	    gpu_embeddings.d_table == nullptr) {
-		return false;
-	}
-
-	synchronize_stream(&gpu_portion, 0);
-	synchronize_stream(&gpu_portion, 1);
-
-	const size_t total_windows = validation_tokens.size() - window_size;
-	const size_t max_windows = std::min<size_t>(8, total_windows);
-	const size_t stride = (total_windows > max_windows) ? (total_windows / max_windows) : 1;
-	const size_t vocab_bound = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
-
-	std::vector<std::bfloat16_t> dummy_target(target_elements_y_total,
-						  static_cast<std::bfloat16_t>(0.0f));
-	std::vector<float> probabilities(vocab_bound, 0.0f);
-
-	double total_loss = 0.0;
-	size_t evaluated = 0;
-
-	gpu_embeddings.active_vocab_size = active_vocab_size;
-
-	for (size_t idx = 0; idx < max_windows; ++idx) {
-		const size_t start = idx * stride;
-		if (start + window_size >= validation_tokens.size()) {
-			break;
-		}
-		const uint32_t target_id = validation_tokens[start + window_size];
-		if (target_id == 0 || target_id >= vocab_bound) {
-			continue;
-		}
-
-		if (!upload_tokens_to_gpu(validation_tokens.data() + start,
-					  window_size,
-					  dummy_target.data(),
-					  dummy_target.size(),
-					  &gpu_portion,
-					  0)) {
-			return false;
-		}
-
-		if (!forward_pass_with_embeddings(&gpu_portion,
-						  &gpu_embeddings,
-						  &gpu_weights,
-						  &gpu_activations,
-						  input_elements_x_total,
-						  target_elements_y_total,
-						  0)) {
-			return false;
-		}
-
-		synchronize_stream(&gpu_portion, 0);
-
-		if (!download_probabilities(&gpu_activations, probabilities.data(), vocab_bound)) {
-			return false;
-		}
-
-		const uint32_t safe_target = (target_id < vocab_bound) ? target_id : 0U;
-		const float target_prob = std::max(probabilities[safe_target], 1e-12f);
-		total_loss += static_cast<double>(-std::log(target_prob));
-		++evaluated;
-	}
-
-	if (evaluated == 0) {
-		return false;
-	}
-
-	validation_loss = total_loss / static_cast<double>(evaluated);
-	return true;
-}
-
-TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
-	// Sync the stream to ensure the GPU is done with this buffer before we
-	// overwrite it.
-	synchronize_stream(&gpu_portion, portion.buffer_index);
-
-	bool has_data = optimizer.load_context_window(portion);
-
-	if (!has_data) {
-		return TrainStatus::NoData;
-	}
-
-	int buffer_index = portion.buffer_index;
-	float learning_rate = optimizer.learning_rate;
-
-	if (portion.has_token_ids && portion.context_token_ids[buffer_index] != nullptr &&
-	    gpu_embeddings.d_table != nullptr) {
-		// Transfer only 128 uint32_t token IDs across PCIe per context window (512 bytes!)
-		if (!upload_tokens_to_gpu(portion.context_token_ids[buffer_index],
-					  portion.context_window_size,
-					  portion.target_tokens[buffer_index],
-					  portion.target_elements,
-					  &gpu_portion,
-					  buffer_index)) {
-			std::cerr << "[AI Brain] Failed to upload tokens to GPU.\n";
-			return TrainStatus::Failed;
-		}
-
-		// Launch CUDA gather kernel + CUTLASS EVT GEMM forward pass
-		gpu_embeddings.active_vocab_size = active_vocab_size;
-		if (!forward_pass_with_embeddings(&gpu_portion,
-						  &gpu_embeddings,
-						  &gpu_weights,
-						  &gpu_activations,
-						  input_elements_x_total,
-						  target_elements_y_total,
-						  buffer_index)) {
-			std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
-			return TrainStatus::Failed;
-		}
-
-		// Launch CUDA fused AdamW + backward scatter embedding update
-		if (!backward_pass_with_embeddings(&gpu_portion,
-						   &gpu_embeddings,
-						   &gpu_weights,
-						   &gpu_activations,
-						   input_elements_x_total,
-						   target_elements_y_total,
-						   learning_rate,
-						   buffer_index,
-						   true /* use_adamw */)) {
-			std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
-			return TrainStatus::Failed;
-		}
-	} else {
-		// Fallback for float-based training
-		if (!upload_to_gpu(portion.context_window_tokens[buffer_index],
-				   portion.all_elements,
-				   portion.target_tokens[buffer_index],
-				   portion.target_elements,
-				   &gpu_portion,
-				   buffer_index)) {
-			std::cerr << "[AI Brain] Failed to upload portion to GPU.\n";
-			return TrainStatus::Failed;
-		}
-
-		if (!forward_pass(&gpu_portion,
-				  &gpu_weights,
-				  &gpu_activations,
-				  input_elements_x_total,
-				  target_elements_y_total,
-				  buffer_index)) {
-			std::cerr << "[AI Brain] Forward pass failed.\n";
-			return TrainStatus::Failed;
-		}
-
-		if (!backward_pass(&gpu_portion,
-				   &gpu_weights,
-				   &gpu_activations,
-				   input_elements_x_total,
-				   target_elements_y_total,
-				   learning_rate,
-				   buffer_index)) {
-			std::cerr << "[AI Brain] Backward pass failed.\n";
-			return TrainStatus::Failed;
-		}
-	}
-
-	// Slide to the next buffer for the next training step
-	portion.buffer_index = 1 - portion.buffer_index;
-	++pending_steps;
-
-	return TrainStatus::Trained;
-}
-
-bool AI::save_weights(const std::string& path) {
-	// 1. Synchronize CUDA streams to ensure in-flight work completes
-	synchronize_stream(&gpu_portion, 0);
-	synchronize_stream(&gpu_portion, 1);
-
-	// 2. Download latest trained weights and embeddings from GPU if allocated
-	if (gpu_weights.d_weights_master != nullptr) {
-		if (!download_weights()) {
-			std::cerr
-				<< "[AI Brain] Failed to download weights from GPU before saving.\n";
-			return false;
-		}
-	}
-
-	// 3. Populate binary header
-	AxiomWeightHeader header {};
-	std::memcpy(header.magic, "AXIOM_V1", 8);
-	header.input_elements_x_total = input_elements_x_total;
-	header.target_elements_y_total = target_elements_y_total;
-	header.weight_count = host_weights.size();
-	header.bias_count = host_bias.size();
-	header.vocab_size = vocab_size;
-	header.embedding_dim = embedding_dim;
-
-	if (header.weight_count != input_elements_x_total * target_elements_y_total ||
-	    header.bias_count != target_elements_y_total) {
-		std::cerr << "[AI Brain] Weight or bias dimension mismatch during serialization.\n";
-		return false;
-	}
-
-	for (float w : host_weights) {
-		if (!std::isfinite(w)) {
-			std::cerr
-				<< "[AI Brain] Refusing to save corrupt checkpoint: weights contain NaN or Inf.\n";
-			return false;
-		}
-	}
-	for (float b : host_bias) {
-		if (!std::isfinite(b)) {
-			std::cerr
-				<< "[AI Brain] Refusing to save corrupt checkpoint: biases contain NaN or Inf.\n";
-			return false;
-		}
-	}
-	for (float e_val : host_embeddings) {
-		if (!std::isfinite(e_val)) {
-			std::cerr
-				<< "[AI Brain] Refusing to save corrupt checkpoint: embeddings contain NaN or Inf.\n";
-			return false;
-		}
-	}
-
-	// 4. Atomic write: write to temporary file first (.tmp)
-	std::filesystem::path target_p(path);
-	if (!target_p.parent_path().empty()) {
-		std::error_code dir_ec;
-		std::filesystem::create_directories(target_p.parent_path(), dir_ec);
-	}
-
-	std::string temp_path = path + ".tmp";
-	std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
-	if (!out.is_open()) {
-		std::cerr << "[AI Brain] Failed to open temporary file for writing: " << temp_path
-			  << "\n";
-		return false;
-	}
-
-	out.write(reinterpret_cast<const char*>(&header), sizeof(header));
-	out.write(reinterpret_cast<const char*>(host_weights.data()),
-		  header.weight_count * sizeof(float));
-	out.write(reinterpret_cast<const char*>(host_bias.data()),
-		  header.bias_count * sizeof(float));
-	out.write(reinterpret_cast<const char*>(host_embeddings.data()),
-		  header.vocab_size * header.embedding_dim * sizeof(float));
-
-	out.flush();
-	if (!out.good()) {
-		std::cerr << "[AI Brain] Stream error while writing weights to: " << temp_path
-			  << "\n";
-		out.close();
-		std::error_code ec;
-		std::filesystem::remove(temp_path, ec);
-		return false;
-	}
-	out.close();
-
-	// 5. Atomically replace the target file
-	std::error_code ec;
-	if (std::filesystem::exists(path, ec)) {
-		std::filesystem::remove(path, ec);
-	}
-	std::filesystem::rename(temp_path, path, ec);
-	if (ec) {
-		ec.clear();
-		std::filesystem::copy_file(
-			temp_path, path, std::filesystem::copy_options::overwrite_existing, ec);
-		std::filesystem::remove(temp_path, ec);
-		if (ec) {
-			std::cerr << "[AI Brain] Failed to rename/copy " << temp_path << " to "
-				  << path << ": " << ec.message() << "\n";
-			return false;
-		}
-	}
-
-	std::cout << "[AI Brain] Saved " << header.weight_count << " weights, " << header.bias_count
-		  << " biases, and " << (header.vocab_size * header.embedding_dim)
-		  << " embeddings to " << path << "\n"
-		  << std::flush;
 	return true;
 }
 
@@ -590,273 +316,6 @@ bool AI::load_weights(const std::string& path) {
 	std::cout << "[AI Brain] Successfully loaded weights and embeddings from " << path
 		  << " and synced to GPU.\n"
 		  << std::flush;
-	return true;
-}
-
-bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
-		 std::vector<float>& output_prediction) {
-	if (context_window.size() != input_elements_x_total) {
-		std::cerr << "[AI Brain] Input context dimension (" << context_window.size()
-			  << ") does not match model in_dim (" << input_elements_x_total << ").\n";
-		return false;
-	}
-
-	synchronize_stream(&gpu_portion, 0);
-
-	std::vector<std::bfloat16_t> dummy_target(target_elements_y_total,
-						  static_cast<std::bfloat16_t>(0.0f));
-
-	if (!upload_to_gpu(context_window.data(),
-			   context_window.size(),
-			   dummy_target.data(),
-			   dummy_target.size(),
-			   &gpu_portion,
-			   0)) {
-		std::cerr << "[AI Brain] Failed to upload context vector to GPU for prediction.\n";
-		return false;
-	}
-
-	gpu_embeddings.active_vocab_size = active_vocab_size;
-	const GpuEmbeddings* embeddings_pointer =
-		(gpu_embeddings.d_table != nullptr) ? &gpu_embeddings : nullptr;
-	if (!forward_pass_with_embeddings(&gpu_portion,
-					  embeddings_pointer,
-					  &gpu_weights,
-					  &gpu_activations,
-					  input_elements_x_total,
-					  target_elements_y_total,
-					  0)) {
-		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
-		return false;
-	}
-
-	synchronize_stream(&gpu_portion, 0);
-
-	return read_prediction(output_prediction);
-}
-
-bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
-			std::vector<float>& output_prediction) {
-	const size_t context_token_count = input_elements_x_total / embedding_dim;
-	if (context_ids.size() != context_token_count) {
-		std::cerr << "[AI Brain] Context token count (" << context_ids.size()
-			  << ") does not match model window (" << context_token_count << ").\n";
-		return false;
-	}
-	if (gpu_embeddings.d_table == nullptr) {
-		std::cerr << "[AI Brain] GPU embedding table is not allocated.\n";
-		return false;
-	}
-
-	synchronize_stream(&gpu_portion, 0);
-
-	std::vector<std::bfloat16_t> dummy_target(target_elements_y_total,
-						  static_cast<std::bfloat16_t>(0.0f));
-
-	// Same path as training: IDs cross PCIe, the GPU gathers the trained embeddings
-	if (!upload_tokens_to_gpu(context_ids.data(),
-				  context_ids.size(),
-				  dummy_target.data(),
-				  dummy_target.size(),
-				  &gpu_portion,
-				  0)) {
-		std::cerr << "[AI Brain] Failed to upload token IDs to GPU for prediction.\n";
-		return false;
-	}
-
-	gpu_embeddings.active_vocab_size = active_vocab_size;
-	if (!forward_pass_with_embeddings(&gpu_portion,
-					  &gpu_embeddings,
-					  &gpu_weights,
-					  &gpu_activations,
-					  input_elements_x_total,
-					  target_elements_y_total,
-					  0)) {
-		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
-		return false;
-	}
-
-	synchronize_stream(&gpu_portion, 0);
-
-	return read_prediction(output_prediction);
-}
-
-bool AI::read_prediction(std::vector<float>& output_prediction) {
-	std::vector<std::bfloat16_t> output_activations(target_elements_y_total);
-	if (!download_output(
-		    &gpu_activations, output_activations.data(), target_elements_y_total)) {
-		std::cerr << "[AI Brain] Failed to download prediction activations from GPU.\n";
-		return false;
-	}
-
-	uint32_t gpu_token = 0;
-	if (download_pred_token(&gpu_activations, &gpu_token)) {
-		last_predicted_token_id = gpu_token;
-	} else {
-		last_predicted_token_id = 0;
-	}
-
-	output_prediction.resize(target_elements_y_total);
-	for (size_t i = 0; i < target_elements_y_total; ++i) {
-		output_prediction[i] = static_cast<float>(output_activations[i]);
-	}
-
-	return true;
-}
-
-bool AI::generate(const std::string& prompt,
-		  Parser& parser,
-		  Input& input,
-		  size_t max_new_tokens,
-		  const SamplingConfig& config,
-		  std::function<void(const std::string&)> token_callback) {
-	gpu_embeddings.temperature = config.temperature;
-
-	if (prompt.empty()) {
-		return false;
-	}
-
-	std::vector<uint32_t> tokens = parser.tokenize_for_inference(input, prompt);
-	if (tokens.empty()) {
-		return false;
-	}
-
-	if (input.next_text_id > 4) {
-		active_vocab_size = input.next_text_id;
-	}
-
-	const size_t context_token_count = input_elements_x_total / embedding_dim;
-
-	// Right-aligned: the newest token sits in the last slot, exactly as in training
-	std::vector<uint32_t> context_ids = parser.build_context_ids(tokens, context_token_count);
-
-	std::vector<float> prediction(target_elements_y_total, 0.0f);
-
-	for (size_t step = 0; step < max_new_tokens; ++step) {
-		if (!predict_tokens(context_ids, prediction)) {
-			return false;
-		}
-
-		uint32_t token_id = 0;
-
-		if (config.temperature <= 1e-4f) {
-			// Greedy Fallback: directly use on-device GPU argmax winner
-			token_id = last_predicted_token_id;
-			if (token_id == 0) {
-				size_t vocab_sz =
-					(active_vocab_size > 0) ? active_vocab_size : vocab_size;
-				std::vector<float> probabilities(vocab_sz, 0.0f);
-				if (download_probabilities(
-					    &gpu_activations, probabilities.data(), vocab_sz)) {
-					float best_prob = -1.0f;
-					for (uint32_t id = 1; id < vocab_sz; ++id) {
-						if (probabilities[id] > best_prob) {
-							best_prob = probabilities[id];
-							token_id = id;
-						}
-					}
-				}
-			}
-		} else {
-			size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
-			std::vector<float> probabilities(vocab_sz, 0.0f);
-			if (download_probabilities(
-				    &gpu_activations, probabilities.data(), vocab_sz)) {
-				std::vector<std::pair<float, uint32_t>> candidates;
-				candidates.reserve(vocab_sz);
-				for (uint32_t id = 1; id < vocab_sz; ++id) {
-					if (probabilities[id] > 0.0f) {
-						candidates.emplace_back(probabilities[id], id);
-					}
-				}
-
-				if (!candidates.empty()) {
-					// 1. Top-K Truncation: Isolate K highest probability tokens
-					if (config.top_k > 0 &&
-					    static_cast<size_t>(config.top_k) < candidates.size()) {
-						std::partial_sort(candidates.begin(),
-								  candidates.begin() + config.top_k,
-								  candidates.end(),
-								  [](const auto& a, const auto& b) {
-									  return a.first > b.first;
-								  });
-						candidates.resize(config.top_k);
-					} else {
-						std::sort(candidates.begin(),
-							  candidates.end(),
-							  [](const auto& a, const auto& b) {
-								  return a.first > b.first;
-							  });
-					}
-
-					// 2. Top-P (Nucleus) Truncation: Cutoff cumulative mass at P
-					float cumulative = 0.0f;
-					size_t nucleus_size = 0;
-					for (const auto& c : candidates) {
-						cumulative += c.first;
-						nucleus_size++;
-						if (cumulative >= config.top_p &&
-						    nucleus_size >= 1) {
-							break;
-						}
-					}
-					candidates.resize(nucleus_size);
-
-					// 3. Re-normalize & Categorical Random Draw
-					float sum_prob = 0.0f;
-					for (const auto& c : candidates) {
-						sum_prob += c.first;
-					}
-
-					if (sum_prob > 0.0f) {
-						std::mt19937_64 rng(
-							config.seed != 0 ? (config.seed + step)
-									 : std::random_device {}());
-						std::uniform_real_distribution<float> dist(
-							0.0f, sum_prob);
-						float r = dist(rng);
-						float running_sum = 0.0f;
-						token_id = candidates.front().second;
-						for (const auto& c : candidates) {
-							running_sum += c.first;
-							if (r <= running_sum) {
-								token_id = c.second;
-								break;
-							}
-						}
-					}
-				}
-			}
-		}
-
-		if (token_id == 0) {
-			token_id = last_predicted_token_id;
-			if (token_id == 0 && !input.embedding_table.empty()) {
-				token_id = parser.decode_token(input, prediction);
-			}
-			if (token_id == 0) {
-				token_id = vocab::UNK;
-			}
-		}
-
-		if (token_id == vocab::EOS) {
-			if (step < 4) {
-				token_id = vocab::UNK;
-			} else {
-				break;
-			}
-		}
-
-		std::string token_string = parser.token_to_string(input, token_id);
-
-		if (token_callback) {
-			token_callback(token_string);
-		}
-
-		std::rotate(context_ids.begin(), context_ids.begin() + 1, context_ids.end());
-		context_ids.back() = token_id;
-	}
-
 	return true;
 }
 
@@ -1228,24 +687,32 @@ bool AI::load_vocabulary(const std::string& vocab_path) {
 	for (uint32_t i = 0; i < count; ++i) {
 		uint32_t token_id = 0;
 		uint32_t str_len = 0;
-		if (!file.read(reinterpret_cast<char*>(&token_id), sizeof(uint32_t))) break;
-		if (!file.read(reinterpret_cast<char*>(&str_len), sizeof(uint32_t)) || str_len > 1048576U) break;
+		if (!file.read(reinterpret_cast<char*>(&token_id), sizeof(uint32_t)))
+			break;
+		if (!file.read(reinterpret_cast<char*>(&str_len), sizeof(uint32_t)) ||
+		    str_len > 1048576U)
+			break;
 		std::string token_str(str_len, '\0');
 		if (str_len > 0) {
-			if (!file.read(&token_str[0], str_len)) break;
+			if (!file.read(&token_str[0], str_len))
+				break;
 		}
 		axiom_vocab_[token_str] = token_id;
 		axiom_reverse_vocab_[token_id] = token_str;
 	}
-	std::cout << "[Axiom Engine] Successfully loaded " << axiom_vocab_.size() << " vocabulary entries.\n";
+	std::cout << "[Axiom Engine] Successfully loaded " << axiom_vocab_.size()
+		  << " vocabulary entries.\n";
 	return !axiom_vocab_.empty();
 }
 
 bool AI::load_axiom_model_mmap(const char* filepath) {
-	HANDLE hFile = CreateFileA(
-		filepath, GENERIC_READ, FILE_SHARE_READ, nullptr,
-		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr
-	);
+	HANDLE hFile = CreateFileA(filepath,
+				   GENERIC_READ,
+				   FILE_SHARE_READ,
+				   nullptr,
+				   OPEN_EXISTING,
+				   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+				   nullptr);
 	if (hFile == INVALID_HANDLE_VALUE) {
 		std::cerr << "[Axiom Engine] Cannot open model file: " << filepath << "\n";
 		return false;
@@ -1265,9 +732,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		return false;
 	}
 
-	const uint8_t* mapped_base = static_cast<const uint8_t*>(
-		MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0)
-	);
+	const uint8_t* mapped_base =
+		static_cast<const uint8_t*>(MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0));
 	if (!mapped_base) {
 		CloseHandle(hMap);
 		CloseHandle(hFile);
@@ -1290,16 +756,18 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	const uint8_t* host_weights_ptr = mapped_base + 64;
 	size_t weights_bytes = total_bytes - 64;
 
-	const size_t D   = config_.hidden_dim;
-	const size_t Qd  = config_.num_q_heads * config_.head_dim;
+	const size_t D = config_.hidden_dim;
+	const size_t Qd = config_.num_q_heads * config_.head_dim;
 	const size_t KVd = config_.num_kv_heads * config_.head_dim;
 	const size_t FFN = config_.ffn_dim;
-	const size_t V   = config_.vocab_size;
-	const size_t per_layer_elements =
-		D + (Qd * D) + Qd + (KVd * D) + KVd + (KVd * D) + KVd + (D * Qd) + D + (FFN * D) + (FFN * D) + (D * FFN);
-	const size_t min_required_elements = (V * D) + (static_cast<size_t>(config_.num_layers) * per_layer_elements) + D;
+	const size_t V = config_.vocab_size;
+	const size_t per_layer_elements = D + (Qd * D) + Qd + (KVd * D) + KVd + (KVd * D) + KVd +
+					  (D * Qd) + D + (FFN * D) + (FFN * D) + (D * FFN);
+	const size_t min_required_elements =
+		(V * D) + (static_cast<size_t>(config_.num_layers) * per_layer_elements) + D;
 	if (weights_bytes < min_required_elements * sizeof(uint16_t)) {
-		std::cerr << "[Axiom Engine] Truncated .axiom weights payload in: " << filepath << "\n";
+		std::cerr << "[Axiom Engine] Truncated .axiom weights payload in: " << filepath
+			  << "\n";
 		UnmapViewOfFile(mapped_base);
 		CloseHandle(hMap);
 		CloseHandle(hFile);
@@ -1313,7 +781,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 
 	d_weights_arena_ = allocate_device_memory(weights_bytes);
 	if (!d_weights_arena_) {
-		std::cerr << "[Axiom Engine] Failed to allocate device memory for weights arena (" << (weights_bytes >> 20) << " MB)\n";
+		std::cerr << "[Axiom Engine] Failed to allocate device memory for weights arena ("
+			  << (weights_bytes >> 20) << " MB)\n";
 		UnmapViewOfFile(mapped_base);
 		CloseHandle(hMap);
 		CloseHandle(hFile);
@@ -1324,10 +793,11 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	for (size_t offset = 0; offset < weights_bytes; offset += chunk_bytes) {
 		size_t to_copy = std::min(chunk_bytes, weights_bytes - offset);
 		if (!upload_device_buffer(static_cast<uint8_t*>(d_weights_arena_) + offset,
-		                          host_weights_ptr + offset,
-		                          to_copy)) {
-			std::cerr << "[Axiom Engine] Failed to upload weights chunk to VRAM at offset "
-			          << (offset >> 20) << " MB.\n";
+					  host_weights_ptr + offset,
+					  to_copy)) {
+			std::cerr
+				<< "[Axiom Engine] Failed to upload weights chunk to VRAM at offset "
+				<< (offset >> 20) << " MB.\n";
 			UnmapViewOfFile(mapped_base);
 			CloseHandle(hMap);
 			CloseHandle(hFile);
@@ -1341,158 +811,245 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 
 	const uint16_t* cursor = static_cast<const uint16_t*>(d_weights_arena_);
 
-	d_embed_tokens_ = cursor; cursor += V * D;
+	d_embed_tokens_ = cursor;
+	cursor += V * D;
 	layers_.resize(config_.num_layers);
 
 	for (uint32_t l = 0; l < config_.num_layers; ++l) {
-		layers_[l].d_input_layernorm     = cursor; cursor += D;
-		layers_[l].d_q_proj_weight       = cursor; cursor += Qd * D;
-		layers_[l].d_q_proj_bias         = cursor; cursor += Qd;
-		layers_[l].d_k_proj_weight       = cursor; cursor += KVd * D;
-		layers_[l].d_k_proj_bias         = cursor; cursor += KVd;
-		layers_[l].d_v_proj_weight       = cursor; cursor += KVd * D;
-		layers_[l].d_v_proj_bias         = cursor; cursor += KVd;
-		layers_[l].d_o_proj_weight       = cursor; cursor += D * Qd;
-		layers_[l].d_post_attn_layernorm = cursor; cursor += D;
-		layers_[l].d_gate_proj_weight    = cursor; cursor += FFN * D;
-		layers_[l].d_up_proj_weight      = cursor; cursor += FFN * D;
-		layers_[l].d_down_proj_weight    = cursor; cursor += D * FFN;
+		layers_[l].d_input_layernorm = cursor;
+		cursor += D;
+		layers_[l].d_q_proj_weight = cursor;
+		cursor += Qd * D;
+		layers_[l].d_q_proj_bias = cursor;
+		cursor += Qd;
+		layers_[l].d_k_proj_weight = cursor;
+		cursor += KVd * D;
+		layers_[l].d_k_proj_bias = cursor;
+		cursor += KVd;
+		layers_[l].d_v_proj_weight = cursor;
+		cursor += KVd * D;
+		layers_[l].d_v_proj_bias = cursor;
+		cursor += KVd;
+		layers_[l].d_o_proj_weight = cursor;
+		cursor += D * Qd;
+		layers_[l].d_post_attn_layernorm = cursor;
+		cursor += D;
+		layers_[l].d_gate_proj_weight = cursor;
+		cursor += FFN * D;
+		layers_[l].d_up_proj_weight = cursor;
+		cursor += FFN * D;
+		layers_[l].d_down_proj_weight = cursor;
+		cursor += D * FFN;
 	}
 
-	d_final_norm_weight_ = cursor; cursor += D;
+	d_final_norm_weight_ = cursor;
+	cursor += D;
 	const size_t untied_elements = min_required_elements + (V * D);
-	d_lm_head_weight_ = (weights_bytes >= untied_elements * sizeof(uint16_t)) ? cursor : d_embed_tokens_;
+	d_lm_head_weight_ =
+		(weights_bytes >= untied_elements * sizeof(uint16_t)) ? cursor : d_embed_tokens_;
 
 	// Allocate working activation buffers
-	if (d_curr_token_)      free_device_memory(d_curr_token_);
-	if (d_curr_pos_)        free_device_memory(d_curr_pos_);
-	if (d_residual_stream_) free_device_memory(d_residual_stream_);
-	if (d_normed_x_)        free_device_memory(d_normed_x_);
-	if (d_q_)               free_device_memory(d_q_);
-	if (d_k_)               free_device_memory(d_k_);
-	if (d_v_)               free_device_memory(d_v_);
-	if (d_attn_out_)        free_device_memory(d_attn_out_);
-	if (d_proj_tmp_)        free_device_memory(d_proj_tmp_);
-	if (d_gate_buf_)        free_device_memory(d_gate_buf_);
-	if (d_up_buf_)          free_device_memory(d_up_buf_);
-	if (d_act_buf_)         free_device_memory(d_act_buf_);
-	if (d_pred_id_)         free_device_memory(d_pred_id_);
-	if (d_logits_)          free_device_memory(d_logits_);
+	if (d_curr_token_)
+		free_device_memory(d_curr_token_);
+	if (d_curr_pos_)
+		free_device_memory(d_curr_pos_);
+	if (d_residual_stream_)
+		free_device_memory(d_residual_stream_);
+	if (d_normed_x_)
+		free_device_memory(d_normed_x_);
+	if (d_q_)
+		free_device_memory(d_q_);
+	if (d_k_)
+		free_device_memory(d_k_);
+	if (d_v_)
+		free_device_memory(d_v_);
+	if (d_attn_out_)
+		free_device_memory(d_attn_out_);
+	if (d_proj_tmp_)
+		free_device_memory(d_proj_tmp_);
+	if (d_gate_buf_)
+		free_device_memory(d_gate_buf_);
+	if (d_up_buf_)
+		free_device_memory(d_up_buf_);
+	if (d_act_buf_)
+		free_device_memory(d_act_buf_);
+	if (d_pred_id_)
+		free_device_memory(d_pred_id_);
+	if (d_logits_)
+		free_device_memory(d_logits_);
 
-	d_curr_token_      = allocate_device_memory(sizeof(uint32_t));
-	d_curr_pos_        = allocate_device_memory(sizeof(int32_t));
-	d_pred_id_         = allocate_device_memory(sizeof(uint32_t));
-	d_logits_          = allocate_device_memory(config_.vocab_size * sizeof(float));
+	d_curr_token_ = allocate_device_memory(sizeof(uint32_t));
+	d_curr_pos_ = allocate_device_memory(sizeof(int32_t));
+	d_pred_id_ = allocate_device_memory(sizeof(uint32_t));
+	d_logits_ = allocate_device_memory(config_.vocab_size * sizeof(float));
 	d_residual_stream_ = allocate_device_memory(D * sizeof(uint16_t));
-	d_normed_x_        = allocate_device_memory(D * sizeof(uint16_t));
-	d_q_               = allocate_device_memory(Qd * sizeof(uint16_t));
-	d_k_               = allocate_device_memory(KVd * sizeof(uint16_t));
-	d_v_               = allocate_device_memory(KVd * sizeof(uint16_t));
-	d_attn_out_        = allocate_device_memory(Qd * sizeof(uint16_t));
-	d_proj_tmp_        = allocate_device_memory(std::max(D, Qd) * sizeof(uint16_t));
-	d_gate_buf_        = allocate_device_memory(FFN * sizeof(uint16_t));
-	d_up_buf_          = allocate_device_memory(FFN * sizeof(uint16_t));
-	d_act_buf_         = allocate_device_memory(FFN * sizeof(uint16_t));
+	d_normed_x_ = allocate_device_memory(D * sizeof(uint16_t));
+	d_q_ = allocate_device_memory(Qd * sizeof(uint16_t));
+	d_k_ = allocate_device_memory(KVd * sizeof(uint16_t));
+	d_v_ = allocate_device_memory(KVd * sizeof(uint16_t));
+	d_attn_out_ = allocate_device_memory(Qd * sizeof(uint16_t));
+	d_proj_tmp_ = allocate_device_memory(std::max(D, Qd) * sizeof(uint16_t));
+	d_gate_buf_ = allocate_device_memory(FFN * sizeof(uint16_t));
+	d_up_buf_ = allocate_device_memory(FFN * sizeof(uint16_t));
+	d_act_buf_ = allocate_device_memory(FFN * sizeof(uint16_t));
 
 	// Allocate Paged KV Cache and physical block table
 	int num_blocks = static_cast<int>((config_.max_seq_len + 15) / 16);
-	if (num_blocks <= 0) num_blocks = 512;
+	if (num_blocks <= 0)
+		num_blocks = 512;
 	std::vector<int32_t> h_block_table(num_blocks);
 	for (int i = 0; i < num_blocks; ++i) {
 		h_block_table[i] = i;
 	}
-	if (d_block_table_) free_device_memory(d_block_table_);
+	if (d_block_table_)
+		free_device_memory(d_block_table_);
 	d_block_table_ = allocate_device_memory(num_blocks * sizeof(int32_t));
 	upload_device_buffer(d_block_table_, h_block_table.data(), num_blocks * sizeof(int32_t));
 
-	for (void* ptr : d_k_cache_) if (ptr) free_device_memory(ptr);
-	for (void* ptr : d_v_cache_) if (ptr) free_device_memory(ptr);
+	for (void* ptr : d_k_cache_)
+		if (ptr)
+			free_device_memory(ptr);
+	for (void* ptr : d_v_cache_)
+		if (ptr)
+			free_device_memory(ptr);
 	d_k_cache_.resize(config_.num_layers, nullptr);
 	d_v_cache_.resize(config_.num_layers, nullptr);
 
-	if (!d_curr_token_ || !d_curr_pos_ || !d_pred_id_ || !d_logits_ || !d_residual_stream_ || !d_normed_x_ ||
-	    !d_q_ || !d_k_ || !d_v_ || !d_attn_out_ || !d_proj_tmp_ ||
+	if (!d_curr_token_ || !d_curr_pos_ || !d_pred_id_ || !d_logits_ || !d_residual_stream_ ||
+	    !d_normed_x_ || !d_q_ || !d_k_ || !d_v_ || !d_attn_out_ || !d_proj_tmp_ ||
 	    !d_gate_buf_ || !d_up_buf_ || !d_act_buf_ || !d_block_table_) {
 		std::cerr << "[Axiom Engine] Out of VRAM: Activation buffer allocation failed.\n";
 		return false;
 	}
 
-	size_t kv_cache_bytes = static_cast<size_t>(config_.max_seq_len) * config_.num_kv_heads * config_.head_dim * sizeof(uint16_t);
+	size_t kv_cache_bytes = static_cast<size_t>(config_.max_seq_len) * config_.num_kv_heads *
+				config_.head_dim * sizeof(uint16_t);
 	for (uint32_t l = 0; l < config_.num_layers; ++l) {
 		d_k_cache_[l] = allocate_device_memory(kv_cache_bytes);
 		d_v_cache_[l] = allocate_device_memory(kv_cache_bytes);
 		if (!d_k_cache_[l] || !d_v_cache_[l]) {
-			std::cerr << "[Axiom Engine] Out of VRAM: KV cache allocation failed at layer " << l << "\n";
+			std::cerr
+				<< "[Axiom Engine] Out of VRAM: KV cache allocation failed at layer "
+				<< l << "\n";
 			return false;
 		}
 	}
 
 	cached_tokens_.clear();
 
-	std::cout << "[Axiom Engine] Loaded model: " << config_.num_layers << " layers, hidden_dim="
-		  << config_.hidden_dim << ", ffn_dim=" << config_.ffn_dim << " ("
-		  << (weights_bytes >> 20) << " MB VRAM)\n";
+	std::cout << "[Axiom Engine] Loaded model: " << config_.num_layers
+		  << " layers, hidden_dim=" << config_.hidden_dim << ", ffn_dim=" << config_.ffn_dim
+		  << " (" << (weights_bytes >> 20) << " MB VRAM)\n";
 	return true;
 }
 
 void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logits, void* stream) {
-	const uint32_t D   = config_.hidden_dim;
-	const uint32_t Qd  = config_.num_q_heads * config_.head_dim;
+	const uint32_t D = config_.hidden_dim;
+	const uint32_t Qd = config_.num_q_heads * config_.head_dim;
 	const uint32_t KVd = config_.num_kv_heads * config_.head_dim;
 	const uint32_t FFN = config_.ffn_dim;
 
 	uint32_t u_token_id = static_cast<uint32_t>(token_id);
-	int32_t  s_token_pos = static_cast<int32_t>(token_pos);
+	int32_t s_token_pos = static_cast<int32_t>(token_pos);
 	upload_device_buffer(d_curr_token_, &u_token_id, sizeof(uint32_t));
 	upload_device_buffer(d_curr_pos_, &s_token_pos, sizeof(int32_t));
 
-	launch_gather_embeddings_batched(
-		static_cast<const uint32_t*>(d_curr_token_),
-		d_embed_tokens_,
-		d_residual_stream_,
-		1, D, config_.vocab_size, stream
-	);
+	launch_gather_embeddings_batched(static_cast<const uint32_t*>(d_curr_token_),
+					 d_embed_tokens_,
+					 d_residual_stream_,
+					 1,
+					 D,
+					 config_.vocab_size,
+					 stream);
 
 	for (uint32_t l = 0; l < config_.num_layers; ++l) {
 		const auto& w = layers_[l];
 
-		launch_rmsnorm_bf16(d_residual_stream_, w.d_input_layernorm, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
+		launch_rmsnorm_bf16(d_residual_stream_,
+				    w.d_input_layernorm,
+				    d_normed_x_,
+				    1,
+				    D,
+				    config_.rms_norm_eps,
+				    stream);
 
-		launch_cutlass_gemm_bf16(1, Qd,  D, d_normed_x_, w.d_q_proj_weight, w.d_q_proj_bias, d_q_, stream);
-		launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_k_proj_weight, w.d_k_proj_bias, d_k_, stream);
-		launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_v_proj_weight, w.d_v_proj_bias, d_v_, stream);
+		launch_cutlass_gemm_bf16(
+			1, Qd, D, d_normed_x_, w.d_q_proj_weight, w.d_q_proj_bias, d_q_, stream);
+		launch_cutlass_gemm_bf16(
+			1, KVd, D, d_normed_x_, w.d_k_proj_weight, w.d_k_proj_bias, d_k_, stream);
+		launch_cutlass_gemm_bf16(
+			1, KVd, D, d_normed_x_, w.d_v_proj_weight, w.d_v_proj_bias, d_v_, stream);
 
-		launch_rope_inplace_bf16(
-			d_q_, d_k_, static_cast<const int32_t*>(d_curr_pos_), 1,
-			config_.num_q_heads, config_.num_kv_heads, config_.head_dim, config_.rope_theta, stream
-		);
+		launch_rope_inplace_bf16(d_q_,
+					 d_k_,
+					 static_cast<const int32_t*>(d_curr_pos_),
+					 1,
+					 config_.num_q_heads,
+					 config_.num_kv_heads,
+					 config_.head_dim,
+					 config_.rope_theta,
+					 stream);
 
-		launch_append_paged_kv(
-			d_k_, d_v_, d_k_cache_[l], d_v_cache_[l], static_cast<const int32_t*>(d_block_table_),
-			token_pos, config_.num_kv_heads, config_.head_dim, stream
-		);
+		launch_append_paged_kv(d_k_,
+				       d_v_,
+				       d_k_cache_[l],
+				       d_v_cache_[l],
+				       static_cast<const int32_t*>(d_block_table_),
+				       token_pos,
+				       config_.num_kv_heads,
+				       config_.head_dim,
+				       stream);
 
 		float scale = 1.0f / std::sqrt(static_cast<float>(config_.head_dim));
-		launch_paged_gqa_decode(
-			d_q_, d_k_cache_[l], d_v_cache_[l], static_cast<const int32_t*>(d_block_table_), d_attn_out_,
-			token_pos + 1, config_.num_q_heads, config_.num_kv_heads, config_.head_dim, scale, stream
-		);
+		launch_paged_gqa_decode(d_q_,
+					d_k_cache_[l],
+					d_v_cache_[l],
+					static_cast<const int32_t*>(d_block_table_),
+					d_attn_out_,
+					token_pos + 1,
+					config_.num_q_heads,
+					config_.num_kv_heads,
+					config_.head_dim,
+					scale,
+					stream);
 
-		launch_cutlass_gemm_bf16(1, D, Qd, d_attn_out_, w.d_o_proj_weight, nullptr, d_proj_tmp_, stream);
+		launch_cutlass_gemm_bf16(
+			1, D, Qd, d_attn_out_, w.d_o_proj_weight, nullptr, d_proj_tmp_, stream);
 		launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
 
-		launch_rmsnorm_bf16(d_residual_stream_, w.d_post_attn_layernorm, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
+		launch_rmsnorm_bf16(d_residual_stream_,
+				    w.d_post_attn_layernorm,
+				    d_normed_x_,
+				    1,
+				    D,
+				    config_.rms_norm_eps,
+				    stream);
 
-		launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_gate_proj_weight, nullptr, d_gate_buf_, stream);
-		launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_up_proj_weight,   nullptr, d_up_buf_,   stream);
+		launch_cutlass_gemm_bf16(
+			1, FFN, D, d_normed_x_, w.d_gate_proj_weight, nullptr, d_gate_buf_, stream);
+		launch_cutlass_gemm_bf16(
+			1, FFN, D, d_normed_x_, w.d_up_proj_weight, nullptr, d_up_buf_, stream);
 		launch_swiglu_bf16(d_gate_buf_, d_up_buf_, d_act_buf_, FFN, stream);
-		launch_cutlass_gemm_bf16(1, D, FFN, d_act_buf_,  w.d_down_proj_weight, nullptr, d_proj_tmp_, stream);
+		launch_cutlass_gemm_bf16(
+			1, D, FFN, d_act_buf_, w.d_down_proj_weight, nullptr, d_proj_tmp_, stream);
 		launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
 	}
 
-	launch_rmsnorm_bf16(d_residual_stream_, d_final_norm_weight_, d_normed_x_, 1, D, config_.rms_norm_eps, stream);
+	launch_rmsnorm_bf16(d_residual_stream_,
+			    d_final_norm_weight_,
+			    d_normed_x_,
+			    1,
+			    D,
+			    config_.rms_norm_eps,
+			    stream);
 	if (d_out_logits) {
-		launch_tied_logits_bf16(d_normed_x_, d_lm_head_weight_, d_out_logits, 1, config_.vocab_size, D, stream);
+		launch_tied_logits_bf16(d_normed_x_,
+					d_lm_head_weight_,
+					d_out_logits,
+					1,
+					config_.vocab_size,
+					D,
+					stream);
 	}
 }
 
@@ -1514,17 +1071,18 @@ bool AI::generate(const std::string& prompt,
 	}
 
 	// Reserve room for generation while allowing full VRAM context window (up to max_seq_len)
-	const size_t reserve_tokens = std::min<size_t>(max_new_tokens + 64, config_.max_seq_len / 2);
+	const size_t reserve_tokens =
+		std::min<size_t>(max_new_tokens + 64, config_.max_seq_len / 2);
 	const size_t max_allowed_prompt = (config_.max_seq_len > reserve_tokens)
-	                                      ? (config_.max_seq_len - reserve_tokens)
-	                                      : (config_.max_seq_len / 2);
+						  ? (config_.max_seq_len - reserve_tokens)
+						  : (config_.max_seq_len / 2);
 
 	if (prompt_tokens.size() > max_allowed_prompt) {
 		size_t excess = prompt_tokens.size() - max_allowed_prompt;
 		// Keep the head (system instructions + tool schema) and the tail (active file context + user query)
 		const size_t head_keep = max_allowed_prompt / 3;
 		prompt_tokens.erase(prompt_tokens.begin() + head_keep,
-		                    prompt_tokens.begin() + head_keep + excess);
+				    prompt_tokens.begin() + head_keep + excess);
 	}
 
 	size_t logits_bytes = config_.vocab_size * sizeof(float);
@@ -1534,14 +1092,16 @@ bool AI::generate(const std::string& prompt,
 		d_logits = static_cast<float*>(allocate_device_memory(logits_bytes));
 		allocated_local_logits = true;
 	}
-	if (!d_logits) return false;
+	if (!d_logits)
+		return false;
 
 	std::vector<float> h_logits(config_.vocab_size);
 
 	// KV Prefix Cache: reuse already-prefilled tokens across multi-turn requests
 	size_t prefix_match = 0;
 	const size_t max_prefix = std::min(cached_tokens_.size(), prompt_tokens.size());
-	while (prefix_match < max_prefix && cached_tokens_[prefix_match] == prompt_tokens[prefix_match]) {
+	while (prefix_match < max_prefix &&
+	       cached_tokens_[prefix_match] == prompt_tokens[prefix_match]) {
 		++prefix_match;
 	}
 	// Always re-run at least the final prompt token to produce fresh d_logits
@@ -1552,7 +1112,8 @@ bool AI::generate(const std::string& prompt,
 	// 1. Prefill only the uncached suffix of the prompt
 	for (size_t i = prefix_match; i < prompt_tokens.size(); ++i) {
 		float* target_logits = (i + 1 == prompt_tokens.size()) ? d_logits : nullptr;
-		forward_transformer_step(prompt_tokens[i], static_cast<int>(i), target_logits, compute_stream_);
+		forward_transformer_step(
+			prompt_tokens[i], static_cast<int>(i), target_logits, compute_stream_);
 	}
 	sync_cuda_stream(compute_stream_);
 
@@ -1566,19 +1127,25 @@ bool AI::generate(const std::string& prompt,
 
 	// 2. Autoregressive decode
 	for (size_t step = 0; step < max_new_tokens; ++step) {
-		if (current_pos >= static_cast<int>(config_.max_seq_len)) break;
+		if (current_pos >= static_cast<int>(config_.max_seq_len))
+			break;
 
 		uint32_t next_token = 0;
 		if (temperature <= 0.01f && d_pred_id_) {
-			launch_softmax_argmax(d_logits, static_cast<uint32_t*>(d_pred_id_), config_.vocab_size, compute_stream_);
+			launch_softmax_argmax(d_logits,
+					      static_cast<uint32_t*>(d_pred_id_),
+					      config_.vocab_size,
+					      compute_stream_);
 			sync_cuda_stream(compute_stream_);
 			download_device_buffer(&h_pred_id_, d_pred_id_, sizeof(uint32_t));
 			next_token = h_pred_id_;
-			if (step == 0 && (next_token == 151643 || next_token == 151644 || next_token == 151645)) {
+			if (step == 0 && (next_token == 151643 || next_token == 151644 ||
+					  next_token == 151645)) {
 				download_device_buffer(h_logits.data(), d_logits, logits_bytes);
 				float best_val = -1e30f;
 				for (uint32_t v = 0; v < config_.vocab_size; ++v) {
-					if (v >= 151643 && v <= 151645) continue;
+					if (v >= 151643 && v <= 151645)
+						continue;
 					if (std::isfinite(h_logits[v]) && h_logits[v] > best_val) {
 						best_val = h_logits[v];
 						next_token = v;
@@ -1600,7 +1167,8 @@ bool AI::generate(const std::string& prompt,
 			for (uint32_t v = 0; v < config_.vocab_size; ++v) {
 				if (std::isfinite(h_logits[v])) {
 					float scaled = h_logits[v] * inv_temp;
-					if (scaled > max_scaled) max_scaled = scaled;
+					if (scaled > max_scaled)
+						max_scaled = scaled;
 				}
 			}
 			// Any logit more than 20.0 below max_scaled has exp(-20) < 2e-9 probability
@@ -1617,19 +1185,24 @@ bool AI::generate(const std::string& prompt,
 			if (candidates.empty()) {
 				next_token = 0;
 			} else {
-				const size_t effective_k = (top_k > 0)
-					? std::min(static_cast<size_t>(top_k), candidates.size())
-					: std::min<size_t>(64, candidates.size());
+				const size_t effective_k =
+					(top_k > 0) ? std::min(static_cast<size_t>(top_k),
+							       candidates.size())
+						    : std::min<size_t>(64, candidates.size());
 				if (effective_k < candidates.size()) {
 					std::partial_sort(candidates.begin(),
-					                  candidates.begin() + effective_k,
-					                  candidates.end(),
-					                  [](const auto& a, const auto& b) { return a.first > b.first; });
+							  candidates.begin() + effective_k,
+							  candidates.end(),
+							  [](const auto& a, const auto& b) {
+								  return a.first > b.first;
+							  });
 					candidates.resize(effective_k);
 				} else {
 					std::sort(candidates.begin(),
-					          candidates.end(),
-					          [](const auto& a, const auto& b) { return a.first > b.first; });
+						  candidates.end(),
+						  [](const auto& a, const auto& b) {
+							  return a.first > b.first;
+						  });
 				}
 
 				float max_val = candidates[0].first;
@@ -1678,7 +1251,8 @@ bool AI::generate(const std::string& prompt,
 		auto it = axiom_reverse_vocab_.find(next_token);
 		if (it != axiom_reverse_vocab_.end()) {
 			generated_so_far += it->second;
-			if (token_callback) token_callback(it->second);
+			if (token_callback)
+				token_callback(it->second);
 		}
 
 		forward_transformer_step(next_token, current_pos, d_logits, compute_stream_);

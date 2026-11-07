@@ -5,140 +5,39 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <mutex>
 #include <stdfloat>
 #include <string>
 #include <vector>
 
-#include "../src/CUDA/transfer.cuh"
-#include "optimizer.hpp"
-#include "paged_cache.hpp"
-
-#pragma pack(push, 1)
-
-struct AxiomWeightHeader {
-	char magic[8] = {'A', 'X', 'I', 'O', 'M', '_', 'V', '1'};
-	uint64_t input_elements_x_total = 0;
-	uint64_t target_elements_y_total = 0;
-	uint64_t weight_count = 0;
-	uint64_t bias_count = 0;
-	uint64_t vocab_size = 0;
-	uint64_t embedding_dim = 0;
-};
-
-#pragma pack(pop)
-
-static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactly 56 bytes");
-
-struct Elements {
-	size_t weight_elements = 0;
-	size_t bias_elements = 0;
-};
-
-// What one AI::train() call did
-enum class TrainStatus {
-	Trained, // one full forward + backward step ran
-	NoData,	 // the RAM buffer is exhausted: the caller must refill it
-	Failed	 // a CUDA step failed (already reported on stderr)
-};
-
-struct TrainingTelemetry {
-	double mean_loss = 0.0;
-	double gradient_norm = 0.0;
-	double activation_magnitude = 0.0;
-	double dead_fraction = 0.0;
-	size_t nonfinite_count = 0;
-	size_t steps = 0;
-};
-
-struct SamplingConfig {
-	float temperature = 0.7f;
-	int top_k = 40;
-	float top_p = 0.9f;
-	uint64_t seed = 0;
-};
-
-struct AxiomModelConfig {
-	uint32_t magic          = 0x4D4F4958; // "XIOM"
-	uint32_t version        = 2;
-	uint32_t num_layers     = 28;
-	uint32_t hidden_dim     = 1536;
-	uint32_t num_q_heads    = 12;
-	uint32_t num_kv_heads   = 2;
-	uint32_t head_dim       = 128;
-	uint32_t ffn_dim        = 8960;
-	uint32_t vocab_size     = 151936;
-	uint32_t max_seq_len    = 8192;
-	float    rms_norm_eps   = 1e-6f;
-	float    rope_theta     = 1000000.0f;
-};
+#include "../include/config.hpp"
+#include "../include/cpu.hpp"
+#include "../include/gpu.hpp"
 
 struct TransformerLayerWeights {
-	const void* d_input_layernorm     = nullptr;
-	const void* d_q_proj_weight       = nullptr;
-	const void* d_q_proj_bias         = nullptr;
-	const void* d_k_proj_weight       = nullptr;
-	const void* d_k_proj_bias         = nullptr;
-	const void* d_v_proj_weight       = nullptr;
-	const void* d_v_proj_bias         = nullptr;
-	const void* d_o_proj_weight       = nullptr;
+	const void* d_input_layernorm = nullptr;
+	const void* d_q_proj_weight = nullptr;
+	const void* d_q_proj_bias = nullptr;
+	const void* d_k_proj_weight = nullptr;
+	const void* d_k_proj_bias = nullptr;
+	const void* d_v_proj_weight = nullptr;
+	const void* d_v_proj_bias = nullptr;
+	const void* d_o_proj_weight = nullptr;
 	const void* d_post_attn_layernorm = nullptr;
-	const void* d_gate_proj_weight    = nullptr;
-	const void* d_up_proj_weight      = nullptr;
-	const void* d_down_proj_weight    = nullptr;
+	const void* d_gate_proj_weight = nullptr;
+	const void* d_up_proj_weight = nullptr;
+	const void* d_down_proj_weight = nullptr;
 };
 
 class Parser;
 struct Input;
 
 class AI {
-private:
-	size_t input_elements_x_total;
-	size_t target_elements_y_total;
-
-	// Bounds of the uniform distribution used to initialize the weights
-	float weight_min;
-	float weight_max;
-
-	// Training steps launched since the last read_loss()
-	size_t pending_steps = 0;
-
-	// Copies the last forward pass output and the GPU-argmax token to the host
-	bool read_prediction(std::vector<float>& output_prediction);
-
 public:
 	AI(const AI&) = delete;
 
 	AI& operator=(const AI&) = delete;
 
-	size_t vocab_size = 65536;
-	size_t embedding_dim = 4;
-	size_t active_vocab_size = 0;
-	uint32_t random_seed = 1337U;
-
-	// Milestone 3: Discrete Autoregressive Token Classification
-	uint32_t last_predicted_token_id = 0;
-
-	// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN
-	bool enable_transformer = false;
-	size_t num_heads = 4;
-	size_t ffn_dimension = 64;
-
-	// CPU Memory (High precision float for initialization and updates)
-	std::vector<float> host_weights;
-	std::vector<float> host_bias;
-	std::vector<float> host_embeddings;
-
-	// GPU Memory State (The pointers for the VRAM)
-	GpuWeights gpu_weights;
-	GpuActivations gpu_activations;
-	GpuPortion gpu_portion; // Reused across
-	// iterations to prevent reallocation
-	GpuEmbeddings gpu_embeddings;
-	GpuPagedCache gpu_paged_cache;
-	std::unique_ptr<PagedBlockManager> block_manager;
-	GpuGraphExecution gpu_graph_execution;
 
 	// Default constructor for standalone inference/serving
 	AI();
@@ -162,22 +61,6 @@ public:
 	// Method to reset all parameters/weights back to chaotic state
 	void reset_weights(Elements& elements);
 
-	// The Training Loop Orchestrator
-	TrainStatus train(Optimizer& optimizer, Portion& portion);
-
-	// Mean training loss (0.5 * squared error per step, measured before each update)
-	// over the steps since the previous call. `steps` receives how many that was.
-	// Waits for the GPU to finish, so call it once per report interval, not per step.
-	bool read_loss(double& mean_loss, size_t& steps);
-
-	bool read_telemetry(TrainingTelemetry& telemetry);
-
-	bool evaluate_validation(const std::vector<uint32_t>& validation_tokens,
-				 size_t window_size,
-				 double& validation_loss);
-
-	// Weight persistence methods
-	bool save_weights(const std::string& path = "weights.axiom");
 
 	bool load_weights(const std::string& path = "weights.axiom");
 
@@ -276,8 +159,13 @@ public:
 
 	bool load_vocabulary(const std::string& vocab_path);
 	bool load_axiom_model_mmap(const char* filepath);
-	bool has_transformer_model() const noexcept { return d_weights_arena_ != nullptr; }
-	void forward_transformer_step(int token_id, int token_pos, float* d_out_logits, void* stream);
+	bool has_transformer_model() const noexcept {
+		return d_weights_arena_ != nullptr;
+	}
+	void forward_transformer_step(int token_id,
+				      int token_pos,
+				      float* d_out_logits,
+				      void* stream);
 	bool generate(const std::string& prompt,
 		      size_t max_new_tokens,
 		      float temperature,
