@@ -2101,7 +2101,15 @@ int main(int argc, char* argv[]) {
 					      : custom_data_dir))
 			: (core_dir / config::asset_folder);
 
-	const std::vector<std::filesystem::path> asset_dirs = {asset_dir};
+	std::vector<std::filesystem::path> asset_dirs = {asset_dir};
+	const std::filesystem::path sandbox_dir = core_dir / "test_sandbox_assets";
+	if (std::filesystem::exists(sandbox_dir)) {
+		asset_dirs.push_back(sandbox_dir);
+	}
+	const std::filesystem::path training_data_dir = core_dir / "training_data" / "Data";
+	if (std::filesystem::exists(training_data_dir)) {
+		asset_dirs.push_back(training_data_dir);
+	}
 
 	if (!is_interactive && mode == AppMode::Chat) {
 		AI engine;
