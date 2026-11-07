@@ -64,7 +64,7 @@ constexpr size_t token_dim = 1024;	    // GPT-2 scale (Must be multiple of 64)
 constexpr size_t context_window_size = 256; // Doubled to capture paragraph-level context
 
 // AdamW Optimizer Settings
-constexpr float learning_rate = 0.0005f; // Scaled down for stable high-dimensional convergence
+constexpr float learning_rate = 0.00003f; // Scaled down for stable high-dimensional convergence
 
 // How many training steps pass between two loss reports
 constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU synchronization stalls
@@ -1076,8 +1076,6 @@ void run_training_loop(AI& ai,
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
 	std::optional<double> first_loss;
-	std::optional<double> best_validation_loss;
-	size_t validation_stall_checks = 0;
 
 	while (true) {
 		// Check for interactive user commands without blocking
@@ -1120,8 +1118,6 @@ void run_training_loop(AI& ai,
 				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
 					first_loss.reset();
-					best_validation_loss.reset();
-					validation_stall_checks = 0;
 					std::cout
 						<< "[!] Brain wipe complete. Resuming training.\n\n";
 				} else {
@@ -1186,16 +1182,6 @@ void run_training_loop(AI& ai,
 							portion.context_window_size,
 							validation_loss);
 
-					if (has_validation) {
-						if (!best_validation_loss ||
-						    validation_loss < *best_validation_loss - 1e-3) {
-							best_validation_loss = validation_loss;
-							validation_stall_checks = 0;
-						} else {
-							++validation_stall_checks;
-						}
-					}
-
 					const double pct =
 						(target_steps > 0)
 							? std::min(100.0,
@@ -1239,27 +1225,27 @@ void run_training_loop(AI& ai,
 					}
 					std::cout << "   " << std::flush;
 
-					// Automated early stopping in the Cross-Entropy sweet spot [1.5, 2.5]
-					// or when held-out validation loss ceases to improve inside the band
-					const bool in_sweet_spot =
-						(step >= config::loss_report_interval) &&
-						(current_loss >= 1.5 && current_loss <= 2.5) &&
-						(!has_validation || validation_loss <= 2.5 ||
-						 validation_stall_checks >= 2);
-					if (in_sweet_spot && step < target_steps) {
-						std::cout
-							<< "\n\n[OK] Early stopping triggered at step "
-							<< step << " (Loss " << std::setprecision(4)
+					// 1. ANOMALY TRIPWIRE (Fail Fast on Divergence)
+					if (current_loss > 25.0 || std::isnan(current_loss)) {
+						std::cerr
+							<< "\n[FATAL ANOMALY] Loss exploded to "
 							<< current_loss
-							<< " in target sweet spot [1.5, 2.5]).\n"
-							<< "[!] Automatically saving model checkpoint...\n"
-							<< std::flush;
+							<< ". Gradients destabilized. Halting to prevent VRAM corruption.\n";
+						break; // Kill the loop instantly
+					}
+
+					// 2. EARLY STOPPING (The 1.5 - 2.5 Sweet Spot)
+					if (current_loss <= 2.5 && current_loss > 0.0 &&
+					    step < target_steps) {
+						std::cout
+							<< "\n[!] Golden sweet spot reached ("
+							<< std::setprecision(4) << current_loss
+							<< "). Halting to lock in generalization.\n";
 						ai.save_weights(weights_path.string());
 						parser.save_vocabulary(vocab_path, input);
-						std::cout << "[OK] Model checkpoint saved to "
-							  << weights_path.filename().string()
-							  << "\n";
-						break;
+						std::cout
+							<< "[OK] Model checkpoint safely locked to disk.\n";
+						break; // Exit the loop and succeed
 					}
 				}
 			}
@@ -1602,6 +1588,19 @@ bool execute_training_session(AI& ai,
 				  << ". Aborting training to prevent overwriting existing file.\n";
 			portion.free_pinned();
 			return false;
+		}
+		double initial_val_loss = 0.0;
+		if (!portion.validation_token_ids.empty() &&
+		    ai.evaluate_validation(portion.validation_token_ids,
+					   portion.context_window_size,
+					   initial_val_loss) &&
+		    (initial_val_loss > 15.0 || !std::isfinite(initial_val_loss))) {
+			std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: "
+				  << std::fixed << std::setprecision(4) << initial_val_loss
+				  << " > 15.0). Resetting brain to fresh state...\n"
+				  << std::flush;
+			ai.reset_weights(ai_elements);
+			ai.upload_weights();
 		}
 	}
 
