@@ -2,6 +2,9 @@
 #define FORWARD_PASS_CUH
 
 #include "../util/gpu_types.cuh"
+#include "cuda_graph_capture.cuh"
+#include "moe_router.cuh"
+#include "paged_gqa.cuh"
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,71 +73,6 @@ CUDA_API bool transformer_forward_block(void* hidden_states,
 					size_t ffn_dim,
 					void* stream);
 
-// Phase 6: Sparse Mixture of Experts (MoE) Routing & Forward Block
-CUDA_API bool forward_mixture_experts(void* hidden_states,
-				      const GpuWeights* gpu_weights,
-				      GpuActivations* gpu_activations,
-				      size_t sequence_length,
-				      size_t embedding_dim,
-				      size_t ffn_dim,
-				      void* stream);
-
-CUDA_API bool download_expert_counts(const GpuActivations* gpu_activations,
-				     int32_t* h_histogram,
-				     size_t num_experts);
-
-CUDA_API bool reset_expert_histogram(GpuActivations* gpu_activations,
-				     size_t num_experts,
-				     void* stream);
-
-// Phase 4: PagedAttention KV-Cache & Block Management
-CUDA_API bool allocate_paged_cache(GpuPagedCache* cache,
-				   size_t total_blocks,
-				   size_t block_size,
-				   size_t hidden_dim,
-				   size_t num_heads);
-
-CUDA_API void free_paged_cache(GpuPagedCache* cache);
-
-CUDA_API bool copy_physical_block(const GpuPagedCache* cache,
-				  int src_block,
-				  int dst_block,
-				  size_t valid_tokens,
-				  void* stream);
-
-CUDA_API bool append_paged_kv(const GpuPagedCache* cache,
-			      int physical_block,
-			      size_t block_offset,
-			      const void* key_vec,
-			      const void* val_vec,
-			      void* stream);
-
-CUDA_API bool paged_causal_attention(const void* query,
-				     const GpuPagedCache* cache,
-				     const int* d_block_table,
-				     void* output,
-				     size_t query_length,
-				     size_t context_length,
-				     size_t hidden_dim,
-				     size_t num_heads,
-				     void* stream);
-
-// Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
-CUDA_API bool capture_training_graph(GpuGraphExecution* graph_engine,
-				     const GpuPortion* gpu_portion,
-				     GpuEmbeddings* gpu_embeddings,
-				     GpuWeights* gpu_weights,
-				     GpuActivations* gpu_activations,
-				     size_t input_dim,
-				     size_t output_dim,
-				     float learning_rate,
-				     int buffer_index);
-
-CUDA_API bool launch_training_graph(GpuGraphExecution* graph_engine, void* stream);
-
-CUDA_API void free_training_graph(GpuGraphExecution* graph_engine);
-
-CUDA_API float benchmark_graph_latency(GpuGraphExecution* graph_engine, void* stream, int iterations);
 
 CUDA_API void launch_gather_embeddings_batched(const uint32_t* d_token_ids,
 					       const void* d_table,

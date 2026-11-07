@@ -20,6 +20,24 @@ CUDA_API void launch_swiglu_bf16(
 	void* stream
 );
 
+CUDA_API bool swiglu_forward(
+	const void* gate,
+	const void* up,
+	void* output,
+	size_t total_elements,
+	void* stream
+);
+
+CUDA_API bool swiglu_backward(
+	const void* grad_output,
+	const void* gate,
+	const void* up,
+	void* grad_gate,
+	void* grad_up,
+	size_t total_elements,
+	void* stream
+);
+
 #ifdef __cplusplus
 }
 #endif

@@ -4,6 +4,7 @@
 #include "../util/caching_allocator.cuh"
 #include "../util/cuda_utils.cuh"
 #include "backward_pass.cuh"
+#include "swiglu.cuh"
 
 // =============================================================================
 // =============================================================================
@@ -615,55 +616,6 @@ extern "C" CUDA_API bool fused_causal_backward(const void* grad_output,
 		num_heads,
 		head_dim,
 		scale);
-
-	return CUDA_CHECK(cudaGetLastError());
-}
-
-__global__ static void swiglu_backward_kernel(
-	const __nv_bfloat16* __restrict__ grad_output,
-	const __nv_bfloat16* __restrict__ gate,
-	const __nv_bfloat16* __restrict__ up,
-	float* __restrict__ grad_gate,
-	float* __restrict__ grad_up,
-	size_t total_elements) {
-
-	size_t idx = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
-	if (idx < total_elements) {
-		float dh = __bfloat162float(grad_output[idx]);
-		float g = __bfloat162float(gate[idx]);
-		float u = __bfloat162float(up[idx]);
-
-		float sig = 1.0f / (1.0f + expf(-g));
-		float swish = g * sig;
-		float swish_prime = sig * (1.0f + g * (1.0f - sig));
-
-		grad_up[idx] = dh * swish;
-		grad_gate[idx] = dh * u * swish_prime;
-	}
-}
-
-extern "C" CUDA_API bool swiglu_backward(const void* grad_output,
-					 const void* gate,
-					 const void* up,
-					 void* grad_gate,
-					 void* grad_up,
-					 size_t total_elements,
-					 void* stream) {
-	if (!grad_output || !gate || !up || !grad_gate || !grad_up || total_elements == 0) {
-		return false;
-	}
-
-	cudaStream_t s = (cudaStream_t)stream;
-	int threads = 256;
-	int blocks = static_cast<int>((total_elements + threads - 1) / threads);
-
-	swiglu_backward_kernel<<<blocks, threads, 0, s>>>(
-		static_cast<const __nv_bfloat16*>(grad_output),
-		static_cast<const __nv_bfloat16*>(gate),
-		static_cast<const __nv_bfloat16*>(up),
-		static_cast<float*>(grad_gate),
-		static_cast<float*>(grad_up),
-		total_elements);
 
 	return CUDA_CHECK(cudaGetLastError());
 }
