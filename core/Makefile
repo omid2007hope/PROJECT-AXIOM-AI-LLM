@@ -39,15 +39,20 @@ DLL_OBJS    = $(DLL_SRCS:.cpp=.o)
 # ─── Default: compile everything ──────────────────────────────────────────────
 all: $(APP_TARGET) $(TEST_TARGET)
 
+CUDA_OBJS    = $(CUDA_SRCS:.cu=.cu.obj)
+
 # ─── Object compilation pattern rule ──────────────────────────────────────────
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+%.cu.obj: %.cu
+	$(NVCC) $(NVCCFLAGS) -DBUILDING_CUDA_DLL -c $< -o $@
+
 # ─── Compile CUDA sources into a single DLL ───────────────────────────────────
 # Build a shared library so MSVC's linker handles all MSVC-specific symbols.
 CUDA_DLL = cuda_transfer.dll
-$(CUDA_DLL): $(CUDA_SRCS)
-	-$(NVCC) $(NVCCFLAGS) -DBUILDING_CUDA_DLL -shared $(CUDA_SRCS) -o $(CUDA_DLL)
+$(CUDA_DLL): $(CUDA_OBJS)
+	-$(NVCC) $(NVCCFLAGS) -shared $(CUDA_OBJS) -o $(CUDA_DLL)
 
 # Helper: return the CUDA DLL only if it was successfully built
 CUDA_LINK = $(if $(wildcard $(CUDA_DLL)),$(CUDA_DLL),)
@@ -68,7 +73,7 @@ dll: $(DLL_OBJS) $(CUDA_DLL)
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 clean:
-	-rm -f $(APP_TARGET) $(TEST_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp build/*.o build/*.dll $(ALL_OBJS)
+	-rm -f $(APP_TARGET) $(TEST_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp build/*.o build/*.dll $(ALL_OBJS) $(CUDA_OBJS) src/CUDA/*/*.cu.obj
 
 # ─── Run tests ────────────────────────────────────────────────────────────────
 test: $(TEST_TARGET)
