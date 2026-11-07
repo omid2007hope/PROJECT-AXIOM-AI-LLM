@@ -1052,7 +1052,7 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 // *****************************************************************************
 // Training loop
 // *****************************************************************************
-void run_training_loop(AI& ai,
+bool run_training_loop(AI& ai,
 		       Optimizer& optimizer,
 		       Portion& portion,
 		       Elements& elements,
@@ -1087,7 +1087,7 @@ void run_training_loop(AI& ai,
 	if (target_steps == 0) {
 		std::cerr << "[!] No training data available in "
 			  << optimizer.data_path.filename().string() << "\n";
-		return;
+		return false;
 	}
 
 	std::cout << "Beginning training session (" << target_steps
@@ -1103,6 +1103,8 @@ void run_training_loop(AI& ai,
 	size_t step = 0;
 	std::optional<double> first_loss;
 	auto session_start_time = std::chrono::steady_clock::now();
+	bool fatal_anomaly = false;
+	bool checkpoint_saved = false;
 
 	while (true) {
 		// Check for interactive user commands without blocking
@@ -1166,6 +1168,7 @@ void run_training_loop(AI& ai,
 				std::cout << "\n[!] Stopping training loop. Saving checkpoint...\n";
 				ai.save_weights(weights_path.string());
 				parser.save_vocabulary(vocab_path, input);
+				checkpoint_saved = true;
 				std::cout << "[OK] Checkpoint saved. Exiting training.\n";
 				break;
 			}
@@ -1176,6 +1179,7 @@ void run_training_loop(AI& ai,
 
 		if (status == TrainStatus::Failed) {
 			std::cerr << "\n[!] Training stopped: a GPU step failed.\n";
+			fatal_anomaly = true;
 			break;
 		}
 
@@ -1195,6 +1199,7 @@ void run_training_loop(AI& ai,
 							<< ": non-finite gradient or activation detected ("
 							<< telemetry.nonfinite_count
 							<< " events). Existing checkpoint preserved.\n";
+						fatal_anomaly = true;
 						break;
 					}
 
@@ -1273,6 +1278,7 @@ void run_training_loop(AI& ai,
 							<< "\n[FATAL ANOMALY] Loss exploded to "
 							<< current_loss
 							<< ". Gradients destabilized. Halting to prevent VRAM corruption.\n";
+						fatal_anomaly = true;
 						break; // Kill the loop instantly
 					}
 
@@ -1287,6 +1293,7 @@ void run_training_loop(AI& ai,
 							<< "). Halting to lock in generalization.\n";
 						ai.save_weights(weights_path.string());
 						parser.save_vocabulary(vocab_path, input);
+						checkpoint_saved = true;
 						std::cout
 							<< "[OK] Model checkpoint safely locked to disk.\n";
 						break; // Exit the loop and succeed
@@ -1312,6 +1319,7 @@ void run_training_loop(AI& ai,
 
 				ai.save_weights(weights_path.string());
 				parser.save_vocabulary(vocab_path, input);
+				checkpoint_saved = true;
 				std::cout << "[OK] Model checkpoint saved to "
 					  << weights_path.filename().string() << "\n";
 				break;
@@ -1331,6 +1339,20 @@ void run_training_loop(AI& ai,
 				break;
 			}
 		}
+	}
+
+	// OUTSIDE THE LOOP (Shutdown Logic)
+	if (!fatal_anomaly) {
+		if (!checkpoint_saved) {
+			ai.save_weights(weights_path.string());
+			parser.save_vocabulary(vocab_path, input);
+			std::cout << "[OK] Model weights safely saved to: "
+				  << weights_path.filename().string() << "\n";
+		}
+		return true;
+	} else {
+		std::cerr << "\n[!] FINAL SAVE ABORTED. Preserving last known good checkpoint.\n";
+		return false;
 	}
 }
 
@@ -1654,19 +1676,23 @@ bool execute_training_session(AI& ai,
 
 	print_hardware_telemetry(portion);
 
-	run_training_loop(ai,
-			  optimizer,
-			  portion,
-			  ai_elements,
-			  parser,
-			  input,
-			  weights_path,
-			  vocab_path,
-			  max_steps,
-			  target_stop_loss);
+	const bool training_ok = run_training_loop(ai,
+						   optimizer,
+						   portion,
+						   ai_elements,
+						   parser,
+						   input,
+						   weights_path,
+						   vocab_path,
+						   max_steps,
+						   target_stop_loss);
 
 	portion.free_pinned();
 	embedded_cleanup.run();
+
+	if (!training_ok) {
+		return false;
+	}
 
 	if (mode == AppMode::BulkTrain) {
 		std::cout << "\n========================================================\n"

@@ -652,7 +652,8 @@ __global__ static void batched_weight_gradient_kernel(
 	}
 
 	if (out_row < OutDim && in_col < InDim) {
-		grad_W[out_row * InDim + in_col] = sum;
+		float inv_s = 1.0f / static_cast<float>(S > 0 ? S : 1);
+		grad_W[out_row * InDim + in_col] = sum * inv_s;
 	}
 }
 
@@ -689,7 +690,7 @@ __global__ static void batched_input_gradient_kernel(
 	}
 
 	if (s < S && in_col < InDim) {
-		grad_X[s * InDim + in_col] = sum;
+		grad_X[s * InDim + in_col] = fmaxf(-1.0f, fminf(1.0f, sum));
 	}
 }
 
@@ -712,6 +713,7 @@ __global__ static void fused_matrix_adamw_kernel(
 		float g = grad_W[idx];
 		if (!isfinite(g))
 			g = 0.0f;
+		g = fmaxf(-1.0f, fminf(1.0f, g));
 
 		float m = beta1 * W_m[idx] + (1.0f - beta1) * g;
 		float v = beta2 * W_v[idx] + (1.0f - beta2) * g * g;
