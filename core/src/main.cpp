@@ -36,10 +36,12 @@
 // clang-format on
 
 #include "../include/ai.hpp"
+#include "../include/config.hpp"
 #include "../include/optimizer.hpp"
-#include "../include/telemetry.hpp"
 #include "../include/server.hpp"
+#include "../include/telemetry.hpp"
 #include "../src/CUDA/kernel/forward_pass.cuh"
+
 
 bool test_path();
 bool test_ifstream();
@@ -56,38 +58,6 @@ bool test_decompressor();
 // *****************************************************************************
 // Configuration: the single source of truth for everything the backend uses
 // *****************************************************************************
-namespace config {
-
-// Hyperparameters
-constexpr size_t ram_buffer_size = 4194304; // 4M tokens (~16.7 MB in RAM)
-constexpr size_t token_dim = 1024;	    // GPT-2 scale (Must be multiple of 64)
-constexpr size_t context_window_size = 256; // Doubled to capture paragraph-level context
-
-// AdamW Optimizer Settings
-constexpr float learning_rate = 0.00003f; // Scaled down for stable high-dimensional convergence
-
-// How many training steps pass between two loss reports
-constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU synchronization stalls
-
-// Initial weights are drawn uniformly from [-sqrt(3/K), +sqrt(3/K)], K = fan-in =
-// context_window_size * token_dim = 262144. That gives std 1/sqrt(K) = 1/512, so the
-// RMS-normalized input produces unit-variance outputs. (1/sqrt(token_dim) ignores the
-// 256x fan-in and explodes the logits.) sqrt(3)/512 = 0.0033854167f.
-constexpr float weight_min = -0.0033854167f;
-constexpr float weight_max = 0.0033854167f;
-
-// Folder layout
-constexpr const char* database_folder = "database";
-constexpr const char* models_folder = "models";
-constexpr const char* training_folder = "training";
-constexpr const char* embedded_file = "embedded_data.bin";
-constexpr const char* asset_folder = "asset_sample";
-constexpr const char* weights_file = "weights.axiom";
-constexpr const char* vocab_file = "vocab.axiom";
-
-} // namespace config
-
-enum class AppMode { Chat, Use, Train, BulkTrain, Test, Benchmark, Server, Exit };
 
 // core/ folder, located from the executable binary with fallbacks
 std::filesystem::path locate_core_dir() {
@@ -314,7 +284,8 @@ AppMode collect_user_input(Input& input) {
 			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
 			  << "[5] Bulk Training (asset_sample)\n";
 		if (is_background_axiom_server_running()) {
-			std::cout << "[6] HTTP Server: [RUNNING on port 8080] (Select to Stop or Switch)\n";
+			std::cout
+				<< "[6] HTTP Server: [RUNNING on port 8080] (Select to Stop or Switch)\n";
 		} else {
 			std::cout << "[6] Launch HTTP Server (OpenAI API / Port 8080)\n";
 		}
@@ -537,8 +508,8 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 // Direct Chat Engine (Native GQA Transformer)
 // *****************************************************************************
 void run_chat_engine(AI& ai,
-                     const std::filesystem::path& weights_path,
-                     const std::filesystem::path& vocab_path) {
+		     const std::filesystem::path& weights_path,
+		     const std::filesystem::path& vocab_path) {
 #ifdef _WIN32
 	HANDLE h_console = GetStdHandle(STD_OUTPUT_HANDLE);
 	DWORD console_mode = 0;
@@ -550,25 +521,21 @@ void run_chat_engine(AI& ai,
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
 
-	const std::vector<std::filesystem::path> weights_candidates = {
-		"models/axiom.axiom",
-		"../models/axiom.axiom",
-		"models/axiom3b.axiom",
-		"../models/axiom3b.axiom",
-		"training/weights.axiom",
-		"../training/weights.axiom",
-		"models/weights.axiom",
-		"../models/weights.axiom"
-	};
+	const std::vector<std::filesystem::path> weights_candidates = {"models/axiom.axiom",
+								       "../models/axiom.axiom",
+								       "models/axiom3b.axiom",
+								       "../models/axiom3b.axiom",
+								       "training/weights.axiom",
+								       "../training/weights.axiom",
+								       "models/weights.axiom",
+								       "../models/weights.axiom"};
 
-	const std::vector<std::filesystem::path> vocab_candidates = {
-		"models/axiom_vocab.axiom",
-		"../models/axiom_vocab.axiom",
-		"training/vocab.axiom",
-		"../training/vocab.axiom",
-		"models/vocab.axiom",
-		"../models/vocab.axiom"
-	};
+	const std::vector<std::filesystem::path> vocab_candidates = {"models/axiom_vocab.axiom",
+								     "../models/axiom_vocab.axiom",
+								     "training/vocab.axiom",
+								     "../training/vocab.axiom",
+								     "models/vocab.axiom",
+								     "../models/vocab.axiom"};
 
 	for (const auto& candidate : weights_candidates) {
 		if (std::filesystem::exists(candidate)) {
@@ -585,28 +552,40 @@ void run_chat_engine(AI& ai,
 	}
 
 	if (!ai.has_transformer_model()) {
-		std::cout << "\033[90m[..] Streaming Axiom weights via Win32 DMA mmap...\033[0m\n" << std::flush;
+		std::cout << "\033[90m[..] Streaming Axiom weights via Win32 DMA mmap...\033[0m\n"
+			  << std::flush;
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (!vocab_ok || !model_ok) {
-			std::cerr << "\033[31m[!] Failed to load transformer weights from: " << target_weights << "\033[0m\n" << std::flush;
+			std::cerr << "\033[31m[!] Failed to load transformer weights from: "
+				  << target_weights << "\033[0m\n"
+				  << std::flush;
 			return;
 		}
-		std::cout << "\033[32m[OK] Stacked GQA Transformer weights loaded into VRAM.\033[0m\n\n" << std::flush;
+		std::cout
+			<< "\033[32m[OK] Stacked GQA Transformer weights loaded into VRAM.\033[0m\n\n"
+			<< std::flush;
 	}
 
-	std::cout << "\033[1;36m========================================================================\033[0m\n"
-		  << "\033[1;37m       PROJECT AXIOM — Ada Lovelace sm_89 Direct GQA Transformer        \033[0m\n"
-		  << "\033[1;36m========================================================================\033[0m\n"
-		  << "  Model Architecture : \033[1;32mStacked Grouped Query Attention (GQA)\033[0m\n"
-		  << "  Layer Count        : \033[1;33m" << ai.config_.num_layers << " stacked blocks\033[0m (Hidden: " << ai.config_.hidden_dim << ", FFN: " << ai.config_.ffn_dim << ")\n"
-		  << "  Attention Heads    : \033[1;33m" << ai.config_.num_q_heads << " Q-Heads / " << ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim << ")\n"
-		  << "  Context Window     : \033[1;33m" << ai.config_.max_seq_len << " tokens\033[0m (Paged Dynamic KV-Cache)\n"
-		  << "  Compute Hardware   : \033[1;32m128-Bit uint4 Coalesced Memory + GPU Softmax/Argmax\033[0m\n"
-		  << "  Vocabulary Size    : \033[1;33m" << ai.config_.vocab_size << " tokens\033[0m (BPE Exact Code Preserved)\n"
-		  << "\033[1;36m------------------------------------------------------------------------\033[0m\n"
-		  << "\033[90mCommands: 'exit' to quit | 'clear' to reset context | 'temp <val>' for sampling\033[0m\n"
-		  << "\033[1;36m------------------------------------------------------------------------\033[0m\n";
+	std::cout
+		<< "\033[1;36m========================================================================\033[0m\n"
+		<< "\033[1;37m       PROJECT AXIOM — Ada Lovelace sm_89 Direct GQA Transformer        \033[0m\n"
+		<< "\033[1;36m========================================================================\033[0m\n"
+		<< "  Model Architecture : \033[1;32mStacked Grouped Query Attention (GQA)\033[0m\n"
+		<< "  Layer Count        : \033[1;33m" << ai.config_.num_layers
+		<< " stacked blocks\033[0m (Hidden: " << ai.config_.hidden_dim
+		<< ", FFN: " << ai.config_.ffn_dim << ")\n"
+		<< "  Attention Heads    : \033[1;33m" << ai.config_.num_q_heads << " Q-Heads / "
+		<< ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim
+		<< ")\n"
+		<< "  Context Window     : \033[1;33m" << ai.config_.max_seq_len
+		<< " tokens\033[0m (Paged Dynamic KV-Cache)\n"
+		<< "  Compute Hardware   : \033[1;32m128-Bit uint4 Coalesced Memory + GPU Softmax/Argmax\033[0m\n"
+		<< "  Vocabulary Size    : \033[1;33m" << ai.config_.vocab_size
+		<< " tokens\033[0m (BPE Exact Code Preserved)\n"
+		<< "\033[1;36m------------------------------------------------------------------------\033[0m\n"
+		<< "\033[90mCommands: 'exit' to quit | 'clear' to reset context | 'temp <val>' for sampling\033[0m\n"
+		<< "\033[1;36m------------------------------------------------------------------------\033[0m\n";
 
 	std::string conversation_history =
 		"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n";
@@ -615,13 +594,17 @@ void run_chat_engine(AI& ai,
 	std::string user_input;
 	while (true) {
 		std::cout << "\n\033[1;36mYou ❯ \033[0m";
-		if (!std::getline(std::cin, user_input)) break;
+		if (!std::getline(std::cin, user_input))
+			break;
 		strip_utf8_bom(user_input);
-		while (!user_input.empty() && (user_input.back() == '\r' || user_input.back() == ' ' || user_input.back() == '\t')) {
+		while (!user_input.empty() &&
+		       (user_input.back() == '\r' || user_input.back() == ' ' ||
+			user_input.back() == '\t')) {
 			user_input.pop_back();
 		}
 
-		if (user_input.empty()) continue;
+		if (user_input.empty())
+			continue;
 		if (user_input == "exit" || user_input == "quit" || user_input == ":q") {
 			std::cout << "\033[90mExiting chat session.\033[0m\n";
 			break;
@@ -635,14 +618,16 @@ void run_chat_engine(AI& ai,
 		if (user_input.rfind("temp ", 0) == 0) {
 			try {
 				current_temp = std::stof(user_input.substr(5));
-				std::cout << "\033[33m[Axiom] Generation temperature set to: " << current_temp << "\033[0m\n";
+				std::cout << "\033[33m[Axiom] Generation temperature set to: "
+					  << current_temp << "\033[0m\n";
 			} catch (...) {
 				std::cout << "\033[31m[!] Invalid temperature value.\033[0m\n";
 			}
 			continue;
 		}
 
-		conversation_history += "<|im_start|>user\n" + user_input + "<|im_end|>\n<|im_start|>assistant\n";
+		conversation_history +=
+			"<|im_start|>user\n" + user_input + "<|im_end|>\n<|im_start|>assistant\n";
 
 		std::cout << "\n\033[1;32mAxiom ❯ \033[0m";
 		std::string assistant_reply;
@@ -651,23 +636,31 @@ void run_chat_engine(AI& ai,
 		bool first_token = true;
 		size_t token_count = 0;
 
-		ai.generate(conversation_history, 1024, current_temp, 40, 0.9f, [&](const std::string& tok) {
-			if (first_token) {
-				t_first = std::chrono::steady_clock::now();
-				first_token = false;
-			}
-			++token_count;
-			std::cout << tok << std::flush;
-			assistant_reply += tok;
-		});
+		ai.generate(conversation_history,
+			    1024,
+			    current_temp,
+			    40,
+			    0.9f,
+			    [&](const std::string& tok) {
+				    if (first_token) {
+					    t_first = std::chrono::steady_clock::now();
+					    first_token = false;
+				    }
+				    ++token_count;
+				    std::cout << tok << std::flush;
+				    assistant_reply += tok;
+			    });
 		std::cout << "\n";
 
 		auto t_end = std::chrono::steady_clock::now();
-		double ttft_ms = std::chrono::duration<double, std::milli>(t_first - t_start).count();
+		double ttft_ms =
+			std::chrono::duration<double, std::milli>(t_first - t_start).count();
 		double gen_sec = std::chrono::duration<double>(t_end - t_first).count();
-		double tps = (gen_sec > 0.001 && token_count > 1) ? ((token_count - 1) / gen_sec) : 0.0;
+		double tps =
+			(gen_sec > 0.001 && token_count > 1) ? ((token_count - 1) / gen_sec) : 0.0;
 
-		std::cout << "\033[90m── [TTFT: " << std::fixed << std::setprecision(1) << ttft_ms << " ms"
+		std::cout << "\033[90m── [TTFT: " << std::fixed << std::setprecision(1) << ttft_ms
+			  << " ms"
 			  << " | Speed: " << std::fixed << std::setprecision(1) << tps << " t/s"
 			  << " | Generated: " << token_count << " tokens"
 			  << " | Temp: " << std::fixed << std::setprecision(2) << current_temp
@@ -720,16 +713,14 @@ void run_inference_engine(AI& ai,
 			"training/weights.axiom",
 			"../training/weights.axiom",
 			"models/weights.axiom",
-			"../models/weights.axiom"
-		};
+			"../models/weights.axiom"};
 		const std::vector<std::filesystem::path> vocab_candidates = {
 			"models/axiom_vocab.axiom",
 			"../models/axiom_vocab.axiom",
 			"training/vocab.axiom",
 			"../training/vocab.axiom",
 			"models/vocab.axiom",
-			"../models/vocab.axiom"
-		};
+			"../models/vocab.axiom"};
 		for (const auto& candidate : weights_candidates) {
 			if (std::filesystem::exists(candidate)) {
 				target_weights = candidate;
@@ -746,20 +737,23 @@ void run_inference_engine(AI& ai,
 	}
 
 	if (is_transformer) {
-		std::cout << "[..] Detected Axiom Stacked Transformer (v2). Streaming weights via Win32 DMA mmap...\n";
+		std::cout
+			<< "[..] Detected Axiom Stacked Transformer (v2). Streaming weights via Win32 DMA mmap...\n";
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (vocab_ok && model_ok) {
 			std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n";
 		} else {
-				std::cerr << "\033[1;31m[!] Failed to map transformer model weights.\033[0m\n\n";
-			}
-		} else if (std::filesystem::exists(target_weights)) {
-			std::cout << "\033[1;36m[..] Loading model weights from: " << target_weights.filename().string()
-			   << "\033[0m\n";
-			if (ai.load_weights(target_weights.string())) {
-				std::cout << "\033[1;32m[OK] Model weights successfully loaded into VRAM.\033[0m\n\n";
-			} else {
+			std::cerr
+				<< "\033[1;31m[!] Failed to map transformer model weights.\033[0m\n\n";
+		}
+	} else if (std::filesystem::exists(target_weights)) {
+		std::cout << "\033[1;36m[..] Loading model weights from: "
+			  << target_weights.filename().string() << "\033[0m\n";
+		if (ai.load_weights(target_weights.string())) {
+			std::cout
+				<< "\033[1;32m[OK] Model weights successfully loaded into VRAM.\033[0m\n\n";
+		} else {
 			std::cerr
 				<< "[!] Failed to load model weights. Using baseline weights.\n\n";
 		}
@@ -776,15 +770,15 @@ void run_inference_engine(AI& ai,
 
 	if (!is_transformer) {
 		if (std::filesystem::exists(target_vocab)) {
-			std::cout << "[..] Loading vocabulary from: " << target_vocab.filename().string()
-				  << "\n";
+			std::cout << "[..] Loading vocabulary from: "
+				  << target_vocab.filename().string() << "\n";
 			if (parser.load_vocabulary(target_vocab, input)) {
 				std::cout << "[OK] Vocabulary successfully restored ("
 					  << input.main_dictionary.size() << " tokens).\n\n";
 			}
 		} else if (target_vocab.filename().string() != config::vocab_file) {
-			std::cerr << "[!] Specified vocabulary file not found: " << target_vocab.string()
-				  << "\n";
+			std::cerr << "[!] Specified vocabulary file not found: "
+				  << target_vocab.string() << "\n";
 		}
 
 		parser.build_embedding_table(input);
@@ -794,22 +788,27 @@ void run_inference_engine(AI& ai,
 	}
 
 	if (ai.has_transformer_model()) {
-		std::cout << "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
-			  << "Layers            : " << ai.config_.num_layers << " stacked blocks\n"
-			  << "Hidden Dimension  : " << ai.config_.hidden_dim << " (Q Heads: "
-			  << ai.config_.num_q_heads << ", KV Heads: " << ai.config_.num_kv_heads << ")\n"
-			  << "Context Window    : " << ai.config_.max_seq_len << " tokens\n"
-			  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
-			  << "Vocabulary Size   : " << ai.config_.vocab_size << " tokens (BPE exact code preserved)\n"
-			  << "--------------------------------------------------------\n"
-			  << "Enter code prompt or instruction (type 'exit' to quit):\n";
+		std::cout
+			<< "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
+			<< "Layers            : " << ai.config_.num_layers << " stacked blocks\n"
+			<< "Hidden Dimension  : " << ai.config_.hidden_dim
+			<< " (Q Heads: " << ai.config_.num_q_heads
+			<< ", KV Heads: " << ai.config_.num_kv_heads << ")\n"
+			<< "Context Window    : " << ai.config_.max_seq_len << " tokens\n"
+			<< "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
+			<< "Vocabulary Size   : " << ai.config_.vocab_size
+			<< " tokens (BPE exact code preserved)\n"
+			<< "--------------------------------------------------------\n"
+			<< "Enter code prompt or instruction (type 'exit' to quit):\n";
 	} else {
 		std::cout << "Model Architecture: Single Dedicated Multimodal Perceptron\n"
 			  << "Context Window    : " << config::context_window_size << " tokens ("
-			  << (config::context_window_size * config::token_dim * sizeof(std::bfloat16_t))
+			  << (config::context_window_size * config::token_dim *
+			      sizeof(std::bfloat16_t))
 			  << " bytes BF16)\n"
 			  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
-			  << "Vocabulary Size   : " << input.embedding_table.size() << " tokens mapped\n"
+			  << "Vocabulary Size   : " << input.embedding_table.size()
+			  << " tokens mapped\n"
 			  << "--------------------------------------------------------\n"
 			  << "Enter text or prompt to predict next token (type 'exit' to quit):\n";
 	}
@@ -891,7 +890,8 @@ void run_inference_engine(AI& ai,
 
 		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] [";
 		for (size_t idx = 0; idx < std::min<size_t>(prediction.size(), 4); ++idx) {
-			if (idx > 0) std::cout << ", ";
+			if (idx > 0)
+				std::cout << ", ";
 			std::cout << prediction[idx];
 		}
 		std::cout << "]\n"
@@ -1008,12 +1008,14 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 	if (run_cutlass_saturation_benchmark(
 		    sat_M, sat_N, sat_K, sat_iters, &sat_tflops, &sat_bw, &sat_avg_ms)) {
 		double best_bw = (vram_bw_gb_s > sat_bw) ? vram_bw_gb_s : sat_bw;
-		float best_bw_pct = (specs.peak_bandwidth_gb_s > 0.0)
-			? static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0)
-			: 0.0f;
-		float sat_mfu_pct = (specs.peak_dense_tflops > 0.0)
-			? static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0)
-			: 0.0f;
+		float best_bw_pct =
+			(specs.peak_bandwidth_gb_s > 0.0)
+				? static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0)
+				: 0.0f;
+		float sat_mfu_pct =
+			(specs.peak_dense_tflops > 0.0)
+				? static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0)
+				: 0.0f;
 		std::string arch_tag =
 			"sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
@@ -1177,10 +1179,9 @@ void run_training_loop(AI& ai,
 					double validation_loss = 0.0;
 					const bool has_validation =
 						!portion.validation_token_ids.empty() &&
-						ai.evaluate_validation(
-							portion.validation_token_ids,
-							portion.context_window_size,
-							validation_loss);
+						ai.evaluate_validation(portion.validation_token_ids,
+								       portion.context_window_size,
+								       validation_loss);
 
 					const double pct =
 						(target_steps > 0)
@@ -1212,8 +1213,8 @@ void run_training_loop(AI& ai,
 						double delta_pct = (current_loss - *first_loss) /
 								   *first_loss * 100.0;
 						std::cout << " (" << std::showpos
-						          << std::setprecision(1) << delta_pct
-						          << "% vs 1st)" << std::noshowpos;
+							  << std::setprecision(1) << delta_pct
+							  << "% vs 1st)" << std::noshowpos;
 					}
 					std::cout << " | |Grad|: " << std::setprecision(3)
 						  << telemetry.gradient_norm
@@ -1432,9 +1433,10 @@ bool execute_training_session(AI& ai,
 			  << "Target Directory : " << asset_dir.string() << "\n\n";
 
 		std::cout << "[..] Scanning and tokenizing all assets in "
-			  << asset_dir.filename().string() << " (min frequency >= "
-			  << min_frequency << ")...\n";
-		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input, 0, min_frequency);
+			  << asset_dir.filename().string() << " (min frequency >= " << min_frequency
+			  << ")...\n";
+		const size_t processed =
+			parser.bulk_tokenize_directory(asset_dir, input, 0, min_frequency);
 		if (processed == 0 || input.tokenized_data.empty()) {
 			std::cerr << "\n[!] No training files could be parsed from "
 				  << asset_dir.string() << "\n"
@@ -1546,7 +1548,8 @@ bool execute_training_session(AI& ai,
 		if (input.tokenized_data.size() > val_tokens + min_val_tokens) {
 			const size_t split_index = input.tokenized_data.size() - val_tokens;
 			portion.validation_token_ids.assign(
-				input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(split_index),
+				input.tokenized_data.begin() +
+					static_cast<std::ptrdiff_t>(split_index),
 				input.tokenized_data.end());
 			input.tokenized_data.resize(split_index);
 			std::cout << "[OK] Generalization split: " << input.tokenized_data.size()
@@ -1695,8 +1698,7 @@ bool execute_training_session(AI& ai,
 			}
 
 			if (cleanup_choice == 2) {
-				const std::filesystem::path archive_dir =
-					asset_dir / "archive";
+				const std::filesystem::path archive_dir = asset_dir / "archive";
 				std::error_code ec;
 				std::filesystem::create_directories(archive_dir, ec);
 				size_t archived_count = 0;
@@ -1800,12 +1802,13 @@ int main(int argc, char* argv[]) {
 
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
-				if (a == "--serve") {
+		if (a == "--serve") {
 			uint16_t port = 8080;
 			if (i + 1 < argc && argv[i + 1][0] != '-') {
 				try {
 					port = static_cast<uint16_t>(std::stoi(argv[++i]));
-				} catch (...) {}
+				} catch (...) {
+				}
 			}
 			AI engine;
 			std::filesystem::path vocab_p = "models/axiom_vocab.axiom";
@@ -1815,8 +1818,7 @@ int main(int argc, char* argv[]) {
 				"training/vocab.axiom",
 				"../training/vocab.axiom",
 				"models/vocab.axiom",
-				"../models/vocab.axiom"
-			};
+				"../models/vocab.axiom"};
 			for (const auto& candidate : vocab_candidates) {
 				if (std::filesystem::exists(candidate)) {
 					vocab_p = candidate;
@@ -1833,16 +1835,17 @@ int main(int argc, char* argv[]) {
 				"training/weights.axiom",
 				"../training/weights.axiom",
 				"models/weights.axiom",
-				"../models/weights.axiom"
-			};
+				"../models/weights.axiom"};
 			for (const auto& candidate : weights_candidates) {
 				if (std::filesystem::exists(candidate)) {
 					weights_p = candidate;
 					break;
 				}
 			}
-			if (!custom_vocab_path.empty()) vocab_p = custom_vocab_path;
-			if (!custom_weights_path.empty()) weights_p = custom_weights_path;
+			if (!custom_vocab_path.empty())
+				vocab_p = custom_vocab_path;
+			if (!custom_weights_path.empty())
+				weights_p = custom_weights_path;
 
 			engine.load_vocabulary(vocab_p.string());
 			engine.load_axiom_model_mmap(weights_p.string().c_str());
@@ -1937,9 +1940,11 @@ int main(int argc, char* argv[]) {
 		} else if (a == "--min-count" || a == "--min-freq" || a == "--min-frequency") {
 			if (i + 1 < argc) {
 				try {
-					min_frequency = static_cast<uint32_t>(std::stoul(argv[++i]));
+					min_frequency =
+						static_cast<uint32_t>(std::stoul(argv[++i]));
 				} catch (...) {
-					std::cerr << "Error: --min-count requires an integer value.\n";
+					std::cerr
+						<< "Error: --min-count requires an integer value.\n";
 					return 1;
 				}
 			} else {
@@ -2049,8 +2054,7 @@ int main(int argc, char* argv[]) {
 		"training/weights.axiom",
 		"../training/weights.axiom",
 		"models/weights.axiom",
-		"../models/weights.axiom"
-	};
+		"../models/weights.axiom"};
 	for (const auto& candidate : llm_weights_candidates) {
 		if (std::filesystem::exists(candidate)) {
 			llm_weights_path = candidate;
@@ -2069,8 +2073,7 @@ int main(int argc, char* argv[]) {
 		"training/vocab.axiom",
 		"../training/vocab.axiom",
 		"models/vocab.axiom",
-		"../models/vocab.axiom"
-	};
+		"../models/vocab.axiom"};
 	for (const auto& candidate : llm_vocab_candidates) {
 		if (std::filesystem::exists(candidate)) {
 			llm_vocab_path = candidate;
@@ -2159,7 +2162,8 @@ int main(int argc, char* argv[]) {
 			return tests_ok ? 0 : 1;
 		}
 		if (mode == AppMode::Use) {
-			run_inference_engine(ai, parser, input, training_weights_path, training_vocab_path);
+			run_inference_engine(
+				ai, parser, input, training_weights_path, training_vocab_path);
 			return 0;
 		}
 		if (mode == AppMode::Benchmark) {
@@ -2220,22 +2224,25 @@ int main(int argc, char* argv[]) {
 				int s_choice = read_choice();
 				if (s_choice == 1) {
 					stop_background_axiom_server();
-					std::cout << "\n[OK] Background server stopped cleanly.\n\n";
+					std::cout
+						<< "\n[OK] Background server stopped cleanly.\n\n";
 				}
 			} else {
-				std::cout << "\n=========================================\n"
-					  << "      PROJECT AXIOM SERVER CONTROLLER    \n"
-					  << "=========================================\n"
-					  << "[1] Start Background Server (Recommended: chat in app while server runs in background)\n"
-					  << "[2] Start Foreground Server (Live stream request logs, press 'q' to stop)\n"
-					  << "[3] Back to Main Menu\n"
-					  << "> ";
+				std::cout
+					<< "\n=========================================\n"
+					<< "      PROJECT AXIOM SERVER CONTROLLER    \n"
+					<< "=========================================\n"
+					<< "[1] Start Background Server (Recommended: chat in app while server runs in background)\n"
+					<< "[2] Start Foreground Server (Live stream request logs, press 'q' to stop)\n"
+					<< "[3] Back to Main Menu\n"
+					<< "> ";
 				int s_choice = read_choice();
 				if (s_choice == 1) {
 					if (start_background_axiom_server(ai, 8080)) {
-						std::cout << "\n[OK] Project Axiom server running in background on http://127.0.0.1:8080\n"
-							  << "[OK] HTTP server listening on port 8080!\n"
-							  << "[OK] You can select Option [1] anytime to chat directly in this app.\n\n";
+						std::cout
+							<< "\n[OK] Project Axiom server running in background on http://127.0.0.1:8080\n"
+							<< "[OK] HTTP server listening on port 8080!\n"
+							<< "[OK] You can select Option [1] anytime to chat directly in this app.\n\n";
 					}
 				} else if (s_choice == 2) {
 					run_axiom_openai_server(ai, 8080);
@@ -2259,7 +2266,11 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (selected_mode == AppMode::Use) {
-			run_inference_engine(ai, parser, session_input, training_weights_path, training_vocab_path);
+			run_inference_engine(ai,
+					     parser,
+					     session_input,
+					     training_weights_path,
+					     training_vocab_path);
 			pause_menu();
 			continue;
 		}

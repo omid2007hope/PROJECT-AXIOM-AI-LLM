@@ -6,6 +6,9 @@
 #include <cstdint>
 #include <vector>
 
+#include "config.hpp"
+
+
 // Logical sequence state mapping to physical VRAM blocks
 struct SequenceContext {
 	int sequence_id = 0;
@@ -17,10 +20,9 @@ struct SequenceContext {
 class PagedBlockManager {
 public:
 	explicit PagedBlockManager(size_t total_blocks = 256, size_t block_size = 16)
-		: total_blocks_count(total_blocks),
-		  block_token_capacity(block_size),
-		  reference_counts(total_blocks, 0)
-	{
+	    : total_blocks_count(total_blocks),
+	      block_token_capacity(block_size),
+	      reference_counts(total_blocks, 0) {
 		free_block_indices.reserve(total_blocks);
 		for (int i = static_cast<int>(total_blocks) - 1; i >= 0; --i) {
 			free_block_indices.push_back(i);
@@ -93,4 +95,3 @@ private:
 };
 
 #endif // PAGED_CACHE_HPP
-

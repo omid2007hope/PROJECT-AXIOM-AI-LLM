@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "config.hpp"
 #include "parser.hpp"
 
 // ── DLL-imported pinned memory API ──────────────────────────────────────────
@@ -140,10 +141,11 @@ struct Portion {
 			context_token_ids[i] = static_cast<uint32_t*>(
 				pinned_alloc(context_window_size * sizeof(uint32_t)));
 
-			target_tokens[i] = static_cast<std::bfloat16_t*>(
-				pinned_alloc(std::max(target_elements * sizeof(std::bfloat16_t), sizeof(uint32_t))));
+			target_tokens[i] = static_cast<std::bfloat16_t*>(pinned_alloc(std::max(
+				target_elements * sizeof(std::bfloat16_t), sizeof(uint32_t))));
 
-			if (!context_window_tokens[i] || !context_token_ids[i] || !target_tokens[i]) {
+			if (!context_window_tokens[i] || !context_token_ids[i] ||
+			    !target_tokens[i]) {
 				std::cerr << "[Portion] pinned_alloc failed\n";
 				free_pinned();
 				return false;
@@ -253,7 +255,10 @@ private:
 	std::vector<std::bfloat16_t> seam_carry;
 
 	void prefetch_loop(size_t chunk_size, size_t context_size, size_t dim);
-	void read_chunk_into(std::vector<std::bfloat16_t>& buffer, size_t chunk_size, size_t context_size, size_t dim);
+	void read_chunk_into(std::vector<std::bfloat16_t>& buffer,
+			     size_t chunk_size,
+			     size_t context_size,
+			     size_t dim);
 
 public:
 	// Path to the binary embedded data file produced by Parser::embedding().
@@ -294,15 +299,18 @@ public:
 template <typename T, size_t Capacity>
 class LockFreeSPSCRingBuffer {
 	static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of 2");
+
 private:
-	alignas(64) std::atomic<size_t> write_idx_{0};
-	alignas(64) std::atomic<size_t> read_idx_{0};
+	alignas(64) std::atomic<size_t> write_idx_ {0};
+	alignas(64) std::atomic<size_t> read_idx_ {0};
 	alignas(64) T buffer_[Capacity];
+
 public:
 	bool try_push(const T& item) noexcept {
 		const size_t w = write_idx_.load(std::memory_order_relaxed);
 		const size_t next_w = (w + 1) & (Capacity - 1);
-		if (next_w == read_idx_.load(std::memory_order_acquire)) return false;
+		if (next_w == read_idx_.load(std::memory_order_acquire))
+			return false;
 		buffer_[w] = item;
 		write_idx_.store(next_w, std::memory_order_release);
 		return true;
@@ -310,7 +318,8 @@ public:
 
 	bool try_pop(T& out_item) noexcept {
 		const size_t r = read_idx_.load(std::memory_order_relaxed);
-		if (r == write_idx_.load(std::memory_order_acquire)) return false;
+		if (r == write_idx_.load(std::memory_order_acquire))
+			return false;
 		out_item = buffer_[r];
 		read_idx_.store((r + 1) & (Capacity - 1), std::memory_order_release);
 		return true;

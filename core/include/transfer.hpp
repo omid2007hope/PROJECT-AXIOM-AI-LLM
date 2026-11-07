@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "../src/CUDA/transfer.cuh"
-
+#include "config.hpp"
 
 class Transfer {
 public:

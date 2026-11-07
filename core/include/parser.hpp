@@ -6,10 +6,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <limits>
-#include <sstream>
 #include <ios>
 #include <iostream>
+#include <limits>
+#include <sstream>
 #include <stdfloat>
 #include <string>
 #include <type_traits>
@@ -17,32 +17,10 @@
 #include <utility>
 #include <vector>
 
+#include "config.hpp"
 
-namespace vocab {
-	constexpr uint32_t VOCAB_SIZE = 65536;
 
-	// Slots [0 .. 3]: Special reserved tokens
-	constexpr uint32_t PAD = 0;
-	constexpr uint32_t UNK = 1;
-	constexpr uint32_t BOS = 2;
-	constexpr uint32_t EOS = 3;
 
-	// Slots [4 .. 64,511]: Text words, subwords, numbers, and mathematical symbols
-	constexpr uint32_t TEXT_START_ID = 4;
-	constexpr uint32_t TEXT_MAX_ID = 64511;
-
-	// Slots [64,512 .. 64,767]: Discrete visual bytes (256 slots for 0x00..0xFF)
-	constexpr uint32_t VISUAL_START_ID = 64512;
-	constexpr uint32_t VISUAL_END_ID = 64767;
-
-	// Slots [64,768 .. 65,023]: Discrete acoustic bytes (256 slots for 0x00..0xFF)
-	constexpr uint32_t ACOUSTIC_START_ID = 64768;
-	constexpr uint32_t ACOUSTIC_END_ID = 65023;
-
-	// Slots [65,024 .. 65,535]: Reserved expansion slots for future modality codebooks
-	constexpr uint32_t EXPANSION_START_ID = 65024;
-	constexpr uint32_t EXPANSION_MAX_ID = 65535;
-}
 
 struct Test {
 	std::vector<std::string> test_input {};
@@ -82,10 +60,10 @@ struct Input {
 	std::vector<std::string> user_voice_paths = {};
 
 	// Global ID Counters (Dense contiguous modality blocks within [0, 65535])
-	uint32_t next_text_id = vocab::TEXT_START_ID;	      // 4 to 64,511
-	uint32_t next_image_id = vocab::VISUAL_START_ID;      // 64,512 to 64,767
-	uint32_t next_video_id = vocab::VISUAL_START_ID;      // 64,512 to 64,767
-	uint32_t next_voice_id = vocab::ACOUSTIC_START_ID;    // 64,768 to 65,023
+	uint32_t next_text_id = vocab::TEXT_START_ID;	   // 4 to 64,511
+	uint32_t next_image_id = vocab::VISUAL_START_ID;   // 64,512 to 64,767
+	uint32_t next_video_id = vocab::VISUAL_START_ID;   // 64,512 to 64,767
+	uint32_t next_voice_id = vocab::ACOUSTIC_START_ID; // 64,768 to 65,023
 
 	// Optimization for test
 	size_t CHUNK_TOKENS = 65536;
@@ -150,13 +128,18 @@ private:
 			} else if constexpr (std::is_same_v<T, uint8_t>) {
 				uint32_t byte_id = 0;
 				if (next_id >= vocab::ACOUSTIC_START_ID) {
-					byte_id = vocab::ACOUSTIC_START_ID + static_cast<uint32_t>(data);
+					byte_id = vocab::ACOUSTIC_START_ID +
+						  static_cast<uint32_t>(data);
 				} else {
-					byte_id = vocab::VISUAL_START_ID + static_cast<uint32_t>(data);
+					byte_id = vocab::VISUAL_START_ID +
+						  static_cast<uint32_t>(data);
 				}
 				dictionary[data] = byte_id;
 			} else {
-				if (next_id < vocab::VOCAB_SIZE) dictionary[data] = next_id++; else dictionary[data] = vocab::UNK;
+				if (next_id < vocab::VOCAB_SIZE)
+					dictionary[data] = next_id++;
+				else
+					dictionary[data] = vocab::UNK;
 			}
 		}
 		input.tokenized_data.push_back(dictionary[data]);
@@ -335,8 +318,7 @@ public:
 	std::vector<std::bfloat16_t> embedding(Input& input, Test& test);
 
 	// Decoder: finds the nearest token ID in the embedding space for a continuous prediction vector
-	uint32_t decode_token(const Input& input,
-			      const std::vector<float>& embedding_vector);
+	uint32_t decode_token(const Input& input, const std::vector<float>& embedding_vector);
 
 	// Formats a discrete token ID back into its human-readable representation
 	std::string token_to_string(const Input& input, uint32_t token_id);
@@ -358,9 +340,11 @@ public:
 	void init_reserved_vocabulary(Input& input);
 
 	// Exact case-preserving longest-match tokenizer for native Axiom BPE vocabulary
-	std::vector<uint32_t> tokenize_exact_code(const Input& input, const std::string& raw_prompt) const;
-	static std::vector<uint32_t> tokenize_exact_code(const std::string& raw_prompt,
-							 const std::unordered_map<std::string, uint32_t>& vocab);
+	std::vector<uint32_t> tokenize_exact_code(const Input& input,
+						  const std::string& raw_prompt) const;
+	static std::vector<uint32_t> tokenize_exact_code(
+		const std::string& raw_prompt,
+		const std::unordered_map<std::string, uint32_t>& vocab);
 
 	// Right-aligned window of token IDs: newest token in the last slot, leading slots are PAD (0)
 	std::vector<uint32_t> build_context_ids(const std::vector<uint32_t>& tokens,

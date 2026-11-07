@@ -13,17 +13,15 @@
 #include <vector>
 
 #include "../src/CUDA/util/memory_allocation.cuh"
+#include "config.hpp"
+
 
 // Supported hardware devices and numeric representations
 enum class DeviceType : uint8_t { CPU = 0, CUDA = 1 };
 enum class DataType : uint8_t { Float32 = 0, BFloat16 = 1 };
 
 // Dispatch routing key flags
-enum class DispatchKey : uint32_t {
-	CPU = 1 << 0,
-	CUDA = 1 << 1,
-	Autograd = 1 << 2
-};
+enum class DispatchKey : uint32_t { CPU = 1 << 0, CUDA = 1 << 1, Autograd = 1 << 2 };
 
 // Bitset representing active dispatch keys
 class DispatchKeySet {
@@ -67,7 +65,7 @@ public:
 	TensorImplementation(std::vector<size_t> dims,
 			     DeviceType dev = DeviceType::CPU,
 			     DataType dtype = DataType::Float32)
-		: shape(std::move(dims)), device(dev), data_type(dtype), owns_memory(true) {
+	    : shape(std::move(dims)), device(dev), data_type(dtype), owns_memory(true) {
 		compute_strides();
 		allocate_storage();
 	}
@@ -78,8 +76,12 @@ public:
 			     void* shared_data,
 			     DeviceType dev,
 			     DataType dtype)
-		: shape(std::move(dims)), strides(std::move(custom_strides)),
-		  device(dev), data_type(dtype), data_pointer(shared_data), owns_memory(false) {
+	    : shape(std::move(dims)),
+	      strides(std::move(custom_strides)),
+	      device(dev),
+	      data_type(dtype),
+	      data_pointer(shared_data),
+	      owns_memory(false) {
 		total_elements = 1;
 		for (size_t d : shape) {
 			total_elements *= d;
@@ -117,7 +119,8 @@ public:
 		for (int i = static_cast<int>(new_shape.size()) - 2; i >= 0; --i) {
 			new_strides[i] = new_strides[i + 1] * new_shape[i + 1];
 		}
-		return std::make_shared<TensorImplementation>(new_shape, new_strides, data_pointer, device, data_type);
+		return std::make_shared<TensorImplementation>(
+			new_shape, new_strides, data_pointer, device, data_type);
 	}
 
 	std::shared_ptr<TensorImplementation> transpose_matrix(size_t dim0, size_t dim1) {
@@ -128,7 +131,8 @@ public:
 		std::vector<size_t> transposed_strides = strides;
 		std::swap(transposed_shape[dim0], transposed_shape[dim1]);
 		std::swap(transposed_strides[dim0], transposed_strides[dim1]);
-		return std::make_shared<TensorImplementation>(transposed_shape, transposed_strides, data_pointer, device, data_type);
+		return std::make_shared<TensorImplementation>(
+			transposed_shape, transposed_strides, data_pointer, device, data_type);
 	}
 
 private:
@@ -147,11 +151,14 @@ private:
 	}
 
 	void allocate_storage() {
-		size_t element_size = (data_type == DataType::Float32) ? sizeof(float) : sizeof(uint16_t);
+		size_t element_size =
+			(data_type == DataType::Float32) ? sizeof(float) : sizeof(uint16_t);
 		size_t total_bytes = total_elements * element_size;
 		if (device == DeviceType::CPU) {
 			data_pointer = new char[total_bytes];
-			std::fill(static_cast<char*>(data_pointer), static_cast<char*>(data_pointer) + total_bytes, 0);
+			std::fill(static_cast<char*>(data_pointer),
+				  static_cast<char*>(data_pointer) + total_bytes,
+				  0);
 		} else if (device == DeviceType::CUDA) {
 			data_pointer = allocate_device_memory(total_bytes);
 		}
@@ -219,7 +226,7 @@ public:
 	Tensor() = default;
 
 	explicit Tensor(std::shared_ptr<TensorImplementation> impl, bool req_grad = false)
-		: implementation(std::move(impl)), requires_grad(req_grad) {}
+	    : implementation(std::move(impl)), requires_grad(req_grad) {}
 
 	std::shared_ptr<TensorImplementation> grad() const {
 		return implementation ? implementation->gradient : nullptr;
@@ -231,7 +238,9 @@ public:
 		}
 	}
 
-	static Tensor create_tensor(std::vector<size_t> shape, DeviceType dev = DeviceType::CPU, bool req_grad = false) {
+	static Tensor create_tensor(std::vector<size_t> shape,
+				    DeviceType dev = DeviceType::CPU,
+				    bool req_grad = false) {
 		auto impl = std::make_shared<TensorImplementation>(std::move(shape), dev);
 		return Tensor(impl, req_grad);
 	}
@@ -243,11 +252,16 @@ public:
 		auto impl = std::make_shared<TensorImplementation>(shape, DeviceType::CPU);
 		if (!values.empty() && impl->data_as_float()) {
 			const size_t copy_elements = std::min(values.size(), impl->total_elements);
-			std::copy(values.begin(), values.begin() + copy_elements, impl->data_as_float());
+			std::copy(values.begin(),
+				  values.begin() + copy_elements,
+				  impl->data_as_float());
 		}
 		if (dev == DeviceType::CUDA) {
-			auto cuda_impl = std::make_shared<TensorImplementation>(shape, DeviceType::CUDA);
-			upload_device_buffer(cuda_impl->data_pointer, impl->data_as_float(), impl->total_elements * sizeof(float));
+			auto cuda_impl =
+				std::make_shared<TensorImplementation>(shape, DeviceType::CUDA);
+			upload_device_buffer(cuda_impl->data_pointer,
+					     impl->data_as_float(),
+					     impl->total_elements * sizeof(float));
 			return Tensor(cuda_impl, req_grad);
 		}
 		return Tensor(impl, req_grad);
@@ -278,13 +292,15 @@ public:
 	}
 
 	Tensor create_view(const std::vector<size_t>& new_shape) const {
-		if (!implementation) return Tensor();
+		if (!implementation)
+			return Tensor();
 		auto view_impl = implementation->create_view(new_shape);
 		return Tensor(view_impl, requires_grad);
 	}
 
 	Tensor transpose_matrix(size_t dim0, size_t dim1) const {
-		if (!implementation) return Tensor();
+		if (!implementation)
+			return Tensor();
 		auto transp_impl = implementation->transpose_matrix(dim0, dim1);
 		return Tensor(transp_impl, requires_grad);
 	}
@@ -294,7 +310,8 @@ public:
 			return;
 		}
 		if (!implementation->gradient) {
-			implementation->gradient = std::make_shared<TensorImplementation>(shape(), device(), DataType::Float32);
+			implementation->gradient = std::make_shared<TensorImplementation>(
+				shape(), device(), DataType::Float32);
 		}
 		float* target_ptr = implementation->gradient->data_as_float();
 		const float* source_ptr = incoming_grad.data_ptr();
@@ -305,11 +322,14 @@ public:
 	}
 
 	void backward() const {
-		if (!implementation) return;
+		if (!implementation)
+			return;
 		if (!implementation->gradient) {
-			implementation->gradient = std::make_shared<TensorImplementation>(shape(), device(), DataType::Float32);
+			implementation->gradient = std::make_shared<TensorImplementation>(
+				shape(), device(), DataType::Float32);
 			std::fill(implementation->gradient->data_as_float(),
-				  implementation->gradient->data_as_float() + num_elements(), 1.0f);
+				  implementation->gradient->data_as_float() + num_elements(),
+				  1.0f);
 		}
 		AutogradTape::get_instance().execute_backward_pass();
 	}
@@ -335,7 +355,8 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 	const size_t b_stride_row = b.strides()[0];
 	const size_t b_stride_col = b.strides()[1];
 
-	Tensor result = Tensor::create_tensor({M, N}, a.device(), a.requires_grad || b.requires_grad);
+	Tensor result =
+		Tensor::create_tensor({M, N}, a.device(), a.requires_grad || b.requires_grad);
 	float* c_ptr = result.data_ptr();
 	const float* a_ptr = a.data_ptr();
 	const float* b_ptr = b.data_ptr();
@@ -354,8 +375,15 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 	if (AutogradTape::get_instance().is_active() && (a.requires_grad || b.requires_grad)) {
 		TapeNode node;
 		node.operation_name = "tensor_matmul";
-		node.backward_closure = [a, b, result, a_stride_row, a_stride_col, b_stride_row, b_stride_col]() mutable {
-			if (!result.grad()) return;
+		node.backward_closure = [a,
+					 b,
+					 result,
+					 a_stride_row,
+					 a_stride_col,
+					 b_stride_row,
+					 b_stride_col]() mutable {
+			if (!result.grad())
+				return;
 			const float* dL_dC = result.grad()->data_as_float();
 			size_t M_dim = a.shape()[0];
 			size_t K_dim = a.shape()[1];
@@ -363,14 +391,17 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 
 			if (a.requires_grad) {
 				// dA = dC * B^T -> [M, N] * [N, K] = [M, K]
-				Tensor grad_a = Tensor::create_tensor({M_dim, K_dim}, a.device(), false);
+				Tensor grad_a =
+					Tensor::create_tensor({M_dim, K_dim}, a.device(), false);
 				float* da_ptr = grad_a.data_ptr();
 				const float* b_data = b.data_ptr();
 				for (size_t i = 0; i < M_dim; ++i) {
 					for (size_t k = 0; k < K_dim; ++k) {
 						float sum = 0.0f;
 						for (size_t j = 0; j < N_dim; ++j) {
-							sum += dL_dC[i * N_dim + j] * b_data[k * b_stride_row + j * b_stride_col];
+							sum += dL_dC[i * N_dim + j] *
+							       b_data[k * b_stride_row +
+								      j * b_stride_col];
 						}
 						da_ptr[i * K_dim + k] = sum;
 					}
@@ -380,14 +411,17 @@ inline Tensor tensor_matmul(const Tensor& a, const Tensor& b) {
 
 			if (b.requires_grad) {
 				// dB = A^T * dC -> [K, M] * [M, N] = [K, N]
-				Tensor grad_b = Tensor::create_tensor({K_dim, N_dim}, b.device(), false);
+				Tensor grad_b =
+					Tensor::create_tensor({K_dim, N_dim}, b.device(), false);
 				float* db_ptr = grad_b.data_ptr();
 				const float* a_data = a.data_ptr();
 				for (size_t k = 0; k < K_dim; ++k) {
 					for (size_t j = 0; j < N_dim; ++j) {
 						float sum = 0.0f;
 						for (size_t i = 0; i < M_dim; ++i) {
-							sum += a_data[i * a_stride_row + k * a_stride_col] * dL_dC[i * N_dim + j];
+							sum += a_data[i * a_stride_row +
+								      k * a_stride_col] *
+							       dL_dC[i * N_dim + j];
 						}
 						db_ptr[k * N_dim + j] = sum;
 					}
@@ -411,7 +445,8 @@ inline Tensor tensor_add(const Tensor& a, const Tensor& b) {
 		throw std::runtime_error("tensor_add dimension mismatch");
 	}
 
-	Tensor result = Tensor::create_tensor(a.shape(), a.device(), a.requires_grad || b.requires_grad);
+	Tensor result =
+		Tensor::create_tensor(a.shape(), a.device(), a.requires_grad || b.requires_grad);
 	float* c_ptr = result.data_ptr();
 	const float* a_ptr = a.data_ptr();
 	const float* b_ptr = b.data_ptr();
@@ -426,7 +461,8 @@ inline Tensor tensor_add(const Tensor& a, const Tensor& b) {
 		TapeNode node;
 		node.operation_name = "tensor_add";
 		node.backward_closure = [a, b, result, is_broadcast_bias, last_dim]() mutable {
-			if (!result.grad()) return;
+			if (!result.grad())
+				return;
 			const float* dL_dC = result.grad()->data_as_float();
 
 			if (a.requires_grad) {
@@ -436,7 +472,8 @@ inline Tensor tensor_add(const Tensor& a, const Tensor& b) {
 
 			if (b.requires_grad) {
 				if (is_broadcast_bias) {
-					Tensor grad_b = Tensor::create_tensor(b.shape(), b.device(), false);
+					Tensor grad_b =
+						Tensor::create_tensor(b.shape(), b.device(), false);
 					float* gb_ptr = grad_b.data_ptr();
 					size_t total = result.num_elements();
 					for (size_t i = 0; i < total; ++i) {
@@ -469,7 +506,8 @@ inline Tensor tensor_scale(const Tensor& a, float factor) {
 		TapeNode node;
 		node.operation_name = "tensor_scale";
 		node.backward_closure = [a, result, factor]() mutable {
-			if (!result.grad()) return;
+			if (!result.grad())
+				return;
 			Tensor grad_a = Tensor::create_tensor(a.shape(), a.device(), false);
 			float* ga_ptr = grad_a.data_ptr();
 			const float* dL_dC = result.grad()->data_as_float();
@@ -486,4 +524,3 @@ inline Tensor tensor_scale(const Tensor& a, float factor) {
 }
 
 #endif // TENSOR_HPP
-

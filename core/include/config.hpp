@@ -20,6 +20,65 @@ struct AxiomWeightHeader {
 
 static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactly 56 bytes");
 
+enum class AppMode { Chat, Use, Train, BulkTrain, Test, Benchmark, Server, Exit };
+namespace config {
+
+// Hyperparameters
+constexpr size_t ram_buffer_size = 4194304; // 4M tokens (~16.7 MB in RAM)
+constexpr size_t token_dim = 1024;	    // GPT-2 scale (Must be multiple of 64)
+constexpr size_t context_window_size = 256; // Doubled to capture paragraph-level context
+
+// AdamW Optimizer Settings
+constexpr float learning_rate = 0.00003f; // Scaled down for stable high-dimensional convergence
+
+// How many training steps pass between two loss reports
+constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU synchronization stalls
+
+// Initial weights are drawn uniformly from [-sqrt(3/K), +sqrt(3/K)], K = fan-in =
+// context_window_size * token_dim = 262144. That gives std 1/sqrt(K) = 1/512, so the
+// RMS-normalized input produces unit-variance outputs. (1/sqrt(token_dim) ignores the
+// 256x fan-in and explodes the logits.) sqrt(3)/512 = 0.0033854167f.
+constexpr float weight_min = -0.0033854167f;
+constexpr float weight_max = 0.0033854167f;
+
+// Folder layout
+constexpr const char* database_folder = "database";
+constexpr const char* models_folder = "models";
+constexpr const char* training_folder = "training";
+constexpr const char* embedded_file = "embedded_data.bin";
+constexpr const char* asset_folder = "asset_sample";
+constexpr const char* weights_file = "weights.axiom";
+constexpr const char* vocab_file = "vocab.axiom";
+
+} // namespace config
+
+
+namespace vocab {
+constexpr uint32_t VOCAB_SIZE = 65536;
+
+// Slots [0 .. 3]: Special reserved tokens
+constexpr uint32_t PAD = 0;
+constexpr uint32_t UNK = 1;
+constexpr uint32_t BOS = 2;
+constexpr uint32_t EOS = 3;
+
+// Slots [4 .. 64,511]: Text words, subwords, numbers, and mathematical symbols
+constexpr uint32_t TEXT_START_ID = 4;
+constexpr uint32_t TEXT_MAX_ID = 64511;
+
+// Slots [64,512 .. 64,767]: Discrete visual bytes (256 slots for 0x00..0xFF)
+constexpr uint32_t VISUAL_START_ID = 64512;
+constexpr uint32_t VISUAL_END_ID = 64767;
+
+// Slots [64,768 .. 65,023]: Discrete acoustic bytes (256 slots for 0x00..0xFF)
+constexpr uint32_t ACOUSTIC_START_ID = 64768;
+constexpr uint32_t ACOUSTIC_END_ID = 65023;
+
+// Slots [65,024 .. 65,535]: Reserved expansion slots for future modality codebooks
+constexpr uint32_t EXPANSION_START_ID = 65024;
+constexpr uint32_t EXPANSION_MAX_ID = 65535;
+} // namespace vocab
+
 struct Elements {
 	size_t weight_elements = 0;
 	size_t bias_elements = 0;

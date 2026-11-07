@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 
+#include "config.hpp"
+
+
 enum class FileFormat {
 	// Text & Document
 	TXT,
@@ -57,9 +60,9 @@ enum class FileFormat {
 
 enum class ModalityCategory {
 	DOCUMENT, // Pure text, code, PDF, DOCX -> Handled by DecompressDocument
-	IMAGE,    // Discrete visual pixels -> Handled by DecompressImage
-	VIDEO,    // Sequential video frames -> Handled by DecompressVideo
-	AUDIO,    // Linear PCM waveforms -> Handled by DecompressAudio
+	IMAGE,	  // Discrete visual pixels -> Handled by DecompressImage
+	VIDEO,	  // Sequential video frames -> Handled by DecompressVideo
+	AUDIO,	  // Linear PCM waveforms -> Handled by DecompressAudio
 	THREE_D,  // 3D coordinates & meshes
 	ARCHIVE,  // Container archives
 	UNKNOWN
@@ -82,8 +85,7 @@ public:
 
 	// Identify all files under a directory (e.g., asset_sample/)
 	static std::vector<IdentifiedFile> identify_directory(
-		const std::filesystem::path& directory_path,
-		bool recursive = true);
+		const std::filesystem::path& directory_path, bool recursive = true);
 
 	// Classification and string conversions
 	static ModalityCategory get_modality(FileFormat format);
@@ -96,7 +98,9 @@ public:
 	static bool is_video(FileFormat format);
 
 private:
-	static FileFormat detect_magic_bytes(const uint8_t* header, size_t length, const std::string& extension);
+	static FileFormat detect_magic_bytes(const uint8_t* header,
+					     size_t length,
+					     const std::string& extension);
 	static FileFormat detect_by_extension(const std::string& extension);
 	static std::string to_lower(std::string str);
 };
