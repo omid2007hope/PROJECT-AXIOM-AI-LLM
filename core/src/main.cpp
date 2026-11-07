@@ -100,6 +100,23 @@ Test make_sample_data() {
 // Console input
 // *****************************************************************************
 
+// Formats second count into human-readable duration (HHh MMm, MMm SSs, or SSs)
+std::string format_duration(uint64_t total_seconds) {
+	const uint64_t hours = total_seconds / 3600;
+	const uint64_t minutes = (total_seconds % 3600) / 60;
+	const uint64_t seconds = total_seconds % 60;
+
+	std::ostringstream stream;
+	if (hours > 0) {
+		stream << hours << "h " << std::setfill('0') << std::setw(2) << minutes << "m";
+	} else if (minutes > 0) {
+		stream << minutes << "m " << std::setfill('0') << std::setw(2) << seconds << "s";
+	} else {
+		stream << seconds << "s";
+	}
+	return stream.str();
+}
+
 // Strips optional UTF-8 Byte Order Mark (0xEF, 0xBB, 0xBF) often prepended by PowerShell pipes
 inline void strip_utf8_bom(std::string& s) {
 	if (s.size() >= 3 && static_cast<unsigned char>(s[0]) == 0xEF &&
@@ -1043,7 +1060,8 @@ void run_training_loop(AI& ai,
 		       const Input& input,
 		       const std::filesystem::path& weights_path,
 		       const std::filesystem::path& vocab_path,
-		       size_t max_steps = 0) {
+		       size_t max_steps = 0,
+		       double target_stop_loss = 2.0) {
 	size_t total_dataset_tokens = portion.ram_buffer_token_ids.size();
 	std::error_code ec;
 	uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
@@ -1078,6 +1096,7 @@ void run_training_loop(AI& ai,
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
 	std::optional<double> first_loss;
+	auto session_start_time = std::chrono::steady_clock::now();
 
 	while (true) {
 		// Check for interactive user commands without blocking
@@ -1120,6 +1139,7 @@ void run_training_loop(AI& ai,
 				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
 					first_loss.reset();
+					session_start_time = std::chrono::steady_clock::now();
 					std::cout
 						<< "[!] Brain wipe complete. Resuming training.\n\n";
 				} else {
@@ -1204,9 +1224,24 @@ void run_training_loop(AI& ai,
 					}
 					bar += "]";
 
+					// Calculate throughput and time until finish
+					const auto current_time = std::chrono::steady_clock::now();
+					const double elapsed_seconds =
+						std::chrono::duration<double>(current_time - session_start_time).count();
+					const double steps_per_second =
+						(elapsed_seconds > 0.0) ? (static_cast<double>(step) / elapsed_seconds) : 0.0;
+					const size_t remaining_steps =
+						(target_steps > step) ? (target_steps - step) : 0;
+					const uint64_t eta_seconds =
+						(steps_per_second > 0.0)
+							? static_cast<uint64_t>(remaining_steps / steps_per_second)
+							: 0;
+
 					std::cout << "\r  [..] Learning " << bar << " "
 						  << std::fixed << std::setprecision(1) << pct
 						  << "% | Step " << step << "/" << target_steps
+						  << " | ETA: " << format_duration(eta_seconds)
+						  << " (" << std::setprecision(1) << steps_per_second << " stp/s)"
 						  << " | Loss: " << std::setprecision(4)
 						  << current_loss;
 					if (*first_loss > 0.0) {
@@ -1235,12 +1270,14 @@ void run_training_loop(AI& ai,
 						break; // Kill the loop instantly
 					}
 
-					// 2. EARLY STOPPING (The 1.5 - 2.5 Sweet Spot)
-					if (current_loss <= 2.5 && current_loss > 0.0 &&
+					// 2. EARLY STOPPING (1.5 - 3.0 Sweet Spot with Warmup Guard)
+					if (step >= config::loss_report_interval &&
+					    current_loss <= target_stop_loss && current_loss > 0.0 &&
 					    step < target_steps) {
 						std::cout
-							<< "\n[!] Golden sweet spot reached ("
+							<< "\n[!] Target loss threshold reached ("
 							<< std::setprecision(4) << current_loss
+							<< " <= " << target_stop_loss
 							<< "). Halting to lock in generalization.\n";
 						ai.save_weights(weights_path.string());
 						parser.save_vocabulary(vocab_path, input);
@@ -1412,7 +1449,8 @@ bool execute_training_session(AI& ai,
 			      bool is_interactive,
 			      bool auto_archive,
 			      bool auto_purge,
-			      uint32_t min_frequency = 3) {
+			      uint32_t min_frequency = 3,
+			      double target_stop_loss = 2.0) {
 	parser.developer_mode = developer_mode;
 
 	if (std::filesystem::exists(vocab_path)) {
@@ -1617,7 +1655,8 @@ bool execute_training_session(AI& ai,
 			  input,
 			  weights_path,
 			  vocab_path,
-			  max_steps);
+			  max_steps,
+			  target_stop_loss);
 
 	portion.free_pinned();
 	embedded_cleanup.run();
@@ -1799,6 +1838,7 @@ int main(int argc, char* argv[]) {
 	uint32_t min_frequency = 3;
 	uint32_t random_seed = 1337U;
 	bool custom_seed_set = false;
+	double target_stop_loss = 2.0;
 
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
@@ -1880,6 +1920,7 @@ int main(int argc, char* argv[]) {
 				<< "  --lr <rate>         Set optimizer learning rate (default: 0.001)\n"
 				<< "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
 				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 3)\n"
+				<< "  --target-loss <L>   Set target stopping loss (default: 2.0, range: 1.5 - 3.0)\n"
 				<< "  --archive           Automatically archive processed files after bulk training\n"
 				<< "  --purge             Automatically purge processed files after bulk training\n\n";
 			return 0;
@@ -1981,6 +2022,25 @@ int main(int argc, char* argv[]) {
 			}
 		} else if (a == "--archive") {
 			auto_archive = true;
+		} else if (a == "--target-loss" || a == "--stop-loss") {
+			if (i + 1 < argc) {
+				try {
+					target_stop_loss = std::stod(argv[++i]);
+				} catch (...) {
+					std::cerr << "Error: --target-loss requires a float value.\n";
+					return 1;
+				}
+			} else {
+				std::cerr << "Error: --target-loss requires a float argument.\n";
+				return 1;
+			}
+		} else if (a.rfind("--target-loss=", 0) == 0) {
+			try {
+				target_stop_loss = std::stod(a.substr(14));
+			} catch (...) {
+				std::cerr << "Error: --target-loss requires a float value.\n";
+				return 1;
+			}
 		} else if (a == "--purge") {
 			auto_purge = true;
 		} else if (a == "--chat") {
@@ -2189,7 +2249,8 @@ int main(int argc, char* argv[]) {
 								 false,
 								 auto_archive,
 								 auto_purge,
-								 min_frequency);
+								 min_frequency,
+								 target_stop_loss);
 			return ok ? 0 : 1;
 		}
 		return 0;
@@ -2294,7 +2355,9 @@ int main(int argc, char* argv[]) {
 						 max_steps,
 						 true,
 						 auto_archive,
-						 auto_purge);
+						 auto_purge,
+						 3,
+						 target_stop_loss);
 			pause_menu();
 			continue;
 		}
