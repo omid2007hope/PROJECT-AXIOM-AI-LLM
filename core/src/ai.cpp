@@ -9,6 +9,15 @@
 #include <random>
 #include <windows.h>
 
+#include "../include/parser.hpp"
+#include "../include/transfer.hpp"
+#include "CUDA/kernel/forward_pass.cuh"
+#include "CUDA/kernel/paged_gqa.cuh"
+#include "CUDA/kernel/rmsnorm.cuh"
+#include "CUDA/kernel/rope.cuh"
+#include "CUDA/kernel/swiglu.cuh"
+#include "CUDA/util/memory_allocation.cuh"
+
 AI::AI()
     : input_elements_x_total(512), target_elements_y_total(4), weight_min(-0.1f), weight_max(0.1f) {
 	vocab_size = 151936;

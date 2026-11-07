@@ -1,5 +1,8 @@
-#ifndef include_config
-#define include_config
+#ifndef INCLUDE_CONFIG_HPP
+#define INCLUDE_CONFIG_HPP
+
+#include <cstddef>
+#include <cstdint>
 
 #pragma pack(push, 1)
 
@@ -20,6 +23,22 @@ static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactl
 struct Elements {
 	size_t weight_elements = 0;
 	size_t bias_elements = 0;
+};
+
+// What one AI::train() call did
+enum class TrainStatus {
+	Trained, // one full forward + backward step ran
+	NoData,	 // the RAM buffer is exhausted: the caller must refill it
+	Failed	 // a CUDA step failed (already reported on stderr)
+};
+
+struct TrainingTelemetry {
+	double mean_loss = 0.0;
+	double gradient_norm = 0.0;
+	double activation_magnitude = 0.0;
+	double dead_fraction = 0.0;
+	size_t nonfinite_count = 0;
+	size_t steps = 0;
 };
 
 struct SamplingConfig {
@@ -44,30 +63,19 @@ struct AxiomModelConfig {
 	float rope_theta = 1000000.0f;
 };
 
-size_t vocab_size = 65536;
-size_t embedding_dim = 4;
-size_t active_vocab_size = 0;
-uint32_t random_seed = 1337U;
+struct TransformerLayerWeights {
+	const void* d_input_layernorm = nullptr;
+	const void* d_q_proj_weight = nullptr;
+	const void* d_q_proj_bias = nullptr;
+	const void* d_k_proj_weight = nullptr;
+	const void* d_k_proj_bias = nullptr;
+	const void* d_v_proj_weight = nullptr;
+	const void* d_v_proj_bias = nullptr;
+	const void* d_o_proj_weight = nullptr;
+	const void* d_post_attn_layernorm = nullptr;
+	const void* d_gate_proj_weight = nullptr;
+	const void* d_up_proj_weight = nullptr;
+	const void* d_down_proj_weight = nullptr;
+};
 
-// Milestone 3: Discrete Autoregressive Token Classification
-uint32_t last_predicted_token_id = 0;
-
-// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN
-bool enable_transformer = false;
-size_t num_heads = 4;
-size_t ffn_dimension = 64;
-
-size_t input_elements_x_total = 0;
-size_t target_elements_y_total = 0;
-
-// Bounds of the uniform distribution used to initialize the weights
-float weight_min = 0;
-float weight_max = 0;
-
-// Training steps launched since the last read_loss()
-size_t pending_steps = 0;
-
-// Copies the last forward pass output and the GPU-argmax token to the host
-bool read_prediction(std::vector<float>& output_prediction);
-
-#endif // include_config
+#endif // INCLUDE_CONFIG_HPP

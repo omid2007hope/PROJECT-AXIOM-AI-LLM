@@ -1,3 +1,12 @@
+#include "../include/ai.hpp"
+#include "../include/parser.hpp"
+#include "../src/CUDA/transfer.cuh"
+
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <random>
+
 bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 		 std::vector<float>& output_prediction) {
 	if (context_window.size() != input_elements_x_total) {

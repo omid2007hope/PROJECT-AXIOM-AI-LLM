@@ -5,39 +5,67 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <stdfloat>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include "../include/config.hpp"
-#include "../include/cpu.hpp"
-#include "../include/gpu.hpp"
-
-struct TransformerLayerWeights {
-	const void* d_input_layernorm = nullptr;
-	const void* d_q_proj_weight = nullptr;
-	const void* d_q_proj_bias = nullptr;
-	const void* d_k_proj_weight = nullptr;
-	const void* d_k_proj_bias = nullptr;
-	const void* d_v_proj_weight = nullptr;
-	const void* d_v_proj_bias = nullptr;
-	const void* d_o_proj_weight = nullptr;
-	const void* d_post_attn_layernorm = nullptr;
-	const void* d_gate_proj_weight = nullptr;
-	const void* d_up_proj_weight = nullptr;
-	const void* d_down_proj_weight = nullptr;
-};
+#include "../src/CUDA/transfer.cuh"
+#include "config.hpp"
+#include "optimizer.hpp"
+#include "paged_cache.hpp"
 
 class Parser;
 struct Input;
 
 class AI {
+private:
+	size_t input_elements_x_total;
+	size_t target_elements_y_total;
+
+	// Bounds of the uniform distribution used to initialize the weights
+	float weight_min;
+	float weight_max;
+
+	// Training steps launched since the last read_loss()
+	size_t pending_steps = 0;
+
+	// Copies the last forward pass output and the GPU-argmax token to the host
+	bool read_prediction(std::vector<float>& output_prediction);
+
 public:
 	AI(const AI&) = delete;
 
 	AI& operator=(const AI&) = delete;
 
+	size_t vocab_size = 65536;
+	size_t embedding_dim = 4;
+	size_t active_vocab_size = 0;
+	uint32_t random_seed = 1337U;
+
+	// Milestone 3: Discrete Autoregressive Token Classification
+	uint32_t last_predicted_token_id = 0;
+
+	// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN
+	bool enable_transformer = false;
+	size_t num_heads = 4;
+	size_t ffn_dimension = 64;
+
+	// CPU Memory (High precision float for initialization and updates)
+	std::vector<float> host_weights;
+	std::vector<float> host_bias;
+	std::vector<float> host_embeddings;
+
+	// GPU Memory State (The pointers for the VRAM)
+	GpuWeights gpu_weights;
+	GpuActivations gpu_activations;
+	GpuPortion gpu_portion; // Reused across iterations to prevent reallocation
+	GpuEmbeddings gpu_embeddings;
+	GpuPagedCache gpu_paged_cache;
+	std::unique_ptr<PagedBlockManager> block_manager;
+	GpuGraphExecution gpu_graph_execution;
 
 	// Default constructor for standalone inference/serving
 	AI();
@@ -61,6 +89,22 @@ public:
 	// Method to reset all parameters/weights back to chaotic state
 	void reset_weights(Elements& elements);
 
+	// The Training Loop Orchestrator
+	TrainStatus train(Optimizer& optimizer, Portion& portion);
+
+	// Mean training loss (0.5 * squared error per step, measured before each update)
+	// over the steps since the previous call. `steps` receives how many that was.
+	// Waits for the GPU to finish, so call it once per report interval, not per step.
+	bool read_loss(double& mean_loss, size_t& steps);
+
+	bool read_telemetry(TrainingTelemetry& telemetry);
+
+	bool evaluate_validation(const std::vector<uint32_t>& validation_tokens,
+				 size_t window_size,
+				 double& validation_loss);
+
+	// Weight persistence methods
+	bool save_weights(const std::string& path = "weights.axiom");
 
 	bool load_weights(const std::string& path = "weights.axiom");
 
@@ -159,13 +203,8 @@ public:
 
 	bool load_vocabulary(const std::string& vocab_path);
 	bool load_axiom_model_mmap(const char* filepath);
-	bool has_transformer_model() const noexcept {
-		return d_weights_arena_ != nullptr;
-	}
-	void forward_transformer_step(int token_id,
-				      int token_pos,
-				      float* d_out_logits,
-				      void* stream);
+	bool has_transformer_model() const noexcept { return d_weights_arena_ != nullptr; }
+	void forward_transformer_step(int token_id, int token_pos, float* d_out_logits, void* stream);
 	bool generate(const std::string& prompt,
 		      size_t max_new_tokens,
 		      float temperature,
@@ -174,4 +213,4 @@ public:
 		      std::function<void(const std::string&)> token_callback);
 };
 
-#endif
+#endif // INCLUDE_AI_HPP
