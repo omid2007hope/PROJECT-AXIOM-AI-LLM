@@ -300,7 +300,9 @@ AppMode collect_user_input(Input& input) {
 				  << "[2] Train it (Training)\n"
 				  << "[3] Run Tests\n"
 				  << "[4] Benchmark Hardware (Telemetry HUD)\n"
-				  << "[5] Bulk Training (asset_sample)\n";
+				  << "[5] Bulk Training (asset_sample)\n"
+				  << "[6] Exit\n"
+				  << "> ";
 
 		option = read_choice();
 
@@ -324,7 +326,7 @@ AppMode collect_user_input(Input& input) {
 			return AppMode::BulkTrain;
 		}
 
-		if (option == 8) {
+		if (option == 6 || option == 8) {
 			return AppMode::Exit;
 		}
 
@@ -1713,45 +1715,8 @@ int main(int argc, char* argv[]) {
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
 		if (a == "--serve") {
-			uint16_t port = 8080;
-			if (i + 1 < argc && argv[i + 1][0] != '-') {
-				try {
-					port = static_cast<uint16_t>(std::stoi(argv[++i]));
-				} catch (...) {
-				}
-			}
-			AI engine;
-			std::filesystem::path vocab_p = "models/axiom_vocab.axiom";
-			const std::vector<std::filesystem::path> vocab_candidates = {
-				"models/axiom_vocab.axiom", "../models/axiom_vocab.axiom", "training/vocab.axiom",
-				"../training/vocab.axiom",	"models/vocab.axiom",		   "../models/vocab.axiom"};
-			for (const auto& candidate : vocab_candidates) {
-				if (std::filesystem::exists(candidate)) {
-					vocab_p = candidate;
-					break;
-				}
-			}
-
-			std::filesystem::path weights_p = "models/axiom.axiom";
-			const std::vector<std::filesystem::path> weights_candidates = {
-				"models/axiom.axiom",	   "../models/axiom.axiom",	 "models/axiom3b.axiom",
-				"../models/axiom3b.axiom", "training/weights.axiom", "../training/weights.axiom",
-				"models/weights.axiom",	   "../models/weights.axiom"};
-			for (const auto& candidate : weights_candidates) {
-				if (std::filesystem::exists(candidate)) {
-					weights_p = candidate;
-					break;
-				}
-			}
-			if (!custom_vocab_path.empty())
-				vocab_p = custom_vocab_path;
-			if (!custom_weights_path.empty())
-				weights_p = custom_weights_path;
-
-			engine.load_vocabulary(vocab_p.string());
-			engine.load_axiom_model_mmap(weights_p.string().c_str());
-
-			return 0;
+			std::cerr << "[!] The HTTP server functionality has been decommissioned.\n";
+			return 1;
 		}
 		if (a == "--test") {
 			return run_tests(locate_core_dir() / config::database_folder / config::embedded_file)
@@ -1950,6 +1915,48 @@ int main(int argc, char* argv[]) {
 	std::error_code dir_ec;
 	std::filesystem::create_directories(training_dir, dir_ec);
 
+	// 1. LLM Model Paths (strictly used by Chat)
+	std::filesystem::path llm_weights_path = "models/axiom.axiom";
+	const std::vector<std::filesystem::path> llm_weights_candidates = {
+		"models/axiom.axiom",
+		"../models/axiom.axiom",
+		core_dir.parent_path() / "models" / "axiom.axiom",
+		"models/axiom3b.axiom",
+		"../models/axiom3b.axiom",
+		core_dir.parent_path() / "models" / "axiom3b.axiom",
+		"training/weights.axiom",
+		"../training/weights.axiom",
+		"models/weights.axiom",
+		"../models/weights.axiom"};
+	for (const auto& candidate : llm_weights_candidates) {
+		if (std::filesystem::exists(candidate)) {
+			llm_weights_path = candidate;
+			break;
+		}
+	}
+	if (!custom_weights_path.empty()) {
+		llm_weights_path = custom_weights_path;
+	}
+
+	std::filesystem::path llm_vocab_path = "models/axiom_vocab.axiom";
+	const std::vector<std::filesystem::path> llm_vocab_candidates = {
+		"models/axiom_vocab.axiom",
+		"../models/axiom_vocab.axiom",
+		core_dir.parent_path() / "models" / "axiom_vocab.axiom",
+		"training/vocab.axiom",
+		"../training/vocab.axiom",
+		"models/vocab.axiom",
+		"../models/vocab.axiom"};
+	for (const auto& candidate : llm_vocab_candidates) {
+		if (std::filesystem::exists(candidate)) {
+			llm_vocab_path = candidate;
+			break;
+		}
+	}
+	if (!custom_vocab_path.empty()) {
+		llm_vocab_path = custom_vocab_path;
+	}
+
 	// 2. Training Paths (strictly used by Training sessions and Perceptron)
 	std::filesystem::path training_weights_path = training_dir / config::weights_file;
 	std::filesystem::path training_vocab_path = training_dir / config::vocab_file;
@@ -2041,6 +2048,9 @@ int main(int argc, char* argv[]) {
 		session_input.embedding_dim = config::token_dim;
 		AppMode selected_mode = collect_user_input(session_input);
 
+		if (selected_mode == AppMode::Exit) {
+			break;
+		}
 
 		if (selected_mode == AppMode::Chat) {
 			run_chat_engine(ai, llm_weights_path, llm_vocab_path);
