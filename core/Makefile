@@ -61,16 +61,16 @@ CUDA_LINK = $(if $(wildcard $(CUDA_DLL)),$(CUDA_DLL),)
 
 # ─── Link CPU + GPU into the app ──────────────────────────────────────────────
 $(APP_TARGET): $(APP_OBJS) $(CUDA_DLL)
-	$(CXX) $(CXXFLAGS) $(APP_OBJS) $(CUDA_LINK) -o $(APP_TARGET) -lpsapi -lws2_32
+	$(CXX) $(CXXFLAGS) $(APP_OBJS) $(CUDA_LINK) -o $(APP_TARGET) -lpsapi -lws2_32 -lz
 
 # ─── Link CPU + GPU into the test binary ──────────────────────────────────────
 $(TEST_TARGET): $(TEST_OBJS) $(CUDA_DLL)
-	$(CXX) $(CXXFLAGS) $(TEST_OBJS) $(CUDA_LINK) -o $(TEST_TARGET) -lpsapi -lws2_32
+	$(CXX) $(CXXFLAGS) $(TEST_OBJS) $(CUDA_LINK) -o $(TEST_TARGET) -lpsapi -lws2_32 -lz
 
 # ─── Shared library DLL target for Python bindings ───────────────────────────
 dll: $(DLL_OBJS) $(CUDA_DLL)
 	@mkdir -p build ../build
-	$(CXX) $(CXXFLAGS) -shared -o $(DLL_TARGET) $(DLL_OBJS) $(CUDA_LINK) -lpsapi -lws2_32
+	$(CXX) $(CXXFLAGS) -shared -o $(DLL_TARGET) $(DLL_OBJS) $(CUDA_LINK) -lpsapi -lws2_32 -lz
 	@cp -f $(DLL_TARGET) ../build/axiom_core.dll
 
 # ─── CUDA Kernel Loss Test Binary ─────────────────────────────────────────────
