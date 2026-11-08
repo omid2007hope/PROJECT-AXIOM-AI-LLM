@@ -38,7 +38,6 @@
 #include "../include/ai.hpp"
 #include "../include/config.hpp"
 #include "../include/optimizer.hpp"
-#include "../include/server.hpp"
 #include "../include/telemetry.hpp"
 #include "../src/CUDA/kernel/forward_pass.cuh"
 
@@ -88,8 +87,8 @@ std::filesystem::path locate_core_dir() {
 Test make_sample_data() {
 	Test test;
 	test.test_input = {"The",  "quick", "brown", "fox", "jumps", "over", "the",
-			   "lazy", "dog",   "5.1",   "3.5", "1.4",   "0.2",  "4.9",
-			   "3.0",  "1.4",   "0.2",   "4.7", "3.2",   "1.3",  "0.2"};
+					   "lazy", "dog",	"5.1",	 "3.5", "1.4",	 "0.2",	 "4.9",
+					   "3.0",  "1.4",	"0.2",	 "4.7", "3.2",	 "1.3",	 "0.2"};
 
 	test.data_image = {"Photo.jpeg"};
 	test.data_video = {"Video.mp4"};
@@ -122,7 +121,7 @@ std::string format_duration(uint64_t total_seconds) {
 // Strips optional UTF-8 Byte Order Mark (0xEF, 0xBB, 0xBF) often prepended by PowerShell pipes
 inline void strip_utf8_bom(std::string& s) {
 	if (s.size() >= 3 && static_cast<unsigned char>(s[0]) == 0xEF &&
-	    static_cast<unsigned char>(s[1]) == 0xBB && static_cast<unsigned char>(s[2]) == 0xBF) {
+		static_cast<unsigned char>(s[1]) == 0xBB && static_cast<unsigned char>(s[2]) == 0xBF) {
 		s.erase(0, 3);
 	}
 }
@@ -295,22 +294,13 @@ AppMode collect_user_input(Input& input) {
 	int option = 0;
 	while (true) {
 		std::cout << "======================================\n"
-			  << "           Welcome to AXIOM           \n"
-			  << "======================================\n"
-			  << "[1] Chat with Axiom (Native GQA LLM)\n"
-			  << "[2] Train it (Training)\n"
-			  << "[3] Run Tests\n"
-			  << "[4] Benchmark Hardware (Telemetry HUD)\n"
-			  << "[5] Bulk Training (asset_sample)\n";
-		if (is_background_axiom_server_running()) {
-			std::cout
-				<< "[6] HTTP Server: [RUNNING on port 8080] (Select to Stop or Switch)\n";
-		} else {
-			std::cout << "[6] Launch HTTP Server (OpenAI API / Port 8080)\n";
-		}
-		std::cout << "[7] Single-Layer Perceptron (Legacy Inference)\n"
-			  << "[8] Exit\n"
-			  << "> ";
+				  << "           Welcome to AXIOM           \n"
+				  << "======================================\n"
+				  << "[1] Chat with Axiom (Native GQA LLM)\n"
+				  << "[2] Train it (Training)\n"
+				  << "[3] Run Tests\n"
+				  << "[4] Benchmark Hardware (Telemetry HUD)\n"
+				  << "[5] Bulk Training (asset_sample)\n";
 
 		option = read_choice();
 
@@ -334,14 +324,6 @@ AppMode collect_user_input(Input& input) {
 			return AppMode::BulkTrain;
 		}
 
-		if (option == 6) {
-			return AppMode::Server;
-		}
-
-		if (option == 7) {
-			return AppMode::Use;
-		}
-
 		if (option == 8) {
 			return AppMode::Exit;
 		}
@@ -362,11 +344,11 @@ AppMode collect_user_input(Input& input) {
 	int type = 0;
 	while (true) {
 		std::cout << "Select Data Type:\n"
-			  << "[1] Text\n"
-			  << "[2] Image\n"
-			  << "[3] Video\n"
-			  << "[4] Voice\n"
-			  << "> ";
+				  << "[1] Text\n"
+				  << "[2] Image\n"
+				  << "[3] Video\n"
+				  << "[4] Voice\n"
+				  << "> ";
 
 		type = read_choice();
 
@@ -420,10 +402,10 @@ AppMode collect_user_input(Input& input) {
 			int media_type = 0;
 			while (true) {
 				std::cout << "\nSelect Media Type:\n"
-					  << "[1] Image\n"
-					  << "[2] Video\n"
-					  << "[3] Voice\n"
-					  << "> ";
+						  << "[1] Image\n"
+						  << "[2] Video\n"
+						  << "[3] Voice\n"
+						  << "> ";
 
 				media_type = read_choice();
 
@@ -474,23 +456,22 @@ void print_hardware_telemetry(const Portion& portion) {
 	const double disk_free_gb = ec ? 0.0 : disk_space.available / 1024.0 / 1024.0 / 1024.0;
 
 	std::cout << "\n========================================================\n"
-		  << "                LIVE HARDWARE TELEMETRY                 \n"
-		  << "========================================================\n"
-		  << std::fixed << std::setprecision(2)
-		  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
-		  << "[RAM] Engine Stream : "
-		  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0)
-		  << " MB\n"
-		  << "[RAM] Process Usage : " << (pmc.WorkingSetSize / 1024.0 / 1024.0) << " MB\n"
-		  << "[RAM] System Avail  : " << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0)
-		  << " GB / " << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
-		  << "[GPU] Context Window: "
-		  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
-		  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
-		  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
-		  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
-		  << "========================================================\n\n"
-		  << std::flush;
+			  << "                LIVE HARDWARE TELEMETRY                 \n"
+			  << "========================================================\n"
+			  << std::fixed << std::setprecision(2)
+			  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
+			  << "[RAM] Engine Stream : "
+			  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0) << " MB\n"
+			  << "[RAM] Process Usage : " << (pmc.WorkingSetSize / 1024.0 / 1024.0) << " MB\n"
+			  << "[RAM] System Avail  : " << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0)
+			  << " GB / " << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
+			  << "[GPU] Context Window: "
+			  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
+			  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
+			  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
+			  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
+			  << "========================================================\n\n"
+			  << std::flush;
 }
 
 // *****************************************************************************
@@ -516,8 +497,7 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 
 	if (*first_loss > 0.0) {
 		std::cout << std::showpos << std::setprecision(1) << "  ("
-			  << (loss - *first_loss) / *first_loss * 100.0 << "% vs first)"
-			  << std::noshowpos;
+				  << (loss - *first_loss) / *first_loss * 100.0 << "% vs first)" << std::noshowpos;
 	}
 
 	std::cout << "\n" << std::flush;
@@ -526,9 +506,8 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 // *****************************************************************************
 // Direct Chat Engine (Native GQA Transformer)
 // *****************************************************************************
-void run_chat_engine(AI& ai,
-		     const std::filesystem::path& weights_path,
-		     const std::filesystem::path& vocab_path) {
+void run_chat_engine(AI& ai, const std::filesystem::path& weights_path,
+					 const std::filesystem::path& vocab_path) {
 #ifdef _WIN32
 	HANDLE h_console = GetStdHandle(STD_OUTPUT_HANDLE);
 	DWORD console_mode = 0;
@@ -540,21 +519,14 @@ void run_chat_engine(AI& ai,
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
 
-	const std::vector<std::filesystem::path> weights_candidates = {"models/axiom.axiom",
-								       "../models/axiom.axiom",
-								       "models/axiom3b.axiom",
-								       "../models/axiom3b.axiom",
-								       "training/weights.axiom",
-								       "../training/weights.axiom",
-								       "models/weights.axiom",
-								       "../models/weights.axiom"};
+	const std::vector<std::filesystem::path> weights_candidates = {
+		"models/axiom.axiom",	   "../models/axiom.axiom",	 "models/axiom3b.axiom",
+		"../models/axiom3b.axiom", "training/weights.axiom", "../training/weights.axiom",
+		"models/weights.axiom",	   "../models/weights.axiom"};
 
-	const std::vector<std::filesystem::path> vocab_candidates = {"models/axiom_vocab.axiom",
-								     "../models/axiom_vocab.axiom",
-								     "training/vocab.axiom",
-								     "../training/vocab.axiom",
-								     "models/vocab.axiom",
-								     "../models/vocab.axiom"};
+	const std::vector<std::filesystem::path> vocab_candidates = {
+		"models/axiom_vocab.axiom", "../models/axiom_vocab.axiom", "training/vocab.axiom",
+		"../training/vocab.axiom",	"models/vocab.axiom",		   "../models/vocab.axiom"};
 
 	for (const auto& candidate : weights_candidates) {
 		if (std::filesystem::exists(candidate)) {
@@ -572,18 +544,17 @@ void run_chat_engine(AI& ai,
 
 	if (!ai.has_transformer_model()) {
 		std::cout << "\033[90m[..] Streaming Axiom weights via Win32 DMA mmap...\033[0m\n"
-			  << std::flush;
+				  << std::flush;
 		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
 		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
 		if (!vocab_ok || !model_ok) {
-			std::cerr << "\033[31m[!] Failed to load transformer weights from: "
-				  << target_weights << "\033[0m\n"
-				  << std::flush;
+			std::cerr << "\033[31m[!] Failed to load transformer weights from: " << target_weights
+					  << "\033[0m\n"
+					  << std::flush;
 			return;
 		}
-		std::cout
-			<< "\033[32m[OK] Stacked GQA Transformer weights loaded into VRAM.\033[0m\n\n"
-			<< std::flush;
+		std::cout << "\033[32m[OK] Stacked GQA Transformer weights loaded into VRAM.\033[0m\n\n"
+				  << std::flush;
 	}
 
 	std::cout
@@ -595,8 +566,7 @@ void run_chat_engine(AI& ai,
 		<< " stacked blocks\033[0m (Hidden: " << ai.config_.hidden_dim
 		<< ", FFN: " << ai.config_.feedforward_network_dimension << ")\n"
 		<< "  Attention Heads    : \033[1;33m" << ai.config_.num_q_heads << " Q-Heads / "
-		<< ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim
-		<< ")\n"
+		<< ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim << ")\n"
 		<< "  Context Window     : \033[1;33m" << ai.config_.max_seq_len
 		<< " tokens\033[0m (Paged Dynamic KV-Cache)\n"
 		<< "  Compute Hardware   : \033[1;32m128-Bit uint4 Coalesced Memory + GPU Softmax/Argmax\033[0m\n"
@@ -616,9 +586,8 @@ void run_chat_engine(AI& ai,
 		if (!std::getline(std::cin, user_input))
 			break;
 		strip_utf8_bom(user_input);
-		while (!user_input.empty() &&
-		       (user_input.back() == '\r' || user_input.back() == ' ' ||
-			user_input.back() == '\t')) {
+		while (!user_input.empty() && (user_input.back() == '\r' || user_input.back() == ' ' ||
+									   user_input.back() == '\t')) {
 			user_input.pop_back();
 		}
 
@@ -637,8 +606,8 @@ void run_chat_engine(AI& ai,
 		if (user_input.rfind("temp ", 0) == 0) {
 			try {
 				current_temp = std::stof(user_input.substr(5));
-				std::cout << "\033[33m[Axiom] Generation temperature set to: "
-					  << current_temp << "\033[0m\n";
+				std::cout << "\033[33m[Axiom] Generation temperature set to: " << current_temp
+						  << "\033[0m\n";
 			} catch (...) {
 				std::cout << "\033[31m[!] Invalid temperature value.\033[0m\n";
 			}
@@ -655,35 +624,28 @@ void run_chat_engine(AI& ai,
 		bool first_token = true;
 		size_t token_count = 0;
 
-		ai.generate(conversation_history,
-			    1024,
-			    current_temp,
-			    40,
-			    0.9f,
-			    [&](const std::string& tok) {
-				    if (first_token) {
-					    t_first = std::chrono::steady_clock::now();
-					    first_token = false;
-				    }
-				    ++token_count;
-				    std::cout << tok << std::flush;
-				    assistant_reply += tok;
-			    });
+		ai.generate(conversation_history, 1024, current_temp, 40, 0.9f,
+					[&](const std::string& tok) {
+						if (first_token) {
+							t_first = std::chrono::steady_clock::now();
+							first_token = false;
+						}
+						++token_count;
+						std::cout << tok << std::flush;
+						assistant_reply += tok;
+					});
 		std::cout << "\n";
 
 		auto t_end = std::chrono::steady_clock::now();
-		double ttft_ms =
-			std::chrono::duration<double, std::milli>(t_first - t_start).count();
+		double ttft_ms = std::chrono::duration<double, std::milli>(t_first - t_start).count();
 		double gen_sec = std::chrono::duration<double>(t_end - t_first).count();
-		double tps =
-			(gen_sec > 0.001 && token_count > 1) ? ((token_count - 1) / gen_sec) : 0.0;
+		double tps = (gen_sec > 0.001 && token_count > 1) ? ((token_count - 1) / gen_sec) : 0.0;
 
-		std::cout << "\033[90m── [TTFT: " << std::fixed << std::setprecision(1) << ttft_ms
-			  << " ms"
-			  << " | Speed: " << std::fixed << std::setprecision(1) << tps << " t/s"
-			  << " | Generated: " << token_count << " tokens"
-			  << " | Temp: " << std::fixed << std::setprecision(2) << current_temp
-			  << "] ──\033[0m\n";
+		std::cout << "\033[90m── [TTFT: " << std::fixed << std::setprecision(1) << ttft_ms << " ms"
+				  << " | Speed: " << std::fixed << std::setprecision(1) << tps << " t/s"
+				  << " | Generated: " << token_count << " tokens"
+				  << " | Temp: " << std::fixed << std::setprecision(2) << current_temp
+				  << "] ──\033[0m\n";
 
 		conversation_history += assistant_reply + "<|im_end|>\n";
 
@@ -698,17 +660,13 @@ void run_chat_engine(AI& ai,
 	}
 }
 
-// *****************************************************************************
-// Inference Engine ("Use it")
-// *****************************************************************************
-void run_inference_engine(AI& ai,
-			  Parser& parser,
-			  Input& input,
-			  const std::filesystem::path& weights_path,
-			  const std::filesystem::path& vocab_path) {
+
+void run_inference_engine(AI& ai, Parser& parser, Input& input,
+						  const std::filesystem::path& weights_path,
+						  const std::filesystem::path& vocab_path) {
 	std::cout << "\n========================================================\n"
-		  << "             AXIOM INFERENCE ENGINE ('Use it')          \n"
-		  << "========================================================\n";
+			  << "             AXIOM INFERENCE ENGINE ('Use it')          \n"
+			  << "========================================================\n";
 
 	std::filesystem::path target_weights = weights_path;
 	std::filesystem::path target_vocab = vocab_path;
@@ -725,21 +683,12 @@ void run_inference_engine(AI& ai,
 		}
 	} else {
 		const std::vector<std::filesystem::path> weights_candidates = {
-			"models/axiom.axiom",
-			"../models/axiom.axiom",
-			"models/axiom3b.axiom",
-			"../models/axiom3b.axiom",
-			"training/weights.axiom",
-			"../training/weights.axiom",
-			"models/weights.axiom",
-			"../models/weights.axiom"};
+			"models/axiom.axiom",	   "../models/axiom.axiom",	 "models/axiom3b.axiom",
+			"../models/axiom3b.axiom", "training/weights.axiom", "../training/weights.axiom",
+			"models/weights.axiom",	   "../models/weights.axiom"};
 		const std::vector<std::filesystem::path> vocab_candidates = {
-			"models/axiom_vocab.axiom",
-			"../models/axiom_vocab.axiom",
-			"training/vocab.axiom",
-			"../training/vocab.axiom",
-			"models/vocab.axiom",
-			"../models/vocab.axiom"};
+			"models/axiom_vocab.axiom", "../models/axiom_vocab.axiom", "training/vocab.axiom",
+			"../training/vocab.axiom",	"models/vocab.axiom",		   "../models/vocab.axiom"};
 		for (const auto& candidate : weights_candidates) {
 			if (std::filesystem::exists(candidate)) {
 				target_weights = candidate;
@@ -763,41 +712,36 @@ void run_inference_engine(AI& ai,
 		if (vocab_ok && model_ok) {
 			std::cout << "[OK] Stacked GQA Transformer weights loaded into VRAM.\n\n";
 		} else {
-			std::cerr
-				<< "\033[1;31m[!] Failed to map transformer model weights.\033[0m\n\n";
+			std::cerr << "\033[1;31m[!] Failed to map transformer model weights.\033[0m\n\n";
 		}
 	} else if (std::filesystem::exists(target_weights)) {
 		std::cout << "\033[1;36m[..] Loading model weights from: "
-			  << target_weights.filename().string() << "\033[0m\n";
+				  << target_weights.filename().string() << "\033[0m\n";
 		if (ai.load_weights(target_weights.string())) {
-			std::cout
-				<< "\033[1;32m[OK] Model weights successfully loaded into VRAM.\033[0m\n\n";
+			std::cout << "\033[1;32m[OK] Model weights successfully loaded into VRAM.\033[0m\n\n";
 		} else {
-			std::cerr
-				<< "[!] Failed to load model weights. Using baseline weights.\n\n";
+			std::cerr << "[!] Failed to load model weights. Using baseline weights.\n\n";
 		}
 	} else if (target_weights.filename().string() != config::weights_file) {
-		std::cerr << "[!] Specified weights file not found: " << target_weights.string()
-			  << "\n"
-			  << "[!] Running with baseline initialized weights.\n\n";
+		std::cerr << "[!] Specified weights file not found: " << target_weights.string() << "\n"
+				  << "[!] Running with baseline initialized weights.\n\n";
 	} else {
-		std::cout
-			<< "[!] Notice: '" << target_weights.filename().string() << "' not found.\n"
-			<< "[!] Running with baseline initialized weights.\n"
-			<< "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
+		std::cout << "[!] Notice: '" << target_weights.filename().string() << "' not found.\n"
+				  << "[!] Running with baseline initialized weights.\n"
+				  << "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
 	}
 
 	if (!is_transformer) {
 		if (std::filesystem::exists(target_vocab)) {
-			std::cout << "[..] Loading vocabulary from: "
-				  << target_vocab.filename().string() << "\n";
+			std::cout << "[..] Loading vocabulary from: " << target_vocab.filename().string()
+					  << "\n";
 			if (parser.load_vocabulary(target_vocab, input)) {
 				std::cout << "[OK] Vocabulary successfully restored ("
-					  << input.main_dictionary.size() << " tokens).\n\n";
+						  << input.main_dictionary.size() << " tokens).\n\n";
 			}
 		} else if (target_vocab.filename().string() != config::vocab_file) {
-			std::cerr << "[!] Specified vocabulary file not found: "
-				  << target_vocab.string() << "\n";
+			std::cerr << "[!] Specified vocabulary file not found: " << target_vocab.string()
+					  << "\n";
 		}
 
 		parser.build_embedding_table(input);
@@ -807,34 +751,27 @@ void run_inference_engine(AI& ai,
 	}
 
 	if (ai.has_transformer_model()) {
-		std::cout
-			<< "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
-			<< "Layers            : " << ai.config_.num_layers << " stacked blocks\n"
-			<< "Hidden Dimension  : " << ai.config_.hidden_dim
-			<< " (Q Heads: " << ai.config_.num_q_heads
-			<< ", KV Heads: " << ai.config_.num_kv_heads << ")\n"
-			<< "Context Window    : " << ai.config_.max_seq_len << " tokens\n"
-			<< "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
-			<< "Vocabulary Size   : " << ai.config_.vocab_size
-			<< " tokens (BPE exact code preserved)\n"
-			<< "--------------------------------------------------------\n"
-			<< "Enter code prompt or instruction (type 'exit' to quit):\n";
+		std::cout << "Model Architecture: Stacked Grouped Query Attention (GQA) Transformer\n"
+				  << "Layers            : " << ai.config_.num_layers << " stacked blocks\n"
+				  << "Hidden Dimension  : " << ai.config_.hidden_dim
+				  << " (Q Heads: " << ai.config_.num_q_heads
+				  << ", KV Heads: " << ai.config_.num_kv_heads << ")\n"
+				  << "Context Window    : " << ai.config_.max_seq_len << " tokens\n"
+				  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
+				  << "Vocabulary Size   : " << ai.config_.vocab_size
+				  << " tokens (BPE exact code preserved)\n"
+				  << "--------------------------------------------------------\n"
+				  << "Enter code prompt or instruction (type 'exit' to quit):\n";
 	} else {
 		std::cout << "Model Architecture: Single Dedicated Multimodal Perceptron\n"
-			  << "Context Window    : " << config::context_window_size << " tokens ("
-			  << (config::context_window_size * config::token_dim *
-			      sizeof(std::bfloat16_t))
-			  << " bytes BF16)\n"
-			  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
-			  << "Vocabulary Size   : " << input.embedding_table.size()
-			  << " tokens mapped\n"
-			  << "--------------------------------------------------------\n"
-			  << "Enter text or prompt to predict next token (type 'exit' to quit):\n";
+				  << "Context Window    : " << config::context_window_size << " tokens ("
+				  << (config::context_window_size * config::token_dim * sizeof(std::bfloat16_t))
+				  << " bytes BF16)\n"
+				  << "Tensor Cores      : CUTLASS v4.8.0 Fused EVT (Ada Lovelace sm_89)\n"
+				  << "Vocabulary Size   : " << input.embedding_table.size() << " tokens mapped\n"
+				  << "--------------------------------------------------------\n"
+				  << "Enter text or prompt to predict next token (type 'exit' to quit):\n";
 	}
-
-	// ****
-	// Use
-	// ****
 
 	std::string line;
 
@@ -903,8 +840,7 @@ void run_inference_engine(AI& ai,
 		if (predicted_token_id == 0 && !input.embedding_table.empty()) {
 			predicted_token_id = parser.decode_token(input, prediction);
 		}
-		std::string predicted_token_string =
-			parser.token_to_string(input, predicted_token_id);
+		std::string predicted_token_string = parser.token_to_string(input, predicted_token_id);
 		telemetry.end_inference(ai.host_weights.size());
 
 		std::cout << std::fixed << std::setprecision(4) << "[Tensor Output] [";
@@ -914,18 +850,14 @@ void run_inference_engine(AI& ai,
 			std::cout << prediction[idx];
 		}
 		std::cout << "]\n"
-			  << "[Next Token ID] #" << predicted_token_id << "\n"
-			  << "[Prediction]    \"" << predicted_token_string << "\"\n";
+				  << "[Next Token ID] #" << predicted_token_id << "\n"
+				  << "[Prediction]    \"" << predicted_token_string << "\"\n";
 
 		std::cout << "[Autoregressive Stream]: ";
-		ai.generate(line,
-			    parser,
-			    input,
-			    128,
-			    SamplingConfig {0.7f, 40, 0.9f},
-			    [](const std::string& token_string) {
-				    std::cout << token_string << " " << std::flush;
-			    });
+		ai.generate(line, parser, input, 128, SamplingConfig {0.7f, 40, 0.9f},
+					[](const std::string& token_string) {
+						std::cout << token_string << " " << std::flush;
+					});
 		std::cout << "\n";
 	}
 }
@@ -935,35 +867,33 @@ void run_inference_engine(AI& ai,
 // *****************************************************************************
 void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 	std::cout << "\n========================================================\n"
-		  << "       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION      \n"
-		  << "========================================================\n";
+			  << "       AXIOM HARDWARE BENCHMARK & KERNEL SATURATION      \n"
+			  << "========================================================\n";
 
 	AxiomTelemetry telemetry;
 	const HardwareSpecs& specs = telemetry.get_specs();
 
 	std::cout << "Hardware Device : " << specs.gpu_name << "\n"
-		  << "Architecture    : sm_" << specs.sm_major << specs.sm_minor
-		  << " (Ada Lovelace)\n"
-		  << "Memory Bus      : " << specs.bus_width_bits
-		  << "-bit | Peak Bandwidth: " << std::fixed << std::setprecision(1)
-		  << specs.peak_bandwidth_gb_s << " GB/s\n"
-		  << "Compute Engine  : " << specs.peak_dense_tflops << " Peak Dense BF16 TFLOPs\n"
-		  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024))
-		  << " MB Free / " << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n"
-		  << "--------------------------------------------------------\n"
-		  << "[STAGE 1/3] Micro-Dispatch Latency & Decode Throughput Profile\n"
-		  << "[..] Warming up Tensor Cores (10 forward passes)...\n";
+			  << "Architecture    : sm_" << specs.sm_major << specs.sm_minor << " (Ada Lovelace)\n"
+			  << "Memory Bus      : " << specs.bus_width_bits
+			  << "-bit | Peak Bandwidth: " << std::fixed << std::setprecision(1)
+			  << specs.peak_bandwidth_gb_s << " GB/s\n"
+			  << "Compute Engine  : " << specs.peak_dense_tflops << " Peak Dense BF16 TFLOPs\n"
+			  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024)) << " MB Free / "
+			  << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n"
+			  << "--------------------------------------------------------\n"
+			  << "[STAGE 1/3] Micro-Dispatch Latency & Decode Throughput Profile\n"
+			  << "[..] Warming up Tensor Cores (10 forward passes)...\n";
 
 	std::vector<std::bfloat16_t> dummy_ctx(config::context_window_size * config::token_dim,
-					       static_cast<std::bfloat16_t>(0.05f));
+										   static_cast<std::bfloat16_t>(0.05f));
 	std::vector<float> pred;
 	for (int i = 0; i < 10; ++i) {
 		ai.predict(dummy_ctx, pred);
 	}
 
 	constexpr int bench_passes = 100;
-	std::cout << "[..] Executing " << bench_passes
-		  << " Hardware-Timed Tensor Core Inferences...\n";
+	std::cout << "[..] Executing " << bench_passes << " Hardware-Timed Tensor Core Inferences...\n";
 
 	telemetry.begin_inference();
 	for (int i = 0; i < bench_passes; ++i) {
@@ -978,42 +908,38 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 
 	// Stage 2: High-Capacity VRAM Allocation & Memory Bus Saturation Stress
 	std::cout << "--------------------------------------------------------\n"
-		  << "[STAGE 2/3] High-Capacity VRAM Allocation & Memory Bus Saturation\n"
-		  << "[..] Querying dynamic GPU memory constraints & safety margin...\n";
+			  << "[STAGE 2/3] High-Capacity VRAM Allocation & Memory Bus Saturation\n"
+			  << "[..] Querying dynamic GPU memory constraints & safety margin...\n";
 
-	constexpr size_t SAFETY_HEADROOM_BYTES =
-		2048ULL * 1024 * 1024; // 2.0 GB Headroom for OS & DWM
+	constexpr size_t SAFETY_HEADROOM_BYTES = 2048ULL * 1024 * 1024; // 2.0 GB Headroom for OS & DWM
 	size_t vram_alloc_bytes = 0;
 	double vram_bw_gb_s = 0.0;
 	float vram_elapsed_ms = 0.0f;
 
-	if (run_vram_saturation_benchmark(
-		    SAFETY_HEADROOM_BYTES, &vram_alloc_bytes, &vram_bw_gb_s, &vram_elapsed_ms)) {
-		double alloc_gb =
-			static_cast<double>(vram_alloc_bytes) / (1024.0 * 1024.0 * 1024.0);
+	if (run_vram_saturation_benchmark(SAFETY_HEADROOM_BYTES, &vram_alloc_bytes, &vram_bw_gb_s,
+									  &vram_elapsed_ms)) {
+		double alloc_gb = static_cast<double>(vram_alloc_bytes) / (1024.0 * 1024.0 * 1024.0);
 		double bw_pct = (specs.peak_bandwidth_gb_s > 0.0)
-					? (vram_bw_gb_s / specs.peak_bandwidth_gb_s) * 100.0
-					: 0.0;
-		std::cout << "[OK] Dynamically allocated " << std::fixed << std::setprecision(2)
-			  << alloc_gb
-			  << " GB synthetic tensors in VRAM (leaving 2.00 GB OS safety headroom)\n"
-			  << "[OK] Vectorized GDDR6 memory streaming bandwidth: "
-			  << std::setprecision(1) << vram_bw_gb_s << " GB/s ("
-			  << std::setprecision(1) << bw_pct << "% of physical bus)\n"
-			  << "[OK] 100% memory integrity verified; VRAM cleanly deallocated.\n";
+							? (vram_bw_gb_s / specs.peak_bandwidth_gb_s) * 100.0
+							: 0.0;
+		std::cout << "[OK] Dynamically allocated " << std::fixed << std::setprecision(2) << alloc_gb
+				  << " GB synthetic tensors in VRAM (leaving 2.00 GB OS safety headroom)\n"
+				  << "[OK] Vectorized GDDR6 memory streaming bandwidth: " << std::setprecision(1)
+				  << vram_bw_gb_s << " GB/s (" << std::setprecision(1) << bw_pct
+				  << "% of physical bus)\n"
+				  << "[OK] 100% memory integrity verified; VRAM cleanly deallocated.\n";
 	} else {
 		std::cout
 			<< "[!] Insufficient free VRAM for massive allocation test (fallback to safe operational limit).\n";
 	}
 
 	// Stage 3: Ada Lovelace Tensor Core Saturation Sweep
-	std::cout
-		<< "--------------------------------------------------------\n"
-		<< "[STAGE 3/3] Ada Lovelace Tensor Core Saturation Sweep\n"
-		<< "            Configuration: M=2048, N=4096, K=4096 (68.7 GFLOPs/sweep)\n"
-		<< "[..] Saturating all 58 Streaming Multiprocessors across 2,048 thread blocks...\n"
-		<< "[..] Locking GPU into P0 Boost Clock and executing 1,000 sustained sweeps...\n"
-		<< std::flush;
+	std::cout << "--------------------------------------------------------\n"
+			  << "[STAGE 3/3] Ada Lovelace Tensor Core Saturation Sweep\n"
+			  << "            Configuration: M=2048, N=4096, K=4096 (68.7 GFLOPs/sweep)\n"
+			  << "[..] Saturating all 58 Streaming Multiprocessors across 2,048 thread blocks...\n"
+			  << "[..] Locking GPU into P0 Boost Clock and executing 1,000 sustained sweeps...\n"
+			  << std::flush;
 
 	constexpr int sat_M = 2048;
 	constexpr int sat_N = 4096;
@@ -1024,28 +950,21 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 	double sat_bw = 0.0;
 	float sat_avg_ms = 0.0f;
 
-	if (run_cutlass_saturation_benchmark(
-		    sat_M, sat_N, sat_K, sat_iters, &sat_tflops, &sat_bw, &sat_avg_ms)) {
+	if (run_cutlass_saturation_benchmark(sat_M, sat_N, sat_K, sat_iters, &sat_tflops, &sat_bw,
+										 &sat_avg_ms)) {
 		double best_bw = (vram_bw_gb_s > sat_bw) ? vram_bw_gb_s : sat_bw;
-		float best_bw_pct =
-			(specs.peak_bandwidth_gb_s > 0.0)
-				? static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0)
-				: 0.0f;
-		float sat_mfu_pct =
-			(specs.peak_dense_tflops > 0.0)
-				? static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0)
-				: 0.0f;
+		float best_bw_pct = (specs.peak_bandwidth_gb_s > 0.0)
+								? static_cast<float>((best_bw / specs.peak_bandwidth_gb_s) * 100.0)
+								: 0.0f;
+		float sat_mfu_pct = (specs.peak_dense_tflops > 0.0)
+								? static_cast<float>((sat_tflops / specs.peak_dense_tflops) * 100.0)
+								: 0.0f;
 		std::string arch_tag =
 			"sm_" + std::to_string(specs.sm_major) + std::to_string(specs.sm_minor);
 
-		AxiomTelemetry::print_saturation_hud(sat_avg_ms,
-						     sat_tflops,
-						     best_bw,
-						     best_bw_pct,
-						     sat_mfu_pct,
-						     vram_alloc_bytes,
-						     SAFETY_HEADROOM_BYTES,
-						     arch_tag);
+		AxiomTelemetry::print_saturation_hud(sat_avg_ms, sat_tflops, best_bw, best_bw_pct,
+											 sat_mfu_pct, vram_alloc_bytes, SAFETY_HEADROOM_BYTES,
+											 arch_tag);
 	} else {
 		std::cerr << "[!] CUTLASS saturation benchmark failed.\n";
 	}
@@ -1054,16 +973,11 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 // *****************************************************************************
 // Training loop
 // *****************************************************************************
-bool run_training_loop(AI& ai,
-		       Optimizer& optimizer,
-		       Portion& portion,
-		       Elements& elements,
-		       Parser& parser,
-		       const Input& input,
-		       const std::filesystem::path& weights_path,
-		       const std::filesystem::path& vocab_path,
-		       size_t max_steps = 0,
-		       double target_stop_loss = 2.0) {
+bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements& elements,
+					   Parser& parser, const Input& input,
+					   const std::filesystem::path& weights_path,
+					   const std::filesystem::path& vocab_path, size_t max_steps = 0,
+					   double target_stop_loss = 2.0) {
 	size_t total_dataset_tokens = portion.ram_buffer_token_ids.size();
 	std::error_code ec;
 	uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
@@ -1071,8 +985,8 @@ bool run_training_loop(AI& ai,
 		total_dataset_tokens = file_bytes / (portion.token_dim * sizeof(std::bfloat16_t));
 	}
 	const size_t available_span = (total_dataset_tokens > portion.context_window_size)
-					      ? (total_dataset_tokens - portion.context_window_size)
-					      : 0;
+									  ? (total_dataset_tokens - portion.context_window_size)
+									  : 0;
 	const size_t window_stride =
 		(!portion.ram_buffer_token_ids.empty() && portion.context_window_size > 0)
 			? std::min<size_t>(portion.context_window_size, 2048)
@@ -1082,24 +996,22 @@ bool run_training_loop(AI& ai,
 
 	size_t target_steps =
 		(max_steps > 0)
-			? std::min(max_steps,
-				   total_dataset_steps > 0 ? total_dataset_steps : max_steps)
+			? std::min(max_steps, total_dataset_steps > 0 ? total_dataset_steps : max_steps)
 			: total_dataset_steps;
 
 	if (target_steps == 0) {
-		std::cerr << "[!] No training data available in "
-			  << optimizer.data_path.filename().string() << "\n";
+		std::cerr << "[!] No training data available in " << optimizer.data_path.filename().string()
+				  << "\n";
 		return false;
 	}
 
 	std::cout << "Beginning training session (" << target_steps
-		  << " steps to 100% completion)...\n";
+			  << " steps to 100% completion)...\n";
 	std::cout << "Controls:\n"
-		  << "  [S] Save current model weights to " << weights_path.filename().string()
-		  << "\n"
-		  << "  [R] Reset AI brain to chaotic state\n"
-		  << "  [Q] Save and quit training loop\n\n"
-		  << std::flush;
+			  << "  [S] Save current model weights to " << weights_path.filename().string() << "\n"
+			  << "  [R] Reset AI brain to chaotic state\n"
+			  << "  [Q] Save and quit training loop\n\n"
+			  << std::flush;
 
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
@@ -1117,8 +1029,7 @@ bool run_training_loop(AI& ai,
 			while (std::cin.rdbuf()->in_avail() > 0) {
 				char c;
 				if (std::cin.get(c)) {
-					if (c == 'q' || c == 'Q' || c == 's' || c == 'S' ||
-					    c == 'r' || c == 'R') {
+					if (c == 'q' || c == 'Q' || c == 's' || c == 'S' || c == 'r' || c == 'R') {
 						ch = c;
 						break;
 					}
@@ -1150,19 +1061,16 @@ bool run_training_loop(AI& ai,
 					step = 0;
 					first_loss.reset();
 					session_start_time = std::chrono::steady_clock::now();
-					std::cout
-						<< "[!] Brain wipe complete. Resuming training.\n\n";
+					std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
 				} else {
-					std::cerr
-						<< "[!] Brain wipe failed: could not upload weights.\n\n";
+					std::cerr << "[!] Brain wipe failed: could not upload weights.\n\n";
 				}
 			} else if (ch == 's' || ch == 'S') {
-				std::cout
-					<< "\n[!] Manual Checkpoint Triggered! Saving weights...\n";
+				std::cout << "\n[!] Manual Checkpoint Triggered! Saving weights...\n";
 				if (ai.save_weights(weights_path.string())) {
 					parser.save_vocabulary(vocab_path, input);
 					std::cout << "[OK] Model checkpoint saved to "
-						  << weights_path.filename().string() << "\n\n";
+							  << weights_path.filename().string() << "\n\n";
 				} else {
 					std::cerr << "[!] Failed to save weights.\n\n";
 				}
@@ -1189,18 +1097,15 @@ bool run_training_loop(AI& ai,
 			++step;
 
 			double current_loss = 0.0;
-			if (step == 1 || step % config::loss_report_interval == 0 ||
-			    step >= target_steps) {
+			if (step == 1 || step % config::loss_report_interval == 0 || step >= target_steps) {
 				TrainingTelemetry telemetry {};
 				if (ai.read_telemetry(telemetry)) {
 					current_loss = telemetry.mean_loss;
-					if (telemetry.nonfinite_count > 0 ||
-					    !std::isfinite(current_loss)) {
-						std::cerr
-							<< "\n[!] Training aborted at step " << step
-							<< ": non-finite gradient or activation detected ("
-							<< telemetry.nonfinite_count
-							<< " events). Existing checkpoint preserved.\n";
+					if (telemetry.nonfinite_count > 0 || !std::isfinite(current_loss)) {
+						std::cerr << "\n[!] Training aborted at step " << step
+								  << ": non-finite gradient or activation detected ("
+								  << telemetry.nonfinite_count
+								  << " events). Existing checkpoint preserved.\n";
 						fatal_anomaly = true;
 						break;
 					}
@@ -1213,14 +1118,11 @@ bool run_training_loop(AI& ai,
 					const bool has_validation =
 						!portion.validation_token_ids.empty() &&
 						ai.evaluate_validation(portion.validation_token_ids,
-								       portion.context_window_size,
-								       validation_loss);
+											   portion.context_window_size, validation_loss);
 
 					const double pct =
 						(target_steps > 0)
-							? std::min(100.0,
-								   (static_cast<double>(step) *
-								    100.0 / target_steps))
+							? std::min(100.0, (static_cast<double>(step) * 100.0 / target_steps))
 							: 100.0;
 					constexpr int bar_width = 24;
 					int filled = static_cast<int>((pct / 100.0) * bar_width);
@@ -1240,86 +1142,67 @@ bool run_training_loop(AI& ai,
 					// Calculate throughput and time until finish
 					const auto current_time = std::chrono::steady_clock::now();
 					const double elapsed_seconds =
-						std::chrono::duration<double>(current_time -
-									      session_start_time)
-							.count();
+						std::chrono::duration<double>(current_time - session_start_time).count();
 					const double steps_per_second =
-						(elapsed_seconds > 0.0)
-							? (static_cast<double>(step) /
-							   elapsed_seconds)
-							: 0.0;
+						(elapsed_seconds > 0.0) ? (static_cast<double>(step) / elapsed_seconds)
+												: 0.0;
 					const size_t remaining_steps =
 						(target_steps > step) ? (target_steps - step) : 0;
 					const uint64_t eta_seconds =
 						(steps_per_second > 0.0)
-							? static_cast<uint64_t>(remaining_steps /
-										steps_per_second)
+							? static_cast<uint64_t>(remaining_steps / steps_per_second)
 							: 0;
 
-					std::cout << "\r  [..] Learning " << bar << " "
-						  << std::fixed << std::setprecision(1) << pct
-						  << "% | Step " << step << "/" << target_steps
-						  << " | ETA: " << format_duration(eta_seconds)
-						  << " (" << std::setprecision(1)
-						  << steps_per_second << " stp/s)"
-						  << " | Loss: " << std::setprecision(4)
-						  << current_loss;
+					std::cout << "\r  [..] Learning " << bar << " " << std::fixed
+							  << std::setprecision(1) << pct << "% | Step " << step << "/"
+							  << target_steps << " | ETA: " << format_duration(eta_seconds) << " ("
+							  << std::setprecision(1) << steps_per_second << " stp/s)"
+							  << " | Loss: " << std::setprecision(4) << current_loss;
 					if (*first_loss > 0.0) {
-						double delta_pct = (current_loss - *first_loss) /
-								   *first_loss * 100.0;
-						std::cout << " (" << std::showpos
-							  << std::setprecision(1) << delta_pct
-							  << "% vs 1st)" << std::noshowpos;
+						double delta_pct = (current_loss - *first_loss) / *first_loss * 100.0;
+						std::cout << " (" << std::showpos << std::setprecision(1) << delta_pct
+								  << "% vs 1st)" << std::noshowpos;
 					}
-					std::cout << " | |Grad|: " << std::setprecision(3)
-						  << telemetry.gradient_norm
-						  << " | Dead: " << std::setprecision(1)
-						  << (telemetry.dead_fraction * 100.0) << "%";
+					std::cout << " | |Grad|: " << std::setprecision(3) << telemetry.gradient_norm
+							  << " | Dead: " << std::setprecision(1)
+							  << (telemetry.dead_fraction * 100.0) << "%";
 					if (has_validation) {
-						std::cout << " | Val: " << std::setprecision(4)
-							  << validation_loss;
+						std::cout << " | Val: " << std::setprecision(4) << validation_loss;
 					}
 					std::cout << "   " << std::flush;
 
 					// 1. ANOMALY TRIPWIRE (Fail Fast on Divergence)
 					if (current_loss > 25.0 || std::isnan(current_loss)) {
 						std::cerr
-							<< "\n[FATAL ANOMALY] Loss exploded to "
-							<< current_loss
+							<< "\n[FATAL ANOMALY] Loss exploded to " << current_loss
 							<< ". Gradients destabilized. Halting to prevent VRAM corruption.\n";
 						fatal_anomaly = true;
 						break; // Kill the loop instantly
 					}
 
 					// 2. EARLY STOPPING (1.5 - 3.0 Sweet Spot with Warmup Guard)
-					if (step >= config::loss_report_interval &&
-					    current_loss <= target_stop_loss &&
-					    current_loss > 0.0 && step < target_steps) {
-						std::cout
-							<< "\n[!] Target loss threshold reached ("
-							<< std::setprecision(4) << current_loss
-							<< " <= " << target_stop_loss
-							<< "). Halting to lock in generalization.\n";
+					if (step >= config::loss_report_interval && current_loss <= target_stop_loss &&
+						current_loss > 0.0 && step < target_steps) {
+						std::cout << "\n[!] Target loss threshold reached (" << std::setprecision(4)
+								  << current_loss << " <= " << target_stop_loss
+								  << "). Halting to lock in generalization.\n";
 						ai.save_weights(weights_path.string());
 						parser.save_vocabulary(vocab_path, input);
 						checkpoint_saved = true;
-						std::cout
-							<< "[OK] Model checkpoint safely locked to disk.\n";
+						std::cout << "[OK] Model checkpoint safely locked to disk.\n";
 						break; // Exit the loop and succeed
 					}
 				}
 			}
 
 			if (step >= target_steps) {
-				std::cout
-					<< "\r  [OK] Learning [========================] 100.0% | Step "
-					<< step << "/" << target_steps << " | Loss: " << std::fixed
-					<< std::setprecision(4) << current_loss;
+				std::cout << "\r  [OK] Learning [========================] 100.0% | Step " << step
+						  << "/" << target_steps << " | Loss: " << std::fixed
+						  << std::setprecision(4) << current_loss;
 				if (first_loss && *first_loss > 0.0) {
-					double delta_pct =
-						(current_loss - *first_loss) / *first_loss * 100.0;
-					std::cout << " (" << std::showpos << std::setprecision(1)
-						  << delta_pct << "% vs 1st)" << std::noshowpos;
+					double delta_pct = (current_loss - *first_loss) / *first_loss * 100.0;
+					std::cout << " (" << std::showpos << std::setprecision(1) << delta_pct
+							  << "% vs 1st)" << std::noshowpos;
 				}
 				std::cout
 					<< "\n\n[OK] 100% of dataset learned: all embedded data on disk consumed.\n"
@@ -1329,8 +1212,8 @@ bool run_training_loop(AI& ai,
 				ai.save_weights(weights_path.string());
 				parser.save_vocabulary(vocab_path, input);
 				checkpoint_saved = true;
-				std::cout << "[OK] Model checkpoint saved to "
-					  << weights_path.filename().string() << "\n";
+				std::cout << "[OK] Model checkpoint saved to " << weights_path.filename().string()
+						  << "\n";
 				break;
 			}
 		}
@@ -1343,8 +1226,7 @@ bool run_training_loop(AI& ai,
 				break;
 			}
 			optimizer.disk_to_ram(portion);
-			if (portion.ram_buffer_tokens.size() <
-			    portion.all_elements + portion.target_elements) {
+			if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
 				break;
 			}
 		}
@@ -1355,8 +1237,8 @@ bool run_training_loop(AI& ai,
 		if (!checkpoint_saved) {
 			ai.save_weights(weights_path.string());
 			parser.save_vocabulary(vocab_path, input);
-			std::cout << "[OK] Model weights safely saved to: "
-				  << weights_path.filename().string() << "\n";
+			std::cout << "[OK] Model weights safely saved to: " << weights_path.filename().string()
+					  << "\n";
 		}
 		return true;
 	} else {
@@ -1370,14 +1252,13 @@ bool run_training_loop(AI& ai,
 void restore_brain(AI& ai, Elements& elements, const std::filesystem::path& weights_path) {
 	if (std::filesystem::exists(weights_path) && ai.load_weights(weights_path.string())) {
 		std::cout << "[OK] Live brain restored from checkpoint: "
-			  << weights_path.filename().string() << "\n";
+				  << weights_path.filename().string() << "\n";
 		return;
 	}
 
 	ai.reset_weights(elements);
 	if (ai.upload_weights()) {
-		std::cout
-			<< "[OK] No checkpoint found: live brain reset to a pristine chaotic state.\n";
+		std::cout << "[OK] No checkpoint found: live brain reset to a pristine chaotic state.\n";
 	} else {
 		std::cerr << "[!] Could not upload the reset weights to VRAM.\n";
 	}
@@ -1423,8 +1304,7 @@ bool run_tests(const std::filesystem::path& embedded_path) {
 	// The tests are done with the generated embedding stream
 	std::error_code cleanup_ec;
 	if (std::filesystem::remove(embedded_path, cleanup_ec)) {
-		std::cout << "\n[OK] Test artifact removed: " << embedded_path.filename().string()
-			  << "\n";
+		std::cout << "\n[OK] Test artifact removed: " << embedded_path.filename().string() << "\n";
 	}
 
 	std::cout << "\n============================================\n";
@@ -1458,43 +1338,27 @@ struct EmbeddedDataCleanup {
 		std::error_code ec;
 		if (std::filesystem::remove(path, ec)) {
 			std::cout << "[OK] Temporary embedding stream automatically removed: "
-				  << path.filename().string() << "\n";
+					  << path.filename().string() << "\n";
 		}
 	}
 
-	~EmbeddedDataCleanup() {
-		run();
-	}
+	~EmbeddedDataCleanup() { run(); }
 };
 
 // Executes a full training pipeline session (interactive or CLI)
-bool execute_training_session(AI& ai,
-			      Optimizer& optimizer,
-			      Portion& portion,
-			      Elements& ai_elements,
-			      Parser& parser,
-			      Input& input,
-			      Test& test,
-			      const std::filesystem::path& weights_path,
-			      const std::filesystem::path& vocab_path,
-			      const std::filesystem::path& embedded_path,
-			      const std::filesystem::path& asset_dir,
-			      const std::filesystem::path& core_dir,
-			      AppMode mode,
-			      bool developer_mode,
-			      size_t max_steps,
-			      bool is_interactive,
-			      bool auto_archive,
-			      bool auto_purge,
-			      uint32_t min_frequency = 3,
-			      double target_stop_loss = 2.0) {
+bool execute_training_session(
+	AI& ai, Optimizer& optimizer, Portion& portion, Elements& ai_elements, Parser& parser,
+	Input& input, Test& test, const std::filesystem::path& weights_path,
+	const std::filesystem::path& vocab_path, const std::filesystem::path& embedded_path,
+	const std::filesystem::path& asset_dir, const std::filesystem::path& core_dir, AppMode mode,
+	bool developer_mode, size_t max_steps, bool is_interactive, bool auto_archive, bool auto_purge,
+	uint32_t min_frequency = 3, double target_stop_loss = 2.0) {
 	parser.developer_mode = developer_mode;
 	ai.enable_transformer = true;
 
 	if (mode != AppMode::BulkTrain && std::filesystem::exists(vocab_path)) {
-		std::cout << "[..] Pre-existing vocabulary found at "
-			  << vocab_path.filename().string()
-			  << ". Loading vocabulary checkpoint...\n";
+		std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
+				  << ". Loading vocabulary checkpoint...\n";
 		parser.load_vocabulary(vocab_path, input);
 	}
 
@@ -1504,30 +1368,28 @@ bool execute_training_session(AI& ai,
 			std::filesystem::create_directories(asset_dir, ec);
 		}
 		std::cout << "\n========================================================\n"
-			  << "              AXIOM BULK TRAINING MODE                  \n"
-			  << "========================================================\n"
-			  << "Target Directory : " << asset_dir.string() << "\n\n";
+				  << "              AXIOM BULK TRAINING MODE                  \n"
+				  << "========================================================\n"
+				  << "Target Directory : " << asset_dir.string() << "\n\n";
 
-		std::cout << "[..] Scanning and tokenizing all assets in "
-			  << asset_dir.filename().string() << " (min frequency >= " << min_frequency
-			  << ")...\n";
-		const size_t processed =
-			parser.bulk_tokenize_directory(asset_dir, input, 0, min_frequency);
+		std::cout << "[..] Scanning and tokenizing all assets in " << asset_dir.filename().string()
+				  << " (min frequency >= " << min_frequency << ")...\n";
+		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input, 0, min_frequency);
 		if (processed == 0 || input.tokenized_data.empty()) {
-			std::cerr << "\n[!] No training files could be parsed from "
-				  << asset_dir.string() << "\n"
-				  << "[i] Instructions:\n"
-				  << "    1. Place training files into the asset directory:\n"
-				  << "       - Text (.txt, .md, .csv, code files)\n"
-				  << "       - Images (.jpeg, .png, .bmp, .webp)\n"
-				  << "       - Videos (.mp4, .mkv, .avi)\n"
-				  << "       - Voice/Audio (.ogg, .wav, .mp3)\n"
-				  << "       - Documents (.pdf) & 3D models (.obj, .stl, etc.)\n"
-				  << "    2. Then run Bulk Training again.\n";
+			std::cerr << "\n[!] No training files could be parsed from " << asset_dir.string()
+					  << "\n"
+					  << "[i] Instructions:\n"
+					  << "    1. Place training files into the asset directory:\n"
+					  << "       - Text (.txt, .md, .csv, code files)\n"
+					  << "       - Images (.jpeg, .png, .bmp, .webp)\n"
+					  << "       - Videos (.mp4, .mkv, .avi)\n"
+					  << "       - Voice/Audio (.ogg, .wav, .mp3)\n"
+					  << "       - Documents (.pdf) & 3D models (.obj, .stl, etc.)\n"
+					  << "    2. Then run Bulk Training again.\n";
 			return false;
 		}
 		std::cout << "\n[OK] Bulk ingestion complete: " << input.tokenized_data.size()
-			  << " tokens collected across " << processed << " files.\n";
+				  << " tokens collected across " << processed << " files.\n";
 	} else {
 		std::cout << "[..] Parsing and tokenizing multimodal data...\n";
 		parser.tokenization(input, test);
@@ -1544,16 +1406,14 @@ bool execute_training_session(AI& ai,
 	if (input.tokenized_data.size() < min_training_tokens) {
 		std::cout
 			<< "[..] Dataset sequence (" << input.tokenized_data.size()
-			<< " tokens) is shorter than context window ("
-			<< config::context_window_size
+			<< " tokens) is shorter than context window (" << config::context_window_size
 			<< " tokens). Repeating sequence to enable continuous autoregressive training...\n";
 		const size_t original_size = input.tokenized_data.size();
 		const size_t target_tokens = config::context_window_size * 8;
 		input.tokenized_data.reserve(target_tokens);
 		while (input.tokenized_data.size() < target_tokens) {
-			for (size_t i = 0;
-			     i < original_size && input.tokenized_data.size() < target_tokens;
-			     ++i) {
+			for (size_t i = 0; i < original_size && input.tokenized_data.size() < target_tokens;
+				 ++i) {
 				const uint32_t token_value = input.tokenized_data[i];
 				input.tokenized_data.push_back(token_value);
 			}
@@ -1569,47 +1429,42 @@ bool execute_training_session(AI& ai,
 		std::cout << "\n--- Multimodal Tokenization & Embedding Pipeline Preview ---\n";
 		for (size_t i = 0; i < preview_count; ++i) {
 			const uint32_t token_id = input.tokenized_data[i];
-			const std::string raw_item =
-				(developer_mode && i < test.test_input.size())
-					? test.test_input[i]
-					: parser.token_to_string(input, token_id);
+			const std::string raw_item = (developer_mode && i < test.test_input.size())
+											 ? test.test_input[i]
+											 : parser.token_to_string(input, token_id);
 
 			std::cout << "  \"" << raw_item << "\" assigned id: " << token_id
-				  << " -> Tokenized into -> " << token_id
-				  << " -> tokenized embedded into -> [";
+					  << " -> Tokenized into -> " << token_id << " -> tokenized embedded into -> [";
 
 			// Query actual master embedding table from AI VRAM/host state
 			if (token_id < ai.vocab_size && !ai.host_embeddings.empty()) {
 				for (size_t d = 0; d < ai.embedding_dim; ++d) {
-					std::cout
-						<< std::fixed << std::setprecision(4)
-						<< ai.host_embeddings[token_id * ai.embedding_dim +
-								      d]
-						<< (d + 1 < ai.embedding_dim ? ", " : "");
+					std::cout << std::fixed << std::setprecision(4)
+							  << ai.host_embeddings[token_id * ai.embedding_dim + d]
+							  << (d + 1 < ai.embedding_dim ? ", " : "");
 				}
 			} else {
 				auto it = input.embedding_table.find(token_id);
 				if (it != input.embedding_table.end()) {
 					for (size_t d = 0; d < it->second.size(); ++d) {
-						std::cout
-							<< std::fixed << std::setprecision(4)
-							<< static_cast<float>(it->second[d])
-							<< (d + 1 < it->second.size() ? ", " : "");
+						std::cout << std::fixed << std::setprecision(4)
+								  << static_cast<float>(it->second[d])
+								  << (d + 1 < it->second.size() ? ", " : "");
 					}
 				}
 			}
 			std::cout << "]\n";
 		}
 		std::cout << "------------------------------------------------------------\n\n"
-			  << std::defaultfloat << std::flush;
+				  << std::defaultfloat << std::flush;
 	}
 
 	parser.save_vocabulary(vocab_path, input);
 	std::cout << "[OK] Vocabulary prepared: "
-		  << (input.main_dictionary.size() + input.image_dictionary.size() +
-		      input.video_dictionary.size() + input.voice_dictionary.size())
-		  << " tokens mapped.\n"
-		  << std::flush;
+			  << (input.main_dictionary.size() + input.image_dictionary.size() +
+				  input.video_dictionary.size() + input.voice_dictionary.size())
+			  << " tokens mapped.\n"
+			  << std::flush;
 
 	if (input.next_text_id > 4) {
 		ai.active_vocab_size = input.next_text_id;
@@ -1619,18 +1474,16 @@ bool execute_training_session(AI& ai,
 	portion.validation_token_ids.clear();
 	if (has_validation_corpus) {
 		const size_t min_val_tokens = config::context_window_size + 1;
-		const size_t val_tokens =
-			std::max(min_val_tokens, input.tokenized_data.size() / 10);
+		const size_t val_tokens = std::max(min_val_tokens, input.tokenized_data.size() / 10);
 		if (input.tokenized_data.size() > val_tokens + min_val_tokens) {
 			const size_t split_index = input.tokenized_data.size() - val_tokens;
 			portion.validation_token_ids.assign(
-				input.tokenized_data.begin() +
-					static_cast<std::ptrdiff_t>(split_index),
+				input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(split_index),
 				input.tokenized_data.end());
 			input.tokenized_data.resize(split_index);
 			std::cout << "[OK] Generalization split: " << input.tokenized_data.size()
-				  << " train tokens | " << portion.validation_token_ids.size()
-				  << " held-out validation tokens.\n";
+					  << " train tokens | " << portion.validation_token_ids.size()
+					  << " held-out validation tokens.\n";
 		}
 	}
 
@@ -1644,8 +1497,7 @@ bool execute_training_session(AI& ai,
 		std::cout << "--- Training AI ---\n" << std::flush;
 	}
 
-	std::cout << "[..] Allocating pinned memory and preparing PCIe token stream...\n"
-		  << std::flush;
+	std::cout << "[..] Allocating pinned memory and preparing PCIe token stream...\n" << std::flush;
 	if (!portion.allocate_pinned()) {
 		std::cerr << "[!] Failed to allocate pinned host memory.\n";
 		return false;
@@ -1659,25 +1511,24 @@ bool execute_training_session(AI& ai,
 
 	// If pre-existing weights exist on disk, load them into VRAM before training
 	if (std::filesystem::exists(weights_path)) {
-		std::cout << "[..] Pre-existing weights found at "
-			  << weights_path.filename().string() << ". Loading checkpoint...\n"
-			  << std::flush;
+		std::cout << "[..] Pre-existing weights found at " << weights_path.filename().string()
+				  << ". Loading checkpoint...\n"
+				  << std::flush;
 		if (!ai.load_weights(weights_path.string())) {
 			std::cerr << "[!] Checkpoint load failed for " << weights_path.string()
-				  << ". Aborting training to prevent overwriting existing file.\n";
+					  << ". Aborting training to prevent overwriting existing file.\n";
 			portion.free_pinned();
 			return false;
 		}
 		double initial_val_loss = 0.0;
 		if (!portion.validation_token_ids.empty() &&
-		    ai.evaluate_validation(portion.validation_token_ids,
-					   portion.context_window_size,
-					   initial_val_loss) &&
-		    (initial_val_loss > 15.0 || !std::isfinite(initial_val_loss))) {
-			std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: "
-				  << std::fixed << std::setprecision(4) << initial_val_loss
-				  << " > 15.0). Resetting brain to fresh state...\n"
-				  << std::flush;
+			ai.evaluate_validation(portion.validation_token_ids, portion.context_window_size,
+								   initial_val_loss) &&
+			(initial_val_loss > 15.0 || !std::isfinite(initial_val_loss))) {
+			std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: " << std::fixed
+					  << std::setprecision(4) << initial_val_loss
+					  << " > 15.0). Resetting brain to fresh state...\n"
+					  << std::flush;
 			ai.reset_weights(ai_elements);
 			ai.upload_weights();
 		}
@@ -1685,16 +1536,9 @@ bool execute_training_session(AI& ai,
 
 	print_hardware_telemetry(portion);
 
-	const bool training_ok = run_training_loop(ai,
-						   optimizer,
-						   portion,
-						   ai_elements,
-						   parser,
-						   input,
-						   weights_path,
-						   vocab_path,
-						   max_steps,
-						   target_stop_loss);
+	const bool training_ok =
+		run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path,
+						  vocab_path, max_steps, target_stop_loss);
 
 	portion.free_pinned();
 	embedded_cleanup.run();
@@ -1705,10 +1549,10 @@ bool execute_training_session(AI& ai,
 
 	if (mode == AppMode::BulkTrain) {
 		std::cout << "\n========================================================\n"
-			  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
-			  << "========================================================\n"
-			  << "[OK] Model weights safely saved to: "
-			  << weights_path.filename().string() << "\n";
+				  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
+				  << "========================================================\n"
+				  << "[OK] Model weights safely saved to: " << weights_path.filename().string()
+				  << "\n";
 
 		const auto& bulk_files = parser.get_last_bulk_files();
 		if (!bulk_files.empty() && (auto_archive || auto_purge)) {
@@ -1719,29 +1563,22 @@ bool execute_training_session(AI& ai,
 				size_t archived_count = 0;
 				for (const auto& fpath : bulk_files) {
 					if (std::filesystem::exists(fpath, ec)) {
-						std::filesystem::path dest =
-							archive_dir / fpath.filename();
+						std::filesystem::path dest = archive_dir / fpath.filename();
 						if (std::filesystem::exists(dest, ec)) {
 							std::string stem = fpath.stem().string();
-							std::string ext =
-								fpath.extension().string();
-							dest = archive_dir /
-							       (stem + "_" +
-								std::to_string(
-									std::chrono::system_clock::now()
-										.time_since_epoch()
-										.count()) +
-								ext);
+							std::string ext = fpath.extension().string();
+							dest =
+								archive_dir /
+								(stem + "_" +
+								 std::to_string(
+									 std::chrono::system_clock::now().time_since_epoch().count()) +
+								 ext);
 						}
 						std::filesystem::rename(fpath, dest, ec);
 						if (ec) {
 							ec.clear();
 							std::filesystem::copy_file(
-								fpath,
-								dest,
-								std::filesystem::copy_options::
-									overwrite_existing,
-								ec);
+								fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
 							if (!ec) {
 								std::filesystem::remove(fpath, ec);
 								++archived_count;
@@ -1751,8 +1588,8 @@ bool execute_training_session(AI& ai,
 						}
 					}
 				}
-				std::cout << "[OK] Automatically archived " << archived_count
-					  << " file(s) to " << archive_dir.string() << "\n";
+				std::cout << "[OK] Automatically archived " << archived_count << " file(s) to "
+						  << archive_dir.string() << "\n";
 			} else if (auto_purge) {
 				size_t purged_count = 0;
 				for (const auto& fpath : bulk_files) {
@@ -1761,17 +1598,17 @@ bool execute_training_session(AI& ai,
 						++purged_count;
 					}
 				}
-				std::cout << "[OK] Automatically purged " << purged_count
-					  << " file(s) from " << asset_dir.string() << "\n";
+				std::cout << "[OK] Automatically purged " << purged_count << " file(s) from "
+						  << asset_dir.string() << "\n";
 			}
 		} else if (is_interactive && !bulk_files.empty()) {
-			std::cout << "\nRaw Asset Management (" << bulk_files.size()
-				  << " source file" << (bulk_files.size() == 1 ? "" : "s") << " in "
-				  << asset_dir.filename().string() << "/):\n"
-				  << "  [1] Keep files in asset_sample/ (Default)\n"
-				  << "  [2] Archive processed files to asset_sample/archive/\n"
-				  << "  [3] Purge (Delete) processed files from asset_sample/\n"
-				  << "> ";
+			std::cout << "\nRaw Asset Management (" << bulk_files.size() << " source file"
+					  << (bulk_files.size() == 1 ? "" : "s") << " in "
+					  << asset_dir.filename().string() << "/):\n"
+					  << "  [1] Keep files in asset_sample/ (Default)\n"
+					  << "  [2] Archive processed files to asset_sample/archive/\n"
+					  << "  [3] Purge (Delete) processed files from asset_sample/\n"
+					  << "> ";
 
 			int cleanup_choice = read_choice();
 			if (cleanup_choice <= 0 || cleanup_choice > 3) {
@@ -1785,29 +1622,22 @@ bool execute_training_session(AI& ai,
 				size_t archived_count = 0;
 				for (const auto& fpath : bulk_files) {
 					if (std::filesystem::exists(fpath, ec)) {
-						std::filesystem::path dest =
-							archive_dir / fpath.filename();
+						std::filesystem::path dest = archive_dir / fpath.filename();
 						if (std::filesystem::exists(dest, ec)) {
 							std::string stem = fpath.stem().string();
-							std::string ext =
-								fpath.extension().string();
-							dest = archive_dir /
-							       (stem + "_" +
-								std::to_string(
-									std::chrono::system_clock::now()
-										.time_since_epoch()
-										.count()) +
-								ext);
+							std::string ext = fpath.extension().string();
+							dest =
+								archive_dir /
+								(stem + "_" +
+								 std::to_string(
+									 std::chrono::system_clock::now().time_since_epoch().count()) +
+								 ext);
 						}
 						std::filesystem::rename(fpath, dest, ec);
 						if (ec) {
 							ec.clear();
 							std::filesystem::copy_file(
-								fpath,
-								dest,
-								std::filesystem::copy_options::
-									overwrite_existing,
-								ec);
+								fpath, dest, std::filesystem::copy_options::overwrite_existing, ec);
 							if (!ec) {
 								std::filesystem::remove(fpath, ec);
 								++archived_count;
@@ -1817,13 +1647,12 @@ bool execute_training_session(AI& ai,
 						}
 					}
 				}
-				std::cout << "[OK] Successfully archived " << archived_count
-					  << " file(s) to " << archive_dir.string() << "\n";
+				std::cout << "[OK] Successfully archived " << archived_count << " file(s) to "
+						  << archive_dir.string() << "\n";
 			} else if (cleanup_choice == 3) {
-				std::cout << "\n[!] WARNING: This will permanently delete "
-					  << bulk_files.size() << " file(s) from "
-					  << asset_dir.string() << "!\n"
-					  << "Are you sure you want to proceed? (y/N): ";
+				std::cout << "\n[!] WARNING: This will permanently delete " << bulk_files.size()
+						  << " file(s) from " << asset_dir.string() << "!\n"
+						  << "Are you sure you want to proceed? (y/N): ";
 				char confirm = 0;
 				std::string confirm_line;
 				if (std::getline(std::cin, confirm_line)) {
@@ -1842,18 +1671,17 @@ bool execute_training_session(AI& ai,
 						}
 					}
 					std::cout << "[OK] Successfully purged " << purged_count
-						  << " file(s) from asset_sample/.\n";
+							  << " file(s) from asset_sample/.\n";
 				} else {
-					std::cout
-						<< "[i] Purge cancelled. Preserving all files in asset_sample/.\n";
+					std::cout << "[i] Purge cancelled. Preserving all files in asset_sample/.\n";
 				}
 			} else {
 				std::cout << "[i] Keeping all processed files in asset_sample/.\n";
 			}
 		} else {
 			std::cout << "[i] You may now remove files from 'asset_sample',\n"
-				  << "    add new training data, and run Bulk Training again\n"
-				  << "    to continuously fine-tune the model.\n";
+					  << "    add new training data, and run Bulk Training again\n"
+					  << "    to continuously fine-tune the model.\n";
 		}
 		std::cout << "========================================================\n";
 	}
@@ -1895,12 +1723,8 @@ int main(int argc, char* argv[]) {
 			AI engine;
 			std::filesystem::path vocab_p = "models/axiom_vocab.axiom";
 			const std::vector<std::filesystem::path> vocab_candidates = {
-				"models/axiom_vocab.axiom",
-				"../models/axiom_vocab.axiom",
-				"training/vocab.axiom",
-				"../training/vocab.axiom",
-				"models/vocab.axiom",
-				"../models/vocab.axiom"};
+				"models/axiom_vocab.axiom", "../models/axiom_vocab.axiom", "training/vocab.axiom",
+				"../training/vocab.axiom",	"models/vocab.axiom",		   "../models/vocab.axiom"};
 			for (const auto& candidate : vocab_candidates) {
 				if (std::filesystem::exists(candidate)) {
 					vocab_p = candidate;
@@ -1910,14 +1734,9 @@ int main(int argc, char* argv[]) {
 
 			std::filesystem::path weights_p = "models/axiom.axiom";
 			const std::vector<std::filesystem::path> weights_candidates = {
-				"models/axiom.axiom",
-				"../models/axiom.axiom",
-				"models/axiom3b.axiom",
-				"../models/axiom3b.axiom",
-				"training/weights.axiom",
-				"../training/weights.axiom",
-				"models/weights.axiom",
-				"../models/weights.axiom"};
+				"models/axiom.axiom",	   "../models/axiom.axiom",	 "models/axiom3b.axiom",
+				"../models/axiom3b.axiom", "training/weights.axiom", "../training/weights.axiom",
+				"models/weights.axiom",	   "../models/weights.axiom"};
 			for (const auto& candidate : weights_candidates) {
 				if (std::filesystem::exists(candidate)) {
 					weights_p = candidate;
@@ -1931,14 +1750,13 @@ int main(int argc, char* argv[]) {
 
 			engine.load_vocabulary(vocab_p.string());
 			engine.load_axiom_model_mmap(weights_p.string().c_str());
-			run_axiom_openai_server(engine, port);
+
 			return 0;
 		}
 		if (a == "--test") {
-			return run_tests(locate_core_dir() / config::database_folder /
-					 config::embedded_file)
-				       ? 0
-				       : 1;
+			return run_tests(locate_core_dir() / config::database_folder / config::embedded_file)
+					   ? 0
+					   : 1;
 		}
 		if (a == "--help" || a == "-h") {
 			std::cout
@@ -1949,8 +1767,6 @@ int main(int argc, char* argv[]) {
 				<< "Execution Modes:\n"
 				<< "  (no argument)       Interactive console menu\n"
 				<< "  --chat              Speak directly with Axiom (Native GQA Transformer)\n"
-				<< "  --serve [port]      Start native OpenAI-compatible chat server (default: 8080)\n"
-				<< "  --use               Run direct forward inference ('Use it')\n"
 				<< "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
 				<< "  --bulk [N]          Bulk train on all files in asset directory (optional N steps)\n"
 				<< "  --benchmark         Run hardware saturation & telemetry benchmark\n"
@@ -1992,8 +1808,7 @@ int main(int argc, char* argv[]) {
 					if (learning_rate <= 0.0f)
 						throw std::invalid_argument("non-positive");
 				} catch (...) {
-					std::cerr
-						<< "Error: --lr requires a positive float value.\n";
+					std::cerr << "Error: --lr requires a positive float value.\n";
 					return 1;
 				}
 			} else {
@@ -2023,11 +1838,9 @@ int main(int argc, char* argv[]) {
 		} else if (a == "--min-count" || a == "--min-freq" || a == "--min-frequency") {
 			if (i + 1 < argc) {
 				try {
-					min_frequency =
-						static_cast<uint32_t>(std::stoul(argv[++i]));
+					min_frequency = static_cast<uint32_t>(std::stoul(argv[++i]));
 				} catch (...) {
-					std::cerr
-						<< "Error: --min-count requires an integer value.\n";
+					std::cerr << "Error: --min-count requires an integer value.\n";
 					return 1;
 				}
 			} else {
@@ -2069,8 +1882,7 @@ int main(int argc, char* argv[]) {
 				try {
 					target_stop_loss = std::stod(argv[++i]);
 				} catch (...) {
-					std::cerr
-						<< "Error: --target-loss requires a float value.\n";
+					std::cerr << "Error: --target-loss requires a float value.\n";
 					return 1;
 				}
 			} else {
@@ -2109,16 +1921,13 @@ int main(int argc, char* argv[]) {
 	}
 
 	const bool is_interactive = primary_mode_arg.empty() && custom_vocab_path.empty() &&
-				    custom_weights_path.empty() && custom_data_dir.empty();
+								custom_weights_path.empty() && custom_data_dir.empty();
 
 	AppMode mode = AppMode::Train;
 	bool developer_mode = false;
 
 	if (primary_mode_arg == "--chat") {
 		mode = AppMode::Chat;
-		developer_mode = true;
-	} else if (primary_mode_arg == "--use") {
-		mode = AppMode::Use;
 		developer_mode = true;
 	} else if (primary_mode_arg == "--benchmark") {
 		mode = AppMode::Benchmark;
@@ -2128,10 +1937,6 @@ int main(int argc, char* argv[]) {
 		developer_mode = false;
 	} else if (primary_mode_arg == "--train") {
 		mode = AppMode::Train;
-		developer_mode = true;
-	} else if ((!custom_vocab_path.empty() || !custom_weights_path.empty()) &&
-		   primary_mode_arg.empty()) {
-		mode = AppMode::Use;
 		developer_mode = true;
 	}
 
@@ -2145,48 +1950,6 @@ int main(int argc, char* argv[]) {
 	std::error_code dir_ec;
 	std::filesystem::create_directories(training_dir, dir_ec);
 
-	// 1. LLM Model Paths (strictly used by Chat and Server)
-	std::filesystem::path llm_weights_path = "models/axiom.axiom";
-	const std::vector<std::filesystem::path> llm_weights_candidates = {
-		"models/axiom.axiom",
-		"../models/axiom.axiom",
-		core_dir.parent_path() / "models" / "axiom.axiom",
-		"models/axiom3b.axiom",
-		"../models/axiom3b.axiom",
-		core_dir.parent_path() / "models" / "axiom3b.axiom",
-		"training/weights.axiom",
-		"../training/weights.axiom",
-		"models/weights.axiom",
-		"../models/weights.axiom"};
-	for (const auto& candidate : llm_weights_candidates) {
-		if (std::filesystem::exists(candidate)) {
-			llm_weights_path = candidate;
-			break;
-		}
-	}
-	if (!custom_weights_path.empty()) {
-		llm_weights_path = custom_weights_path;
-	}
-
-	std::filesystem::path llm_vocab_path = "models/axiom_vocab.axiom";
-	const std::vector<std::filesystem::path> llm_vocab_candidates = {
-		"models/axiom_vocab.axiom",
-		"../models/axiom_vocab.axiom",
-		core_dir.parent_path() / "models" / "axiom_vocab.axiom",
-		"training/vocab.axiom",
-		"../training/vocab.axiom",
-		"models/vocab.axiom",
-		"../models/vocab.axiom"};
-	for (const auto& candidate : llm_vocab_candidates) {
-		if (std::filesystem::exists(candidate)) {
-			llm_vocab_path = candidate;
-			break;
-		}
-	}
-	if (!custom_vocab_path.empty()) {
-		llm_vocab_path = custom_vocab_path;
-	}
-
 	// 2. Training Paths (strictly used by Training sessions and Perceptron)
 	std::filesystem::path training_weights_path = training_dir / config::weights_file;
 	std::filesystem::path training_vocab_path = training_dir / config::vocab_file;
@@ -2198,13 +1961,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	const std::filesystem::path asset_dir =
-		!custom_data_dir.empty()
-			? (std::filesystem::exists(custom_data_dir)
-				   ? custom_data_dir
-				   : (std::filesystem::exists(core_dir / custom_data_dir)
-					      ? (core_dir / custom_data_dir)
-					      : custom_data_dir))
-			: (core_dir / config::asset_folder);
+		!custom_data_dir.empty() ? (std::filesystem::exists(custom_data_dir)
+										? custom_data_dir
+										: (std::filesystem::exists(core_dir / custom_data_dir)
+											   ? (core_dir / custom_data_dir)
+											   : custom_data_dir))
+								 : (core_dir / config::asset_folder);
 
 	std::vector<std::filesystem::path> asset_dirs = {asset_dir};
 	const std::filesystem::path sandbox_dir = core_dir / "test_sandbox_assets";
@@ -2232,11 +1994,8 @@ int main(int argc, char* argv[]) {
 	portion.seed_shuffle(random_seed);
 	Optimizer optimizer(embedded_path, learning_rate);
 	Elements ai_elements;
-	AI ai(portion.all_elements,
-	      portion.target_elements,
-	      config::weight_min,
-	      config::weight_max,
-	      ai_elements);
+	AI ai(portion.all_elements, portion.target_elements, config::weight_min, config::weight_max,
+		  ai_elements);
 	if (custom_seed_set) {
 		ai.random_seed = random_seed;
 		ai.reset_weights(ai_elements);
@@ -2255,45 +2014,22 @@ int main(int argc, char* argv[]) {
 			run_chat_engine(ai, llm_weights_path, llm_vocab_path);
 			return 0;
 		}
-		if (mode == AppMode::Server) {
-			run_axiom_openai_server(ai, 8080);
-			return 0;
-		}
+
 		if (mode == AppMode::Test) {
 			const bool tests_ok = run_tests(embedded_path);
 			restore_brain(ai, ai_elements, training_weights_path);
 			return tests_ok ? 0 : 1;
 		}
-		if (mode == AppMode::Use) {
-			run_inference_engine(
-				ai, parser, input, training_weights_path, training_vocab_path);
-			return 0;
-		}
+
 		if (mode == AppMode::Benchmark) {
 			run_hardware_benchmark(ai, parser, input);
 			return 0;
 		}
 		if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
-			const bool ok = execute_training_session(ai,
-								 optimizer,
-								 portion,
-								 ai_elements,
-								 parser,
-								 input,
-								 test,
-								 training_weights_path,
-								 training_vocab_path,
-								 embedded_path,
-								 asset_dir,
-								 core_dir,
-								 mode,
-								 developer_mode,
-								 max_steps,
-								 false,
-								 auto_archive,
-								 auto_purge,
-								 min_frequency,
-								 target_stop_loss);
+			const bool ok = execute_training_session(
+				ai, optimizer, portion, ai_elements, parser, input, test, training_weights_path,
+				training_vocab_path, embedded_path, asset_dir, core_dir, mode, developer_mode,
+				max_steps, false, auto_archive, auto_purge, min_frequency, target_stop_loss);
 			return ok ? 0 : 1;
 		}
 		return 0;
@@ -2305,53 +2041,9 @@ int main(int argc, char* argv[]) {
 		session_input.embedding_dim = config::token_dim;
 		AppMode selected_mode = collect_user_input(session_input);
 
-		if (selected_mode == AppMode::Exit) {
-			stop_background_axiom_server();
-			break;
-		}
 
 		if (selected_mode == AppMode::Chat) {
 			run_chat_engine(ai, llm_weights_path, llm_vocab_path);
-			pause_menu();
-			continue;
-		}
-
-		if (selected_mode == AppMode::Server) {
-			if (is_background_axiom_server_running()) {
-				std::cout << "\n=========================================\n"
-					  << "      PROJECT AXIOM SERVER CONTROLLER    \n"
-					  << "=========================================\n"
-					  << "Status: Currently RUNNING on http://127.0.0.1:8080\n"
-					  << "[1] Stop Background Server\n"
-					  << "[2] Keep Running & Return to Menu\n"
-					  << "> ";
-				int s_choice = read_choice();
-				if (s_choice == 1) {
-					stop_background_axiom_server();
-					std::cout
-						<< "\n[OK] Background server stopped cleanly.\n\n";
-				}
-			} else {
-				std::cout
-					<< "\n=========================================\n"
-					<< "      PROJECT AXIOM SERVER CONTROLLER    \n"
-					<< "=========================================\n"
-					<< "[1] Start Background Server (Recommended: chat in app while server runs in background)\n"
-					<< "[2] Start Foreground Server (Live stream request logs, press 'q' to stop)\n"
-					<< "[3] Back to Main Menu\n"
-					<< "> ";
-				int s_choice = read_choice();
-				if (s_choice == 1) {
-					if (start_background_axiom_server(ai, 8080)) {
-						std::cout
-							<< "\n[OK] Project Axiom server running in background on http://127.0.0.1:8080\n"
-							<< "[OK] HTTP server listening on port 8080!\n"
-							<< "[OK] You can select Option [1] anytime to chat directly in this app.\n\n";
-					}
-				} else if (s_choice == 2) {
-					run_axiom_openai_server(ai, 8080);
-				}
-			}
 			pause_menu();
 			continue;
 		}
@@ -2369,43 +2061,18 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		if (selected_mode == AppMode::Use) {
-			run_inference_engine(ai,
-					     parser,
-					     session_input,
-					     training_weights_path,
-					     training_vocab_path);
-			pause_menu();
-			continue;
-		}
-
 		if (selected_mode == AppMode::Train || selected_mode == AppMode::BulkTrain) {
 			Test empty_test;
-			execute_training_session(ai,
-						 optimizer,
-						 portion,
-						 ai_elements,
-						 parser,
-						 session_input,
-						 empty_test,
-						 training_weights_path,
-						 training_vocab_path,
-						 embedded_path,
-						 asset_dir,
-						 core_dir,
-						 selected_mode,
-						 false,
-						 max_steps,
-						 true,
-						 auto_archive,
-						 auto_purge,
-						 3,
-						 target_stop_loss);
+			execute_training_session(ai, optimizer, portion, ai_elements, parser, session_input,
+									 empty_test, training_weights_path, training_vocab_path,
+									 embedded_path, asset_dir, core_dir, selected_mode, false,
+									 max_steps, true, auto_archive, auto_purge, 3,
+									 target_stop_loss);
 			pause_menu();
 			continue;
 		}
 	}
 
-	stop_background_axiom_server();
+
 	return 0;
 }
