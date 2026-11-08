@@ -46,16 +46,29 @@ DecodedAudio DecompressAudio::decompress_wav(const std::filesystem::path& file_p
 			in.read(reinterpret_cast<char*>(&block_align), 2);
 			in.read(reinterpret_cast<char*>(&bits_per_sample), 2);
 
+			// Reject impossible formats instead of labelling arbitrary bytes as PCM
+			const bool valid_bits = bits_per_sample == 8 || bits_per_sample == 16 ||
+						bits_per_sample == 24 || bits_per_sample == 32;
+			if (num_channels == 0 || num_channels > 32 || sample_rate == 0 ||
+			    sample_rate > 1000000 || !valid_bits) {
+				return DecodedAudio {};
+			}
+
 			audio.channels = num_channels;
 			audio.sample_rate = sample_rate;
 			audio.bits_per_sample = bits_per_sample;
 			found_fmt = true;
 
-			// Skip extra fmt bytes if chunk_size > 16
-			if (chunk_size > 16) {
-				in.seekg(chunk_size - 16, std::ios::cur);
+			// Skip extra fmt bytes if chunk_size > 16 (chunks are padded to even length)
+			const uint32_t remaining_bytes = (chunk_size - 16) + (chunk_size & 1u);
+			if (remaining_bytes > 0) {
+				in.seekg(remaining_bytes, std::ios::cur);
 			}
 		} else if (std::memcmp(chunk_id, "data", 4) == 0) {
+			if (!found_fmt) {
+				// PCM without a format description cannot be interpreted
+				return DecodedAudio {};
+			}
 			const size_t max_pcm_alloc = 256 * 1024 * 1024;
 			const size_t safe_size = std::min<size_t>(chunk_size, max_pcm_alloc);
 			audio.pcm_bytes.resize(safe_size);
@@ -64,8 +77,8 @@ DecodedAudio DecompressAudio::decompress_wav(const std::filesystem::path& file_p
 			found_data = true;
 			break;
 		} else {
-			// Skip unrecognized chunk
-			in.seekg(chunk_size, std::ios::cur);
+			// Skip unrecognized chunk (chunks are padded to even length)
+			in.seekg(static_cast<std::streamoff>(chunk_size) + (chunk_size & 1u), std::ios::cur);
 		}
 	}
 

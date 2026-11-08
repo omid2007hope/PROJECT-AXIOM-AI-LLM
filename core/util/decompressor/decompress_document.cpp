@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -102,95 +103,235 @@ static bool is_image_dictionary(const std::string& dictionary) {
 	       dictionary.find("/Metadata") != std::string::npos;
 }
 
-static void extract_pdf_text(const std::string& raw, std::ostringstream& extracted) {
-	const size_t n = raw.size();
-	size_t pos = 0;
+// Reads one PDF literal string starting at raw[position] == '(' and leaves position just
+// past the matching ')'. Handles nesting, \n \r \t \b \f, \ddd octal and line continuations.
+static std::string read_pdf_literal(const std::string& raw, size_t& position, size_t limit) {
+	std::string literal;
+	int depth = 1;
+	++position;
+	while (position < limit && depth > 0) {
+		const char current = raw[position];
+		if (current == '\\' && position + 1 < limit) {
+			++position;
+			const char escaped = raw[position];
+			if (escaped >= '0' && escaped <= '7') {
+				int code = 0;
+				int digits = 0;
+				while (digits < 3 && position < limit && raw[position] >= '0' && raw[position] <= '7') {
+					code = code * 8 + (raw[position] - '0');
+					++position;
+					++digits;
+				}
+				literal += static_cast<char>(code & 0xFF);
+				continue;
+			}
+			switch (escaped) {
+			case 'n': literal += '\n'; break;
+			case 'r': literal += '\r'; break;
+			case 't': literal += '\t'; break;
+			case 'b': literal += '\b'; break;
+			case 'f': literal += '\f'; break;
+			case '\r':
+				if (position + 1 < limit && raw[position + 1] == '\n') {
+					++position;
+				}
+				break;
+			case '\n': break;
+			default: literal += escaped; break;
+			}
+		} else if (current == '(') {
+			++depth;
+			literal += '(';
+		} else if (current == ')') {
+			--depth;
+			if (depth > 0) {
+				literal += ')';
+			}
+		} else {
+			literal += current;
+		}
+		++position;
+	}
 
-	while (pos < n) {
-		size_t bt = raw.find("BT", pos);
-		if (bt == std::string::npos) {
+	// Map Windows-1252 punctuation to ASCII and drop other high bytes so that raw
+	// font-encoded bytes never reach the tokenizer as invalid UTF-8
+	std::string normalized;
+	normalized.reserve(literal.size());
+	for (unsigned char byte : literal) {
+		if (byte < 128) {
+			normalized += static_cast<char>(byte);
+		} else if (byte == 0x91 || byte == 0x92) {
+			normalized += '\'';
+		} else if (byte == 0x93 || byte == 0x94) {
+			normalized += '"';
+		} else if (byte == 0x96 || byte == 0x97 || byte == 0xAD) {
+			normalized += '-';
+		} else if (byte == 0x95) {
+			normalized += '*';
+		} else if (byte == 0x85) {
+			normalized += "...";
+		} else if (byte == 0xA0) {
+			normalized += ' ';
+		}
+	}
+	return normalized;
+}
+
+static void extract_text_runs(const std::string& raw, std::ostringstream& extracted) {
+	const size_t length = raw.size();
+	size_t position = 0;
+
+	while (position < length) {
+		size_t begin_text = raw.find("BT", position);
+		if (begin_text == std::string::npos) {
 			break;
 		}
 
-		bool valid_before = (bt == 0 || std::isspace(static_cast<unsigned char>(raw[bt - 1])));
-		bool valid_after = (bt + 2 < n && std::isspace(static_cast<unsigned char>(raw[bt + 2])));
+		bool valid_before =
+			(begin_text == 0 ||
+			 std::isspace(static_cast<unsigned char>(raw[begin_text - 1])));
+		bool valid_after =
+			(begin_text + 2 < length &&
+			 std::isspace(static_cast<unsigned char>(raw[begin_text + 2])));
 		if (!valid_before || !valid_after) {
-			pos = bt + 2;
+			position = begin_text + 2;
 			continue;
 		}
 
-		size_t et = bt + 2;
-		bool found_et = false;
-		while (et < n) {
-			et = raw.find("ET", et);
-			if (et == std::string::npos || (et - bt) > 65536) {
+		size_t end_text = begin_text + 2;
+		bool found_end = false;
+		while (end_text < length) {
+			end_text = raw.find("ET", end_text);
+			if (end_text == std::string::npos || (end_text - begin_text) > 65536) {
 				break;
 			}
-			bool et_before = std::isspace(static_cast<unsigned char>(raw[et - 1])) ||
-					 raw[et - 1] == ')' || raw[et - 1] == ']' || raw[et - 1] == '>';
-			bool et_after = (et + 2 == n || std::isspace(static_cast<unsigned char>(raw[et + 2])));
-			if (et_before && et_after) {
-				found_et = true;
+			bool end_valid_before =
+				std::isspace(static_cast<unsigned char>(raw[end_text - 1])) ||
+				raw[end_text - 1] == ')' || raw[end_text - 1] == ']' ||
+				raw[end_text - 1] == '>';
+			bool end_valid_after =
+				(end_text + 2 == length ||
+				 std::isspace(static_cast<unsigned char>(raw[end_text + 2])));
+			if (end_valid_before && end_valid_after) {
+				found_end = true;
 				break;
 			}
-			et += 2;
+			end_text += 2;
 		}
 
-		if (!found_et) {
-			pos = bt + 2;
+		if (!found_end) {
+			position = begin_text + 2;
 			continue;
 		}
 
 		bool is_binary_chunk = false;
-		for (size_t k = bt; k < et; ++k) {
-			unsigned char c = static_cast<unsigned char>(raw[k]);
-			if (c == 0 || (c < 32 && c != '\n' && c != '\r' && c != '\t')) {
+		for (size_t index = begin_text; index < end_text; ++index) {
+			unsigned char character = static_cast<unsigned char>(raw[index]);
+			if (character == 0 ||
+			    (character < 32 && character != '\n' && character != '\r' &&
+			     character != '\t')) {
 				is_binary_chunk = true;
 				break;
 			}
 		}
 		if (is_binary_chunk) {
-			pos = bt + 2;
+			position = begin_text + 2;
 			continue;
 		}
 
-		size_t j = bt + 2;
-		while (j < et) {
-			if (raw[j] == '(') {
-				j++;
-				std::string literal;
-				int depth = 1;
-				while (j < et && depth > 0) {
-					if (raw[j] == '\\' && j + 1 < et) {
-						j++;
-						switch (raw[j]) {
-						case 'n': literal += '\n'; break;
-						case 'r': literal += '\r'; break;
-						case 't': literal += '\t'; break;
-						default: literal += raw[j]; break;
-						}
-					} else if (raw[j] == '(') {
-						depth++;
-						literal += '(';
-					} else if (raw[j] == ')') {
-						depth--;
-						if (depth > 0) {
-							literal += ')';
-						}
-					} else {
-						literal += raw[j];
-					}
-					j++;
-				}
+		size_t scan_index = begin_text + 2;
+		while (scan_index < end_text) {
+			if (raw[scan_index] == '(') {
+				std::string literal = read_pdf_literal(raw, scan_index, end_text);
 				if (is_valid_token(literal)) {
 					extracted << literal << " ";
 				}
+			} else if (raw[scan_index] == '[') {
+				// TJ array: literals are glyph runs of one word; only a large negative
+				// kerning value (below -200) is a real word gap
+				std::string joined;
+				++scan_index;
+				while (scan_index < end_text && raw[scan_index] != ']') {
+					if (raw[scan_index] == '(') {
+						joined += read_pdf_literal(raw, scan_index, end_text);
+					} else if (raw[scan_index] == '-' || raw[scan_index] == '+' ||
+						   raw[scan_index] == '.' ||
+						   std::isdigit(static_cast<unsigned char>(raw[scan_index]))) {
+						char* number_end = nullptr;
+						const double kerning =
+							std::strtod(raw.c_str() + scan_index, &number_end);
+						const size_t consumed = static_cast<size_t>(
+							number_end - (raw.c_str() + scan_index));
+						if (consumed == 0) {
+							++scan_index;
+						} else {
+							scan_index += consumed;
+							if (kerning < -200.0) {
+								joined += ' ';
+							}
+						}
+					} else {
+						++scan_index;
+					}
+				}
+				if (is_valid_token(joined)) {
+					extracted << joined << " ";
+				}
 			} else {
-				j++;
+				scan_index++;
 			}
 		}
-		pos = et + 2;
+		position = end_text + 2;
 	}
+}
+
+// Subset fonts with custom encodings turn real text into shifted glyph codes that still look
+// like words ("obk^jfkd"). Natural Latin-script text puts about 70% of its letters in
+// {e,t,a,o,i,n,s,h,r}; a stream of at least 60 letters below 50% is a mis-encoded stream.
+static bool has_natural_letters(const std::string& text) {
+	size_t letter_count = 0;
+	size_t common_count = 0;
+	for (unsigned char character : text) {
+		if (!std::isalpha(character)) {
+			continue;
+		}
+		++letter_count;
+		switch (std::tolower(character)) {
+		case 'e': case 't': case 'a': case 'o': case 'i':
+		case 'n': case 's': case 'h': case 'r':
+			++common_count;
+			break;
+		default:
+			break;
+		}
+	}
+	return letter_count < 60 || common_count * 100 >= letter_count * 50;
+}
+
+// Extracts the text of one PDF content stream, dropping it whole if it is mis-encoded
+static void extract_pdf_text(const std::string& raw, std::ostringstream& extracted) {
+	std::ostringstream stream_text;
+	extract_text_runs(raw, stream_text);
+	const std::string text = stream_text.str();
+	if (has_natural_letters(text)) {
+		extracted << text;
+	}
+}
+
+// True when the bytes are plausible text: no NUL and at most 1% control characters
+static bool looks_like_text(const std::string& content) {
+	size_t control_bytes = 0;
+	for (unsigned char character : content) {
+		if (character == 0) {
+			return false;
+		}
+		if ((character < 32 && character != '\t' && character != '\n' && character != '\r' &&
+		     character != '\f') ||
+		    character == 127) {
+			++control_bytes;
+		}
+	}
+	return control_bytes * 100 <= content.size();
 }
 
 std::string DecompressDocument::decompress_text(const std::filesystem::path& file_path) {
@@ -202,6 +343,11 @@ std::string DecompressDocument::decompress_text(const std::filesystem::path& fil
 	std::ostringstream ss;
 	ss << in.rdbuf();
 	std::string content = ss.str();
+
+	// Binary data renamed to a text extension must never reach the text tokenizer
+	if (!looks_like_text(content)) {
+		return "";
+	}
 
 	// Strip UTF-8 BOM if present
 	if (content.size() >= 3 && static_cast<unsigned char>(content[0]) == 0xEF &&
@@ -229,61 +375,62 @@ std::string DecompressDocument::decompress_pdf(const std::filesystem::path& file
 	}
 
 	std::ostringstream extracted;
-	const size_t n = raw.size();
+	const size_t length = raw.size();
 	size_t cursor = 0;
 
-	while (cursor < n) {
-		size_t stream_pos = raw.find("stream", cursor);
-		if (stream_pos == std::string::npos) {
+	while (cursor < length) {
+		size_t stream_position = raw.find("stream", cursor);
+		if (stream_position == std::string::npos) {
 			extract_pdf_text(raw.substr(cursor), extracted);
 			break;
 		}
 
 		// Verify "stream" is a standalone PDF keyword followed by EOL
-		bool valid_kw_before =
-			(stream_pos == 0 ||
-			 std::isspace(static_cast<unsigned char>(raw[stream_pos - 1])) ||
-			 raw[stream_pos - 1] == '>');
-		size_t data_start = stream_pos + 6;
-		bool valid_kw_after = false;
-		if (data_start < n) {
-			if (raw[data_start] == '\r' && data_start + 1 < n &&
+		bool valid_keyword_before =
+			(stream_position == 0 ||
+			 std::isspace(static_cast<unsigned char>(raw[stream_position - 1])) ||
+			 raw[stream_position - 1] == '>');
+		size_t data_start = stream_position + 6;
+		bool valid_keyword_after = false;
+		if (data_start < length) {
+			if (raw[data_start] == '\r' && data_start + 1 < length &&
 			    raw[data_start + 1] == '\n') {
 				data_start += 2;
-				valid_kw_after = true;
+				valid_keyword_after = true;
 			} else if (raw[data_start] == '\n' || raw[data_start] == '\r') {
 				data_start += 1;
-				valid_kw_after = true;
+				valid_keyword_after = true;
 			}
 		}
 
-		if (!valid_kw_before || !valid_kw_after) {
-			if (stream_pos + 6 > cursor) {
-				extract_pdf_text(raw.substr(cursor, stream_pos + 6 - cursor),
+		if (!valid_keyword_before || !valid_keyword_after) {
+			if (stream_position + 6 > cursor) {
+				extract_pdf_text(raw.substr(cursor, stream_position + 6 - cursor),
 						 extracted);
 			}
-			cursor = stream_pos + 6;
+			cursor = stream_position + 6;
 			continue;
 		}
 
-		if (stream_pos > cursor) {
-			extract_pdf_text(raw.substr(cursor, stream_pos - cursor), extracted);
+		if (stream_position > cursor) {
+			extract_pdf_text(raw.substr(cursor, stream_position - cursor), extracted);
 		}
 
-		size_t endstream_pos = raw.find("endstream", data_start);
-		if (endstream_pos == std::string::npos) {
+		size_t endstream_position = raw.find("endstream", data_start);
+		if (endstream_position == std::string::npos) {
 			break;
 		}
 
-		size_t dict_lookback = (stream_pos > 1024) ? (stream_pos - 1024) : 0;
-		size_t obj_pos = raw.rfind("obj", stream_pos);
-		if (obj_pos != std::string::npos && obj_pos > dict_lookback) {
-			dict_lookback = obj_pos;
+		size_t dictionary_lookback = (stream_position > 1024) ? (stream_position - 1024) : 0;
+		size_t object_position = raw.rfind("obj", stream_position);
+		if (object_position != std::string::npos && object_position > dictionary_lookback) {
+			dictionary_lookback = object_position;
 		}
-		std::string dictionary = raw.substr(dict_lookback, stream_pos - dict_lookback);
+		std::string dictionary =
+			raw.substr(dictionary_lookback, stream_position - dictionary_lookback);
 
 		if (!is_image_dictionary(dictionary)) {
-			size_t data_end = endstream_pos;
+			size_t data_end = endstream_position;
 			if (data_end > data_start && raw[data_end - 1] == '\n') {
 				data_end--;
 			}
@@ -308,30 +455,31 @@ std::string DecompressDocument::decompress_pdf(const std::filesystem::path& file
 			}
 		}
 
-		cursor = endstream_pos + 9;
+		cursor = endstream_position + 9;
 	}
 
 	return extracted.str();
 }
 
 static void extract_docx_xml(const std::string& xml, std::ostringstream& extracted) {
-	const size_t n = xml.size();
-	for (size_t i = 0; i + 4 < n; ++i) {
-		if (xml[i] == '<' && xml[i + 1] == 'w' && xml[i + 2] == ':' && xml[i + 3] == 'p' &&
-		    (xml[i + 4] == '>' || xml[i + 4] == ' ' || xml[i + 4] == '/')) {
+	const size_t length = xml.size();
+	for (size_t index = 0; index + 4 < length; ++index) {
+		if (xml[index] == '<' && xml[index + 1] == 'w' && xml[index + 2] == ':' &&
+		    xml[index + 3] == 'p' &&
+		    (xml[index + 4] == '>' || xml[index + 4] == ' ' || xml[index + 4] == '/')) {
 			extracted << "\n";
 		}
 
-		if (xml[i] == '<' && xml[i + 1] == 'w' && xml[i + 2] == ':' && xml[i + 3] == 't' &&
-		    (xml[i + 4] == '>' || xml[i + 4] == ' ')) {
-			size_t tag_close = i + 4;
-			while (tag_close < n && xml[tag_close] != '>') {
+		if (xml[index] == '<' && xml[index + 1] == 'w' && xml[index + 2] == ':' &&
+		    xml[index + 3] == 't' && (xml[index + 4] == '>' || xml[index + 4] == ' ')) {
+			size_t tag_close = index + 4;
+			while (tag_close < length && xml[tag_close] != '>') {
 				tag_close++;
 			}
-			if (tag_close < n && xml[tag_close] == '>') {
+			if (tag_close < length && xml[tag_close] == '>') {
 				size_t content_start = tag_close + 1;
 				size_t end_tag = content_start;
-				while (end_tag + 5 < n) {
+				while (end_tag + 5 < length) {
 					if (xml[end_tag] == '<' && xml[end_tag + 1] == '/' &&
 					    xml[end_tag + 2] == 'w' && xml[end_tag + 3] == ':' &&
 					    xml[end_tag + 4] == 't' && xml[end_tag + 5] == '>') {
@@ -343,7 +491,7 @@ static void extract_docx_xml(const std::string& xml, std::ostringstream& extract
 					extracted << xml.substr(content_start, end_tag - content_start)
 						  << " ";
 				}
-				i = end_tag + 5;
+				index = end_tag + 5;
 			}
 		}
 	}
@@ -361,51 +509,53 @@ std::string DecompressDocument::decompress_docx(const std::filesystem::path& fil
 	}
 
 	std::ostringstream extracted;
-	const size_t n = raw.size();
+	const size_t length = raw.size();
 
 	// 1. Parse ZIP local file headers (PK\x03\x04) and inflate compressed XML entries
-	size_t pos = 0;
-	while (pos + 30 <= n) {
-		size_t sig = raw.find("PK\x03\x04", pos);
-		if (sig == std::string::npos || sig + 30 > n) {
+	size_t position = 0;
+	while (position + 30 <= length) {
+		size_t signature = raw.find("PK\x03\x04", position);
+		if (signature == std::string::npos || signature + 30 > length) {
 			break;
 		}
-		const auto* hdr = reinterpret_cast<const unsigned char*>(raw.data() + sig);
-		uint16_t method = static_cast<uint16_t>(hdr[8] | (hdr[9] << 8));
-		uint32_t comp_size = static_cast<uint32_t>(
-			hdr[18] | (hdr[19] << 8) | (hdr[20] << 16) | (hdr[21] << 24));
-		uint16_t name_len = static_cast<uint16_t>(hdr[26] | (hdr[27] << 8));
-		uint16_t extra_len = static_cast<uint16_t>(hdr[28] | (hdr[29] << 8));
+		const auto* header = reinterpret_cast<const unsigned char*>(raw.data() + signature);
+		uint16_t method = static_cast<uint16_t>(header[8] | (header[9] << 8));
+		uint32_t compressed_size = static_cast<uint32_t>(
+			header[18] | (header[19] << 8) | (header[20] << 16) | (header[21] << 24));
+		uint16_t name_length = static_cast<uint16_t>(header[26] | (header[27] << 8));
+		uint16_t extra_length = static_cast<uint16_t>(header[28] | (header[29] << 8));
 
-		size_t data_offset = sig + 30 + name_len + extra_len;
-		if (name_len == 0 || name_len > 512 || data_offset > n) {
-			pos = sig + 4;
+		size_t data_offset = signature + 30 + name_length + extra_length;
+		if (name_length == 0 || name_length > 512 || data_offset > length) {
+			position = signature + 4;
 			continue;
 		}
 
-		std::string entry_name = raw.substr(sig + 30, name_len);
-		size_t next_sig = raw.find("PK", data_offset);
-		size_t payload_len = comp_size;
-		if (payload_len == 0 || data_offset + payload_len > n) {
-			payload_len = (next_sig != std::string::npos) ? (next_sig - data_offset)
-								      : (n - data_offset);
+		std::string entry_name = raw.substr(signature + 30, name_length);
+		size_t next_signature = raw.find("PK", data_offset);
+		size_t payload_length = compressed_size;
+		if (payload_length == 0 || data_offset + payload_length > length) {
+			payload_length = (next_signature != std::string::npos)
+						 ? (next_signature - data_offset)
+						 : (length - data_offset);
 		}
 
 		if (entry_name.find("word/") != std::string::npos &&
-		    entry_name.find(".xml") != std::string::npos && payload_len > 0) {
+		    entry_name.find(".xml") != std::string::npos && payload_length > 0) {
 			if (method == 8) {
 				std::string xml =
-					inflate_stream_data(raw.data() + data_offset, payload_len);
+					inflate_stream_data(raw.data() + data_offset, payload_length);
 				if (!xml.empty()) {
 					extract_docx_xml(xml, extracted);
 				}
 			} else if (method == 0) {
-				extract_docx_xml(raw.substr(data_offset, payload_len), extracted);
+				extract_docx_xml(raw.substr(data_offset, payload_length), extracted);
 			}
 		}
 
-		pos = (comp_size > 0 && data_offset + comp_size <= n) ? (data_offset + comp_size)
-								      : (data_offset + 1);
+		position = (compressed_size > 0 && data_offset + compressed_size <= length)
+				   ? (data_offset + compressed_size)
+				   : (data_offset + 1);
 	}
 
 	// 2. Fallback for uncompressed/synthetic XML buffers containing <w:t>

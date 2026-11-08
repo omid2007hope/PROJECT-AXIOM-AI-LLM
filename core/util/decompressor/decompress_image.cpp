@@ -27,18 +27,31 @@ DecodedImage DecompressImage::decompress_bmp(const std::filesystem::path& file_p
 		return img;
 	}
 
+	uint32_t dib_size = *reinterpret_cast<uint32_t*>(&info_header[0]);
 	int32_t width = *reinterpret_cast<int32_t*>(&info_header[4]);
 	int32_t height = *reinterpret_cast<int32_t*>(&info_header[8]);
 	uint16_t bpp = *reinterpret_cast<uint16_t*>(&info_header[14]);
+	uint32_t compression = *reinterpret_cast<uint32_t*>(&info_header[16]);
 
-	if (width <= 0 || width > 32768 || height == 0 || height == INT32_MIN ||
-	    (bpp != 24 && bpp != 32 && bpp != 8)) {
+	// Only uncompressed BITMAPINFOHEADER-or-later pixel data is decoded: RLE/bitfield
+	// payloads or OS/2 headers would be misread as pixels
+	if (dib_size < 40 || compression != 0 || width <= 0 || width > 32768 || height == 0 ||
+	    height == INT32_MIN || (bpp != 24 && bpp != 32 && bpp != 8)) {
 		return img;
 	}
 
 	bool top_down = (height < 0);
 	height = (height < 0) ? -height : height;
 	if (height > 32768) {
+		return img;
+	}
+
+	// The pixel array must fit inside the file, otherwise the header is lying about the
+	// size and would force a huge allocation
+	const size_t row_stride = ((static_cast<size_t>(width) * bpp + 31) / 32) * 4;
+	const std::uintmax_t file_size = std::filesystem::file_size(file_path);
+	if (pixel_offset < 54 || pixel_offset > file_size ||
+	    row_stride * static_cast<size_t>(height) > file_size - pixel_offset) {
 		return img;
 	}
 
@@ -51,7 +64,6 @@ DecodedImage DecompressImage::decompress_bmp(const std::filesystem::path& file_p
 		return img;
 	}
 
-	size_t row_stride = ((width * bpp + 31) / 32) * 4;
 	std::vector<uint8_t> row_buffer(row_stride);
 	img.pixels.resize(static_cast<size_t>(width) * height * 3);
 
@@ -158,6 +170,11 @@ DecodedImage DecompressImage::decompress_jpeg(const std::filesystem::path& file_
 		}
 	}
 
+	// A JPEG without a Start-Of-Frame marker has no image dimensions and is not decodable
+	if (img.width <= 0 || img.height <= 0) {
+		return DecodedImage {};
+	}
+
 	// Store raw image scan data (pixels / quantized DCT coefficients)
 	img.pixels = std::move(buffer);
 	img.is_valid = true;
@@ -183,12 +200,23 @@ DecodedImage DecompressImage::decompress_png(const std::filesystem::path& file_p
 		return img;
 	}
 
-	// Parse IHDR chunk (always at offset 8)
-	if (buffer[12] == 'I' && buffer[13] == 'H' && buffer[14] == 'D' && buffer[15] == 'R') {
-		img.width = (buffer[16] << 24) | (buffer[17] << 16) | (buffer[18] << 8) | buffer[19];
-		img.height = (buffer[20] << 24) | (buffer[21] << 16) | (buffer[22] << 8) | buffer[23];
-		img.channels = 3;
+	// Parse IHDR chunk (always at offset 8): a valid PNG starts with a 13-byte IHDR
+	const uint32_t ihdr_length = (static_cast<uint32_t>(buffer[8]) << 24) | (buffer[9] << 16) |
+				     (buffer[10] << 8) | buffer[11];
+	if (ihdr_length != 13 || buffer[12] != 'I' || buffer[13] != 'H' || buffer[14] != 'D' ||
+	    buffer[15] != 'R') {
+		return img;
 	}
+	const uint32_t png_width = (static_cast<uint32_t>(buffer[16]) << 24) | (buffer[17] << 16) |
+				   (buffer[18] << 8) | buffer[19];
+	const uint32_t png_height = (static_cast<uint32_t>(buffer[20]) << 24) | (buffer[21] << 16) |
+				    (buffer[22] << 8) | buffer[23];
+	if (png_width == 0 || png_height == 0 || png_width > 0x7FFFFFFFu || png_height > 0x7FFFFFFFu) {
+		return img;
+	}
+	img.width = static_cast<int>(png_width);
+	img.height = static_cast<int>(png_height);
+	img.channels = 3;
 
 	img.pixels = std::move(buffer);
 	img.is_valid = true;

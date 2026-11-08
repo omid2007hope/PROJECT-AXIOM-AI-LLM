@@ -65,13 +65,21 @@ DecodedVideo DecompressVideo::decompress_mp4(const std::filesystem::path& file_p
 						if (t_size < 8 || trak_sub + t_size > trak_end) break;
 
 						if (std::memcmp(buffer.data() + trak_sub + 4, "tkhd", 4) == 0 &&
-						    t_size >= 86 && trak_sub + 86 <= len) {
-							// In tkhd (v0), width and height are fixed-point 16.16 at offsets 76 and 80
-							uint32_t w_fixed = (buffer[trak_sub + 80] << 8) | buffer[trak_sub + 81];
-							uint32_t h_fixed = (buffer[trak_sub + 84] << 8) | buffer[trak_sub + 85];
-							if (w_fixed > 0 && h_fixed > 0) {
-								video.width = static_cast<int>(w_fixed);
-								video.height = static_cast<int>(h_fixed);
+						    video.width == 0) {
+							// width/height are 16.16 fixed-point values at the end of
+							// tkhd: version 0 places them at box offsets 84/88, version 1
+							// (64-bit times) at 96/100. Audio tracks store 0 and are skipped.
+							const size_t width_offset = (buffer[trak_sub + 8] == 1) ? 96 : 84;
+							if (t_size >= width_offset + 8 &&
+							    trak_sub + width_offset + 8 <= len) {
+								uint32_t fixed_width = (buffer[trak_sub + width_offset] << 8) |
+										       buffer[trak_sub + width_offset + 1];
+								uint32_t fixed_height = (buffer[trak_sub + width_offset + 4] << 8) |
+											buffer[trak_sub + width_offset + 5];
+								if (fixed_width > 0 && fixed_height > 0) {
+									video.width = static_cast<int>(fixed_width);
+									video.height = static_cast<int>(fixed_height);
+								}
 							}
 						}
 						trak_sub += t_size;
@@ -95,7 +103,8 @@ DecodedVideo DecompressVideo::decompress_mp4(const std::filesystem::path& file_p
 	if (video.width == 0) video.width = 1920;
 	if (video.height == 0) video.height = 1080;
 	video.fps = 30.0;
-	video.frame_count = static_cast<int>(video.raw_frames.size() / (video.width * video.height * 3 + 1));
+	video.frame_count = static_cast<int>(video.raw_frames.size() /
+					     (static_cast<size_t>(video.width) * video.height * 3 + 1));
 	if (video.frame_count == 0 && !video.raw_frames.empty()) video.frame_count = 1;
 
 	video.is_valid = !video.raw_frames.empty();

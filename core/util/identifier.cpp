@@ -17,9 +17,12 @@ FileFormat Identifier::detect_magic_bytes(const uint8_t* header, size_t length, 
 		return detect_by_extension(extension);
 	}
 
-	// 1. PDF: %PDF- (0x25, 0x50, 0x44, 0x46)
-	if (length >= 4 && header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46) {
-		return FileFormat::PDF;
+	// 1. PDF: "%PDF-" may be preceded by junk, but only within the probed header
+	for (size_t i = 0; i + 5 <= length; ++i) {
+		if (header[i] == 0x25 && header[i + 1] == 0x50 && header[i + 2] == 0x44 &&
+		    header[i + 3] == 0x46 && header[i + 4] == '-') {
+			return FileFormat::PDF;
+		}
 	}
 
 	// 2. JPEG: 0xFF, 0xD8, 0xFF
@@ -39,9 +42,16 @@ FileFormat Identifier::detect_magic_bytes(const uint8_t* header, size_t length, 
 		return FileFormat::GIF;
 	}
 
-	// 5. BMP: 'B', 'M' (0x42, 0x4D)
-	if (length >= 2 && header[0] == 0x42 && header[1] == 0x4D) {
-		return FileFormat::BMP;
+	// 5. BMP: 'BM' alone matches plain text such as "BMW", so also require the
+	// reserved field to be zero and a known DIB header size
+	if (length >= 18 && header[0] == 0x42 && header[1] == 0x4D && header[6] == 0 && header[7] == 0 &&
+	    header[8] == 0 && header[9] == 0) {
+		const uint32_t dib_size = static_cast<uint32_t>(header[14]) | (static_cast<uint32_t>(header[15]) << 8) |
+					  (static_cast<uint32_t>(header[16]) << 16) | (static_cast<uint32_t>(header[17]) << 24);
+		if (dib_size == 12 || dib_size == 40 || dib_size == 52 || dib_size == 56 || dib_size == 64 ||
+		    dib_size == 108 || dib_size == 124) {
+			return FileFormat::BMP;
+		}
 	}
 
 	// 6. RIFF-based formats (WAV, WEBP, AVI)
@@ -67,9 +77,14 @@ FileFormat Identifier::detect_magic_bytes(const uint8_t* header, size_t length, 
 		return FileFormat::FLAC;
 	}
 
-	// 9. MP3: ID3 header or MPEG sync bits
-	if ((length >= 3 && header[0] == 'I' && header[1] == 'D' && header[2] == '3') ||
-	    (length >= 2 && header[0] == 0xFF && (header[1] & 0xE0) == 0xE0)) {
+	// 9. MP3: ID3v2 header or a plausible MPEG frame header (reserved version, layer,
+	// bitrate and sample-rate values rejected so random 0xFF 0xEx bytes do not match)
+	const bool has_id3 = length >= 5 && header[0] == 'I' && header[1] == 'D' && header[2] == '3' &&
+			     header[3] < 0xFF && header[4] < 0xFF;
+	const bool has_mpeg_frame = length >= 3 && header[0] == 0xFF && (header[1] & 0xE0) == 0xE0 &&
+				    ((header[1] >> 3) & 0x3) != 1 && ((header[1] >> 1) & 0x3) != 0 &&
+				    (header[2] >> 4) != 0xF && ((header[2] >> 2) & 0x3) != 3;
+	if (has_id3 || has_mpeg_frame) {
 		return FileFormat::MP3;
 	}
 
@@ -105,18 +120,30 @@ FileFormat Identifier::detect_magic_bytes(const uint8_t* header, size_t length, 
 		return FileFormat::TIFF;
 	}
 
-	// 15. Binary vs Text Detection Fallback
-	bool has_null_byte = false;
+	// 15. Binary vs Text Detection Fallback: NUL bytes or many control characters
+	// mean the file is not text, whatever its extension claims
+	size_t control_bytes = 0;
+	bool is_binary_content = false;
 	for (size_t i = 0; i < length; ++i) {
 		if (header[i] == 0) {
-			has_null_byte = true;
+			is_binary_content = true;
 			break;
 		}
+		if (header[i] < 32 && header[i] != '\t' && header[i] != '\n' && header[i] != '\r' &&
+		    header[i] != '\f') {
+			++control_bytes;
+		}
 	}
+	is_binary_content = is_binary_content || (control_bytes * 10 > length);
 
-	if (has_null_byte) {
+	if (is_binary_content) {
+		// Binary data may keep a container/media label from its extension, but never a
+		// plain-text label (TXT, MD, JSON, CSV, LOG, CODE): that would feed it to the text path
 		FileFormat by_extension = detect_by_extension(extension);
-		if (by_extension != FileFormat::UNKNOWN && by_extension != FileFormat::TXT) {
+		const bool is_text_format = by_extension == FileFormat::TXT || by_extension == FileFormat::MD ||
+					    by_extension == FileFormat::JSON || by_extension == FileFormat::CSV ||
+					    by_extension == FileFormat::LOG || by_extension == FileFormat::CODE;
+		if (by_extension != FileFormat::UNKNOWN && !is_text_format) {
 			return by_extension;
 		}
 		return FileFormat::UNKNOWN_BINARY;

@@ -1,9 +1,12 @@
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+#include <zlib.h>
 
+#include "../include/Identifier.hpp"
 #include "../include/decompressor/decompress_audio.hpp"
 #include "../include/decompressor/decompress_document.hpp"
 #include "../include/decompressor/decompress_image.hpp"
@@ -287,6 +290,166 @@ bool test_decompressor() {
 
 		bool samples_match = (decoded.pcm_bytes == original_pcm);
 		test_check(samples_match, "Gate 6: Acoustic token roundtrip achieves 100% bit-accurate PCM reconstruction", pass_count, fail_count);
+	}
+
+	// ─── [6] Hardening: noise rejection, malformed headers, identifier false positives ──
+	std::cout << "\n[6] Hardening (scanned PDFs, binary-as-text, hostile headers)\n";
+
+	auto write_file = [&](const std::filesystem::path& path, const std::string& bytes) {
+		std::ofstream out(path, std::ios::binary);
+		out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+	};
+	auto deflate_bytes = [](const std::string& plain) {
+		uLongf compressed_size = compressBound(static_cast<uLong>(plain.size()));
+		std::string compressed(compressed_size, '\0');
+		compress(reinterpret_cast<Bytef*>(compressed.data()), &compressed_size,
+			 reinterpret_cast<const Bytef*>(plain.data()), static_cast<uLong>(plain.size()));
+		compressed.resize(compressed_size);
+		return compressed;
+	};
+	auto pdf_with_stream = [](const std::string& dictionary, const std::string& payload) {
+		return "%PDF-1.4\n4 0 obj << " + dictionary + " /Length " + std::to_string(payload.size()) +
+		       " >> stream\n" + payload + "\nendstream endobj\n%%EOF";
+	};
+
+	// 6.1 Scanned PDF: an image stream must contribute nothing, even if it contains BT..ET text
+	{
+		std::string image_payload = "BT (Declassified fake words inside jpeg bytes) Tj ET ";
+		for (int i = 0; i < 4096; ++i) {
+			image_payload += static_cast<char>((i * 131 + 7) % 256);
+		}
+		write_file(temp_dir / "scanned.pdf",
+			   pdf_with_stream("/Type /XObject /Subtype /Image /Filter /DCTDecode", image_payload));
+		std::string scanned_text = DecompressDocument::decompress_pdf(temp_dir / "scanned.pdf");
+		test_check(scanned_text.empty(), "decompress_pdf returns nothing for DCTDecode image streams", pass_count, fail_count);
+
+		write_file(temp_dir / "binary_only.pdf",
+			   pdf_with_stream("/Filter /JBIG2Decode", image_payload));
+		test_check(DecompressDocument::decompress_pdf(temp_dir / "binary_only.pdf").empty(), "decompress_pdf returns nothing for JBIG2Decode streams", pass_count, fail_count);
+	}
+
+	// 6.2 FlateDecode content stream: inflated, kerned TJ glyph runs are joined into words
+	{
+		std::string content = "BT\n/F1 12 Tf\n[(Hel)-10(lo) -400 (Wor)5(ld)] TJ\n(it\\222s plain text) Tj\nET\n";
+		write_file(temp_dir / "flate.pdf",
+			   pdf_with_stream("/Filter /FlateDecode", deflate_bytes(content)));
+		std::string flate_text = DecompressDocument::decompress_pdf(temp_dir / "flate.pdf");
+		test_check(flate_text.find("Hello World") != std::string::npos, "decompress_pdf joins kerned TJ glyph runs into words", pass_count, fail_count);
+		test_check(flate_text.find("it's plain text") != std::string::npos, "decompress_pdf decodes octal escapes to ASCII punctuation", pass_count, fail_count);
+	}
+
+	// 6.3 Mis-encoded subset-font stream (shifted glyph codes) is dropped whole
+	{
+		std::string shifted_letters;
+		for (int i = 0; i < 40; ++i) {
+			shifted_letters += "jkqxzvwbpmjkqxzvwbpm ";
+		}
+		std::string content = "BT\n(" + shifted_letters + ") Tj\nET\n";
+		write_file(temp_dir / "shifted.pdf",
+			   pdf_with_stream("/Filter /FlateDecode", deflate_bytes(content)));
+		test_check(DecompressDocument::decompress_pdf(temp_dir / "shifted.pdf").empty(), "decompress_pdf drops streams with non-linguistic letter statistics", pass_count, fail_count);
+	}
+
+	// 6.4 Binary renamed to .txt never reaches the text tokenizer
+	{
+		std::string noise("\x00\x01\x02\x03", 4);
+		write_file(temp_dir / "fake.txt", noise);
+		test_check(DecompressDocument::decompress_text(temp_dir / "fake.txt").empty(), "decompress_text rejects binary content with a .txt extension", pass_count, fail_count);
+		test_check(DecompressDocument::extract_text(temp_dir / "fake.txt").empty(), "extract_text rejects binary content with a .txt extension", pass_count, fail_count);
+		test_check(Identifier::identify(temp_dir / "fake.txt").format == FileFormat::UNKNOWN_BINARY, "Identifier labels binary .txt as UNKNOWN_BINARY", pass_count, fail_count);
+
+		write_file(temp_dir / "fake.csv", noise);
+		test_check(Identifier::identify(temp_dir / "fake.csv").modality == ModalityCategory::UNKNOWN, "Identifier never labels binary .csv as a text document", pass_count, fail_count);
+	}
+
+	// 6.5 Identifier false positives
+	{
+		write_file(temp_dir / "bmw.txt", "BMW car review: the engine is smooth and quiet.");
+		test_check(Identifier::identify(temp_dir / "bmw.txt").format == FileFormat::TXT, "Text starting with 'BM' is not mistaken for BMP", pass_count, fail_count);
+
+		write_file(temp_dir / "junk_before.pdf", "\n\n%PDF-1.4\n1 0 obj << >> endobj\n");
+		test_check(Identifier::identify(temp_dir / "junk_before.pdf").format == FileFormat::PDF, "PDF header preceded by whitespace is still identified", pass_count, fail_count);
+
+		std::string fake_mpeg("\xFF\xE0\x00\x00 random bytes", 20);
+		write_file(temp_dir / "not_audio.bin", fake_mpeg);
+		test_check(Identifier::identify(temp_dir / "not_audio.bin").format != FileFormat::MP3, "Reserved MPEG layer bits are not identified as MP3", pass_count, fail_count);
+	}
+
+	// 6.6 Hostile image headers
+	{
+		// BMP claiming 30000 x 30000 pixels in a 54-byte file must not allocate gigabytes
+		std::string bomb(54, '\0');
+		bomb[0] = 'B';
+		bomb[1] = 'M';
+		bomb[10] = 54;
+		bomb[14] = 40;
+		const int32_t huge = 30000;
+		std::memcpy(&bomb[18], &huge, 4);
+		std::memcpy(&bomb[22], &huge, 4);
+		bomb[26] = 1;
+		bomb[28] = 24;
+		write_file(temp_dir / "bomb.bmp", bomb);
+		test_check(!DecompressImage::decompress_bmp(temp_dir / "bomb.bmp").is_valid, "decompress_bmp rejects pixel arrays larger than the file", pass_count, fail_count);
+
+		// RLE-compressed BMP would be misread as raw pixels
+		std::string encoded_bitmap = bomb;
+		const int32_t small = 4;
+		std::memcpy(&encoded_bitmap[18], &small, 4);
+		std::memcpy(&encoded_bitmap[22], &small, 4);
+		encoded_bitmap[30] = 1;
+		encoded_bitmap.append(64, '\x55');
+		write_file(temp_dir / "rle.bmp", encoded_bitmap);
+		test_check(!DecompressImage::decompress_bmp(temp_dir / "rle.bmp").is_valid, "decompress_bmp rejects compressed (RLE) pixel data", pass_count, fail_count);
+
+		write_file(temp_dir / "no_sof.jpg", std::string("\xFF\xD8\xFF\xE0\x00\x10JFIF\x00 no frame marker here", 32));
+		test_check(!DecompressImage::decompress_jpeg(temp_dir / "no_sof.jpg").is_valid, "decompress_jpeg rejects JPEG without a frame header", pass_count, fail_count);
+
+		write_file(temp_dir / "bad_ihdr.png", std::string("\x89PNG\r\n\x1A\n\x00\x00\x00\x0DXXXX", 16) + std::string(20, '\0'));
+		test_check(!DecompressImage::decompress_png(temp_dir / "bad_ihdr.png").is_valid, "decompress_png rejects PNG without IHDR", pass_count, fail_count);
+	}
+
+	// 6.7 WAV chunk parsing: odd-sized chunks are padded, bogus formats rejected
+	{
+		auto little_endian_16 = [](uint16_t value) { return std::string(reinterpret_cast<char*>(&value), 2); };
+		auto little_endian_32 = [](uint32_t value) { return std::string(reinterpret_cast<char*>(&value), 4); };
+		std::string pcm(16, '\x42');
+		std::string format_body = little_endian_16(1) + little_endian_16(2) + little_endian_32(44100) + little_endian_32(176400) + little_endian_16(4) + little_endian_16(16);
+		std::string wav = "RIFF" + little_endian_32(4 + 8 + 4 + 8 + 16 + 8 + 16) + "WAVE" + "LIST" + little_endian_32(3) +
+				  "abc" + std::string(1, '\0') + "fmt " + little_endian_32(16) + format_body + "data" +
+				  little_endian_32(16) + pcm;
+		write_file(temp_dir / "odd_chunk.wav", wav);
+		DecodedAudio odd = DecompressAudio::decompress_wav(temp_dir / "odd_chunk.wav");
+		test_check(odd.is_valid && odd.pcm_bytes == std::vector<uint8_t>(pcm.begin(), pcm.end()), "decompress_wav honours RIFF even-byte chunk padding", pass_count, fail_count);
+
+		std::string invalid_format = little_endian_16(1) + little_endian_16(0) + little_endian_32(44100) + little_endian_32(176400) + little_endian_16(4) + little_endian_16(16);
+		std::string bad_wav = "RIFF" + little_endian_32(36 + 16) + "WAVE" + "fmt " + little_endian_32(16) + invalid_format +
+				      "data" + little_endian_32(16) + pcm;
+		write_file(temp_dir / "zero_channels.wav", bad_wav);
+		test_check(!DecompressAudio::decompress_wav(temp_dir / "zero_channels.wav").is_valid, "decompress_wav rejects zero-channel format chunks", pass_count, fail_count);
+	}
+
+	// 6.8 MP4 track header: width/height come from the right tkhd offsets
+	{
+		auto big_endian_32 = [](uint32_t value) {
+			std::string bytes(4, '\0');
+			bytes[0] = static_cast<char>(value >> 24);
+			bytes[1] = static_cast<char>(value >> 16);
+			bytes[2] = static_cast<char>(value >> 8);
+			bytes[3] = static_cast<char>(value);
+			return bytes;
+		};
+		std::string track_header(92, '\0');
+		track_header.replace(0, 4, big_endian_32(92));
+		track_header.replace(4, 4, "tkhd");
+		track_header.replace(84, 4, big_endian_32(1280u << 16));
+		track_header.replace(88, 4, big_endian_32(720u << 16));
+		std::string track_box = big_endian_32(8 + 92) + "trak" + track_header;
+		std::string movie_box = big_endian_32(8 + static_cast<uint32_t>(track_box.size())) + "moov" + track_box;
+		std::string file_type = big_endian_32(16) + "ftyp" + "isom" + big_endian_32(0);
+		std::string media_data = big_endian_32(8 + 32) + "mdat" + std::string(32, '\x11');
+		write_file(temp_dir / "dims.mp4", file_type + movie_box + media_data);
+		DecodedVideo video = DecompressVideo::decompress_mp4(temp_dir / "dims.mp4");
+		test_check(video.is_valid && video.width == 1280 && video.height == 720, "decompress_mp4 reads width/height from the tkhd 16.16 fields", pass_count, fail_count);
 	}
 
 	// Clean up temp directory
