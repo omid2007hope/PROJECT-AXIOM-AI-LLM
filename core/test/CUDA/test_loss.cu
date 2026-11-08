@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cuda_runtime.h>
 #include <iostream>
 #include <vector>
-#include <cuda_runtime.h>
 
-#include "../../src/CUDA/util/gpu_types.cuh"
+#include "../../src/CUDA/gpu/download.cuh"
 #include "../../src/CUDA/kernel/backward_pass.cuh"
+#include "../../src/CUDA/util/gpu_types.cuh"
+#include "../../src/CUDA/util/memory_allocation.cuh"
 
 // ─── ANSI Terminal Color Formatting ──────────────────────────────────────────
 #define COLOR_RED   "\033[31m"
@@ -17,25 +19,24 @@
 
 // ─── Range & Finite Assertion Helpers ────────────────────────────────────────
 static bool check_scalar_bounds(float actual_value,
-				float minimum_bound,
-				float maximum_bound,
-				const char* check_label) {
+								float minimum_bound,
+								float maximum_bound,
+								const char* check_label) {
 	if (!std::isfinite(actual_value) || actual_value < minimum_bound ||
-	    actual_value > maximum_bound) {
-		std::cerr << COLOR_RED << "  [FAIL] " << check_label << ": " << actual_value
-			  << " outside [" << minimum_bound << ", " << maximum_bound << "]"
-			  << COLOR_RESET << "\n";
+		actual_value > maximum_bound) {
+		std::cerr << COLOR_RED << "  [FAIL] " << check_label << ": " << actual_value << " outside ["
+				  << minimum_bound << ", " << maximum_bound << "]" << COLOR_RESET << "\n";
 		return false;
 	}
 	std::cout << COLOR_GREEN << "  [PASS] " << check_label << ": " << actual_value
-		  << " is within bounds" << COLOR_RESET << "\n";
+			  << " is within bounds" << COLOR_RESET << "\n";
 	return true;
 }
 
 static bool check_tensor_bounds(const std::vector<float>& tensor,
-				float minimum_bound,
-				float maximum_bound,
-				const char* check_label) {
+								float minimum_bound,
+								float maximum_bound,
+								const char* check_label) {
 	float observed_min = 1e30f;
 	float observed_max = -1e30f;
 	bool elements_valid = true;
@@ -53,20 +54,114 @@ static bool check_tensor_bounds(const std::vector<float>& tensor,
 
 	if (!elements_valid) {
 		std::cerr << COLOR_RED << "  [FAIL] " << check_label
-			  << " contains invalid or out-of-bounds value. Sample: " << observed_min
-			  << " outside [" << minimum_bound << ", " << maximum_bound << "]"
-			  << COLOR_RESET << "\n";
+				  << " contains invalid or out-of-bounds value. Sample: " << observed_min
+				  << " outside [" << minimum_bound << ", " << maximum_bound << "]"
+				  << COLOR_RESET << "\n";
 		return false;
 	}
 
-	std::cout << COLOR_GREEN << "  [PASS] " << check_label
-		  << " (all " << tensor.size() << " elements in range ["
-		  << observed_min << ", " << observed_max << "])"
-		  << COLOR_RESET << "\n";
+	std::cout << COLOR_GREEN << "  [PASS] " << check_label << " (all " << tensor.size()
+			  << " elements in range [" << observed_min << ", " << observed_max << "])"
+			  << COLOR_RESET << "\n";
 	return true;
 }
 
-// ─── Test 1: SwiGLU Backward Gradient Range Verification ─────────────────────
+// ─── Kernel Simulator for Domain A ───────────────────────────────────────────
+__global__ static void simulate_step_loss_kernel(float* loss_buffer, float step_loss) {
+	if (threadIdx.x == 0 && blockIdx.x == 0) {
+		atomicAdd(&loss_buffer[telemetry_loss], step_loss);
+	}
+}
+
+// ─── Test 1: Two-Domain Differential Loss Verification ───────────────────────
+static bool test_differential_loss_domains() {
+	std::cout << "[Test] Two-Domain Differential Loss Verification\n";
+
+	const size_t slot_bytes = telemetry_slot_count * sizeof(float);
+	const float expected_step_loss = 2.302585f; // Analytical -log(0.1)
+
+	GpuActivations activations = {};
+	cudaMalloc(&activations.d_loss, slot_bytes);
+	cudaMemset(activations.d_loss, 0, slot_bytes);
+
+	// ── 1. Failure Domain A: Kernel & Math Execution ──
+	simulate_step_loss_kernel<<<1, 1>>>(static_cast<float*>(activations.d_loss), expected_step_loss);
+	cudaDeviceSynchronize();
+
+	// Direct raw device inspection (isolates math from host pipeline)
+	float raw_device_loss = 0.0f;
+	cudaMemcpy(&raw_device_loss, activations.d_loss, sizeof(float), cudaMemcpyDeviceToHost);
+
+	bool domain_a_valid = std::isfinite(raw_device_loss) && raw_device_loss >= 0.0f;
+	if (!domain_a_valid) {
+		std::cerr << COLOR_RED
+				  << "  [FAIL] Domain A (Compute Kernel): Math produced NaN, Inf, or negative value: "
+				  << raw_device_loss << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+	std::cout << COLOR_GREEN << "  [PASS] Domain A (Compute Kernel): Raw loss valid ("
+			  << raw_device_loss << ")" << COLOR_RESET << "\n";
+
+	// ── 2. Failure Domain B: State Plumbing & Routing ──
+	float host_slots[telemetry_slot_count] = {};
+	bool download_success = download_telemetry(&activations, host_slots);
+
+	if (!download_success) {
+		std::cerr << COLOR_RED << "  [FAIL] Domain B (Pipeline Plumbing): download_telemetry failed"
+				  << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+
+	float current_loss = host_slots[telemetry_loss];
+	bool domain_b_valid = std::isfinite(current_loss) && current_loss >= 0.0f;
+	if (!domain_b_valid) {
+		std::cerr << COLOR_RED
+				  << "  [FAIL] Domain B (Pipeline Plumbing): Memory corruption or invalid slot value: "
+				  << current_loss << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+	std::cout << COLOR_GREEN << "  [PASS] Domain B (Pipeline Plumbing): Slot propagated successfully ("
+			  << current_loss << ")" << COLOR_RESET << "\n";
+
+	// ── 3. Differential Identity Check: Domain A vs Domain B ──
+	constexpr float float_epsilon = 1e-6f;
+	float absolute_difference = std::abs(current_loss - raw_device_loss);
+	bool identity_valid = absolute_difference < float_epsilon;
+
+	if (!identity_valid) {
+		std::cerr << COLOR_RED
+				  << "  [FAIL] Routing Logic: current_loss diverged from raw_loss (diff = "
+				  << absolute_difference << ")" << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+	std::cout << COLOR_GREEN
+			  << "  [PASS] Differential Check: Identity holds (|loss[0] - current_loss| < 1e-6)"
+			  << COLOR_RESET << "\n";
+
+	// ── 4. Pipeline Invariant Check: d_loss reset in VRAM ──
+	float reset_check_value = -1.0f;
+	cudaMemcpy(&reset_check_value, activations.d_loss, sizeof(float), cudaMemcpyDeviceToHost);
+	bool reset_valid = (reset_check_value == 0.0f);
+
+	if (!reset_valid) {
+		std::cerr << COLOR_RED
+				  << "  [FAIL] Pipeline Invariant: d_loss was not reset to 0 in VRAM after download"
+				  << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+	std::cout << COLOR_GREEN << "  [PASS] Pipeline Invariant: d_loss successfully reset to 0 in VRAM"
+			  << COLOR_RESET << "\n";
+
+	free_gpu_activations(&activations);
+	return domain_a_valid && domain_b_valid && identity_valid && reset_valid;
+}
+
+// ─── Test 2: SwiGLU Backward Gradient Range Verification ─────────────────────
 static bool test_swiglu_gradient_bounds() {
 	std::cout << "[Test] SwiGLU Backward Gradient Range\n";
 
@@ -77,7 +172,7 @@ static bool test_swiglu_gradient_bounds() {
 	// 1. Host Data Initialization
 	std::vector<uint16_t> host_grad(total_elements, 0x3F80); // 1.0f in bf16
 	std::vector<uint16_t> host_gate(total_elements, 0x3F00); // 0.5f in bf16
-	std::vector<uint16_t> host_up(total_elements, 0x3F00);   // 0.5f in bf16
+	std::vector<uint16_t> host_up(total_elements, 0x3F00);	 // 0.5f in bf16
 
 	// 2. Device Memory Allocation
 	void* device_grad = nullptr;
@@ -98,13 +193,8 @@ static bool test_swiglu_gradient_bounds() {
 	cudaMemcpy(device_up, host_up.data(), byte_count_bf16, cudaMemcpyHostToDevice);
 
 	// 4. Execute CUDA Kernel / Function
-	bool execution_success = swiglu_backward(device_grad,
-						device_gate,
-						device_up,
-						device_grad_gate,
-						device_grad_up,
-						total_elements,
-						nullptr);
+	bool execution_success = swiglu_backward(device_grad, device_gate, device_up, device_grad_gate,
+											 device_grad_up, total_elements, nullptr);
 
 	cudaDeviceSynchronize();
 
@@ -133,7 +223,7 @@ static bool test_swiglu_gradient_bounds() {
 	return gate_valid && up_valid;
 }
 
-// ─── Test 2: Telemetry Slot Loss Bounds Verification ─────────────────────────
+// ─── Test 3: Telemetry Slot Loss Bounds Verification ─────────────────────────
 static bool test_telemetry_loss_bounds() {
 	std::cout << "[Test] Telemetry Slot Loss Bounds\n";
 
@@ -149,7 +239,8 @@ static bool test_telemetry_loss_bounds() {
 
 	// Expected: Loss >= 0.0 and no nonfinite counts
 	bool pass_loss = check_scalar_bounds(host_telemetry[telemetry_loss], 0.0f, 100.0f, "Mean Loss");
-	bool pass_anomaly = check_scalar_bounds(host_telemetry[telemetry_nonfinite], 0.0f, 0.0f, "Non-finite Count");
+	bool pass_anomaly =
+		check_scalar_bounds(host_telemetry[telemetry_nonfinite], 0.0f, 0.0f, "Non-finite Count");
 
 	return pass_loss && pass_anomaly;
 }
@@ -161,6 +252,12 @@ int main() {
 
 	int passed_tests = 0;
 	int failed_tests = 0;
+
+	if (test_differential_loss_domains()) {
+		++passed_tests;
+	} else {
+		++failed_tests;
+	}
 
 	if (test_swiglu_gradient_bounds()) {
 		++passed_tests;
@@ -175,10 +272,9 @@ int main() {
 	}
 
 	std::cout << "----------------------------------------\n";
-	std::cout << "Summary: "
-		  << COLOR_GREEN << passed_tests << " Passed" << COLOR_RESET << ", "
-		  << (failed_tests > 0 ? COLOR_RED : COLOR_GREEN) << failed_tests << " Failed"
-		  << COLOR_RESET << "\n";
+	std::cout << "Summary: " << COLOR_GREEN << passed_tests << " Passed" << COLOR_RESET << ", "
+			  << (failed_tests > 0 ? COLOR_RED : COLOR_GREEN) << failed_tests << " Failed"
+			  << COLOR_RESET << "\n";
 
 	return (failed_tests == 0) ? 0 : 1;
 }
