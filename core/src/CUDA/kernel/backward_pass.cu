@@ -244,7 +244,8 @@ __global__ static void backward_scatter_embeddings_kernel(const uint32_t* __rest
 							  size_t embedding_dim,
 							  size_t vocab_size,
 							  size_t out_dim,
-							  float learning_rate) {
+							  float learning_rate,
+							  bool update_table) {
 
 	size_t in_dim = num_tokens * embedding_dim;
 	size_t j = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
@@ -266,13 +267,13 @@ __global__ static void backward_scatter_embeddings_kernel(const uint32_t* __rest
 			dx_out[j] = dx_j;
 		}
 
-		// Accumulate gradient into FP32 master table with atomicAdd
+		// Accumulate gradient into FP32 master table with atomicAdd only when update_table is true
 		size_t token_idx = j / embedding_dim;
 		size_t dim_idx = j % embedding_dim;
 		uint32_t tok_id = token_ids[token_idx];
 
 		// PAD (ID 0) is a fixed zero vector and never learns
-		if (tok_id != 0 && tok_id < vocab_size) {
+		if (update_table && tok_id != 0 && tok_id < vocab_size) {
 			size_t table_idx = tok_id * embedding_dim + dim_idx;
 			float delta = -learning_rate * dx_j;
 			float old_val = atomicAdd(&table_master[table_idx], delta);
@@ -434,6 +435,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 							      : (input_dim / emb_dim);
 		int threads = 256;
 		int blocks = static_cast<int>((input_dim + threads - 1) / threads);
+		bool update_table = (gpu_weights->d_query_weights == nullptr);
 
 		backward_scatter_embeddings_kernel<<<blocks, threads, 0, stream>>>(
 			static_cast<const uint32_t*>(gpu_portion->d_token_ids[buffer_index]),
@@ -447,7 +449,8 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_por
 			emb_dim,
 			gpu_embeddings->vocab_size,
 			output_dim,
-			learning_rate);
+			learning_rate,
+			update_table);
 
 		if (!CUDA_CHECK(cudaGetLastError()))
 			return false;
@@ -630,46 +633,60 @@ extern "C" CUDA_API bool fused_causal_backward(const void* grad_output,
 	return CUDA_CHECK(cudaGetLastError());
 }
 
+__global__ static void accumulate_ffn_residual_kernel(float* __restrict__ d_grad_mid,
+						      const float* __restrict__ grad_out,
+						      const float* __restrict__ d_grad_up,
+						      size_t total_elements) {
+	size_t idx = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+	if (idx < total_elements) {
+		float out_g = grad_out[idx];
+		float gate_g = d_grad_mid[idx];
+		float up_g = d_grad_up[idx];
+		float sum = out_g + gate_g + up_g;
+		d_grad_mid[idx] = isfinite(sum) ? fmaxf(-10.0f, fminf(10.0f, sum)) : 0.0f;
+	}
+}
+
 __global__ static void batched_weight_gradient_kernel(const float* __restrict__ grad_out,
 						      const __nv_bfloat16* __restrict__ input,
 						      float* __restrict__ grad_W,
 						      int S,
-						      int target_elements_y_total,
-						      int input_elements_x_total) {
+						      int in_dim,
+						      int out_dim) {
 
-	__shared__ float tile_dz[16][16];
 	__shared__ float tile_x[16][16];
+	__shared__ float tile_g[16][16];
 
-	int in_col = blockIdx.x * 16 + threadIdx.x;
-	int out_row = blockIdx.y * 16 + threadIdx.y;
+	int o = blockIdx.x * 16 + threadIdx.x;
+	int i = blockIdx.y * 16 + threadIdx.y;
 
 	float sum = 0.0f;
 	for (int base_s = 0; base_s < S; base_s += 16) {
-		int s_dz = base_s + threadIdx.x;
-		int s_x = base_s + threadIdx.y;
+		int s_k = base_s + threadIdx.x;
+		int s_g = base_s + threadIdx.y;
 
-		tile_dz[threadIdx.y][threadIdx.x] =
-			(s_dz < S && out_row < target_elements_y_total)
-				? grad_out[s_dz * target_elements_y_total + out_row]
-				: 0.0f;
 		tile_x[threadIdx.y][threadIdx.x] =
-			(s_x < S && in_col < input_elements_x_total)
-				? __bfloat162float(input[s_x * input_elements_x_total + in_col])
+			(i < in_dim && s_k < S)
+				? __bfloat162float(input[s_k * in_dim + i])
+				: 0.0f;
+		tile_g[threadIdx.y][threadIdx.x] =
+			(o < out_dim && s_g < S)
+				? grad_out[s_g * out_dim + o]
 				: 0.0f;
 
 		__syncthreads();
 
 #pragma unroll
 		for (int k = 0; k < 16; ++k) {
-			sum += tile_dz[threadIdx.y][k] * tile_x[k][threadIdx.x];
+			sum += tile_x[threadIdx.y][k] * tile_g[k][threadIdx.x];
 		}
 
 		__syncthreads();
 	}
 
-	if (out_row < target_elements_y_total && in_col < input_elements_x_total) {
+	if (i < in_dim && o < out_dim) {
 		float inv_s = 1.0f / static_cast<float>(S > 0 ? S : 1);
-		grad_W[out_row * input_elements_x_total + in_col] = sum * inv_s;
+		grad_W[i * out_dim + o] = isfinite(sum) ? (sum * inv_s) : 0.0f;
 	}
 }
 
@@ -677,41 +694,41 @@ __global__ static void batched_input_gradient_kernel(const float* __restrict__ g
 						     const float* __restrict__ W_master,
 						     float* __restrict__ grad_X,
 						     int S,
-						     int target_elements_y_total,
-						     int input_elements_x_total) {
+						     int in_dim,
+						     int out_dim) {
 
-	__shared__ float tile_dz[16][16];
+	__shared__ float tile_g[16][16];
 	__shared__ float tile_w[16][16];
 
+	int i = blockIdx.x * 16 + threadIdx.x;
 	int s = blockIdx.y * 16 + threadIdx.y;
-	int in_col = blockIdx.x * 16 + threadIdx.x;
 
 	float sum = 0.0f;
-	for (int base_o = 0; base_o < target_elements_y_total; base_o += 16) {
-		int o_dz = base_o + threadIdx.x;
+	for (int base_o = 0; base_o < out_dim; base_o += 16) {
+		int o_g = base_o + threadIdx.x;
 		int o_w = base_o + threadIdx.y;
 
-		tile_dz[threadIdx.y][threadIdx.x] =
-			(s < S && o_dz < target_elements_y_total)
-				? grad_out[s * target_elements_y_total + o_dz]
+		tile_g[threadIdx.y][threadIdx.x] =
+			(s < S && o_g < out_dim)
+				? grad_out[s * out_dim + o_g]
 				: 0.0f;
 		tile_w[threadIdx.y][threadIdx.x] =
-			(o_w < target_elements_y_total && in_col < input_elements_x_total)
-				? W_master[o_w * input_elements_x_total + in_col]
+			(i < in_dim && o_w < out_dim)
+				? W_master[i * out_dim + o_w]
 				: 0.0f;
 
 		__syncthreads();
 
 #pragma unroll
 		for (int k = 0; k < 16; ++k) {
-			sum += tile_dz[threadIdx.y][k] * tile_w[k][threadIdx.x];
+			sum += tile_g[threadIdx.y][k] * tile_w[k][threadIdx.x];
 		}
 
 		__syncthreads();
 	}
 
-	if (s < S && in_col < input_elements_x_total) {
-		grad_X[s * input_elements_x_total + in_col] = fmaxf(-1.0f, fminf(1.0f, sum));
+	if (s < S && i < in_dim) {
+		grad_X[s * in_dim + i] = isfinite(sum) ? fmaxf(-10.0f, fminf(10.0f, sum)) : 0.0f;
 	}
 }
 
@@ -845,25 +862,25 @@ extern "C" CUDA_API bool transformer_backward_block(const void* grad_output,
 
 	dim3 block_dim(16, 16);
 
-	// 1. Parameter gradient for W_down: [D x F] = dX_out^T * SwiGLU
-	dim3 grid_down((F + block_dim.x - 1) / block_dim.x, (D + block_dim.y - 1) / block_dim.y);
+	// 1. Parameter gradient for W_down: [F x D] = SwiGLU^T * dX_out
+	dim3 grid_down((D + block_dim.x - 1) / block_dim.x, (F + block_dim.y - 1) / block_dim.y);
 	batched_weight_gradient_kernel<<<grid_down, block_dim, 0, s>>>(
 		static_cast<const float*>(grad_output),
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_intermediate_swiglu),
 		d_grad_down_W,
 		S,
-		D,
-		F);
+		F,
+		D);
 
-	// 2. Input gradient into SwiGLU: [S x F] = dX_out * W_down
+	// 2. Input gradient into SwiGLU: [S x F] = dX_out * W_down^T
 	dim3 grid_swiglu((F + block_dim.x - 1) / block_dim.x, (S + block_dim.y - 1) / block_dim.y);
 	batched_input_gradient_kernel<<<grid_swiglu, block_dim, 0, s>>>(
 		static_cast<const float*>(grad_output),
 		static_cast<const float*>(gpu_weights->d_down_master),
 		d_grad_swiglu_float,
 		S,
-		D,
-		F);
+		F,
+		D);
 
 	// Convert d_grad_swiglu_float to bf16 for swiglu_backward
 	int conv_threads = 256;
@@ -880,34 +897,48 @@ extern "C" CUDA_API bool transformer_backward_block(const void* grad_output,
 			total_seq_ffn,
 			s);
 
-	// 4. Parameter gradients for W_gate and W_up: [F x D]
-	dim3 grid_gate_up((D + block_dim.x - 1) / block_dim.x, (F + block_dim.y - 1) / block_dim.y);
+	// 4. Parameter gradients for W_gate and W_up: [D x F]
+	dim3 grid_gate_up((F + block_dim.x - 1) / block_dim.x, (D + block_dim.y - 1) / block_dim.y);
 	batched_weight_gradient_kernel<<<grid_gate_up, block_dim, 0, s>>>(
 		d_grad_gate_float,
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_residual_mid),
 		d_grad_gate_W,
 		S,
-		F,
-		D);
+		D,
+		F);
 	batched_weight_gradient_kernel<<<grid_gate_up, block_dim, 0, s>>>(
 		d_grad_up_float,
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_residual_mid),
 		d_grad_up_W,
 		S,
-		F,
-		D);
+		D,
+		F);
 
-	// 5. Backprop into mid activations: [S x D]
+	// 5. Backprop into mid activations: [S x D] (SwiGLU Gate + SwiGLU Up + Residual Highway)
 	dim3 grid_mid((D + block_dim.x - 1) / block_dim.x, (S + block_dim.y - 1) / block_dim.y);
 	batched_input_gradient_kernel<<<grid_mid, block_dim, 0, s>>>(
 		d_grad_gate_float,
 		static_cast<const float*>(gpu_weights->d_gate_master),
 		d_grad_mid_float,
 		S,
-		F,
-		D);
+		D,
+		F);
+	batched_input_gradient_kernel<<<grid_mid, block_dim, 0, s>>>(
+		d_grad_up_float,
+		static_cast<const float*>(gpu_weights->d_up_master),
+		d_grad_attn_float,
+		S,
+		D,
+		F);
+	int res_threads = 256;
+	int res_blocks = static_cast<int>((total_seq_dim + res_threads - 1) / res_threads);
+	accumulate_ffn_residual_kernel<<<res_blocks, res_threads, 0, s>>>(
+		d_grad_mid_float,
+		static_cast<const float*>(grad_output),
+		d_grad_attn_float,
+		total_seq_dim);
 
-	// 6. Parameter gradient for W_output: [D x D] = d_grad_mid^T * Attn_Out
+	// 6. Parameter gradient for W_output: [D x D] = Attn_Out^T * d_grad_mid
 	dim3 grid_d_d((D + block_dim.x - 1) / block_dim.x, (D + block_dim.y - 1) / block_dim.y);
 	batched_weight_gradient_kernel<<<grid_d_d, block_dim, 0, s>>>(
 		d_grad_mid_float,

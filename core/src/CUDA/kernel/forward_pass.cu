@@ -1433,16 +1433,16 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 	fused_causal_attention(gpu_activations->d_query,
 			       gpu_activations->d_key,
 			       gpu_activations->d_value,
-			       gpu_activations->d_ffn_output /* temporary output buffer */,
+			       gpu_activations->d_attention_output,
 			       sequence_length,
 			       embedding_dim,
 			       num_heads,
 			       s);
 
-	// 5. Output projection: O * W_O -> d_attention_output
-	batched_gemm_multiply(gpu_activations->d_ffn_output,
+	// 5. Output projection: O * W_O -> d_ffn_output (temporary holder before residual add)
+	batched_gemm_multiply(gpu_activations->d_attention_output,
 			      gpu_weights->d_output_weights,
-			      gpu_activations->d_attention_output,
+			      gpu_activations->d_ffn_output,
 			      S,
 			      D,
 			      D,
@@ -1455,7 +1455,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 	int add_blocks = static_cast<int>((total_seq_dim + add_threads - 1) / add_threads);
 	tensor_add_inplace_kernel<<<add_blocks, add_threads, 0, s>>>(
 		static_cast<__nv_bfloat16*>(gpu_activations->d_residual_mid),
-		static_cast<const __nv_bfloat16*>(gpu_activations->d_attention_output),
+		static_cast<const __nv_bfloat16*>(gpu_activations->d_ffn_output),
 		total_seq_dim);
 
 	// Copy X_mid back into hidden_states and into d_residual_out for FFN residual
