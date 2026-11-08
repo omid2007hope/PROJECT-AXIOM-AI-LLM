@@ -223,26 +223,68 @@ static bool test_swiglu_gradient_bounds() {
 	return gate_valid && up_valid;
 }
 
-// ─── Test 3: Telemetry Slot Loss Bounds Verification ─────────────────────────
+// ─── Test 3: Multi-Step Telemetry Accumulation & Reduction ───────────────────
 static bool test_telemetry_loss_bounds() {
-	std::cout << "[Test] Telemetry Slot Loss Bounds\n";
+	std::cout << "[Test] Multi-Step Telemetry Accumulation & Reduction\n";
 
 	const size_t slot_bytes = telemetry_slot_count * sizeof(float);
-	float* device_telemetry = nullptr;
-	cudaMalloc(&device_telemetry, slot_bytes);
-	cudaMemset(device_telemetry, 0, slot_bytes);
+	const size_t step_count = 4;
+	const float per_step_loss = 2.302585f;
+	const float expected_accumulated_sum = per_step_loss * static_cast<float>(step_count);
 
-	// Download telemetry to host
-	std::vector<float> host_telemetry(telemetry_slot_count, 0.0f);
-	cudaMemcpy(host_telemetry.data(), device_telemetry, slot_bytes, cudaMemcpyDeviceToHost);
-	cudaFree(device_telemetry);
+	GpuActivations activations = {};
+	cudaMalloc(&activations.d_loss, slot_bytes);
+	cudaMemset(activations.d_loss, 0, slot_bytes);
 
-	// Expected: Loss >= 0.0 and no nonfinite counts
-	bool pass_loss = check_scalar_bounds(host_telemetry[telemetry_loss], 0.0f, 100.0f, "Mean Loss");
-	bool pass_anomaly =
-		check_scalar_bounds(host_telemetry[telemetry_nonfinite], 0.0f, 0.0f, "Non-finite Count");
+	// Simulate step_count training iterations accumulating into slot 0
+	for (size_t step = 0; step < step_count; ++step) {
+		simulate_step_loss_kernel<<<1, 1>>>(static_cast<float*>(activations.d_loss), per_step_loss);
+	}
+	cudaDeviceSynchronize();
 
-	return pass_loss && pass_anomaly;
+	// Download accumulated telemetry through the official pipeline
+	float host_telemetry[telemetry_slot_count] = {};
+	bool download_success = download_telemetry(&activations, host_telemetry);
+
+	if (!download_success) {
+		std::cerr << COLOR_RED << "  [FAIL] download_telemetry returned false" << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+
+	// 1. Verify Accumulated Sum Ingestion
+	float downloaded_sum = host_telemetry[telemetry_loss];
+	constexpr float epsilon = 1e-5f;
+	bool sum_matches = std::abs(downloaded_sum - expected_accumulated_sum) < epsilon;
+
+	if (!sum_matches) {
+		std::cerr << COLOR_RED << "  [FAIL] Accumulator mismatch: got " << downloaded_sum
+				  << ", expected " << expected_accumulated_sum << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+	std::cout << COLOR_GREEN << "  [PASS] Accumulated Loss Sum (" << step_count << " steps): "
+			  << downloaded_sum << COLOR_RESET << "\n";
+
+	// 2. Verify Host-Side Mean Loss Reduction (Exact same calculation as training.cpp:318)
+	float reduced_mean_loss = downloaded_sum / static_cast<float>(step_count);
+	bool mean_matches = std::abs(reduced_mean_loss - per_step_loss) < epsilon;
+
+	if (!mean_matches) {
+		std::cerr << COLOR_RED << "  [FAIL] Mean loss reduction mismatch: got " << reduced_mean_loss
+				  << ", expected " << per_step_loss << COLOR_RESET << "\n";
+		free_gpu_activations(&activations);
+		return false;
+	}
+	std::cout << COLOR_GREEN << "  [PASS] Mean Loss Reduction: " << reduced_mean_loss
+			  << " matches per-step target (" << per_step_loss << ")" << COLOR_RESET << "\n";
+
+	// 3. Verify Health Invariants (No NaNs/Infs)
+	bool anomaly_free = check_scalar_bounds(host_telemetry[telemetry_nonfinite], 0.0f, 0.0f,
+											"Non-finite Count");
+
+	free_gpu_activations(&activations);
+	return sum_matches && mean_matches && anomaly_free;
 }
 
 int main() {
