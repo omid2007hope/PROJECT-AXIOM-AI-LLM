@@ -4,12 +4,12 @@ BasedOnStyle: Google
 Language: Cpp
 Standard: c++20
 
-# --- Indentation & Tabs (Linus Torvalds 8-Char Tab Standard) ---
-IndentWidth: 8
-TabWidth: 8
+# --- Indentation & Tabs (4-Space Standard) ---
+IndentWidth: 4
+TabWidth: 4
 UseTab: Always
-ContinuationIndentWidth: 8
-AccessModifierOffset: -8
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
 IndentCaseLabels: true
 
 # --- Braces & Control Structures ---
@@ -44,11 +44,11 @@ AlignOperands: Align
 AlignTrailingComments: true
 
 # --- Functions & Arguments ---
-AllowShortFunctionsOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
-BinPackArguments: false
-BinPackParameters: false
+BinPackArguments: true
+BinPackParameters: true
 AllowAllParametersOfDeclarationOnNextLine: true
 AlwaysBreakTemplateDeclarations: Yes
 

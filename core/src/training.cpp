@@ -22,16 +22,13 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 	float learning_rate = optimizer.learning_rate;
 
 	if (portion.has_token_ids && portion.context_token_ids[buffer_index] != nullptr &&
-	    gpu_embeddings.d_table != nullptr) {
+		gpu_embeddings.d_table != nullptr) {
 		const size_t sequence_length = std::min<size_t>(portion.context_window_size, 2048);
 
 		// Transfer token IDs across PCIe per context window
-		if (!upload_tokens_to_gpu(portion.context_token_ids[buffer_index],
-					  sequence_length,
-					  portion.target_tokens[buffer_index],
-					  portion.target_elements,
-					  &gpu_portion,
-					  buffer_index)) {
+		if (!upload_tokens_to_gpu(portion.context_token_ids[buffer_index], sequence_length,
+								  portion.target_tokens[buffer_index], portion.target_elements,
+								  &gpu_portion, buffer_index)) {
 			std::cerr << "[AI Brain] Failed to upload tokens to GPU.\n";
 			return TrainStatus::Failed;
 		}
@@ -41,24 +38,19 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 		if (enable_transformer) {
 			synchronize_stream(&gpu_portion, 1 - buffer_index);
 
-			const size_t model_dim =
-				embedding_dim > 0 ? embedding_dim : target_elements_y_total;
-			size_t heads =
-				(num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
+			const size_t model_dim = embedding_dim > 0 ? embedding_dim : target_elements_y_total;
+			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
 			if (model_dim / heads > 64 && model_dim % 64 == 0) {
 				heads = model_dim / 64;
 			}
 			const size_t feedforward_network_dimension =
-				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim)
-					? ffn_dimension
-					: (model_dim * 4);
+				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim) ? ffn_dimension
+																				: (model_dim * 4);
 
 			if (gpu_weights.d_query_weights == nullptr ||
-			    gpu_weights.transformer_dim != model_dim) {
-				if (!build_transformer_block(
-					    model_dim, heads, feedforward_network_dimension)) {
-					std::cerr
-						<< "[AI Brain] Failed to build transformer block.\n";
+				gpu_weights.transformer_dim != model_dim) {
+				if (!build_transformer_block(model_dim, heads, feedforward_network_dimension)) {
+					std::cerr << "[AI Brain] Failed to build transformer block.\n";
 					return TrainStatus::Failed;
 				}
 			}
@@ -68,74 +60,55 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 
 			for (size_t i = 0; i < gpu_portion.context_ptr; ++i) {
 				if (gpu_portion.context_elements != input_elements_x_total ||
-				    !gpu_portion.d_context_window[i]) {
+					!gpu_portion.d_context_window[i]) {
 					if (gpu_portion.d_context_window[i]) {
-						free_vram(gpu_portion.d_context_window[i],
-							  gpu_portion.stream[i]);
+						free_vram(gpu_portion.d_context_window[i], gpu_portion.stream[i]);
 					}
 					gpu_portion.d_context_window[i] = allocate_vram(
-						input_elements_x_total * sizeof(std::bfloat16_t),
-						gpu_portion.stream[i]);
+						input_elements_x_total * sizeof(std::bfloat16_t), gpu_portion.stream[i]);
 				}
 			}
 			gpu_portion.context_elements = input_elements_x_total;
 
 			if (!gpu_portion.d_hidden_state[buffer_index]) {
-				gpu_portion.d_hidden_state[buffer_index] = allocate_vram(
-					sequence_elements * sizeof(std::bfloat16_t), stream);
+				gpu_portion.d_hidden_state[buffer_index] =
+					allocate_vram(sequence_elements * sizeof(std::bfloat16_t), stream);
 			}
 			if (!gpu_portion.d_dx[buffer_index]) {
 				gpu_portion.d_dx[buffer_index] =
 					allocate_vram(sequence_elements * sizeof(float), stream);
 			}
 			if (!gpu_portion.d_context_window[buffer_index] ||
-			    !gpu_portion.d_hidden_state[buffer_index] ||
-			    !gpu_portion.d_dx[buffer_index]) {
-				std::cerr
-					<< "[AI Brain] Failed to allocate sequence buffers in VRAM.\n";
+				!gpu_portion.d_hidden_state[buffer_index] || !gpu_portion.d_dx[buffer_index]) {
+				std::cerr << "[AI Brain] Failed to allocate sequence buffers in VRAM.\n";
 				return TrainStatus::Failed;
 			}
 
 			// Gather [M = S x D] token embeddings into context and saved hidden_state buffers
 			launch_gather_embeddings_batched(
 				static_cast<const uint32_t*>(gpu_portion.d_token_ids[buffer_index]),
-				gpu_embeddings.d_table,
-				gpu_portion.d_context_window[buffer_index],
-				static_cast<uint32_t>(sequence_length),
-				static_cast<uint32_t>(model_dim),
-				static_cast<uint32_t>(vocab_size),
-				stream);
+				gpu_embeddings.d_table, gpu_portion.d_context_window[buffer_index],
+				static_cast<uint32_t>(sequence_length), static_cast<uint32_t>(model_dim),
+				static_cast<uint32_t>(vocab_size), stream);
 			launch_gather_embeddings_batched(
 				static_cast<const uint32_t*>(gpu_portion.d_token_ids[buffer_index]),
-				gpu_embeddings.d_table,
-				gpu_portion.d_hidden_state[buffer_index],
-				static_cast<uint32_t>(sequence_length),
-				static_cast<uint32_t>(model_dim),
-				static_cast<uint32_t>(vocab_size),
-				stream);
+				gpu_embeddings.d_table, gpu_portion.d_hidden_state[buffer_index],
+				static_cast<uint32_t>(sequence_length), static_cast<uint32_t>(model_dim),
+				static_cast<uint32_t>(vocab_size), stream);
 
 			// Sequence-parallel Transformer Forward Block (M = S)
-			if (!transformer_forward_block(gpu_portion.d_context_window[buffer_index],
-						       &gpu_weights,
-						       &gpu_activations,
-						       sequence_length,
-						       model_dim,
-						       heads,
-						       feedforward_network_dimension,
-						       stream)) {
+			if (!transformer_forward_block(gpu_portion.d_context_window[buffer_index], &gpu_weights,
+										   &gpu_activations, sequence_length, model_dim, heads,
+										   feedforward_network_dimension, stream)) {
 				std::cerr << "[AI Brain] Transformer forward block failed.\n";
 				return TrainStatus::Failed;
 			}
 
 			// Preserve transformed [S x D] activations during readout forward projection
 			gpu_portion.token_ids_active[buffer_index] = false;
-			const bool fwd_ok = forward_pass_with_embeddings(&gpu_portion,
-									 &gpu_embeddings,
-									 &gpu_weights,
-									 &gpu_activations,
-									 input_elements_x_total,
-									 target_elements_y_total,
-									 buffer_index);
+			const bool fwd_ok = forward_pass_with_embeddings(
+				&gpu_portion, &gpu_embeddings, &gpu_weights, &gpu_activations,
+				input_elements_x_total, target_elements_y_total, buffer_index);
 			gpu_portion.token_ids_active[buffer_index] = true;
 			if (!fwd_ok) {
 				std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
@@ -143,90 +116,57 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 			}
 
 			// Readout loss, telemetry, and upstream gradient d_dx computation
-			if (!backward_pass_with_embeddings(&gpu_portion,
-							   &gpu_embeddings,
-							   &gpu_weights,
-							   &gpu_activations,
-							   input_elements_x_total,
-							   target_elements_y_total,
-							   learning_rate,
-							   buffer_index,
-							   true /* use_adamw */)) {
+			if (!backward_pass_with_embeddings(&gpu_portion, &gpu_embeddings, &gpu_weights,
+											   &gpu_activations, input_elements_x_total,
+											   target_elements_y_total, learning_rate, buffer_index,
+											   true /* use_adamw */)) {
 				std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
 
 			// Sequence-parallel Transformer Backward Block (M = S)
-			if (!transformer_backward_block(gpu_portion.d_dx[buffer_index],
-							nullptr,
-							gpu_portion.d_hidden_state[buffer_index],
-							&gpu_weights,
-							&gpu_activations,
-							sequence_length,
-							model_dim,
-							heads,
-							feedforward_network_dimension,
-							learning_rate,
-							stream)) {
+			if (!transformer_backward_block(gpu_portion.d_dx[buffer_index], nullptr,
+											gpu_portion.d_hidden_state[buffer_index], &gpu_weights,
+											&gpu_activations, sequence_length, model_dim, heads,
+											feedforward_network_dimension, learning_rate, stream)) {
 				std::cerr << "[AI Brain] Transformer backward block failed.\n";
 				return TrainStatus::Failed;
 			}
 		} else {
 			// Launch CUDA gather kernel + CUTLASS EVT GEMM forward pass
-			if (!forward_pass_with_embeddings(&gpu_portion,
-							  &gpu_embeddings,
-							  &gpu_weights,
-							  &gpu_activations,
-							  input_elements_x_total,
-							  target_elements_y_total,
-							  buffer_index)) {
+			if (!forward_pass_with_embeddings(&gpu_portion, &gpu_embeddings, &gpu_weights,
+											  &gpu_activations, input_elements_x_total,
+											  target_elements_y_total, buffer_index)) {
 				std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
 
 			// Launch CUDA fused AdamW + backward scatter embedding update
-			if (!backward_pass_with_embeddings(&gpu_portion,
-							   &gpu_embeddings,
-							   &gpu_weights,
-							   &gpu_activations,
-							   input_elements_x_total,
-							   target_elements_y_total,
-							   learning_rate,
-							   buffer_index,
-							   true /* use_adamw */)) {
+			if (!backward_pass_with_embeddings(&gpu_portion, &gpu_embeddings, &gpu_weights,
+											   &gpu_activations, input_elements_x_total,
+											   target_elements_y_total, learning_rate, buffer_index,
+											   true /* use_adamw */)) {
 				std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
 		}
 	} else {
 		// Fallback for float-based training
-		if (!upload_to_gpu(portion.context_window_tokens[buffer_index],
-				   portion.all_elements,
-				   portion.target_tokens[buffer_index],
-				   portion.target_elements,
-				   &gpu_portion,
-				   buffer_index)) {
+		if (!upload_to_gpu(portion.context_window_tokens[buffer_index], portion.all_elements,
+						   portion.target_tokens[buffer_index], portion.target_elements,
+						   &gpu_portion, buffer_index)) {
 			std::cerr << "[AI Brain] Failed to upload portion to GPU.\n";
 			return TrainStatus::Failed;
 		}
 
-		if (!forward_pass(&gpu_portion,
-				  &gpu_weights,
-				  &gpu_activations,
-				  input_elements_x_total,
-				  target_elements_y_total,
-				  buffer_index)) {
+		if (!forward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_elements_x_total,
+						  target_elements_y_total, buffer_index)) {
 			std::cerr << "[AI Brain] Forward pass failed.\n";
 			return TrainStatus::Failed;
 		}
 
-		if (!backward_pass(&gpu_portion,
-				   &gpu_weights,
-				   &gpu_activations,
-				   input_elements_x_total,
-				   target_elements_y_total,
-				   learning_rate,
-				   buffer_index)) {
+		if (!backward_pass(&gpu_portion, &gpu_weights, &gpu_activations, input_elements_x_total,
+						   target_elements_y_total, learning_rate, buffer_index)) {
 			std::cerr << "[AI Brain] Backward pass failed.\n";
 			return TrainStatus::Failed;
 		}
@@ -247,8 +187,7 @@ bool AI::save_weights(const std::string& path) {
 	// 2. Download latest trained weights and embeddings from GPU if allocated
 	if (gpu_weights.d_weights_master != nullptr) {
 		if (!download_weights()) {
-			std::cerr
-				<< "[AI Brain] Failed to download weights from GPU before saving.\n";
+			std::cerr << "[AI Brain] Failed to download weights from GPU before saving.\n";
 			return false;
 		}
 	}
@@ -264,7 +203,7 @@ bool AI::save_weights(const std::string& path) {
 	header.embedding_dim = embedding_dim;
 
 	if (header.weight_count != input_elements_x_total * target_elements_y_total ||
-	    header.bias_count != target_elements_y_total) {
+		header.bias_count != target_elements_y_total) {
 		std::cerr << "[AI Brain] Weight or bias dimension mismatch during serialization.\n";
 		return false;
 	}
@@ -301,23 +240,20 @@ bool AI::save_weights(const std::string& path) {
 	std::string temp_path = path + ".tmp";
 	std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
 	if (!out.is_open()) {
-		std::cerr << "[AI Brain] Failed to open temporary file for writing: " << temp_path
-			  << "\n";
+		std::cerr << "[AI Brain] Failed to open temporary file for writing: " << temp_path << "\n";
 		return false;
 	}
 
 	out.write(reinterpret_cast<const char*>(&header), sizeof(header));
 	out.write(reinterpret_cast<const char*>(host_weights.data()),
-		  header.weight_count * sizeof(float));
-	out.write(reinterpret_cast<const char*>(host_bias.data()),
-		  header.bias_count * sizeof(float));
+			  header.weight_count * sizeof(float));
+	out.write(reinterpret_cast<const char*>(host_bias.data()), header.bias_count * sizeof(float));
 	out.write(reinterpret_cast<const char*>(host_embeddings.data()),
-		  header.vocab_size * header.embedding_dim * sizeof(float));
+			  header.vocab_size * header.embedding_dim * sizeof(float));
 
 	out.flush();
 	if (!out.good()) {
-		std::cerr << "[AI Brain] Stream error while writing weights to: " << temp_path
-			  << "\n";
+		std::cerr << "[AI Brain] Stream error while writing weights to: " << temp_path << "\n";
 		out.close();
 		std::error_code ec;
 		std::filesystem::remove(temp_path, ec);
@@ -333,20 +269,20 @@ bool AI::save_weights(const std::string& path) {
 	std::filesystem::rename(temp_path, path, ec);
 	if (ec) {
 		ec.clear();
-		std::filesystem::copy_file(
-			temp_path, path, std::filesystem::copy_options::overwrite_existing, ec);
+		std::filesystem::copy_file(temp_path, path,
+								   std::filesystem::copy_options::overwrite_existing, ec);
 		std::filesystem::remove(temp_path, ec);
 		if (ec) {
-			std::cerr << "[AI Brain] Failed to rename/copy " << temp_path << " to "
-				  << path << ": " << ec.message() << "\n";
+			std::cerr << "[AI Brain] Failed to rename/copy " << temp_path << " to " << path << ": "
+					  << ec.message() << "\n";
 			return false;
 		}
 	}
 
 	std::cout << "[AI Brain] Saved " << header.weight_count << " weights, " << header.bias_count
-		  << " biases, and " << (header.vocab_size * header.embedding_dim)
-		  << " embeddings to " << path << "\n"
-		  << std::flush;
+			  << " biases, and " << (header.vocab_size * header.embedding_dim) << " embeddings to "
+			  << path << "\n"
+			  << std::flush;
 	return true;
 }
 
@@ -361,8 +297,10 @@ bool AI::read_loss(double& mean_loss, size_t& steps) {
 }
 
 bool AI::read_telemetry(TrainingTelemetry& telemetry) {
+	// index:  0 1 2 3 4
 	float slots[telemetry_slot_count] = {};
 
+	// unable to download data from GPU
 	if (!download_telemetry(&gpu_activations, slots)) {
 		return false;
 	}
@@ -370,15 +308,15 @@ bool AI::read_telemetry(TrainingTelemetry& telemetry) {
 	telemetry.steps = pending_steps;
 	pending_steps = 0;
 
-	const double step_count =
-		(telemetry.steps > 0) ? static_cast<double>(telemetry.steps) : 1.0;
+	const double step_count = (telemetry.steps > 0) ? static_cast<double>(telemetry.steps) : 1.0;
+
 	const double output_count =
 		static_cast<double>((telemetry.steps > 0 ? telemetry.steps : 1) *
-				    (target_elements_y_total > 0 ? target_elements_y_total : 1));
+							(target_elements_y_total > 0 ? target_elements_y_total : 1));
 
-	telemetry.mean_loss = (telemetry.steps > 0)
-				      ? static_cast<double>(slots[telemetry_loss]) / step_count
-				      : 0.0;
+	telemetry.mean_loss =
+		(telemetry.steps > 0) ? static_cast<double>(slots[telemetry_loss]) / step_count : 0.0;
+
 	telemetry.gradient_norm =
 		std::sqrt(static_cast<double>(slots[telemetry_gradient_square]) / step_count);
 	telemetry.nonfinite_count = static_cast<size_t>(slots[telemetry_nonfinite]);
@@ -389,11 +327,10 @@ bool AI::read_telemetry(TrainingTelemetry& telemetry) {
 	return true;
 }
 
-bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
-			     size_t window_size,
-			     double& validation_loss) {
+bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, size_t window_size,
+							 double& validation_loss) {
 	if (window_size == 0 || validation_tokens.size() <= window_size ||
-	    gpu_embeddings.d_table == nullptr) {
+		gpu_embeddings.d_table == nullptr) {
 		return false;
 	}
 
@@ -406,7 +343,7 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
 	const size_t vocab_bound = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
 
 	std::vector<std::bfloat16_t> dummy_target(target_elements_y_total,
-						  static_cast<std::bfloat16_t>(0.0f));
+											  static_cast<std::bfloat16_t>(0.0f));
 	std::vector<float> probabilities(vocab_bound, 0.0f);
 
 	double total_loss = 0.0;
@@ -424,68 +361,45 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens,
 			continue;
 		}
 
-		if (!upload_tokens_to_gpu(validation_tokens.data() + start,
-					  window_size,
-					  dummy_target.data(),
-					  dummy_target.size(),
-					  &gpu_portion,
-					  0)) {
+		if (!upload_tokens_to_gpu(validation_tokens.data() + start, window_size,
+								  dummy_target.data(), dummy_target.size(), &gpu_portion, 0)) {
 			return false;
 		}
 
 		if (enable_transformer && gpu_weights.d_query_weights != nullptr &&
-		    gpu_portion.d_context_window[0] != nullptr) {
-			const size_t model_dim =
-				embedding_dim > 0 ? embedding_dim : target_elements_y_total;
-			size_t heads =
-				(num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
+			gpu_portion.d_context_window[0] != nullptr) {
+			const size_t model_dim = embedding_dim > 0 ? embedding_dim : target_elements_y_total;
+			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
 			if (model_dim / heads > 64 && model_dim % 64 == 0) {
 				heads = model_dim / 64;
 			}
 			const size_t feedforward_network_dimension =
-				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim)
-					? ffn_dimension
-					: (model_dim * 4);
+				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim) ? ffn_dimension
+																				: (model_dim * 4);
 
 			launch_gather_embeddings_batched(
-				static_cast<const uint32_t*>(gpu_portion.d_token_ids[0]),
-				gpu_embeddings.d_table,
-				gpu_portion.d_context_window[0],
-				static_cast<uint32_t>(window_size),
-				static_cast<uint32_t>(model_dim),
-				static_cast<uint32_t>(vocab_size),
+				static_cast<const uint32_t*>(gpu_portion.d_token_ids[0]), gpu_embeddings.d_table,
+				gpu_portion.d_context_window[0], static_cast<uint32_t>(window_size),
+				static_cast<uint32_t>(model_dim), static_cast<uint32_t>(vocab_size),
 				gpu_portion.stream[0]);
 
-			if (!transformer_forward_block(gpu_portion.d_context_window[0],
-						       &gpu_weights,
-						       &gpu_activations,
-						       window_size,
-						       model_dim,
-						       heads,
-						       feedforward_network_dimension,
-						       gpu_portion.stream[0])) {
+			if (!transformer_forward_block(gpu_portion.d_context_window[0], &gpu_weights,
+										   &gpu_activations, window_size, model_dim, heads,
+										   feedforward_network_dimension, gpu_portion.stream[0])) {
 				return false;
 			}
 
 			gpu_portion.token_ids_active[0] = false;
-			const bool fwd_ok = forward_pass_with_embeddings(&gpu_portion,
-									 &gpu_embeddings,
-									 &gpu_weights,
-									 &gpu_activations,
-									 input_elements_x_total,
-									 target_elements_y_total,
-									 0);
+			const bool fwd_ok = forward_pass_with_embeddings(
+				&gpu_portion, &gpu_embeddings, &gpu_weights, &gpu_activations,
+				input_elements_x_total, target_elements_y_total, 0);
 			gpu_portion.token_ids_active[0] = true;
 			if (!fwd_ok) {
 				return false;
 			}
-		} else if (!forward_pass_with_embeddings(&gpu_portion,
-							 &gpu_embeddings,
-							 &gpu_weights,
-							 &gpu_activations,
-							 input_elements_x_total,
-							 target_elements_y_total,
-							 0)) {
+		} else if (!forward_pass_with_embeddings(&gpu_portion, &gpu_embeddings, &gpu_weights,
+												 &gpu_activations, input_elements_x_total,
+												 target_elements_y_total, 0)) {
 			return false;
 		}
 
