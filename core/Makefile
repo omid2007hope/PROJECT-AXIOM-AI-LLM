@@ -30,14 +30,16 @@ APP_OBJS  = $(ALL_OBJS)
 TEST_OBJS = $(ALL_OBJS)
 
 # ─── Output targets ───────────────────────────────────────────────────────────
-APP_TARGET  = app.exe
-TEST_TARGET = test.exe
-DLL_TARGET  = build/axiom_core.dll
-DLL_SRCS    = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp $(UTIL_SRCS)
-DLL_OBJS    = $(DLL_SRCS:.cpp=.o)
+APP_TARGET       = app.exe
+TEST_TARGET      = test.exe
+TEST_LOSS_TARGET = test_loss.exe
+TEST_LOSS_SRC    = test/CUDA/test_loss.cu
+DLL_TARGET       = build/axiom_core.dll
+DLL_SRCS         = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp $(UTIL_SRCS)
+DLL_OBJS         = $(DLL_SRCS:.cpp=.o)
 
 # ─── Default: compile everything ──────────────────────────────────────────────
-all: $(APP_TARGET) $(TEST_TARGET)
+all: $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET)
 
 CUDA_OBJS    = $(CUDA_SRCS:.cu=.cu.obj)
 
@@ -70,6 +72,12 @@ dll: $(DLL_OBJS) $(CUDA_DLL)
 	@mkdir -p build ../build
 	$(CXX) $(CXXFLAGS) -shared -o $(DLL_TARGET) $(DLL_OBJS) $(CUDA_LINK) -lpsapi -lws2_32
 	@cp -f $(DLL_TARGET) ../build/axiom_core.dll
+
+# ─── CUDA Kernel Loss Test Binary ─────────────────────────────────────────────
+test_loss: $(TEST_LOSS_TARGET)
+
+$(TEST_LOSS_TARGET): $(TEST_LOSS_SRC) $(CUDA_DLL)
+	$(NVCC) $(NVCCFLAGS) -I$(SRC_DIR) $< $(if $(wildcard cuda_transfer.lib),cuda_transfer.lib,) -o $@
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 clean:

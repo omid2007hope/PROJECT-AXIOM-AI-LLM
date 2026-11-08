@@ -55,6 +55,8 @@ bool test_inference();
 bool test_identifier();
 bool test_decompressor();
 
+bool test_all_backward_pass_individually();
+
 // *****************************************************************************
 // Configuration: the single source of truth for everything the backend uses
 // *****************************************************************************
