@@ -168,21 +168,11 @@ __global__ static void backward_pass_adamw_kernel(
 			x_val = 0.0f;
 		}
 
-		float g = dz * x_val;
-		float m = beta1 * W_m[i] + (1.0f - beta1) * g;
-		float v = beta2 * W_v[i] + (1.0f - beta2) * g * g;
-		W_m[i] = m;
-		W_v[i] = v;
-
-		float step_f = static_cast<float>(step);
-		float bc1 = 1.0f - powf(beta1, step_f);
-		float bc2 = 1.0f - powf(beta2, step_f);
-		float m_hat = m / (bc1 > 1e-7f ? bc1 : 1.0f);
-		float v_hat = v / (bc2 > 1e-7f ? bc2 : 1.0f);
-
-		float inv_fan_in = 1.0f / static_cast<float>(in_dim > 0 ? in_dim : 1);
-		float weight_lr = learning_rate * inv_fan_in;
-		float update = m_hat / (sqrtf(v_hat) + eps) + weight_decay * W_master[i];
+		float out_dim_f = static_cast<float>(out_dim > 0 ? out_dim : 1);
+		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
+		float scaled_dz = dz * sqrtf(out_dim_f);
+		float weight_lr = (1.5f * learning_rate) / sqrtf(in_dim_f);
+		float update = scaled_dz * x_val + weight_decay * W_master[i];
 		float w_val = W_master[i] - weight_lr * update;
 
 		if (isfinite(w_val)) {
@@ -192,16 +182,22 @@ __global__ static void backward_pass_adamw_kernel(
 		}
 
 		if (col == 0) {
+			float eff_beta1 = 0.5f * beta1;
+			float step_f = static_cast<float>(step);
+			float bc1 = 1.0f - powf(eff_beta1, step_f);
+			float bc2 = 1.0f - powf(beta2, step_f);
+			float rms_floor = 1.0f / sqrtf(out_dim_f);
 			float bg = dz;
-			float bm = beta1 * b_m[row] + (1.0f - beta1) * bg;
+			float bm = eff_beta1 * b_m[row] + (1.0f - eff_beta1) * bg;
 			float bv = beta2 * b_v[row] + (1.0f - beta2) * bg * bg;
 			b_m[row] = bm;
 			b_v[row] = bv;
 
 			float bm_hat = bm / (bc1 > 1e-7f ? bc1 : 1.0f);
 			float bv_hat = bv / (bc2 > 1e-7f ? bc2 : 1.0f);
-			float bias_lr = learning_rate / sqrtf(static_cast<float>(out_dim > 0 ? out_dim : 1));
-			float b_update = bm_hat / (sqrtf(bv_hat) + eps) + weight_decay * b_master[row];
+			float bias_lr = learning_rate;
+			float b_update =
+				bm_hat / (sqrtf(bv_hat) + rms_floor + eps) + weight_decay * b_master[row];
 			float b_val = b_master[row] - bias_lr * b_update;
 
 			if (isfinite(b_val)) {
@@ -297,17 +293,51 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 	}
 
 	float grad_logit = p - (v == target_tok_id ? 1.0f : 0.0f);
-	float head_lr = learning_rate / sqrtf(static_cast<float>(emb_dim > 0 ? emb_dim : 1));
+	float emb_dim_f = static_cast<float>(emb_dim > 0 ? emb_dim : 1);
+	float head_lr = (4.0f * learning_rate) / sqrtf(emb_dim_f);
+	float bound_limit = 4.0f / sqrtf(emb_dim_f);
 	size_t row_offset = v * emb_dim;
+
+	__shared__ float s_y_sq[32];
+	float local_y_sq = 0.0f;
+	for (size_t d = threadIdx.x; d < emb_dim; d += blockDim.x) {
+		float y_val = __bfloat162float(y[d]);
+		if (isfinite(y_val)) {
+			local_y_sq += y_val * y_val;
+		}
+	}
+	for (int offset = 16; offset > 0; offset /= 2) {
+		local_y_sq += __shfl_down_sync(0xffffffff, local_y_sq, offset);
+	}
+	int lane = threadIdx.x % 32;
+	int wid = threadIdx.x / 32;
+	if (lane == 0) {
+		s_y_sq[wid] = local_y_sq;
+	}
+	__syncthreads();
+	if (wid == 0) {
+		float warp_sq = (lane < (blockDim.x / 32)) ? s_y_sq[lane] : 0.0f;
+		for (int offset = 16; offset > 0; offset /= 2) {
+			warp_sq += __shfl_down_sync(0xffffffff, warp_sq, offset);
+		}
+		if (lane == 0) {
+			float mean_y_sq = warp_sq / emb_dim_f;
+			s_y_sq[0] = fmaxf(1.0f, sqrtf(mean_y_sq));
+		}
+	}
+	__syncthreads();
+	float rms_y = s_y_sq[0];
 
 	for (size_t d = threadIdx.x; d < emb_dim; d += blockDim.x) {
 		float y_val = __bfloat162float(y[d]);
 		if (isfinite(y_val)) {
-			float grad_e = fmaxf(-1.0f, fminf(1.0f, grad_logit * y_val));
+			float norm_y = y_val / rms_y;
+			float grad_e = fmaxf(-1.0f, fminf(1.0f, grad_logit * norm_y));
 			size_t table_idx = row_offset + d;
-			float new_val = table_master[table_idx] - head_lr * grad_e;
+			float cur_val = table_master[table_idx];
+			float new_val = cur_val - head_lr * (grad_e + 0.01f * cur_val);
 			if (isfinite(new_val)) {
-				new_val = fmaxf(-5.0f, fminf(5.0f, new_val));
+				new_val = fmaxf(-bound_limit, fminf(bound_limit, new_val));
 				table_master[table_idx] = new_val;
 				table[table_idx] = __float2bfloat16(new_val);
 			}
@@ -332,8 +362,9 @@ __global__ static void backward_scatter_embeddings_kernel(
 		// PAD (ID 0) is a fixed zero vector and never learns
 		if (tok_id != 0 && tok_id < vocab_size) {
 			size_t table_idx = tok_id * embedding_dim + dim_idx;
-			float inv_tokens = 1.0f / static_cast<float>(num_tokens > 0 ? num_tokens : 1);
-			float delta = -learning_rate * inv_tokens * dx_in[j];
+			float inv_sqrt_tokens =
+				1.0f / sqrtf(static_cast<float>(num_tokens > 0 ? num_tokens : 1));
+			float delta = -learning_rate * inv_sqrt_tokens * dx_in[j];
 			if (isfinite(delta)) {
 				atomicAdd(&table_master[table_idx], delta);
 			}
@@ -355,16 +386,18 @@ __global__ static void sync_scattered_embeddings(const uint32_t* __restrict__ to
 		uint32_t tok_id = token_ids[token_idx];
 
 		if (tok_id != 0 && tok_id < vocab_size) {
+			float bound_limit =
+				4.0f / sqrtf(static_cast<float>(embedding_dim > 0 ? embedding_dim : 1));
 			size_t table_idx = tok_id * embedding_dim + dim_idx;
 			float val = table_master[table_idx];
 			if (!isfinite(val)) {
 				val = 0.0f;
 				table_master[table_idx] = val;
-			} else if (val > 5.0f) {
-				val = 5.0f;
+			} else if (val > bound_limit) {
+				val = bound_limit;
 				table_master[table_idx] = val;
-			} else if (val < -5.0f) {
-				val = -5.0f;
+			} else if (val < -bound_limit) {
+				val = -bound_limit;
 				table_master[table_idx] = val;
 			}
 			table[table_idx] = __float2bfloat16(val);
@@ -389,18 +422,12 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 	cudaStream_t stream = (cudaStream_t)gpu_portion->stream[buffer_index];
 	gpu_weights->step_count += 1;
 
-	// Lazy allocation of AdamW momentum & variance buffers if requested
-	if (use_adamw && (!gpu_weights->d_weights_m || !gpu_weights->d_weights_v)) {
-		size_t w_elems = input_dim * output_dim;
+	// Lazy allocation of AdamW bias momentum & variance buffers if requested
+	if (use_adamw && (!gpu_weights->d_bias_m || !gpu_weights->d_bias_v)) {
 		size_t b_elems = output_dim;
-		gpu_weights->d_weights_m = allocate_vram(w_elems * sizeof(float), stream);
-		gpu_weights->d_weights_v = allocate_vram(w_elems * sizeof(float), stream);
 		gpu_weights->d_bias_m = allocate_vram(b_elems * sizeof(float), stream);
 		gpu_weights->d_bias_v = allocate_vram(b_elems * sizeof(float), stream);
-		if (gpu_weights->d_weights_m && gpu_weights->d_weights_v && gpu_weights->d_bias_m &&
-			gpu_weights->d_bias_v) {
-			cudaMemsetAsync(gpu_weights->d_weights_m, 0, w_elems * sizeof(float), stream);
-			cudaMemsetAsync(gpu_weights->d_weights_v, 0, w_elems * sizeof(float), stream);
+		if (gpu_weights->d_bias_m && gpu_weights->d_bias_v) {
 			cudaMemsetAsync(gpu_weights->d_bias_m, 0, b_elems * sizeof(float), stream);
 			cudaMemsetAsync(gpu_weights->d_bias_v, 0, b_elems * sizeof(float), stream);
 		} else {
@@ -478,7 +505,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 
 	Grid grid(input_dim * output_dim);
 
-	if (use_adamw && gpu_weights->d_weights_m && gpu_weights->d_weights_v) {
+	if (use_adamw && gpu_weights->d_bias_m && gpu_weights->d_bias_v) {
 		constexpr float beta1 = 0.9f;
 		constexpr float beta2 = 0.999f;
 		constexpr float eps = 1e-8f;

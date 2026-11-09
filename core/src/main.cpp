@@ -1356,7 +1356,7 @@ bool execute_training_session(
 	bool developer_mode, size_t max_steps, bool is_interactive, bool auto_archive, bool auto_purge,
 	uint32_t min_frequency = 3, double target_stop_loss = 2.0) {
 	parser.developer_mode = developer_mode;
-	ai.enable_transformer = true;
+	ai.enable_transformer = false;
 
 	if (mode != AppMode::BulkTrain && std::filesystem::exists(vocab_path)) {
 		std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
@@ -1427,7 +1427,9 @@ bool execute_training_session(
 	// Multimodal pipeline preview: demonstrate transformation of initial data items
 	const size_t preview_count = std::min<size_t>(3, input.tokenized_data.size());
 	if (preview_count > 0) {
-		parser.build_embedding_table(input);
+		if (ai.host_embeddings.empty()) {
+			parser.build_embedding_table(input);
+		}
 		std::cout << "\n--- Multimodal Tokenization & Embedding Pipeline Preview ---\n";
 		for (size_t i = 0; i < preview_count; ++i) {
 			const uint32_t token_id = input.tokenized_data[i];

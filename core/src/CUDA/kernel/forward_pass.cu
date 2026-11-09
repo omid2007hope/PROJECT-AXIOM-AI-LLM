@@ -177,7 +177,10 @@ __global__ static void gather_embeddings_kernel(const uint32_t* __restrict__ tok
 		size_t dim_idx = idx % embedding_dim;
 		uint32_t tok_id = token_ids[token_idx];
 		uint32_t safe_id = (tok_id < vocab_size) ? tok_id : 1u;
-		context_window[idx] = table[safe_id * embedding_dim + dim_idx];
+		float emb_val = __bfloat162float(table[safe_id * embedding_dim + dim_idx]);
+		float lag = static_cast<float>(num_tokens - token_idx);
+		float recency_weight = rsqrtf(lag * sqrtf(lag));
+		context_window[idx] = __float2bfloat16(emb_val * recency_weight);
 	}
 }
 
@@ -432,7 +435,7 @@ __global__ static void rms_norm_forward_kernel(__nv_bfloat16* __restrict__ x,
 	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
 		float val = __bfloat162float(x[i]);
 		float norm_val = val * inv_rms;
-		norm_val = fmaxf(-10.0f, fminf(10.0f, norm_val));
+		norm_val = fmaxf(-30.0f, fminf(30.0f, norm_val));
 		x[i] = __float2bfloat16(norm_val);
 	}
 }

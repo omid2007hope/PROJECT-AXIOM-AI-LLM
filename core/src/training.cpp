@@ -125,7 +125,8 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 			}
 
 			// Sequence-parallel Transformer Backward Block (M = S)
-			if (!transformer_backward_block(gpu_portion.d_dx[buffer_index], nullptr,
+			if (!transformer_backward_block(gpu_portion.d_dx[buffer_index],
+											gpu_portion.d_dx[buffer_index],
 											gpu_portion.d_hidden_state[buffer_index], &gpu_weights,
 											&gpu_activations, sequence_length, model_dim, heads,
 											feedforward_network_dimension, learning_rate, stream)) {

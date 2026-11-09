@@ -29,7 +29,7 @@ constexpr size_t token_dim = 1024;	    // GPT-2 scale (Must be multiple of 64)
 constexpr size_t context_window_size = 256; // Doubled to capture paragraph-level context
 
 // AdamW Optimizer Settings
-constexpr float learning_rate = 0.00003f; // Scaled down for stable high-dimensional convergence
+constexpr float learning_rate = 0.001f; // Base AdamW rate (fan-in scaled inside CUDA kernels)
 
 // How many training steps pass between two loss reports
 constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU synchronization stalls
