@@ -17,6 +17,7 @@
 #include <conio.h> // For _kbhit() and _getch()
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <io.h> // For _isatty() and _fileno()
 #include <iomanip>
@@ -296,7 +297,7 @@ AppMode collect_user_input(Input& input) {
 		std::cout << "======================================\n"
 				  << "           Welcome to AXIOM           \n"
 				  << "======================================\n"
-				  << "[1] Chat with Axiom (Native GQA LLM)\n"
+				  << "[1] Chat with Axiom\n"
 				  << "[2] Train it (Training)\n"
 				  << "[3] Run Tests\n"
 				  << "[4] Benchmark Hardware (Telemetry HUD)\n"
@@ -506,9 +507,10 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 }
 
 // *****************************************************************************
-// Direct Chat Engine (Native GQA Transformer)
+// Direct Chat Engine (Native GQA Transformer & Multimodal Perceptron)
 // *****************************************************************************
-void run_chat_engine(AI& ai, const std::filesystem::path& weights_path,
+void run_chat_engine(AI& ai, Parser& parser, Input& input,
+					 const std::filesystem::path& weights_path,
 					 const std::filesystem::path& vocab_path) {
 #ifdef _WIN32
 	HANDLE h_console = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -530,53 +532,140 @@ void run_chat_engine(AI& ai, const std::filesystem::path& weights_path,
 		"models/axiom_vocab.axiom", "../models/axiom_vocab.axiom", "training/vocab.axiom",
 		"../training/vocab.axiom",	"models/vocab.axiom",		   "../models/vocab.axiom"};
 
-	for (const auto& candidate : weights_candidates) {
-		if (std::filesystem::exists(candidate)) {
-			target_weights = candidate;
-			break;
+	if (!std::filesystem::exists(target_weights)) {
+		for (const auto& candidate : weights_candidates) {
+			if (std::filesystem::exists(candidate)) {
+				target_weights = candidate;
+				break;
+			}
 		}
 	}
 
-	for (const auto& candidate : vocab_candidates) {
-		if (std::filesystem::exists(candidate)) {
-			target_vocab = candidate;
-			break;
+	if (!std::filesystem::exists(target_vocab)) {
+		for (const auto& candidate : vocab_candidates) {
+			if (std::filesystem::exists(candidate)) {
+				target_vocab = candidate;
+				break;
+			}
 		}
 	}
 
-	if (!ai.has_transformer_model()) {
-		std::cout << "\033[90m[..] Streaming Axiom weights via Win32 DMA mmap...\033[0m\n"
+	bool is_transformer = false;
+	bool is_perceptron = false;
+	if (std::filesystem::exists(target_weights)) {
+		std::ifstream probe(target_weights, std::ios::binary);
+		if (probe.is_open()) {
+			uint32_t magic = 0;
+			probe.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+			if (magic == 0x4D4F4958U) {
+				is_transformer = true;
+			} else {
+				char magic_bytes[8] = {};
+				probe.seekg(0);
+				probe.read(magic_bytes, 8);
+				if (std::memcmp(magic_bytes, "AXIOM_V1", 8) == 0) {
+					is_perceptron = true;
+				}
+			}
+		}
+	}
+
+	if (is_transformer) {
+		if (!ai.has_transformer_model()) {
+			std::cout << "\033[90m[..] Streaming Axiom weights via Win32 DMA mmap...\033[0m\n"
+					  << std::flush;
+			bool vocab_ok = ai.load_vocabulary(target_vocab.string());
+			bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
+			if (!vocab_ok || !model_ok) {
+				std::cerr << "\033[31m[!] Failed to load transformer weights from: " << target_weights
+						  << "\033[0m\n"
+						  << std::flush;
+				return;
+			}
+			std::cout << "\033[32m[OK] Stacked GQA Transformer weights loaded into VRAM.\033[0m\n\n"
+					  << std::flush;
+		}
+
+		std::cout
+			<< "\033[1;36m========================================================================\033[0m\n"
+			<< "\033[1;37m       PROJECT AXIOM — Ada Lovelace sm_89 Direct GQA Transformer        \033[0m\n"
+			<< "\033[1;36m========================================================================\033[0m\n"
+			<< "  Model Architecture : \033[1;32mStacked Grouped Query Attention (GQA)\033[0m\n"
+			<< "  Layer Count        : \033[1;33m" << ai.config_.num_layers
+			<< " stacked blocks\033[0m (Hidden: " << ai.config_.hidden_dim
+			<< ", FFN: " << ai.config_.feedforward_network_dimension << ")\n"
+			<< "  Attention Heads    : \033[1;33m" << ai.config_.num_q_heads << " Q-Heads / "
+			<< ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim << ")\n"
+			<< "  Context Window     : \033[1;33m" << ai.config_.max_seq_len
+			<< " tokens\033[0m (Paged Dynamic KV-Cache)\n"
+			<< "  Compute Hardware   : \033[1;32m128-Bit uint4 Coalesced Memory + GPU Softmax/Argmax\033[0m\n"
+			<< "  Vocabulary Size    : \033[1;33m" << ai.config_.vocab_size
+			<< " tokens\033[0m (BPE Exact Code Preserved)\n"
+			<< "\033[1;36m------------------------------------------------------------------------\033[0m\n"
+			<< "\033[90mCommands: 'exit' to quit | 'clear' to reset context | 'temp <val>' for sampling\033[0m\n"
+			<< "\033[1;36m------------------------------------------------------------------------\033[0m\n";
+	} else if (is_perceptron) {
+		std::cout << "\033[90m[..] Loading trained Axiom weights from: "
+				  << target_weights.filename().string() << "...\033[0m\n"
 				  << std::flush;
-		bool vocab_ok = ai.load_vocabulary(target_vocab.string());
-		bool model_ok = ai.load_axiom_model_mmap(target_weights.string().c_str());
-		if (!vocab_ok || !model_ok) {
-			std::cerr << "\033[31m[!] Failed to load transformer weights from: " << target_weights
+		if (!ai.load_weights(target_weights.string())) {
+			std::cerr << "\033[31m[!] Failed to load model weights from: " << target_weights
 					  << "\033[0m\n"
 					  << std::flush;
 			return;
 		}
-		std::cout << "\033[32m[OK] Stacked GQA Transformer weights loaded into VRAM.\033[0m\n\n"
-				  << std::flush;
-	}
 
-	std::cout
-		<< "\033[1;36m========================================================================\033[0m\n"
-		<< "\033[1;37m       PROJECT AXIOM — Ada Lovelace sm_89 Direct GQA Transformer        \033[0m\n"
-		<< "\033[1;36m========================================================================\033[0m\n"
-		<< "  Model Architecture : \033[1;32mStacked Grouped Query Attention (GQA)\033[0m\n"
-		<< "  Layer Count        : \033[1;33m" << ai.config_.num_layers
-		<< " stacked blocks\033[0m (Hidden: " << ai.config_.hidden_dim
-		<< ", FFN: " << ai.config_.feedforward_network_dimension << ")\n"
-		<< "  Attention Heads    : \033[1;33m" << ai.config_.num_q_heads << " Q-Heads / "
-		<< ai.config_.num_kv_heads << " KV-Heads\033[0m (Head Dim: " << ai.config_.head_dim << ")\n"
-		<< "  Context Window     : \033[1;33m" << ai.config_.max_seq_len
-		<< " tokens\033[0m (Paged Dynamic KV-Cache)\n"
-		<< "  Compute Hardware   : \033[1;32m128-Bit uint4 Coalesced Memory + GPU Softmax/Argmax\033[0m\n"
-		<< "  Vocabulary Size    : \033[1;33m" << ai.config_.vocab_size
-		<< " tokens\033[0m (BPE Exact Code Preserved)\n"
-		<< "\033[1;36m------------------------------------------------------------------------\033[0m\n"
-		<< "\033[90mCommands: 'exit' to quit | 'clear' to reset context | 'temp <val>' for sampling\033[0m\n"
-		<< "\033[1;36m------------------------------------------------------------------------\033[0m\n";
+		if (!std::filesystem::exists(target_vocab)) {
+			const std::vector<std::filesystem::path> perceptron_vocab_candidates = {
+				"training/vocab.axiom",
+				"../training/vocab.axiom",
+				"vocab.axiom",
+				"../vocab.axiom",
+				"models/vocab.axiom",
+				"../models/vocab.axiom"};
+			for (const auto& cand : perceptron_vocab_candidates) {
+				if (std::filesystem::exists(cand)) {
+					target_vocab = cand;
+					break;
+				}
+			}
+		}
+
+		if (std::filesystem::exists(target_vocab)) {
+			std::cout << "\033[90m[..] Restoring vocabulary from: "
+					  << target_vocab.filename().string() << "...\033[0m\n"
+					  << std::flush;
+			if (parser.load_vocabulary(target_vocab, input)) {
+				if (input.next_text_id > 4) {
+					ai.active_vocab_size = input.next_text_id;
+				}
+			}
+		}
+
+		std::cout
+			<< "\033[1;36m========================================================================\033[0m\n"
+			<< "\033[1;37m     PROJECT AXIOM — Ada Lovelace sm_89 Multimodal Perceptron Brain     \033[0m\n"
+			<< "\033[1;36m========================================================================\033[0m\n"
+			<< "  Model Architecture : \033[1;32mSingle Dedicated Multimodal Perceptron\033[0m\n"
+			<< "  Weights Checkpoint : \033[1;33m" << target_weights.filename().string()
+			<< " (" << ai.host_weights.size() << " weights | " << ai.host_bias.size() << " biases)\033[0m\n"
+			<< "  Context Window     : \033[1;33m" << config::context_window_size
+			<< " tokens\033[0m (" << (config::context_window_size * config::token_dim * sizeof(std::bfloat16_t))
+			<< " bytes BF16)\n"
+			<< "  Compute Hardware   : \033[1;32mCUTLASS v4.8.0 Fused EVT (sm_89) + GPU Argmax\033[0m\n"
+			<< "  Vocabulary Size    : \033[1;33m" << input.main_dictionary.size()
+			<< " tokens mapped\033[0m\n"
+			<< "\033[1;36m------------------------------------------------------------------------\033[0m\n"
+			<< "\033[90mCommands: 'exit' to quit | 'clear' to reset context | 'temp <val>' for sampling\033[0m\n"
+			<< "\033[1;36m------------------------------------------------------------------------\033[0m\n";
+	} else {
+		std::cerr << "\033[31m[!] No valid model checkpoint found at: " << target_weights
+				  << "\033[0m\n"
+				  << "[!] Tip: Run Option [5] Bulk Training to train the brain first,\n"
+				  << "[!] or convert a GGUF model via 'python tools/convert_gguf_to_axiom.py'.\n"
+				  << std::flush;
+		return;
+	}
 
 	std::string conversation_history =
 		"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n";
@@ -616,9 +705,6 @@ void run_chat_engine(AI& ai, const std::filesystem::path& weights_path,
 			continue;
 		}
 
-		conversation_history +=
-			"<|im_start|>user\n" + user_input + "<|im_end|>\n<|im_start|>assistant\n";
-
 		std::cout << "\n\033[1;32mAxiom ❯ \033[0m";
 		std::string assistant_reply;
 		auto t_start = std::chrono::steady_clock::now();
@@ -626,17 +712,45 @@ void run_chat_engine(AI& ai, const std::filesystem::path& weights_path,
 		bool first_token = true;
 		size_t token_count = 0;
 
-		ai.generate(conversation_history, 1024, current_temp, 40, 0.9f,
-					[&](const std::string& tok) {
-						if (first_token) {
-							t_first = std::chrono::steady_clock::now();
-							first_token = false;
-						}
-						++token_count;
-						std::cout << tok << std::flush;
-						assistant_reply += tok;
-					});
-		std::cout << "\n";
+		if (ai.has_transformer_model()) {
+			conversation_history +=
+				"<|im_start|>user\n" + user_input + "<|im_end|>\n<|im_start|>assistant\n";
+
+			ai.generate(conversation_history, 1024, current_temp, 40, 0.9f,
+						[&](const std::string& tok) {
+							if (first_token) {
+								t_first = std::chrono::steady_clock::now();
+								first_token = false;
+							}
+							++token_count;
+							std::cout << tok << std::flush;
+							assistant_reply += tok;
+						});
+			std::cout << "\n";
+			conversation_history += assistant_reply + "<|im_end|>\n";
+
+			if (conversation_history.size() > 12288) {
+				size_t second_turn = conversation_history.find("<|im_start|>user", 64);
+				if (second_turn != std::string::npos) {
+					conversation_history =
+						"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n" +
+						conversation_history.substr(second_turn);
+				}
+			}
+		} else {
+			ai.generate(user_input, parser, input, 128,
+						SamplingConfig {current_temp, 40, 0.9f},
+						[&](const std::string& tok) {
+							if (first_token) {
+								t_first = std::chrono::steady_clock::now();
+								first_token = false;
+							}
+							++token_count;
+							std::cout << tok << " " << std::flush;
+							assistant_reply += tok + " ";
+						});
+			std::cout << "\n";
+		}
 
 		auto t_end = std::chrono::steady_clock::now();
 		double ttft_ms = std::chrono::duration<double, std::milli>(t_first - t_start).count();
@@ -648,17 +762,6 @@ void run_chat_engine(AI& ai, const std::filesystem::path& weights_path,
 				  << " | Generated: " << token_count << " tokens"
 				  << " | Temp: " << std::fixed << std::setprecision(2) << current_temp
 				  << "] ──\033[0m\n";
-
-		conversation_history += assistant_reply + "<|im_end|>\n";
-
-		if (conversation_history.size() > 12288) {
-			size_t second_turn = conversation_history.find("<|im_start|>user", 64);
-			if (second_turn != std::string::npos) {
-				conversation_history =
-					"<|im_start|>system\nYou are Project Axiom, an expert C++23, CUDA, and systems programming AI.<|im_end|>\n" +
-					conversation_history.substr(second_turn);
-			}
-		}
 	}
 }
 
@@ -1987,12 +2090,6 @@ int main(int argc, char* argv[]) {
 		asset_dirs.push_back(training_data_dir);
 	}
 
-	if (!is_interactive && mode == AppMode::Chat) {
-		AI engine;
-		run_chat_engine(engine, llm_weights_path, llm_vocab_path);
-		return 0;
-	}
-
 	Parser parser(developer_mode, embedded_path, asset_dirs);
 	Input input;
 	input.embedding_dim = config::token_dim;
@@ -2020,7 +2117,7 @@ int main(int argc, char* argv[]) {
 
 	if (!is_interactive) {
 		if (mode == AppMode::Chat) {
-			run_chat_engine(ai, llm_weights_path, llm_vocab_path);
+			run_chat_engine(ai, parser, input, llm_weights_path, llm_vocab_path);
 			return 0;
 		}
 
@@ -2055,7 +2152,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (selected_mode == AppMode::Chat) {
-			run_chat_engine(ai, llm_weights_path, llm_vocab_path);
+			run_chat_engine(ai, parser, input, llm_weights_path, llm_vocab_path);
 			pause_menu();
 			continue;
 		}

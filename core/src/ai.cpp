@@ -570,6 +570,15 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		return false;
 	}
 
+	if (std::memcmp(mapped_base, "AXIOM_V1", 8) == 0) {
+		std::cerr << "[Axiom Engine] Checkpoint " << filepath
+			  << " is an AXIOM_V1 Multimodal Perceptron model (GQA Transformer expects 0x4D4F4958).\n";
+		UnmapViewOfFile(mapped_base);
+		CloseHandle(hMap);
+		CloseHandle(hFile);
+		return false;
+	}
+
 	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
 	if (config_.magic != 0x4D4F4958U || config_.num_layers == 0 || config_.hidden_dim == 0 ||
 	    config_.head_dim == 0 || config_.num_q_heads == 0 || config_.num_kv_heads == 0 ||
