@@ -70,15 +70,13 @@ __global__ static void compute_loss_and_dz_kernel(
 				}
 			}
 
-			//! here
-
 			if (isfinite(dz_val)) {
 				atomicAdd(&loss[telemetry_gradient_square], dz_val * dz_val);
 			} else {
 				atomicAdd(&loss[telemetry_nonfinite], 1.0f);
 				dz_val = 0.0f;
 			}
-			dz_val = fmaxf(-1.0f, fminf(1.0f, dz_val));
+			dz_val = fmaxf(-10.0f, fminf(10.0f, dz_val));
 			dz[row] = dz_val;
 		}
 	} else {
@@ -182,7 +180,7 @@ __global__ static void backward_pass_adamw_kernel(
 		}
 
 		if (col == 0) {
-			float eff_beta1 = 0.5f * beta1;
+			float eff_beta1 = beta1;
 			float step_f = static_cast<float>(step);
 			float bc1 = 1.0f - powf(eff_beta1, step_f);
 			float bc2 = 1.0f - powf(beta2, step_f);
@@ -266,7 +264,7 @@ __global__ static void backward_rms_norm(const __nv_bfloat16* __restrict__ x_hat
 		float g_j = dx_inout[j];
 		float x_j = __bfloat162float(x_hat[j]);
 		float dx_j = inv_rms * (g_j - x_j * mean_dot);
-		dx_j = isfinite(dx_j) ? fmaxf(-1.0f, fminf(1.0f, dx_j)) : 0.0f;
+		dx_j = isfinite(dx_j) ? fmaxf(-10.0f, fminf(10.0f, dx_j)) : 0.0f;
 		dx_inout[j] = dx_j;
 	}
 }
@@ -288,7 +286,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 	}
 
 	float p = probs[v];
-	if (p <= 1e-5f && v != target_tok_id) {
+	if (p <= 1e-7f && v != target_tok_id) {
 		return;
 	}
 
@@ -332,7 +330,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 		float y_val = __bfloat162float(y[d]);
 		if (isfinite(y_val)) {
 			float norm_y = y_val / rms_y;
-			float grad_e = fmaxf(-1.0f, fminf(1.0f, grad_logit * norm_y));
+			float grad_e = fmaxf(-10.0f, fminf(10.0f, grad_logit * norm_y));
 			size_t table_idx = row_offset + d;
 			float cur_val = table_master[table_idx];
 			float new_val = cur_val - head_lr * (grad_e + 0.01f * cur_val);
