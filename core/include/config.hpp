@@ -21,11 +21,24 @@ struct AxiomWeightHeader {
 static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactly 56 bytes");
 
 enum class AppMode { Chat, Use, Train, BulkTrain, Test, Benchmark, Server, Exit };
+
+struct Config {
+	size_t ram_buffer_size = 4194304;
+	size_t token_dim = 1024;
+	size_t context_window_size = 256;
+	float learning_rate = 0.001f;
+	size_t loss_report_interval = 1000;
+
+
+	float weight_min = -0.0033854167f;
+	float weight_max = 0.0033854167f;
+};
+
 namespace config {
 
 // Hyperparameters
 constexpr size_t ram_buffer_size = 4194304; // 4M tokens (~16.7 MB in RAM)
-constexpr size_t token_dim = 1024;	    // GPT-2 scale (Must be multiple of 64)
+constexpr size_t token_dim = 1024;			// GPT-2 scale (Must be multiple of 64)
 constexpr size_t context_window_size = 256; // Doubled to capture paragraph-level context
 
 // AdamW Optimizer Settings

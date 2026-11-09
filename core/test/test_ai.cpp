@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../include/ai.hpp"
+#include "../include/config.hpp"
 #include "../include/optimizer.hpp"
 #include "../include/parser.hpp"
 #include "../include/tensor.hpp"
@@ -16,10 +17,12 @@ bool test_ai() {
 	std::cout << "\n=== AI Engine Test Suite ===\n";
 	int s_pass = 0, s_fail = 0;
 
-	const size_t in_dim = 512;
-	const size_t out_dim = 4;
-	const float w_min = -0.5f;
-	const float w_max = 0.5f;
+	Config c;
+
+	const size_t in_dim = c.token_dim * c.context_window_size;
+	const size_t out_dim = c.token_dim * 1;
+	const float w_min = c.weight_min;
+	const float w_max = c.weight_max;
 
 	Elements e {};
 
@@ -27,14 +30,11 @@ bool test_ai() {
 	std::cout << "\n[1] AI Initialization & Dimensions\n";
 	AI ai(in_dim, out_dim, w_min, w_max, e);
 
-	test_check_eq(e.weight_elements,
-		      in_dim * out_dim,
-		      "Elements weight_elements == 2048",
-		      s_pass,
-		      s_fail);
+	test_check_eq(e.weight_elements, in_dim * out_dim, "Elements weight_elements == 2048", s_pass,
+				  s_fail);
 	test_check_eq(e.bias_elements, out_dim, "Elements bias_elements == 4", s_pass, s_fail);
-	test_check_eq(
-		ai.host_weights.size(), in_dim * out_dim, "h_weights size == 2048", s_pass, s_fail);
+	test_check_eq(ai.host_weights.size(), in_dim * out_dim, "h_weights size == 2048", s_pass,
+				  s_fail);
 	test_check_eq(ai.host_bias.size(), out_dim, "h_bias size == 4", s_pass, s_fail);
 
 	// â”€â”€ [2] Chaos / Symmetry Breaking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -48,14 +48,9 @@ bool test_ai() {
 		}
 		weight_sum += w;
 	}
-	test_check(weights_in_bounds,
-		   "All weights bounded strictly in [w_min, w_max]",
-		   s_pass,
-		   s_fail);
-	test_check(std::abs(weight_sum) > 0.001f,
-		   "Weights are non-zero chaotic distribution",
-		   s_pass,
-		   s_fail);
+	test_check(weights_in_bounds, "All weights bounded strictly in [w_min, w_max]", s_pass, s_fail);
+	test_check(std::abs(weight_sum) > 0.001f, "Weights are non-zero chaotic distribution", s_pass,
+			   s_fail);
 
 	bool biases_zero = true;
 	for (float b : ai.host_bias) {
@@ -75,18 +70,14 @@ bool test_ai() {
 
 	test_check(ai.download_weights(), "download_weights() returns true", s_pass, s_fail);
 	test_check(std::abs(ai.host_weights[0] - original_w0) < 1e-6f,
-		   "Downloaded weights restored original VRAM value",
-		   s_pass,
-		   s_fail);
+			   "Downloaded weights restored original VRAM value", s_pass, s_fail);
 
 	// â”€â”€ [4] Loss Reading with Zero Steps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[4] Zero Pending Steps Handling\n";
 	double zero_loss = 0.0;
 	size_t zero_steps = 0;
-	test_check(ai.read_loss(zero_loss, zero_steps),
-		   "read_loss() succeeds when pending_steps is 0",
-		   s_pass,
-		   s_fail);
+	test_check(ai.read_loss(zero_loss, zero_steps), "read_loss() succeeds when pending_steps is 0",
+			   s_pass, s_fail);
 	test_check_eq(zero_steps, size_t {0}, "steps reported is 0", s_pass, s_fail);
 	test_check_eq(zero_loss, 0.0, "loss reported is 0.0", s_pass, s_fail);
 
@@ -108,18 +99,13 @@ bool test_ai() {
 
 	TrainStatus status = ai.train(optimizer, portion);
 	test_check(status == TrainStatus::Trained,
-		   "ai.train() returns TrainStatus::Trained on populated buffer",
-		   s_pass,
-		   s_fail);
+			   "ai.train() returns TrainStatus::Trained on populated buffer", s_pass, s_fail);
 
 	double train_loss = 0.0;
 	size_t train_steps = 0;
-	test_check(ai.read_loss(train_loss, train_steps),
-		   "read_loss() after train() succeeds",
-		   s_pass,
-		   s_fail);
-	test_check_eq(
-		train_steps, size_t {1}, "read_loss() reports 1 pending step", s_pass, s_fail);
+	test_check(ai.read_loss(train_loss, train_steps), "read_loss() after train() succeeds", s_pass,
+			   s_fail);
+	test_check_eq(train_steps, size_t {1}, "read_loss() reports 1 pending step", s_pass, s_fail);
 	test_check(train_loss > 0.0, "Training loss is strictly positive", s_pass, s_fail);
 
 	portion.free_pinned();
@@ -131,9 +117,7 @@ bool test_ai() {
 	// ram_buffer_tokens is empty
 	TrainStatus empty_status = ai.train(optimizer, empty_portion);
 	test_check(empty_status == TrainStatus::NoData,
-		   "ai.train() returns TrainStatus::NoData when buffer is empty",
-		   s_pass,
-		   s_fail);
+			   "ai.train() returns TrainStatus::NoData when buffer is empty", s_pass, s_fail);
 	empty_portion.free_pinned();
 
 	// â”€â”€ [7] Multi-Step Training Convergence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -153,8 +137,7 @@ bool test_ai() {
 	auto refill = [&]() {
 		conv_portion.ram_buffer_tokens.resize(RAM_BUFFER);
 		for (size_t i = 0; i < RAM_BUFFER; ++i) {
-			conv_portion.ram_buffer_tokens[i] =
-				static_cast<std::bfloat16_t>(0.1f * ((i % 4) + 1));
+			conv_portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 4) + 1));
 		}
 	};
 	refill();
@@ -185,12 +168,10 @@ bool test_ai() {
 	size_t final_steps = 0;
 	ai.read_loss(final_loss, final_steps);
 
-	std::cout << "  Initial step loss: " << initial_loss
-		  << " -> Multi-step loss: " << final_loss << "\n";
-	test_check(final_loss < initial_loss,
-		   "Loss decreased after training (AI is actively learning)",
-		   s_pass,
-		   s_fail);
+	std::cout << "  Initial step loss: " << initial_loss << " -> Multi-step loss: " << final_loss
+			  << "\n";
+	test_check(final_loss < initial_loss, "Loss decreased after training (AI is actively learning)",
+			   s_pass, s_fail);
 
 	conv_portion.free_pinned();
 
@@ -199,23 +180,16 @@ bool test_ai() {
 	const std::string test_weights_path = "test_weights.axiom";
 
 	// Save trained weights to disk
-	test_check(ai.save_weights(test_weights_path),
-		   "ai.save_weights() returns true",
-		   s_pass,
-		   s_fail);
-	test_check(std::filesystem::exists(test_weights_path),
-		   "test_weights.axiom file exists on disk",
-		   s_pass,
-		   s_fail);
+	test_check(ai.save_weights(test_weights_path), "ai.save_weights() returns true", s_pass,
+			   s_fail);
+	test_check(std::filesystem::exists(test_weights_path), "test_weights.axiom file exists on disk",
+			   s_pass, s_fail);
 
 	const size_t expected_file_size =
-		sizeof(AxiomWeightHeader) + (in_dim * out_dim * sizeof(float)) +
-		(out_dim * sizeof(float)) + (ai.vocab_size * ai.embedding_dim * sizeof(float));
-	test_check_eq(std::filesystem::file_size(test_weights_path),
-		      expected_file_size,
-		      "File size matches exact binary format",
-		      s_pass,
-		      s_fail);
+		sizeof(AxiomWeightHeader) + (in_dim * out_dim * sizeof(float)) + (out_dim * sizeof(float)) +
+		(ai.vocab_size * ai.embedding_dim * sizeof(float));
+	test_check_eq(std::filesystem::file_size(test_weights_path), expected_file_size,
+				  "File size matches exact binary format", s_pass, s_fail);
 
 	// Snapshot of the saved parameters
 	std::vector<float> saved_weights = ai.host_weights;
@@ -229,53 +203,37 @@ bool test_ai() {
 	// Verify host weights and embeddings are different from saved
 	bool weights_differ_from_saved = (ai.host_weights != saved_weights);
 	test_check(weights_differ_from_saved,
-		   "Memory wiped: current weights differ from saved snapshot",
-		   s_pass,
-		   s_fail);
+			   "Memory wiped: current weights differ from saved snapshot", s_pass, s_fail);
 	bool embeddings_differ_from_saved = (ai.host_embeddings != saved_embeddings);
 	test_check(embeddings_differ_from_saved,
-		   "Memory wiped: current embeddings differ from saved snapshot",
-		   s_pass,
-		   s_fail);
+			   "Memory wiped: current embeddings differ from saved snapshot", s_pass, s_fail);
 
 	// Load weights from file
-	test_check(ai.load_weights(test_weights_path),
-		   "ai.load_weights() returns true",
-		   s_pass,
-		   s_fail);
+	test_check(ai.load_weights(test_weights_path), "ai.load_weights() returns true", s_pass,
+			   s_fail);
 
 	// Assert bit-for-bit equality on host memory
-	test_check(ai.host_weights == saved_weights,
-		   "Loaded weights match saved weights bit-for-bit",
-		   s_pass,
-		   s_fail);
-	test_check(ai.host_bias == saved_bias,
-		   "Loaded biases match saved biases bit-for-bit",
-		   s_pass,
-		   s_fail);
+	test_check(ai.host_weights == saved_weights, "Loaded weights match saved weights bit-for-bit",
+			   s_pass, s_fail);
+	test_check(ai.host_bias == saved_bias, "Loaded biases match saved biases bit-for-bit", s_pass,
+			   s_fail);
 	test_check(ai.host_embeddings == saved_embeddings,
-		   "Loaded embeddings match saved embeddings bit-for-bit",
-		   s_pass,
-		   s_fail);
+			   "Loaded embeddings match saved embeddings bit-for-bit", s_pass, s_fail);
 
 	// Verify GPU VRAM was also restored by load_weights()
 	ai.host_weights[0] = 999.0f; // Tamper with CPU memory
 	ai.host_embeddings[0] = 999.0f;
 	test_check(ai.download_weights(), "download_weights() succeeds after load", s_pass, s_fail);
 	test_check(ai.host_weights == saved_weights,
-		   "VRAM verified: weights downloaded from GPU match saved bit-for-bit",
-		   s_pass,
-		   s_fail);
+			   "VRAM verified: weights downloaded from GPU match saved bit-for-bit", s_pass,
+			   s_fail);
 	test_check(ai.host_embeddings == saved_embeddings,
-		   "VRAM verified: embeddings downloaded from GPU match saved bit-for-bit",
-		   s_pass,
-		   s_fail);
+			   "VRAM verified: embeddings downloaded from GPU match saved bit-for-bit", s_pass,
+			   s_fail);
 
 	// Test error cases: non-existent file and invalid magic header
 	test_check(!ai.load_weights("non_existent_file.axiom"),
-		   "load_weights() fails on non-existent file",
-		   s_pass,
-		   s_fail);
+			   "load_weights() fails on non-existent file", s_pass, s_fail);
 
 	// Corrupt magic header test
 	{
@@ -284,10 +242,8 @@ bool test_ai() {
 		char bad_header[sizeof(AxiomWeightHeader)] = {0};
 		corrupt_out.write(bad_header, sizeof(bad_header));
 		corrupt_out.close();
-		test_check(!ai.load_weights(corrupt_path),
-			   "load_weights() rejects invalid magic header",
-			   s_pass,
-			   s_fail);
+		test_check(!ai.load_weights(corrupt_path), "load_weights() rejects invalid magic header",
+				   s_pass, s_fail);
 		std::filesystem::remove(corrupt_path);
 	}
 
@@ -298,17 +254,12 @@ bool test_ai() {
 	{
 		const std::string nested_path = "test_artifacts/nested/weights.axiom";
 		test_check(ai.save_weights(nested_path),
-			   "ai.save_weights() creates parent directories and saves atomically",
-			   s_pass,
-			   s_fail);
-		test_check(std::filesystem::exists(nested_path),
-			   "Nested weight file exists on disk",
-			   s_pass,
-			   s_fail);
+				   "ai.save_weights() creates parent directories and saves atomically", s_pass,
+				   s_fail);
+		test_check(std::filesystem::exists(nested_path), "Nested weight file exists on disk",
+				   s_pass, s_fail);
 		test_check(ai.load_weights(nested_path),
-			   "ai.load_weights() successfully loads from nested directory",
-			   s_pass,
-			   s_fail);
+				   "ai.load_weights() successfully loads from nested directory", s_pass, s_fail);
 		std::error_code rm_ec;
 		std::filesystem::remove_all("test_artifacts", rm_ec);
 	}
@@ -324,14 +275,9 @@ bool test_ai() {
 
 	std::vector<float> prediction_output;
 	test_check(ai.predict(test_context, prediction_output),
-		   "ai.predict(context_vector) returns true",
-		   s_pass,
-		   s_fail);
-	test_check_eq(prediction_output.size(),
-		      out_dim,
-		      "Prediction output dimension == out_dim (4)",
-		      s_pass,
-		      s_fail);
+			   "ai.predict(context_vector) returns true", s_pass, s_fail);
+	test_check_eq(prediction_output.size(), out_dim, "Prediction output dimension == out_dim (4)",
+				  s_pass, s_fail);
 
 	bool prediction_valid = true;
 	for (float val : prediction_output) {
@@ -340,10 +286,8 @@ bool test_ai() {
 			break;
 		}
 	}
-	test_check(prediction_valid,
-		   "Prediction output values are valid finite floats",
-		   s_pass,
-		   s_fail);
+	test_check(prediction_valid, "Prediction output values are valid finite floats", s_pass,
+			   s_fail);
 
 	// 2. Parser Vocabulary & Nearest-Neighbor Decoding Verification
 	Input parser_input;
@@ -358,9 +302,7 @@ bool test_ai() {
 	test_parser.build_embedding_table(parser_input);
 
 	test_check(parser_input.embedding_table.size() >= 4,
-		   "Parser embedding table populated for vocabulary",
-		   s_pass,
-		   s_fail);
+			   "Parser embedding table populated for vocabulary", s_pass, s_fail);
 
 	// Verify exact match decoding
 	const auto& fox_emb = parser_input.embedding_table[4];
@@ -369,64 +311,43 @@ bool test_ai() {
 		fox_float_vec[d] = static_cast<float>(fox_emb[d]);
 	}
 	uint32_t decoded_id = test_parser.decode_token(parser_input, fox_float_vec);
-	test_check_eq(decoded_id,
-		      static_cast<uint32_t>(4),
-		      "Exact embedding vector decodes to token ID #4 ('fox')",
-		      s_pass,
-		      s_fail);
+	test_check_eq(decoded_id, static_cast<uint32_t>(4),
+				  "Exact embedding vector decodes to token ID #4 ('fox')", s_pass, s_fail);
 
 	std::string decoded_str = test_parser.decode_prediction(parser_input, fox_float_vec);
-	test_check_eq(
-		decoded_str, std::string("fox"), "Decoded string matches 'fox'", s_pass, s_fail);
+	test_check_eq(decoded_str, std::string("fox"), "Decoded string matches 'fox'", s_pass, s_fail);
 
 	// Verify nearest-neighbor with minor noise perturbation
 	std::vector<float> noisy_fox_vec = fox_float_vec;
 	noisy_fox_vec[0] += 0.001f;
 	noisy_fox_vec[1] -= 0.001f;
 	uint32_t noisy_decoded_id = test_parser.decode_token(parser_input, noisy_fox_vec);
-	test_check_eq(noisy_decoded_id,
-		      static_cast<uint32_t>(4),
-		      "Perturbed embedding robustly decodes to nearest token ID #4",
-		      s_pass,
-		      s_fail);
+	test_check_eq(noisy_decoded_id, static_cast<uint32_t>(4),
+				  "Perturbed embedding robustly decodes to nearest token ID #4", s_pass, s_fail);
 
 	// Verify decoding model's live prediction
 	std::string live_prediction_word =
 		test_parser.decode_prediction(parser_input, prediction_output);
 	test_check(!live_prediction_word.empty(),
-		   "Live prediction decodes to non-empty vocabulary word",
-		   s_pass,
-		   s_fail);
+			   "Live prediction decodes to non-empty vocabulary word", s_pass, s_fail);
 
 	// 3. Prompt Tokenization & Context Window Generation
 	std::vector<uint32_t> prompt_tokens =
 		test_parser.tokenize_prompt(parser_input, "The quick brown fox jumps");
-	test_check_eq(prompt_tokens.size(),
-		      static_cast<size_t>(5),
-		      "tokenize_prompt parses 5 tokens",
-		      s_pass,
-		      s_fail);
-	test_check_eq(parser_input.main_dictionary["jumps"],
-		      static_cast<uint32_t>(5),
-		      "New word 'jumps' assigned token ID #5",
-		      s_pass,
-		      s_fail);
+	test_check_eq(prompt_tokens.size(), static_cast<size_t>(5), "tokenize_prompt parses 5 tokens",
+				  s_pass, s_fail);
+	test_check_eq(parser_input.main_dictionary["jumps"], static_cast<uint32_t>(5),
+				  "New word 'jumps' assigned token ID #5", s_pass, s_fail);
 
 	std::vector<std::bfloat16_t> prompt_context =
 		test_parser.build_context_window(parser_input, prompt_tokens, 128);
-	test_check_eq(prompt_context.size(),
-		      static_cast<size_t>(512),
-		      "build_context_window generates exact 512 bfloat16_t elements",
-		      s_pass,
-		      s_fail);
+	test_check_eq(prompt_context.size(), static_cast<size_t>(512),
+				  "build_context_window generates exact 512 bfloat16_t elements", s_pass, s_fail);
 
 	std::vector<float> prompt_pred;
 	test_check(ai.predict(prompt_context, prompt_pred),
-		   "ai.predict(prompt_context) succeeds on user prompt context",
-		   s_pass,
-		   s_fail);
-	test_check_eq(
-		prompt_pred.size(), out_dim, "Prompt prediction dimension == 4", s_pass, s_fail);
+			   "ai.predict(prompt_context) succeeds on user prompt context", s_pass, s_fail);
+	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == 4", s_pass, s_fail);
 
 	// â”€â”€ [10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning â”€â”€
 	std::cout << "\n[10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning\n";
@@ -442,14 +363,9 @@ bool test_ai() {
 			}
 			embedding_sum += val;
 		}
-		test_check(emb_in_bounds,
-			   "Embeddings bounded in [-1/sqrt(D), +1/sqrt(D)]",
-			   s_pass,
-			   s_fail);
-		test_check(std::abs(embedding_sum) > 0.01f,
-			   "Embeddings have non-zero chaotic distribution",
-			   s_pass,
-			   s_fail);
+		test_check(emb_in_bounds, "Embeddings bounded in [-1/sqrt(D), +1/sqrt(D)]", s_pass, s_fail);
+		test_check(std::abs(embedding_sum) > 0.01f, "Embeddings have non-zero chaotic distribution",
+				   s_pass, s_fail);
 
 		// 2. Token-based training step
 		Portion token_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
@@ -467,38 +383,27 @@ bool test_ai() {
 
 		TrainStatus token_status = ai.train(optimizer, token_portion);
 		test_check(token_status == TrainStatus::Trained,
-			   "ai.train() succeeds using 128 uint32_t token IDs across PCIe",
-			   s_pass,
-			   s_fail);
-		test_check(token_portion.has_token_ids,
-			   "Portion flagged has_token_ids == true",
-			   s_pass,
-			   s_fail);
+				   "ai.train() succeeds using 128 uint32_t token IDs across PCIe", s_pass, s_fail);
+		test_check(token_portion.has_token_ids, "Portion flagged has_token_ids == true", s_pass,
+				   s_fail);
 
 		double token_loss = 0.0;
 		size_t token_steps = 0;
 		test_check(ai.read_loss(token_loss, token_steps),
-			   "read_loss() succeeds after token training step",
-			   s_pass,
-			   s_fail);
-		test_check_eq(
-			token_steps, size_t {1}, "1 token training step recorded", s_pass, s_fail);
+				   "read_loss() succeeds after token training step", s_pass, s_fail);
+		test_check_eq(token_steps, size_t {1}, "1 token training step recorded", s_pass, s_fail);
 		test_check(token_loss >= 0.0 && std::isfinite(token_loss),
-			   "Token training step produces valid finite loss",
-			   s_pass,
-			   s_fail);
+				   "Token training step produces valid finite loss", s_pass, s_fail);
 
 		// Verify backward scatter updated the embedding table
 		ai.download_weights();
 		float after_emb0 = ai.host_embeddings[tracked_token * ai.embedding_dim];
 		test_check(std::isfinite(after_emb0),
-			   "Master embedding table value remains finite after backward scatter",
-			   s_pass,
-			   s_fail);
+				   "Master embedding table value remains finite after backward scatter", s_pass,
+				   s_fail);
 		test_check(after_emb0 != before_emb0,
-			   "Backward scatter physically updated embedding coordinate in VRAM",
-			   s_pass,
-			   s_fail);
+				   "Backward scatter physically updated embedding coordinate in VRAM", s_pass,
+				   s_fail);
 
 		token_portion.free_pinned();
 	}
@@ -532,10 +437,8 @@ bool test_ai() {
 		upload_device_buffer(d_k, h_k.data(), bf_bytes);
 		upload_device_buffer(d_v, h_v.data(), bf_bytes);
 
-		bool attn_ok1 =
-			fused_causal_attention(d_q, d_k, d_v, d_out, seq_len, emb_dim, heads, 0);
-		test_check(
-			attn_ok1, "fused_causal_attention executes successfully", s_pass, s_fail);
+		bool attn_ok1 = fused_causal_attention(d_q, d_k, d_v, d_out, seq_len, emb_dim, heads, 0);
+		test_check(attn_ok1, "fused_causal_attention executes successfully", s_pass, s_fail);
 		download_device_buffer(h_out1.data(), d_out, bf_bytes);
 
 		// Mutate future tokens (tokens 2 and 3)
@@ -548,19 +451,15 @@ bool test_ai() {
 		upload_device_buffer(d_k, h_k.data(), bf_bytes);
 		upload_device_buffer(d_v, h_v.data(), bf_bytes);
 
-		bool attn_ok2 =
-			fused_causal_attention(d_q, d_k, d_v, d_out, seq_len, emb_dim, heads, 0);
-		test_check(attn_ok2,
-			   "fused_causal_attention re-run on perturbed future tokens",
-			   s_pass,
-			   s_fail);
+		bool attn_ok2 = fused_causal_attention(d_q, d_k, d_v, d_out, seq_len, emb_dim, heads, 0);
+		test_check(attn_ok2, "fused_causal_attention re-run on perturbed future tokens", s_pass,
+				   s_fail);
 		download_device_buffer(h_out2.data(), d_out, bf_bytes);
 
 		// Assert that past tokens (tokens 0 and 1) were 100% UNCHANGED by future mutations
 		bool causal_preserved = true;
 		for (size_t i = 0; i < 2 * emb_dim; ++i) {
-			if (std::abs(static_cast<float>(h_out1[i]) -
-				     static_cast<float>(h_out2[i])) > 1e-4f) {
+			if (std::abs(static_cast<float>(h_out1[i]) - static_cast<float>(h_out2[i])) > 1e-4f) {
 				causal_preserved = false;
 				break;
 			}
@@ -568,8 +467,7 @@ bool test_ai() {
 		test_check(
 			causal_preserved,
 			"Strict Causality: Future tokens (t >= 2) cannot leak or alter past outputs (t < 2)",
-			s_pass,
-			s_fail);
+			s_pass, s_fail);
 
 		// Future tokens themselves should be different
 		bool future_diff = false;
@@ -606,8 +504,7 @@ bool test_ai() {
 
 		bool swi_ok = swiglu_forward(d_gate, d_up, d_swi, ffn_elements, 0);
 		test_check(swi_ok, "swiglu_forward executes successfully", s_pass, s_fail);
-		download_device_buffer(
-			h_swiglu_out.data(), d_swi, ffn_elements * sizeof(std::bfloat16_t));
+		download_device_buffer(h_swiglu_out.data(), d_swi, ffn_elements * sizeof(std::bfloat16_t));
 
 		bool swiglu_correct = true;
 		for (size_t i = 0; i < ffn_elements; ++i) {
@@ -620,16 +517,12 @@ bool test_ai() {
 				break;
 			}
 		}
-		test_check(swiglu_correct,
-			   "SwiGLU output matches analytical Swish(G) * U",
-			   s_pass,
-			   s_fail);
+		test_check(swiglu_correct, "SwiGLU output matches analytical Swish(G) * U", s_pass, s_fail);
 
 		// Backward SwiGLU gradient check
 		void* d_grad_g = allocate_device_memory(ffn_elements * sizeof(float));
 		void* d_grad_u = allocate_device_memory(ffn_elements * sizeof(float));
-		bool swi_bwd_ok =
-			swiglu_backward(d_swi, d_gate, d_up, d_grad_g, d_grad_u, ffn_elements, 0);
+		bool swi_bwd_ok = swiglu_backward(d_swi, d_gate, d_up, d_grad_g, d_grad_u, ffn_elements, 0);
 		test_check(swi_bwd_ok, "swiglu_backward executes successfully", s_pass, s_fail);
 
 		std::vector<float> h_grad_g(ffn_elements), h_grad_u(ffn_elements);
@@ -643,10 +536,8 @@ bool test_ai() {
 				break;
 			}
 		}
-		test_check(grad_finite,
-			   "SwiGLU backward gradients are strictly finite numbers",
-			   s_pass,
-			   s_fail);
+		test_check(grad_finite, "SwiGLU backward gradients are strictly finite numbers", s_pass,
+				   s_fail);
 
 		free_device_memory(d_gate);
 		free_device_memory(d_up);
@@ -668,17 +559,13 @@ bool test_ai() {
 		upload_device_buffer(d_B, h_B.data(), K * N * sizeof(std::bfloat16_t));
 
 		bool gemm_ok = batched_gemm_multiply(d_A, d_B, d_C, M, N, K, false, false, 0);
-		test_check(gemm_ok,
-			   "batched_gemm_multiply computes [128x32] * [32x32] on GPU",
-			   s_pass,
-			   s_fail);
+		test_check(gemm_ok, "batched_gemm_multiply computes [128x32] * [32x32] on GPU", s_pass,
+				   s_fail);
 		download_device_buffer(h_C.data(), d_C, M * N * sizeof(std::bfloat16_t));
 
 		float sample_c = static_cast<float>(h_C[0]);
 		test_check(std::abs(sample_c - 0.64f) < 0.05f,
-			   "Batched GEMM matches expected dot-product accumulation (0.64)",
-			   s_pass,
-			   s_fail);
+				   "Batched GEMM matches expected dot-product accumulation (0.64)", s_pass, s_fail);
 
 		free_device_memory(d_A);
 		free_device_memory(d_B);
@@ -687,9 +574,8 @@ bool test_ai() {
 		// 11.4 Full Transformer Block Convergence (Gate 3 Verification)
 		AI xform_ai(in_dim, out_dim, w_min, w_max, e);
 		test_check(xform_ai.build_transformer_block(out_dim, 1, 16),
-			   "build_transformer_block initializes projection weights in VRAM",
-			   s_pass,
-			   s_fail);
+				   "build_transformer_block initializes projection weights in VRAM", s_pass,
+				   s_fail);
 
 		std::vector<std::bfloat16_t> xform_states(128 * out_dim);
 		for (size_t i = 0; i < xform_states.size(); ++i) {
@@ -697,32 +583,22 @@ bool test_ai() {
 		}
 
 		bool xform_fwd_ok = xform_ai.forward_transformer(xform_states, 128);
-		test_check(xform_fwd_ok,
-			   "forward_transformer runs Pre-Norm Attention + SwiGLU Block",
-			   s_pass,
-			   s_fail);
+		test_check(xform_fwd_ok, "forward_transformer runs Pre-Norm Attention + SwiGLU Block",
+				   s_pass, s_fail);
 		test_check(std::isfinite(static_cast<float>(xform_states[0])),
-			   "Transformer block output states are finite",
-			   s_pass,
-			   s_fail);
+				   "Transformer block output states are finite", s_pass, s_fail);
 
 		std::vector<float> grad_out(128 * out_dim, 0.01f);
 		std::vector<float> grad_in;
 		bool xform_bwd_ok =
 			xform_ai.backward_transformer(grad_out, grad_in, xform_states, 128, 0.001f);
-		test_check(xform_bwd_ok,
-			   "backward_transformer updates all 7 projection matrices via AdamW",
-			   s_pass,
-			   s_fail);
-		test_check_eq(grad_in.size(),
-			      grad_out.size(),
-			      "Transformer backward pass produces input gradient matching shape",
-			      s_pass,
-			      s_fail);
+		test_check(xform_bwd_ok, "backward_transformer updates all 7 projection matrices via AdamW",
+				   s_pass, s_fail);
+		test_check_eq(grad_in.size(), grad_out.size(),
+					  "Transformer backward pass produces input gradient matching shape", s_pass,
+					  s_fail);
 		test_check(std::isfinite(grad_in[0]),
-			   "Input gradient through transformer block is strictly finite",
-			   s_pass,
-			   s_fail);
+				   "Input gradient through transformer block is strictly finite", s_pass, s_fail);
 
 		// Verify monotonic loss reduction on sequence modeling task
 		Portion xform_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
@@ -730,8 +606,7 @@ bool test_ai() {
 		auto xform_refill = [&]() {
 			xform_portion.ram_buffer_token_ids.resize(4000);
 			for (size_t i = 0; i < 4000; ++i) {
-				xform_portion.ram_buffer_token_ids[i] =
-					static_cast<uint32_t>(4 + (i % 8));
+				xform_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 8));
 			}
 		};
 		xform_refill();
@@ -767,15 +642,12 @@ bool test_ai() {
 		xform_ai.read_loss(final_xform_loss, final_xform_count);
 
 		std::cout << "  [Gate 3] Transformer Initial Loss: " << step1_loss
-			  << " -> Multi-Step Trained Loss: " << final_xform_loss << "\n";
+				  << " -> Multi-Step Trained Loss: " << final_xform_loss << "\n";
 		test_check(step1_loss > 0.0 && std::isfinite(step1_loss),
-			   "Gate 3: Transformer initial loss is valid positive number",
-			   s_pass,
-			   s_fail);
+				   "Gate 3: Transformer initial loss is valid positive number", s_pass, s_fail);
 		test_check(std::isfinite(final_xform_loss) && final_xform_loss > 0.0,
-			   "Gate 3: Monotonic loss reduction verified on causal sequence modeling",
-			   s_pass,
-			   s_fail);
+				   "Gate 3: Monotonic loss reduction verified on causal sequence modeling", s_pass,
+				   s_fail);
 
 		xform_portion.free_pinned();
 	}
@@ -792,93 +664,55 @@ bool test_ai() {
 		}
 
 		bool graph_captured = ai.build_training_graph(optimizer, graph_portion);
-		test_check(graph_captured,
-			   "build_training_graph captures static DAG into cudaGraph_t",
-			   s_pass,
-			   s_fail);
+		test_check(graph_captured, "build_training_graph captures static DAG into cudaGraph_t",
+				   s_pass, s_fail);
 		test_check(ai.gpu_graph_execution.is_instantiated,
-			   "CUDA graph successfully instantiated into cudaGraphExec_t",
-			   s_pass,
-			   s_fail);
+				   "CUDA graph successfully instantiated into cudaGraphExec_t", s_pass, s_fail);
 
 		bool graph_step_ok = ai.launch_training_graph_step();
-		test_check(graph_step_ok,
-			   "launch_training_graph_step executes hardware DAG",
-			   s_pass,
-			   s_fail);
+		test_check(graph_step_ok, "launch_training_graph_step executes hardware DAG", s_pass,
+				   s_fail);
 
 		// 12.2 Gate 5 Verification: Host Launch Latency (< 0.05 ms)
 		float avg_launch_latency_ms = ai.benchmark_graph_launch_latency(100);
 		std::cout << "  [Gate 5] Measured Graph Host Launch Latency: "
-			  << (avg_launch_latency_ms * 1000.0f) << " us (" << avg_launch_latency_ms
-			  << " ms)\n";
+				  << (avg_launch_latency_ms * 1000.0f) << " us (" << avg_launch_latency_ms
+				  << " ms)\n";
 		test_check(avg_launch_latency_ms >= 0.0f,
-			   "Graph launch latency benchmark produced valid measurement",
-			   s_pass,
-			   s_fail);
+				   "Graph launch latency benchmark produced valid measurement", s_pass, s_fail);
 		test_check(avg_launch_latency_ms < 0.05f,
-			   "Gate 5: Graph host launch latency is strictly < 0.05 ms (50 us)",
-			   s_pass,
-			   s_fail);
+				   "Gate 5: Graph host launch latency is strictly < 0.05 ms (50 us)", s_pass,
+				   s_fail);
 
 		ai.free_training_graph_resources();
 		graph_portion.free_pinned();
 
 		// 12.3 Modular ATen Tensor Handle & Strided Zero-Copy Views
 		Tensor t_orig = Tensor::create_tensor({4, 8}, DeviceType::CPU, false);
-		test_check_eq(t_orig.shape().size(),
-			      static_cast<size_t>(2),
-			      "Tensor shape has 2 dimensions",
-			      s_pass,
-			      s_fail);
-		test_check_eq(t_orig.shape()[0],
-			      static_cast<size_t>(4),
-			      "Dimension 0 is 4",
-			      s_pass,
-			      s_fail);
-		test_check_eq(t_orig.shape()[1],
-			      static_cast<size_t>(8),
-			      "Dimension 1 is 8",
-			      s_pass,
-			      s_fail);
-		test_check_eq(t_orig.strides()[0],
-			      static_cast<size_t>(8),
-			      "Row stride is 8",
-			      s_pass,
-			      s_fail);
-		test_check_eq(t_orig.strides()[1],
-			      static_cast<size_t>(1),
-			      "Column stride is 1",
-			      s_pass,
-			      s_fail);
+		test_check_eq(t_orig.shape().size(), static_cast<size_t>(2),
+					  "Tensor shape has 2 dimensions", s_pass, s_fail);
+		test_check_eq(t_orig.shape()[0], static_cast<size_t>(4), "Dimension 0 is 4", s_pass,
+					  s_fail);
+		test_check_eq(t_orig.shape()[1], static_cast<size_t>(8), "Dimension 1 is 8", s_pass,
+					  s_fail);
+		test_check_eq(t_orig.strides()[0], static_cast<size_t>(8), "Row stride is 8", s_pass,
+					  s_fail);
+		test_check_eq(t_orig.strides()[1], static_cast<size_t>(1), "Column stride is 1", s_pass,
+					  s_fail);
 
 		Tensor t_view = t_orig.transpose_matrix(0, 1);
-		test_check_eq(t_view.shape()[0],
-			      static_cast<size_t>(8),
-			      "Transposed dimension 0 is 8",
-			      s_pass,
-			      s_fail);
-		test_check_eq(t_view.shape()[1],
-			      static_cast<size_t>(4),
-			      "Transposed dimension 1 is 4",
-			      s_pass,
-			      s_fail);
-		test_check_eq(t_view.strides()[0],
-			      static_cast<size_t>(1),
-			      "Transposed row stride is 1",
-			      s_pass,
-			      s_fail);
-		test_check_eq(t_view.strides()[1],
-			      static_cast<size_t>(8),
-			      "Transposed col stride is 8",
-			      s_pass,
-			      s_fail);
+		test_check_eq(t_view.shape()[0], static_cast<size_t>(8), "Transposed dimension 0 is 8",
+					  s_pass, s_fail);
+		test_check_eq(t_view.shape()[1], static_cast<size_t>(4), "Transposed dimension 1 is 4",
+					  s_pass, s_fail);
+		test_check_eq(t_view.strides()[0], static_cast<size_t>(1), "Transposed row stride is 1",
+					  s_pass, s_fail);
+		test_check_eq(t_view.strides()[1], static_cast<size_t>(8), "Transposed col stride is 8",
+					  s_pass, s_fail);
 
 		t_orig.data_ptr()[0] = 42.0f;
 		test_check(t_view.data_ptr()[0] == 42.0f,
-			   "Zero-copy view shares identical memory with parent",
-			   s_pass,
-			   s_fail);
+				   "Zero-copy view shares identical memory with parent", s_pass, s_fail);
 
 		// 12.4 Gate 5 Verification: Autograd Reverse-Mode Computational Tape Parity
 		AutogradTape::get_instance().set_active(true);
@@ -905,23 +739,16 @@ bool test_ai() {
 		Tensor tensor_y = tensor_add(tensor_z, tensor_b);
 
 		std::vector<float> dy_vals(M * N, 0.5f);
-		Tensor tensor_dy =
-			Tensor::create_from_vector(dy_vals, {M, N}, DeviceType::CPU, false);
+		Tensor tensor_dy = Tensor::create_from_vector(dy_vals, {M, N}, DeviceType::CPU, false);
 		tensor_y.set_gradient(tensor_dy);
 		tensor_y.backward();
 
-		test_check(tensor_w.grad() != nullptr,
-			   "Weight gradient computed by reverse-mode tape",
-			   s_pass,
-			   s_fail);
-		test_check(tensor_x.grad() != nullptr,
-			   "Input gradient computed by reverse-mode tape",
-			   s_pass,
-			   s_fail);
-		test_check(tensor_b.grad() != nullptr,
-			   "Bias gradient computed by reverse-mode tape",
-			   s_pass,
-			   s_fail);
+		test_check(tensor_w.grad() != nullptr, "Weight gradient computed by reverse-mode tape",
+				   s_pass, s_fail);
+		test_check(tensor_x.grad() != nullptr, "Input gradient computed by reverse-mode tape",
+				   s_pass, s_fail);
+		test_check(tensor_b.grad() != nullptr, "Bias gradient computed by reverse-mode tape",
+				   s_pass, s_fail);
 
 		std::vector<float> dw_manual(K * N, 0.0f);
 		for (size_t k = 0; k < K; ++k) {
@@ -973,150 +800,93 @@ bool test_ai() {
 		}
 
 		std::cout << "  [Gate 5 Parity] Max diffs - Weight: " << max_diff_w
-			  << ", Input: " << max_diff_x << ", Bias: " << max_diff_b << "\n";
+				  << ", Input: " << max_diff_x << ", Bias: " << max_diff_b << "\n";
 
 		test_check(max_diff_w < 1e-5f,
-			   "Gate 5: Weight gradient achieves 100% parity with analytical formula",
-			   s_pass,
-			   s_fail);
+				   "Gate 5: Weight gradient achieves 100% parity with analytical formula", s_pass,
+				   s_fail);
 		test_check(max_diff_x < 1e-5f,
-			   "Gate 5: Input gradient achieves 100% parity with analytical formula",
-			   s_pass,
-			   s_fail);
+				   "Gate 5: Input gradient achieves 100% parity with analytical formula", s_pass,
+				   s_fail);
 		test_check(max_diff_b < 1e-5f,
-			   "Gate 5: Bias gradient achieves 100% parity with analytical formula",
-			   s_pass,
-			   s_fail);
+				   "Gate 5: Bias gradient achieves 100% parity with analytical formula", s_pass,
+				   s_fail);
 
 		AutogradTape::get_instance().set_active(false);
 
 		// 12.5 Strided Non-Contiguous Tensor Matmul & Autograd Parity (transpose_matrix(0, 1))
 		AutogradTape::get_instance().set_active(true);
 
-		Tensor matrix_a_orig = Tensor::create_from_vector(
-			{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f}, {3, 2}, DeviceType::CPU, true);
-		Tensor matrix_b_orig = Tensor::create_from_vector(
-			{7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f}, {2, 3}, DeviceType::CPU, true);
+		Tensor matrix_a_orig = Tensor::create_from_vector({1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},
+														  {3, 2}, DeviceType::CPU, true);
+		Tensor matrix_b_orig = Tensor::create_from_vector({7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f},
+														  {2, 3}, DeviceType::CPU, true);
 
 		Tensor matrix_a = matrix_a_orig.transpose_matrix(0, 1);
 		Tensor matrix_b = matrix_b_orig.transpose_matrix(0, 1);
 
-		test_check_eq(matrix_a.strides()[0],
-			      static_cast<size_t>(1),
-			      "Transposed A row stride is 1 (non-contiguous)",
-			      s_pass,
-			      s_fail);
-		test_check_eq(matrix_a.strides()[1],
-			      static_cast<size_t>(2),
-			      "Transposed A col stride is 2",
-			      s_pass,
-			      s_fail);
-		test_check_eq(matrix_b.strides()[0],
-			      static_cast<size_t>(1),
-			      "Transposed B row stride is 1 (non-contiguous)",
-			      s_pass,
-			      s_fail);
-		test_check_eq(matrix_b.strides()[1],
-			      static_cast<size_t>(3),
-			      "Transposed B col stride is 3",
-			      s_pass,
-			      s_fail);
+		test_check_eq(matrix_a.strides()[0], static_cast<size_t>(1),
+					  "Transposed A row stride is 1 (non-contiguous)", s_pass, s_fail);
+		test_check_eq(matrix_a.strides()[1], static_cast<size_t>(2), "Transposed A col stride is 2",
+					  s_pass, s_fail);
+		test_check_eq(matrix_b.strides()[0], static_cast<size_t>(1),
+					  "Transposed B row stride is 1 (non-contiguous)", s_pass, s_fail);
+		test_check_eq(matrix_b.strides()[1], static_cast<size_t>(3), "Transposed B col stride is 3",
+					  s_pass, s_fail);
 
 		Tensor matrix_c = tensor_matmul(matrix_a, matrix_b);
-		test_check_eq(matrix_c.shape()[0],
-			      static_cast<size_t>(2),
-			      "C shape[0] == 2",
-			      s_pass,
-			      s_fail);
-		test_check_eq(matrix_c.shape()[1],
-			      static_cast<size_t>(2),
-			      "C shape[1] == 2",
-			      s_pass,
-			      s_fail);
+		test_check_eq(matrix_c.shape()[0], static_cast<size_t>(2), "C shape[0] == 2", s_pass,
+					  s_fail);
+		test_check_eq(matrix_c.shape()[1], static_cast<size_t>(2), "C shape[1] == 2", s_pass,
+					  s_fail);
 
 		const float* matrix_c_ptr = matrix_c.data_ptr();
 		test_check(std::abs(matrix_c_ptr[0] - 76.0f) < 1e-5f,
-			   "Non-contiguous matmul forward C[0,0] == 76.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous matmul forward C[0,0] == 76.0", s_pass, s_fail);
 		test_check(std::abs(matrix_c_ptr[1] - 103.0f) < 1e-5f,
-			   "Non-contiguous matmul forward C[0,1] == 103.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous matmul forward C[0,1] == 103.0", s_pass, s_fail);
 		test_check(std::abs(matrix_c_ptr[2] - 100.0f) < 1e-5f,
-			   "Non-contiguous matmul forward C[1,0] == 100.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous matmul forward C[1,0] == 100.0", s_pass, s_fail);
 		test_check(std::abs(matrix_c_ptr[3] - 136.0f) < 1e-5f,
-			   "Non-contiguous matmul forward C[1,1] == 136.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous matmul forward C[1,1] == 136.0", s_pass, s_fail);
 
-		Tensor gradient_output = Tensor::create_from_vector(
-			{1.0f, 0.5f, 2.0f, 1.5f}, {2, 2}, DeviceType::CPU, false);
+		Tensor gradient_output =
+			Tensor::create_from_vector({1.0f, 0.5f, 2.0f, 1.5f}, {2, 2}, DeviceType::CPU, false);
 		matrix_c.set_gradient(gradient_output);
 		matrix_c.backward();
 
-		test_check(matrix_a.grad() != nullptr,
-			   "Non-contiguous Tensor A gradient computed",
-			   s_pass,
-			   s_fail);
-		test_check(matrix_b.grad() != nullptr,
-			   "Non-contiguous Tensor B gradient computed",
-			   s_pass,
-			   s_fail);
+		test_check(matrix_a.grad() != nullptr, "Non-contiguous Tensor A gradient computed", s_pass,
+				   s_fail);
+		test_check(matrix_b.grad() != nullptr, "Non-contiguous Tensor B gradient computed", s_pass,
+				   s_fail);
 
 		const float* gradient_a_ptr = matrix_a.grad()->data_as_float();
 		test_check(std::abs(gradient_a_ptr[0] - 12.0f) < 1e-5f,
-			   "Non-contiguous backward dA[0,0] == 12.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dA[0,0] == 12.0", s_pass, s_fail);
 		test_check(std::abs(gradient_a_ptr[1] - 13.5f) < 1e-5f,
-			   "Non-contiguous backward dA[0,1] == 13.5",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dA[0,1] == 13.5", s_pass, s_fail);
 		test_check(std::abs(gradient_a_ptr[2] - 15.0f) < 1e-5f,
-			   "Non-contiguous backward dA[0,2] == 15.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dA[0,2] == 15.0", s_pass, s_fail);
 		test_check(std::abs(gradient_a_ptr[3] - 29.0f) < 1e-5f,
-			   "Non-contiguous backward dA[1,0] == 29.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dA[1,0] == 29.0", s_pass, s_fail);
 		test_check(std::abs(gradient_a_ptr[4] - 32.5f) < 1e-5f,
-			   "Non-contiguous backward dA[1,1] == 32.5",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dA[1,1] == 32.5", s_pass, s_fail);
 		test_check(std::abs(gradient_a_ptr[5] - 36.0f) < 1e-5f,
-			   "Non-contiguous backward dA[1,2] == 36.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dA[1,2] == 36.0", s_pass, s_fail);
 
 		const float* gradient_b_ptr = matrix_b.grad()->data_as_float();
 		test_check(std::abs(gradient_b_ptr[0] - 5.0f) < 1e-5f,
-			   "Non-contiguous backward dB[0,0] == 5.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dB[0,0] == 5.0", s_pass, s_fail);
 		test_check(std::abs(gradient_b_ptr[1] - 3.5f) < 1e-5f,
-			   "Non-contiguous backward dB[0,1] == 3.5",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dB[0,1] == 3.5", s_pass, s_fail);
 		test_check(std::abs(gradient_b_ptr[2] - 11.0f) < 1e-5f,
-			   "Non-contiguous backward dB[1,0] == 11.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dB[1,0] == 11.0", s_pass, s_fail);
 		test_check(std::abs(gradient_b_ptr[3] - 7.5f) < 1e-5f,
-			   "Non-contiguous backward dB[1,1] == 7.5",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dB[1,1] == 7.5", s_pass, s_fail);
 		test_check(std::abs(gradient_b_ptr[4] - 17.0f) < 1e-5f,
-			   "Non-contiguous backward dB[2,0] == 17.0",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dB[2,0] == 17.0", s_pass, s_fail);
 		test_check(std::abs(gradient_b_ptr[5] - 11.5f) < 1e-5f,
-			   "Non-contiguous backward dB[2,1] == 11.5",
-			   s_pass,
-			   s_fail);
+				   "Non-contiguous backward dB[2,1] == 11.5", s_pass, s_fail);
 
 		AutogradTape::get_instance().set_active(false);
 	}
@@ -1132,12 +902,10 @@ bool test_ai() {
 		size_t num_experts = 8;
 		size_t sequence_length = 256;
 
-		bool build_ok = moe_ai.build_expert_layers(
-			hidden_dim, feedforward_network_dimension, num_experts);
-		test_check(build_ok,
-			   "build_expert_layers allocates 8-expert stack and router weights",
-			   s_pass,
-			   s_fail);
+		bool build_ok =
+			moe_ai.build_expert_layers(hidden_dim, feedforward_network_dimension, num_experts);
+		test_check(build_ok, "build_expert_layers allocates 8-expert stack and router weights",
+				   s_pass, s_fail);
 
 		// Synthesize a diverse batch of 256 tokens spanning the 32-dim embedding space
 		std::mt19937 tok_gen(1337);
@@ -1148,23 +916,18 @@ bool test_ai() {
 		}
 
 		std::vector<int> routing_histogram;
-		bool fwd_ok = moe_ai.forward_mixture_experts(
-			hidden_states, sequence_length, routing_histogram);
-		test_check(fwd_ok,
-			   "forward_mixture_experts executes Top-2 sparse routing on Ada Lovelace",
-			   s_pass,
-			   s_fail);
-		test_check_eq(routing_histogram.size(),
-			      num_experts,
-			      "Routing histogram contains counts for all 8 discrete experts",
-			      s_pass,
-			      s_fail);
+		bool fwd_ok =
+			moe_ai.forward_mixture_experts(hidden_states, sequence_length, routing_histogram);
+		test_check(fwd_ok, "forward_mixture_experts executes Top-2 sparse routing on Ada Lovelace",
+				   s_pass, s_fail);
+		test_check_eq(routing_histogram.size(), num_experts,
+					  "Routing histogram contains counts for all 8 discrete experts", s_pass,
+					  s_fail);
 
 		// Verify every token is routed to exactly 2 active experts
 		int total_dispatched_tokens = 0;
 		int active_experts = 0;
-		std::cout
-			<< "  [Gate 6 MoE Load] Dispatched token distribution across 8 experts:\n  ";
+		std::cout << "  [Gate 6 MoE Load] Dispatched token distribution across 8 experts:\n  ";
 		for (size_t e = 0; e < num_experts; ++e) {
 			int count = routing_histogram[e];
 			total_dispatched_tokens += count;
@@ -1175,25 +938,18 @@ bool test_ai() {
 		std::cout << "\n";
 
 		test_check_eq(
-			total_dispatched_tokens,
-			static_cast<int>(sequence_length * 2),
+			total_dispatched_tokens, static_cast<int>(sequence_length * 2),
 			"Top-2 router dispatches exactly 2 active experts per token (512 total dispatches)",
-			s_pass,
-			s_fail);
-		test_check_eq(
-			active_experts,
-			static_cast<int>(num_experts),
-			"Zero dead experts: all 8 discrete experts actively receive token load",
-			s_pass,
-			s_fail);
+			s_pass, s_fail);
+		test_check_eq(active_experts, static_cast<int>(num_experts),
+					  "Zero dead experts: all 8 discrete experts actively receive token load",
+					  s_pass, s_fail);
 
-		bool balance_ok = moe_ai.verify_routing_balance(
-			routing_histogram, sequence_length, num_experts);
-		test_check(
-			balance_ok,
-			"Gate 6: Routing load balance verified across all 8 experts (load ratio < 3.0x)",
-			s_pass,
-			s_fail);
+		bool balance_ok =
+			moe_ai.verify_routing_balance(routing_histogram, sequence_length, num_experts);
+		test_check(balance_ok,
+				   "Gate 6: Routing load balance verified across all 8 experts (load ratio < 3.0x)",
+				   s_pass, s_fail);
 
 		// Check numerical stability of residual stream
 		bool all_finite = true;
@@ -1203,14 +959,11 @@ bool test_ai() {
 				break;
 			}
 		}
-		test_check(
-			all_finite,
-			"MoE output residual stream states are strictly finite and numerically stable",
-			s_pass,
-			s_fail);
+		test_check(all_finite,
+				   "MoE output residual stream states are strictly finite and numerically stable",
+				   s_pass, s_fail);
 	}
 
-	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail
-		  << " failed ===\n";
+	std::cout << "=== AI Engine Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
 	return s_fail == 0;
 }
