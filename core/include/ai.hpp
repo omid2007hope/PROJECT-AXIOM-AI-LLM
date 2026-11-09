@@ -88,6 +88,7 @@ public:
 
 	// Method to reset all parameters/weights back to chaotic state
 	void reset_weights(Elements& elements);
+	void reset_weights(Elements& elements, bool verbose);
 
 	// The Training Loop Orchestrator
 	TrainStatus train(Optimizer& optimizer, Portion& portion);

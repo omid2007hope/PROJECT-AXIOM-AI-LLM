@@ -979,7 +979,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 					   Parser& parser, const Input& input,
 					   const std::filesystem::path& weights_path,
 					   const std::filesystem::path& vocab_path, size_t max_steps = 0,
-					   double target_stop_loss = 2.0) {
+					   double target_stop_loss = 2.8) {
 	size_t total_dataset_tokens = portion.ram_buffer_token_ids.size();
 	std::error_code ec;
 	uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
@@ -1058,7 +1058,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 		if (ch != 0) {
 			if (ch == 'r' || ch == 'R') {
 				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
-				ai.reset_weights(elements);
+				ai.reset_weights(elements, true);
 				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
 					first_loss.reset();
@@ -1354,7 +1354,7 @@ bool execute_training_session(
 	const std::filesystem::path& vocab_path, const std::filesystem::path& embedded_path,
 	const std::filesystem::path& asset_dir, const std::filesystem::path& core_dir, AppMode mode,
 	bool developer_mode, size_t max_steps, bool is_interactive, bool auto_archive, bool auto_purge,
-	uint32_t min_frequency = 3, double target_stop_loss = 2.0) {
+	uint32_t min_frequency = 3, double target_stop_loss = 2.8) {
 	parser.developer_mode = developer_mode;
 	ai.enable_transformer = false;
 
@@ -1712,7 +1712,7 @@ int main(int argc, char* argv[]) {
 	uint32_t min_frequency = 3;
 	uint32_t random_seed = 1337U;
 	bool custom_seed_set = false;
-	double target_stop_loss = 2.0;
+	double target_stop_loss = 2.8;
 
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
@@ -1745,7 +1745,7 @@ int main(int argc, char* argv[]) {
 				<< "  --lr <rate>         Set optimizer learning rate (default: 0.001)\n"
 				<< "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
 				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 3)\n"
-				<< "  --target-loss <L>   Set target stopping loss (default: 2.0, range: 1.5 - 3.0)\n"
+				<< "  --target-loss <L>   Set target stopping loss (default: 2.8, range: 1.5 - 3.0)\n"
 				<< "  --archive           Automatically archive processed files after bulk training\n"
 				<< "  --purge             Automatically purge processed files after bulk training\n\n";
 			return 0;

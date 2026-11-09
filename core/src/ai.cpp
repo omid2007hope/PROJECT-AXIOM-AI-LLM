@@ -62,6 +62,10 @@ AI::AI(size_t input_elements_x_total,
 }
 
 void AI::reset_weights(Elements& elements) {
+	reset_weights(elements, false);
+}
+
+void AI::reset_weights(Elements& elements, bool verbose) {
 	elements.weight_elements = input_elements_x_total * target_elements_y_total;
 	elements.bias_elements = target_elements_y_total;
 
@@ -93,8 +97,10 @@ void AI::reset_weights(Elements& elements) {
 		upload_embeddings(host_embeddings.data(), &gpu_embeddings);
 	}
 
-	std::cout << "[AI Brain] Weights, Biases, and Embeddings reset to chaotic state.\n"
-		  << std::flush;
+	if (verbose) {
+		std::cout << "[AI Brain] Weights, Biases, and Embeddings reset to chaotic state.\n"
+				  << std::flush;
+	}
 }
 
 AI::~AI() {
