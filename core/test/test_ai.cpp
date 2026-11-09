@@ -30,12 +30,12 @@ bool test_ai() {
 	std::cout << "\n[1] AI Initialization & Dimensions\n";
 	AI ai(in_dim, out_dim, w_min, w_max, e);
 
-	test_check_eq(e.weight_elements, in_dim * out_dim, "Elements weight_elements == 2048", s_pass,
+	test_check_eq(e.weight_elements, in_dim * out_dim, "Elements weight_elements == in_dim * out_dim", s_pass,
 				  s_fail);
-	test_check_eq(e.bias_elements, out_dim, "Elements bias_elements == 4", s_pass, s_fail);
-	test_check_eq(ai.host_weights.size(), in_dim * out_dim, "h_weights size == 2048", s_pass,
+	test_check_eq(e.bias_elements, out_dim, "Elements bias_elements == out_dim", s_pass, s_fail);
+	test_check_eq(ai.host_weights.size(), in_dim * out_dim, "h_weights size == in_dim * out_dim", s_pass,
 				  s_fail);
-	test_check_eq(ai.host_bias.size(), out_dim, "h_bias size == 4", s_pass, s_fail);
+	test_check_eq(ai.host_bias.size(), out_dim, "h_bias size == out_dim", s_pass, s_fail);
 
 	// â”€â”€ [2] Chaos / Symmetry Breaking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[2] Weight Distribution & Chaos Verification\n";
@@ -83,19 +83,19 @@ bool test_ai() {
 
 	// â”€â”€ [5] Training Loop Step & Loss Reading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[5] Training Step Execution\n";
-	const size_t RAM_BUFFER = 1000;
-	const size_t TOKEN_DIM = 4;
-	const size_t CONTEXT_WINDOW = 128; // 512 floats window, 4 floats target (matches in_dim)
+	const size_t CONTEXT_WINDOW = c.context_window_size;
+	const size_t TOKEN_DIM = c.token_dim;
+	const size_t RAM_BUFFER = (CONTEXT_WINDOW + 10) * TOKEN_DIM;
 	Portion portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	portion.allocate_pinned();
 
 	// Populate ram buffer with synthetic tokens
-	portion.ram_buffer_tokens.resize(RAM_BUFFER);
-	for (size_t i = 0; i < RAM_BUFFER; ++i) {
+	portion.ram_buffer_tokens.resize(portion.all_elements + portion.target_elements);
+	for (size_t i = 0; i < portion.ram_buffer_tokens.size(); ++i) {
 		portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 10) + 1));
 	}
 
-	Optimizer optimizer(test_embedded_path(), 0.01f);
+	Optimizer optimizer(test_embedded_path(), c.learning_rate);
 
 	TrainStatus status = ai.train(optimizer, portion);
 	test_check(status == TrainStatus::Trained,
@@ -125,19 +125,19 @@ bool test_ai() {
 	Portion conv_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 	conv_portion.allocate_pinned();
 
-	// Initialize weights and biases to positive regime to ensure active gradient flow (avoid dead ReLU)
+	// Initialize weights scaled by fan-in bound to ensure active gradient flow without overflow
 	for (float& w : ai.host_weights) {
-		w = 0.01f;
+		w = c.weight_max * 0.5f;
 	}
 	for (float& b : ai.host_bias) {
-		b = 0.1f;
+		b = 0.0f;
 	}
 	ai.upload_weights();
 
 	auto refill = [&]() {
-		conv_portion.ram_buffer_tokens.resize(RAM_BUFFER);
-		for (size_t i = 0; i < RAM_BUFFER; ++i) {
-			conv_portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.1f * ((i % 4) + 1));
+		conv_portion.ram_buffer_tokens.resize(conv_portion.all_elements + conv_portion.target_elements);
+		for (size_t i = 0; i < conv_portion.ram_buffer_tokens.size(); ++i) {
+			conv_portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.01f * ((i % 4) + 1));
 		}
 	};
 	refill();
@@ -340,14 +340,14 @@ bool test_ai() {
 				  "New word 'jumps' assigned token ID #5", s_pass, s_fail);
 
 	std::vector<std::bfloat16_t> prompt_context =
-		test_parser.build_context_window(parser_input, prompt_tokens, 128);
-	test_check_eq(prompt_context.size(), static_cast<size_t>(512),
-				  "build_context_window generates exact 512 bfloat16_t elements", s_pass, s_fail);
+		test_parser.build_context_window(parser_input, prompt_tokens, c.context_window_size);
+	test_check_eq(prompt_context.size(), in_dim,
+				  "build_context_window generates exact elements matching in_dim", s_pass, s_fail);
 
 	std::vector<float> prompt_pred;
 	test_check(ai.predict(prompt_context, prompt_pred),
 			   "ai.predict(prompt_context) succeeds on user prompt context", s_pass, s_fail);
-	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == 4", s_pass, s_fail);
+	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == out_dim", s_pass, s_fail);
 
 	// â”€â”€ [10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning â”€â”€
 	std::cout << "\n[10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning\n";
@@ -371,9 +371,9 @@ bool test_ai() {
 		Portion token_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 		token_portion.allocate_pinned();
 
-		// Populate ram_buffer_token_ids with 200 token IDs
-		token_portion.ram_buffer_token_ids.resize(200);
-		for (size_t i = 0; i < 200; ++i) {
+		// Populate ram_buffer_token_ids with token IDs
+		token_portion.ram_buffer_token_ids.resize(CONTEXT_WINDOW + 20);
+		for (size_t i = 0; i < token_portion.ram_buffer_token_ids.size(); ++i) {
 			token_portion.ram_buffer_token_ids[i] = static_cast<uint32_t>(4 + (i % 20));
 		}
 
@@ -383,7 +383,7 @@ bool test_ai() {
 
 		TrainStatus token_status = ai.train(optimizer, token_portion);
 		test_check(token_status == TrainStatus::Trained,
-				   "ai.train() succeeds using 128 uint32_t token IDs across PCIe", s_pass, s_fail);
+				   "ai.train() succeeds using token IDs across PCIe", s_pass, s_fail);
 		test_check(token_portion.has_token_ids, "Portion flagged has_token_ids == true", s_pass,
 				   s_fail);
 

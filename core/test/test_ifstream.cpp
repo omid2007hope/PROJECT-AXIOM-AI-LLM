@@ -1,4 +1,5 @@
 #include "test_header.hpp"
+#include "../include/config.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -7,8 +8,9 @@ bool test_ifstream() {
 	std::cout << "\n=== Binary Asset Stream Test Suite ===\n";
 	int s_pass = 0, s_fail = 0;
 
+	Config c;
 	const std::vector<std::string> assets = {"Photo.jpeg", "Video.mp4", "Voice.ogg"};
-	const std::filesystem::path asset_dir = test_core_dir() / "asset_sample";
+	const std::filesystem::path asset_dir = test_core_dir() / c.asset_folder;
 
 	for (const auto& file_name : assets) {
 		std::filesystem::path p = asset_dir / file_name;

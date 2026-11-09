@@ -23,45 +23,53 @@ static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactl
 enum class AppMode { Chat, Use, Train, BulkTrain, Test, Benchmark, Server, Exit };
 
 struct Config {
-	size_t ram_buffer_size = 4194304;
-	size_t token_dim = 1024;
-	size_t context_window_size = 256;
-	float learning_rate = 0.001f;
-	size_t loss_report_interval = 1000;
+	static constexpr size_t ram_buffer_size = 4194304;
+	static constexpr size_t token_dim = 1024;
+	static constexpr size_t context_window_size = 256;
+	static constexpr float learning_rate = 0.001f;
+	static constexpr size_t loss_report_interval = 1000;
 
+	static constexpr float weight_min = -0.0033854167f;
+	static constexpr float weight_max = 0.0033854167f;
 
-	float weight_min = -0.0033854167f;
-	float weight_max = 0.0033854167f;
+	// Folder layout & files
+	static constexpr const char* database_folder = "database";
+	static constexpr const char* models_folder = "models";
+	static constexpr const char* training_folder = "training";
+	static constexpr const char* embedded_file = "embedded_data.bin";
+	static constexpr const char* asset_folder = "asset_sample";
+	static constexpr const char* weights_file = "weights.axiom";
+	static constexpr const char* vocab_file = "vocab.axiom";
 };
 
 namespace config {
 
 // Hyperparameters
-constexpr size_t ram_buffer_size = 4194304; // 4M tokens (~16.7 MB in RAM)
-constexpr size_t token_dim = 1024;			// GPT-2 scale (Must be multiple of 64)
-constexpr size_t context_window_size = 256; // Doubled to capture paragraph-level context
+constexpr size_t ram_buffer_size = Config::ram_buffer_size; // 4M tokens (~16.7 MB in RAM)
+constexpr size_t token_dim = Config::token_dim;			// GPT-2 scale (Must be multiple of 64)
+constexpr size_t context_window_size = Config::context_window_size; // Doubled to capture paragraph-level context
 
 // AdamW Optimizer Settings
-constexpr float learning_rate = 0.001f; // Base AdamW rate (fan-in scaled inside CUDA kernels)
+constexpr float learning_rate = Config::learning_rate; // Base AdamW rate (fan-in scaled inside CUDA kernels)
 
 // How many training steps pass between two loss reports
-constexpr size_t loss_report_interval = 1000; // Increased to prevent CPU/GPU synchronization stalls
+constexpr size_t loss_report_interval = Config::loss_report_interval; // Increased to prevent CPU/GPU synchronization stalls
 
 // Initial weights are drawn uniformly from [-sqrt(3/K), +sqrt(3/K)], K = fan-in =
 // context_window_size * token_dim = 262144. That gives std 1/sqrt(K) = 1/512, so the
 // RMS-normalized input produces unit-variance outputs. (1/sqrt(token_dim) ignores the
 // 256x fan-in and explodes the logits.) sqrt(3)/512 = 0.0033854167f.
-constexpr float weight_min = -0.0033854167f;
-constexpr float weight_max = 0.0033854167f;
+constexpr float weight_min = Config::weight_min;
+constexpr float weight_max = Config::weight_max;
 
 // Folder layout
-constexpr const char* database_folder = "database";
-constexpr const char* models_folder = "models";
-constexpr const char* training_folder = "training";
-constexpr const char* embedded_file = "embedded_data.bin";
-constexpr const char* asset_folder = "asset_sample";
-constexpr const char* weights_file = "weights.axiom";
-constexpr const char* vocab_file = "vocab.axiom";
+constexpr const char* database_folder = Config::database_folder;
+constexpr const char* models_folder = Config::models_folder;
+constexpr const char* training_folder = Config::training_folder;
+constexpr const char* embedded_file = Config::embedded_file;
+constexpr const char* asset_folder = Config::asset_folder;
+constexpr const char* weights_file = Config::weights_file;
+constexpr const char* vocab_file = Config::vocab_file;
 
 } // namespace config
 

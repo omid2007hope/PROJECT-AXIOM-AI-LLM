@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "../include/config.hpp"
 #include "../include/parser.hpp"
 
 inline void print_file_path() {
@@ -50,11 +51,11 @@ inline std::filesystem::path test_core_dir() {
 }
 
 inline std::filesystem::path test_embedded_path() {
-	return test_core_dir() / "database" / "embedded_data.bin";
+	return test_core_dir() / config::database_folder / config::embedded_file;
 }
 
 inline std::vector<std::filesystem::path> test_asset_dirs() {
-	std::vector<std::filesystem::path> dirs = {test_core_dir() / "asset_sample"};
+	std::vector<std::filesystem::path> dirs = {test_core_dir() / config::asset_folder};
 	std::filesystem::path sb = test_core_dir() / "test_sandbox_assets";
 	if (std::filesystem::exists(sb)) {
 		dirs.push_back(sb);

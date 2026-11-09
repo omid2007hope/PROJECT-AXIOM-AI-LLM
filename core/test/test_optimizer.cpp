@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "../include/config.hpp"
 #include "../include/optimizer.hpp"
 #include "../include/parser.hpp"
 #include "test_header.hpp"
@@ -32,20 +33,16 @@ static void check(bool cond, const char* label) {
 bool test_optimizer() {
 	std::cout << "\n=== Optimizer Test Suite ===\n";
 
-	// Constants that match optimizer.cpp internals
-	const size_t TOKEN_DIM = 4; // 1 token = 4 bfloat16_t values
-
-	// Use small buffer so tests are fast yet cover all code paths.
-	// ram_buffer_size = 100 floats = 25 tokens
-	// context_window_size = 4 tokens → window=16 floats, target=4 floats
-	// context_window_size = 4 tokens → window=16 floats, target=4 floats
-	const size_t RAM_BUFFER = 100;
-	const size_t CONTEXT_WINDOW = 4;
-	const size_t WINDOW_ELEMENTS = CONTEXT_WINDOW * TOKEN_DIM; // 16
-	const size_t TARGET_ELEMENTS = 1 * TOKEN_DIM;	      //  4
+	// Dynamic configuration sourced directly from Config
+	Config c;
+	const size_t TOKEN_DIM = c.token_dim;
+	const size_t RAM_BUFFER = c.ram_buffer_size;
+	const size_t CONTEXT_WINDOW = c.context_window_size;
+	const size_t WINDOW_ELEMENTS = CONTEXT_WINDOW * TOKEN_DIM;
+	const size_t TARGET_ELEMENTS = 1 * TOKEN_DIM;
 
 	// Expected windows per chunk: floor((RAM_BUFFER - WINDOW_ELEMENTS - TARGET_ELEMENTS) / TOKEN_DIM) + 1
-	const size_t EXPECTED_WINDOWS = (RAM_BUFFER - WINDOW_ELEMENTS - TARGET_ELEMENTS) / TOKEN_DIM + 1; // = 21
+	const size_t EXPECTED_WINDOWS = (RAM_BUFFER - WINDOW_ELEMENTS - TARGET_ELEMENTS) / TOKEN_DIM + 1;
 
 	// ── [1] Initial Portion state ────────────────────────────────────────────
 	std::cout << "\n[1] Initial Portion state\n";
@@ -66,7 +63,7 @@ bool test_optimizer() {
 	check(portion.context_window_tokens[0] != nullptr, "context_window_tokens allocated");
 	check(portion.target_tokens[0] != nullptr, "target_tokens allocated");
 
-	Optimizer optimizer(test_embedded_path(), 0.001f);
+	Optimizer optimizer(test_embedded_path(), c.learning_rate);
 
 	// ── [2] disk_to_ram — first load ─────────────────────────────────────────
 	std::cout << "\n[2] disk_to_ram — first load\n";
@@ -120,18 +117,18 @@ bool test_optimizer() {
 	// ── [6] Lock safety — buffer_in_use blocks disk_to_ram ───────────────────
 	std::cout << "\n[6] Lock safety\n";
 	{
-		Portion locked(64, TOKEN_DIM, CONTEXT_WINDOW);
+		Portion locked(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 		locked.buffer_in_use.store(true, std::memory_order_relaxed);
-		Optimizer opt2(test_embedded_path(), 0.001f);
+		Optimizer opt2(test_embedded_path(), c.learning_rate);
 		opt2.disk_to_ram(locked); // must be a no-op
 		check_eq(locked.ram_buffer_tokens.size(),
 			 size_t {0},
 			 "disk_to_ram skipped when buffer_in_use=true");
 	}
 	{
-		Portion locked(64, TOKEN_DIM, CONTEXT_WINDOW);
+		Portion locked(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 		locked.context_in_use.store(true, std::memory_order_relaxed);
-		Optimizer opt3(test_embedded_path(), 0.001f);
+		Optimizer opt3(test_embedded_path(), c.learning_rate);
 		opt3.disk_to_ram(locked); // must be a no-op
 		check_eq(locked.ram_buffer_tokens.size(),
 			 size_t {0},
@@ -185,8 +182,8 @@ bool test_optimizer() {
 		check_eq(ring_buffer.available_chunks(), size_t {0}, "0 available chunks after pop");
 
 		// Test Optimizer prefetch controls
-		Optimizer prefetch_opt(test_embedded_path(), 0.001f);
-		Portion test_portion(64, TOKEN_DIM, CONTEXT_WINDOW);
+		Optimizer prefetch_opt(test_embedded_path(), c.learning_rate);
+		Portion test_portion(RAM_BUFFER, TOKEN_DIM, CONTEXT_WINDOW);
 		check(!prefetch_opt.is_prefetch_running(), "Prefetch not running initially");
 		prefetch_opt.start_prefetch(test_portion);
 		check(prefetch_opt.is_prefetch_running(), "Prefetch running after start_prefetch");
