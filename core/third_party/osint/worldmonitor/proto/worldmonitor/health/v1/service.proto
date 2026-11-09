@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package worldmonitor.health.v1;
+
+import "sebuf/http/annotations.proto";
+import "worldmonitor/health/v1/list_air_quality_alerts.proto";
+import "worldmonitor/health/v1/list_disease_outbreaks.proto";
+
+service HealthService {
+  option (sebuf.http.service_config) = {base_path: "/api/health/v1"};
+
+  // ListDiseaseOutbreaks returns recent outbreak alerts from WHO Disease Outbreak News, CDC, ECDC, CIDRAP and ProMED-sourced ThinkGlobalHealth, with alert levels.
+  rpc ListDiseaseOutbreaks(ListDiseaseOutbreaksRequest) returns (ListDiseaseOutbreaksResponse) {
+    option (sebuf.http.config) = {path: "/list-disease-outbreaks", method: HTTP_METHOD_GET};
+  }
+
+  // ListAirQualityAlerts returns PM2.5 stations reporting in the last 2 hours from OpenAQ, supplemented by WAQI, with AQI and a derived health risk level.
+  rpc ListAirQualityAlerts(ListAirQualityAlertsRequest) returns (ListAirQualityAlertsResponse) {
+    option (sebuf.http.config) = {path: "/list-air-quality-alerts", method: HTTP_METHOD_GET};
+  }
+}

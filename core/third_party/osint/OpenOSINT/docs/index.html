@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenOSINT: the OSINT toolkit for AI agents</title>
+<meta name="description" content="The OSINT toolkit for AI agents: Agent Skill, MCP server and CLI. Passive by default, no API keys to start, every finding cites its tool call.">
+<link rel="canonical" href="https://openosint.tech/">
+<meta name="theme-color" content="#16181b">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/assets/fonts/HankenGrotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+<meta property="og:site_name" content="OpenOSINT">
+<meta property="og:type" content="website">
+<meta property="og:title" content="OpenOSINT: the OSINT toolkit for AI agents">
+<meta property="og:description" content="The OSINT toolkit for AI agents: Agent Skill, MCP server and CLI. Passive by default, no API keys to start, every finding cites its tool call.">
+<meta property="og:url" content="https://openosint.tech/">
+<meta property="og:image" content="https://openosint.tech/assets/social-card.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="OpenOSINT: the OSINT toolkit for AI agents. Agent Skill, MCP server and CLI.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OpenOSINT: the OSINT toolkit for AI agents">
+<meta name="twitter:description" content="The OSINT toolkit for AI agents: Agent Skill, MCP server and CLI. Passive by default, no API keys to start, every finding cites its tool call.">
+<meta name="twitter:image" content="https://openosint.tech/assets/social-card.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "OpenOSINT",
+  "url": "https://openosint.tech/",
+  "logo": "https://openosint.tech/logo.svg",
+  "description": "Open-source engine for passive checks of public information, with hosted products Monitor and Diligence.",
+  "email": "commercial@openosint.tech",
+  "sameAs": [
+    "https://github.com/OpenOSINT/OpenOSINT",
+    "https://app.openosint.tech/"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "OpenOSINT",
+  "description": "Open-source engine for passive checks of public information: CLI, MCP server and web UI.",
+  "codeRepository": "https://github.com/OpenOSINT/OpenOSINT",
+  "programmingLanguage": "Python",
+  "license": "https://opensource.org/licenses/MIT",
+  "url": "https://openosint.tech/"
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="logo" href="/"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3"/><path d="M11 6v10M6 11h10" stroke="currentColor" stroke-width="1.5"/></svg>OpenOSINT</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/docs/">Docs</a>
+      <a href="/tools/">Tools</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+    </nav>
+    <div class="bar-right">
+      <a class="btn btn-small" href="https://app.openosint.tech/?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=nav">Hosted products</a>
+      <details class="menu">
+        <summary>Menu</summary>
+        <div class="menu-panel">
+          <a href="/docs/">Docs</a>
+          <a href="/tools/">Tools</a>
+          <a href="/blog/">Blog</a>
+          <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="intro" aria-label="Introduction">
+    <div class="wrap">
+      <h1>OpenOSINT</h1>
+      <p class="lead">The OSINT toolkit for AI agents: Agent Skill, MCP server and CLI. Passive by default, no API keys needed to start, and every finding cites the tool call that produced it.</p>
+      <div class="hero-actions">
+        <a class="btn" href="/docs/agent-skill/">Add the Agent Skill</a>
+        <a class="btn btn-secondary" href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">View on GitHub &middot; 1,700+ stars</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="quickstart">
+    <div class="wrap">
+      <h2 id="quickstart">Quickstart</h2>
+      <p class="muted">Needs <a href="https://docs.astral.sh/uv/getting-started/installation/" rel="noopener">uv</a>. No API keys for the default flow.</p>
+      <h3>Claude Code plugin</h3>
+      <pre><code>/plugin marketplace add OpenOSINT/OpenOSINT
+/plugin install openosint@openosint
+/openosint:osint example.com</code></pre>
+      <h3>Any agent</h3>
+      <pre><code>npx skills add OpenOSINT/OpenOSINT</code></pre>
+      <h3>MCP server and pip</h3>
+      <pre><code>claude mcp add openosint -- uvx --from openosint openosint-mcp
+pip install openosint &amp;&amp; openosint exposure example.com</code></pre>
+      <p>Details: <a href="/docs/agent-skill/">Agent Skill and plugin</a> &middot; <a href="/docs/mcp/">MCP clients</a> &middot; <a href="/docs/cli/">CLI reference</a> &middot; <a href="/docs/web-ui/">Web UI</a> &middot; <a href="/docs/install/">Install</a></p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hosted">
+    <div class="wrap">
+      <h2 id="hosted">Hosted products built on the engine</h2>
+      <div class="plans">
+        <div class="plan">
+          <div>
+            <h3>Monitor</h3>
+            <p>Know when your domain&rsquo;s security gets worse. External checks of email authentication, TLS, security headers and lookalike domains, and one email when something changes.</p>
+          </div>
+          <a class="btn" href="https://app.openosint.tech/monitor?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=home">Open Monitor</a>
+        </div>
+        <div class="plan">
+          <div>
+            <h3>Diligence</h3>
+            <p>For analysts, investors and banks. Official company records compared with the company&rsquo;s public footprint, each signal with its source and retrieval time.</p>
+          </div>
+          <a class="btn" href="https://app.openosint.tech/diligence?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=home">Open Diligence</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band-light" id="sponsors" aria-label="Sponsors and integrations">
+    <div class="wrap">
+      <h2>Sponsors &amp; integrations</h2>
+      <p>OpenOSINT is proudly sponsored by <b><a href="https://www.ip2location.com" target="_blank" rel="noopener sponsored">IP2Location</a></b> (IP Geolocation &amp; Threat Intelligence category).</p>
+      <div class="sponsor">
+        <a href="https://www.ip2location.io/?utm_source=openosint&amp;utm_medium=readme&amp;utm_campaign=ip2location" target="_blank" rel="noopener sponsored"><img src="https://raw.githubusercontent.com/OpenOSINT/OpenOSINT/main/assets/sponsors/ip2location-logo.png" alt="IP2Location.io logo" height="40"></a>
+        <h3><code>search_ip2location</code></h3>
+        <p>Queries the <a href="https://www.ip2location.io" target="_blank" rel="noopener sponsored">IP2Location.io</a> API for enhanced IP intelligence: geolocation, ISP, domain and ASN, plus VPN, proxy, Tor and datacenter detection on the Security Plan. Sponsored integration. <a href="/tools/#search_ip2location">Details and example output</a> &middot; <a href="https://github.com/OpenOSINT/OpenOSINT/blob/main/docs/integrations/ip2location.md" rel="noopener">Integration guide</a></p>
+        <p><b>Note:</b> The IP2Location integration is sponsored — a Security Plan API key is provided free of charge by <a href="https://www.ip2location.com" target="_blank" rel="noopener">IP2Location</a>.</p>
+      </div>
+      <div class="sponsor">
+        <a href="https://www.testmuai.com/?utm_source=openosint&amp;utm_medium=opensourcecollab" rel="noopener sponsored"><img src="https://raw.githubusercontent.com/OpenOSINT/OpenOSINT/main/assets/sponsors/testmu-ai.svg" alt="TestMu AI logo"></a>
+        <p>TestMu AI (formerly LambdaTest) is an AI-native testing cloud platform built for modern engineering teams. It covers everything from autonomous test creation and fast execution to testing AI agents, chatbots and voice assistants.</p>
+      </div>
+      <p><a href="/sponsors.html">Become a sponsor &rarr;</a></p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <ul class="footer-links">
+      <li><a href="/blog/">Blog</a></li>
+      <li><a href="/tools/">Tools</a></li>
+      <li><a href="/commercial/">Commercial</a></li>
+      <li><a href="/sponsors.html">Sponsors</a></li>
+      <li><a href="/terms/">Terms</a></li>
+      <li><a href="/privacy/">Privacy</a></li>
+      <li><a href="/acceptable-use/">Acceptable Use</a></li>
+      <li><a href="/subprocessors/">Subprocessors</a></li>
+      <li><a href="mailto:commercial@openosint.tech">Contact</a></li>
+    </ul>
+    <span>&copy; 2026 Tommaso Bertocchi, Trieste, Italy</span>
+  </div>
+</footer>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  if (!navigator.clipboard) return;
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "copy"; b.textContent = "Copy"; b.setAttribute("aria-label", "Copy code");
+  b.addEventListener("click", function () {
+    var code = pre.querySelector("code") || pre;
+    navigator.clipboard.writeText(code.innerText).then(function () {
+      b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+    });
+  });
+  pre.appendChild(b);
+});
+</script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "8c1e6e8590b649a5803fbbd3356aa7d2"}'></script>
+</body>
+</html>

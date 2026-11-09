@@ -1,0 +1,37 @@
+---
+interface Props {
+  href: string;
+  image?: string;
+  newTab?: boolean;
+}
+
+const { href, image, newTab } = Astro.props;
+---
+
+<a href={href} target={newTab ? '_blank' : undefined}>
+  {image && <img src={image} alt="" />}
+  <slot />
+</a>
+
+<style lang="scss">
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    background: var(--primary-increased-contrast);
+    color: var(--background);
+    white-space: nowrap;
+    transition: background 0.3s ease;
+    &:hover,
+    &:focus-visible {
+      background: var(--text-color);
+      text-decoration: none;
+    }
+  }
+  img {
+    width: 1rem;
+    filter: grayscale(100%);
+  }
+</style>

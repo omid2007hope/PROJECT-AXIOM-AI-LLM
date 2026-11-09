@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+# Note: This script runs theHarvester
+import sys
+
+
+def main() -> None:
+    if sys.version_info < (3, 14):
+        print('[!] theHarvester requires Python 3.14 or newer, quitting.\n')
+        sys.exit(1)
+
+    from theHarvester.theHarvester import main as theharvester_main
+
+    theharvester_main()
+
+
+if __name__ == '__main__':
+    main()

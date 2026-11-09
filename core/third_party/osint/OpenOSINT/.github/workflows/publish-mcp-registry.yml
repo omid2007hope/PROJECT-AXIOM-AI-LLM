@@ -1,0 +1,82 @@
+name: Publish to MCP Registry
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate server.json version matches release tag
+        run: |
+          TOP_VERSION=$(python3 -c "import json; print(json.load(open('.mcp/server.json'))['version'])")
+          PKG_VERSION=$(python3 -c "import json; print(json.load(open('.mcp/server.json'))['packages'][0]['version'])")
+          if [ "$TOP_VERSION" != "$PKG_VERSION" ]; then
+            echo "❌ Version mismatch inside .mcp/server.json: top-level=$TOP_VERSION, packages[0]=$PKG_VERSION"
+            exit 1
+          fi
+          if [ "${{ github.event_name }}" != "release" ]; then
+            echo "⚠️  Not a release event (workflow_dispatch) — no tag to compare against, using .mcp/server.json version $TOP_VERSION"
+            exit 0
+          fi
+          TAG_VERSION="${{ github.event.release.tag_name }}"
+          TAG_VERSION="${TAG_VERSION#v}"
+          if [ "$TAG_VERSION" != "$TOP_VERSION" ]; then
+            echo "❌ Version mismatch: release tag=$TAG_VERSION, .mcp/server.json=$TOP_VERSION"
+            echo "   .mcp/server.json is stale in the repo — sync it to $TAG_VERSION and commit before this release can publish."
+            exit 1
+          fi
+          echo "✅ Version match: $TAG_VERSION"
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/
+
+      - name: Wait for PyPI to publish this version
+        run: |
+          VERSION=$(python3 -c "import json; d=json.load(open('.mcp/server.json')); print(d['packages'][0]['version'])")
+          echo "Waiting for openosint $VERSION on PyPI..."
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/openosint/$VERSION/json")
+            [ "$code" = "200" ] && { echo "openosint $VERSION is on PyPI"; exit 0; }
+            echo "  try $i: got $code — retrying in 15s"
+            sleep 15
+          done
+          echo "Timed out waiting for openosint $VERSION on PyPI (10 min elapsed)"
+          exit 1
+
+      - name: Publish to MCP Registry
+        run: |
+          mcp-publisher login github-oidc
+
+          MAX_ATTEMPTS=5
+          DELAYS=(15 30 60 120 120)
+
+          for attempt in $(seq 1 $((MAX_ATTEMPTS + 1))); do
+            out=$(mcp-publisher publish .mcp/server.json 2>&1) && code=0 || code=$?
+            echo "$out"
+            if [ $code -eq 0 ]; then
+              echo "✅ MCP Registry publish succeeded"
+              exit 0
+            fi
+            # Treat an already-registered version as idempotent success.
+            if echo "$out" | grep -qi "duplicate version"; then
+              echo "✅ Version already registered in MCP Registry (idempotent)"
+              exit 0
+            fi
+            if [ $attempt -gt $MAX_ATTEMPTS ]; then
+              echo "❌ mcp-publisher publish failed after $MAX_ATTEMPTS attempts"
+              exit 1
+            fi
+            WAIT=${DELAYS[$((attempt-1))]}
+            echo "⚠️  Attempt $attempt failed. Retrying in ${WAIT}s..."
+            sleep "$WAIT"
+          done

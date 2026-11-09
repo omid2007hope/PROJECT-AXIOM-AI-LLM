@@ -1,0 +1,196 @@
+vi.mock('../attachmentWorkerClient', async () => {
+  const { decodeTextBufferIfText, decodeTextWithAutoEncoding } = await import('@main/utils/textEncoding')
+  return {
+    runAttachmentWorker: async (
+      _type: string,
+      input: { content: Uint8Array; conservative: boolean },
+      signal?: AbortSignal
+    ) => {
+      signal?.throwIfAborted()
+      const bytes = Buffer.from(input.content)
+      return (
+        (input.conservative
+          ? decodeTextBufferIfText(bytes)
+          : decodeTextWithAutoEncoding(bytes, { warn() {}, error() {} })
+        )?.trim() ?? null
+      )
+    }
+  }
+})
+
+import iconv from 'iconv-lite'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@logger', () => ({
+  loggerService: { withContext: () => ({ debug: vi.fn(), warn: vi.fn(), info: vi.fn(), error: vi.fn() }) }
+}))
+
+const { getVersionMock, getByIdMock, readMock, cacheGet, cacheSet } = vi.hoisted(() => ({
+  getVersionMock: vi.fn<() => Promise<{ mtime: number; size: number }>>(),
+  getByIdMock: vi.fn<() => Promise<{ ext: string | null }>>(),
+  readMock: vi.fn<() => Promise<{ content: Uint8Array }>>(),
+  cacheGet: vi.fn(),
+  cacheSet: vi.fn()
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    get: (name: string) =>
+      name === 'CacheService'
+        ? { get: cacheGet, set: cacheSet }
+        : { getVersion: getVersionMock, getById: getByIdMock, read: readMock },
+    getPath: () => '/tmp'
+  }
+}))
+
+const { parseOfficeAsyncMock } = vi.hoisted(() => ({ parseOfficeAsyncMock: vi.fn<() => Promise<string>>() }))
+vi.mock('officeparser', () => ({ default: { parseOfficeAsync: parseOfficeAsyncMock } }))
+
+const { wordExtractMock } = vi.hoisted(() => ({ wordExtractMock: vi.fn() }))
+vi.mock('word-extractor', () => ({
+  default: class {
+    extract = wordExtractMock
+  }
+}))
+
+const { extractPdfTextMock } = vi.hoisted(() => ({ extractPdfTextMock: vi.fn<() => Promise<string>>() }))
+vi.mock('@main/utils/pdf', () => ({ extractPdfText: extractPdfTextMock }))
+
+import { extractDocumentText, noExtractableTextNote } from '../attachmentTextExtraction'
+
+const LRMX_UTF8 = `<?xml version="1.0" encoding="UTF-8"?>
+<GanBuRenMianShenPiBiao>
+  <XingMing>张三</XingMing>
+  <XingBie>男</XingBie>
+  <ChuShengNianYue>1975.04</ChuShengNianYue>
+  <MinZu>汉族</MinZu>
+  <JiGuan>河北石家庄</JiGuan>
+  <XianRenZhiWu>某某市某某区人民政府副区长</XianRenZhiWu>
+  <NiRenZhiWu>某某市人民政府副市长</NiRenZhiWu>
+</GanBuRenMianShenPiBiao>
+`
+const LRM_GBK = LRMX_UTF8.replace('encoding="UTF-8"', 'encoding="GBK"')
+
+const BYTES = new Uint8Array([1, 2, 3])
+
+afterEach(() => vi.clearAllMocks())
+
+describe('extractDocumentText — dispatch on entry ext, bytes via FileManager.read', () => {
+  beforeEach(() => {
+    getVersionMock.mockResolvedValue({ mtime: 1, size: 2 })
+    cacheGet.mockReturnValue(undefined)
+    readMock.mockResolvedValue({ content: BYTES })
+  })
+
+  it('extracts PDF via extractPdfText on the raw bytes (no physical path)', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: 'pdf' })
+    extractPdfTextMock.mockResolvedValueOnce('  pdf body  ')
+    expect(await extractDocumentText('e1')).toBe('pdf body')
+    expect(extractPdfTextMock).toHaveBeenCalledWith(BYTES)
+  })
+
+  it('normalizes ext case (PDF → pdf)', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: 'PDF' })
+    extractPdfTextMock.mockResolvedValueOnce('x')
+    expect(await extractDocumentText('e1')).toBe('x')
+    expect(extractPdfTextMock).toHaveBeenCalled()
+  })
+
+  it('extracts .doc via word-extractor (buffer)', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: 'doc' })
+    wordExtractMock.mockResolvedValueOnce({
+      getBody: () => ' word body ',
+      getTextboxes: () => ' a callout ',
+      getFootnotes: () => ' a footnote ',
+      getEndnotes: () => ''
+    })
+    expect(await extractDocumentText('e1')).toBe('word body\n\na callout\n\na footnote')
+    expect(wordExtractMock).toHaveBeenCalledWith(expect.any(Buffer))
+  })
+
+  it('extracts office formats via officeparser (buffer)', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: 'docx' })
+    parseOfficeAsyncMock.mockResolvedValueOnce(' office body ')
+    expect(await extractDocumentText('e1')).toBe('office body')
+    expect(parseOfficeAsyncMock).toHaveBeenCalledWith(expect.any(Buffer), { tempFilesLocation: '/tmp' })
+  })
+
+  it('decodes text/code files with auto encoding', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: 'md' })
+    readMock.mockResolvedValueOnce({ content: Buffer.from(' markdown ') })
+    expect(await extractDocumentText('e1')).toBe('markdown')
+  })
+
+  it.each(['lrmx', 'LRMX'])('decodes UTF-8 XML with unrecognized extension %s', async (ext) => {
+    getByIdMock.mockResolvedValueOnce({ ext })
+    const content = Buffer.from(LRMX_UTF8)
+    readMock.mockResolvedValueOnce({ content })
+    expect(await extractDocumentText('e1')).toEqual(LRMX_UTF8.trim())
+  })
+
+  it('decodes high-confidence GBK XML with an unrecognized extension', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: 'lrm' })
+    const content = iconv.encode(LRM_GBK, 'gbk')
+    readMock.mockResolvedValueOnce({ content })
+    expect(await extractDocumentText('e1')).toEqual(LRM_GBK.trim())
+  })
+
+  it('accepts ASCII text under an unrelated unknown extension', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: 'onnx' })
+    readMock.mockResolvedValueOnce({ content: Buffer.from('key=value\n') })
+    expect(await extractDocumentText('e1')).toEqual('key=value')
+  })
+
+  it.each([
+    ['onnx', Buffer.from(Array.from({ length: 4096 }, (_, i) => (i * 37 + 11) % 256))],
+    ['zip', Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(128)])],
+    ['lrmx', Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n')],
+    ['lrm', iconv.encode('<a>中文</a>', 'gbk')],
+    ['bin', Buffer.concat([Buffer.alloc(1024 * 1024, 'a'), Buffer.from([0])])]
+  ])('rejects binary or ambiguous bytes under unknown extension %s', async (ext, content) => {
+    getByIdMock.mockResolvedValueOnce({ ext })
+    readMock.mockResolvedValueOnce({ content })
+    expect(await extractDocumentText('e1')).toBeNull()
+  })
+
+  it('falls back to text decode for legacy-encoded text when the entry has no ext', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: null })
+    const text = '这是一个没有扩展名的 GBK 文本文件，用于验证自动编码检测。'
+    const content = iconv.encode(text, 'gbk')
+    readMock.mockResolvedValueOnce({ content })
+    expect(await extractDocumentText('e1')).toBe(text)
+  })
+
+  it('rejects ambiguous short legacy-encoded files instead of returning mojibake', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: null })
+    readMock.mockResolvedValueOnce({ content: iconv.encode('中文', 'big5') })
+    expect(await extractDocumentText('e1')).toBeNull()
+  })
+
+  it('does not decode an extensionless binary file as text', async () => {
+    getByIdMock.mockResolvedValueOnce({ ext: null })
+    readMock.mockResolvedValueOnce({ content: Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj') })
+    expect(await extractDocumentText('e1')).toBeNull()
+  })
+
+  it('caches by entry version and skips re-extraction on hit', async () => {
+    cacheGet.mockReturnValueOnce('cached text')
+    expect(await extractDocumentText('e1')).toBe('cached text')
+    expect(getByIdMock).not.toHaveBeenCalled()
+    expect(readMock).not.toHaveBeenCalled()
+  })
+
+  it('throws the abort reason when the signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(extractDocumentText('e1', { signal: controller.signal })).rejects.toBeDefined()
+    expect(getByIdMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('noExtractableTextNote', () => {
+  it('names the file and hints at a scanned/image-only doc', () => {
+    expect(noExtractableTextNote('scan.pdf')).toContain('scan.pdf')
+    expect(noExtractableTextNote('scan.pdf')).toContain('scanned')
+  })
+})

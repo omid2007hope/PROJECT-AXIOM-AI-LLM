@@ -1,0 +1,449 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import {
+  ClaudePluginsSearchResponseSchema,
+  ClawhubSearchResponseSchema,
+  ClawhubSkillDetailSchema,
+  SkillsShSearchResponseSchema
+} from '@shared/types/skill'
+import { normalizeClaudePlugins, normalizeClawhub, normalizeSkillsSh } from '@shared/utils/skillMarketplace'
+
+import { loadSkillsShLeaderboard, searchSkills, SKILL_SEARCH_FAILED_ERROR } from '../skillSearch'
+import claudePluginsFixture from './fixtures/claude-plugins-search.json'
+import clawhubDetailFixture from './fixtures/clawhub-detail.json'
+import clawhubSearchFixture from './fixtures/clawhub-search.json'
+import skillsShFixture from './fixtures/skills-sh-search.json'
+
+// =============================================================================
+// Schema validation against fixtures
+// =============================================================================
+
+describe('Skill search API schemas', () => {
+  describe('ClaudePluginsSearchResponseSchema', () => {
+    it('should parse the claude-plugins fixture', () => {
+      const result = ClaudePluginsSearchResponseSchema.safeParse(claudePluginsFixture)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.skills).toHaveLength(4)
+      }
+    })
+
+    it('should handle missing optional fields', () => {
+      const minimal = {
+        skills: [
+          {
+            id: 'min-1',
+            name: 'minimal-skill',
+            namespace: 'test'
+          }
+        ]
+      }
+      const result = ClaudePluginsSearchResponseSchema.safeParse(minimal)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.skills[0].stars).toBeUndefined()
+        expect(result.data.skills[0].metadata).toBeUndefined()
+      }
+    })
+
+    it('should reject invalid data', () => {
+      const invalid = { skills: [{ name: 'no-id' }] }
+      const result = ClaudePluginsSearchResponseSchema.safeParse(invalid)
+      expect(result.success).toBe(false)
+    })
+  })
+
+  describe('SkillsShSearchResponseSchema', () => {
+    it('should parse the skills.sh fixture', () => {
+      const result = SkillsShSearchResponseSchema.safeParse(skillsShFixture)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.skills).toHaveLength(3)
+        expect(result.data.query).toBe('vercel')
+      }
+    })
+
+    it('should reject missing required fields', () => {
+      const invalid = {
+        query: 'test',
+        skills: [{ id: 'x', name: 'y' }],
+        count: 1
+      }
+      const result = SkillsShSearchResponseSchema.safeParse(invalid)
+      expect(result.success).toBe(false)
+    })
+  })
+
+  describe('ClawhubSearchResponseSchema', () => {
+    it('should parse the clawhub search fixture', () => {
+      const result = ClawhubSearchResponseSchema.safeParse(clawhubSearchFixture)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.results).toHaveLength(2)
+      }
+    })
+
+    it('should handle null version', () => {
+      const result = ClawhubSearchResponseSchema.parse(clawhubSearchFixture)
+      const nullVersion = result.results.find((r) => r.version === null)
+      expect(nullVersion).toBeDefined()
+      expect(nullVersion!.slug).toBe('test-suite-gen')
+    })
+  })
+
+  describe('ClawhubSkillDetailSchema', () => {
+    it('should parse the clawhub detail fixture', () => {
+      const result = ClawhubSkillDetailSchema.safeParse(clawhubDetailFixture)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.skill.slug).toBe('code-reviewer-pro')
+        expect(result.data.owner?.handle).toBe('devmaster')
+      }
+    })
+
+    it('should handle null owner and moderation', () => {
+      const minimal = {
+        skill: {
+          slug: 'test',
+          displayName: 'Test',
+          summary: 'A test skill'
+        },
+        owner: null,
+        moderation: null
+      }
+      const result = ClawhubSkillDetailSchema.safeParse(minimal)
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.owner).toBeNull()
+        expect(result.data.moderation).toBeNull()
+      }
+    })
+  })
+})
+
+// =============================================================================
+// Normalizer tests
+// =============================================================================
+
+describe('Skill search normalizers', () => {
+  describe('normalizeClaudePlugins', () => {
+    it('should normalize fixture to unified results', () => {
+      const results = normalizeClaudePlugins(claudePluginsFixture)
+
+      // cp-002 (null metadata) and cp-003 (no directoryPath/sourceUrl path)
+      // are filtered out because their install source is ambiguous.
+      expect(results).toHaveLength(2)
+
+      // Verify specific normalization rules
+      const codeReview = results.find((r) => r.name === 'code-review')!
+      expect(codeReview.author).toBe('anthropic')
+      expect(codeReview.stars).toBe(42)
+      expect(codeReview.installSource).toBe('claude-plugins:anthropic/skills/code-review')
+      expect(codeReview.sourceUrl).toBe('https://github.com/anthropic/skills/tree/main/code-review')
+    })
+
+    it('should use directoryPath (not name) for installSource to handle name mismatches', () => {
+      // This is the key bug fix test: skill name "vercel-react-best-practices"
+      // differs from the actual repo directory path "skills/react-best-practices".
+      // Using name would cause resolve API failure; using directoryPath works.
+      const results = normalizeClaudePlugins(claudePluginsFixture)
+
+      const vercelSkill = results.find((r) => r.name === 'vercel-react-best-practices')!
+      expect(vercelSkill).toBeDefined()
+
+      // installSource must use the actual directoryPath, not the display name
+      expect(vercelSkill.installSource).toBe('claude-plugins:vercel-labs/agent-skills/skills/react-best-practices')
+      // NOT "claude-plugins:vercel-labs/agent-skills/vercel-react-best-practices"
+
+      // sourceUrl should come from the API response, not be reconstructed
+      expect(vercelSkill.sourceUrl).toBe(
+        'https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices'
+      )
+    })
+
+    it('should drop entries without a resolvable directory path', () => {
+      // cp-002 has null metadata, so repoOwner/repoName are empty and the repo
+      // cannot be cloned — surfacing it would show a non-installable result whose
+      // install click always fails. It must be filtered out at the normalize stage.
+      // cp-003 has repoOwner/repoName but lacks directoryPath/sourceUrl path, so
+      // installing it would scan the whole repo and could install a different skill.
+      const results = normalizeClaudePlugins(claudePluginsFixture)
+
+      expect(results.find((r) => r.name === 'test-generator')).toBeUndefined()
+      expect(results.find((r) => r.name === 'docs-writer')).toBeUndefined()
+      expect(results.every((r) => r.installSource !== 'claude-plugins://')).toBe(true)
+      expect(results.every((r) => !r.installSource.endsWith('/'))).toBe(true)
+    })
+
+    it('should parse directoryPath from matching GitHub tree sourceUrl', () => {
+      const results = normalizeClaudePlugins({
+        skills: [
+          {
+            id: 'cp-url',
+            name: 'docs-writer',
+            namespace: 'devtools',
+            sourceUrl: 'https://github.com/devtools-org/claude-skills/tree/main/skills/docs-writer',
+            metadata: {
+              repoOwner: 'devtools-org',
+              repoName: 'claude-skills'
+            }
+          }
+        ]
+      })
+
+      expect(results).toHaveLength(1)
+      expect(results[0].installSource).toBe('claude-plugins:devtools-org/claude-skills/skills/docs-writer')
+    })
+
+    it('should prefer API sourceUrl over reconstructed URL', () => {
+      const results = normalizeClaudePlugins(claudePluginsFixture)
+
+      // cp-001 has sourceUrl in the API response
+      const codeReview = results.find((r) => r.name === 'code-review')!
+      expect(codeReview.sourceUrl).toBe('https://github.com/anthropic/skills/tree/main/code-review')
+
+      const reconstructed = normalizeClaudePlugins({
+        skills: [
+          {
+            id: 'cp-reconstructed',
+            name: 'docs-writer',
+            namespace: 'devtools',
+            metadata: {
+              repoOwner: 'devtools-org',
+              repoName: 'claude-skills',
+              directoryPath: 'docs-writer'
+            }
+          }
+        ]
+      })
+      expect(reconstructed[0].sourceUrl).toBe('https://github.com/devtools-org/claude-skills/tree/main/docs-writer')
+    })
+  })
+
+  describe('normalizeSkillsSh', () => {
+    it('should normalize fixture to unified results', () => {
+      const results = normalizeSkillsSh(skillsShFixture)
+
+      expect(results).toHaveLength(3)
+
+      expect(results[0].author).toBe('vercel-labs')
+      expect(results[0].description).toBeNull()
+      expect(results[0].sourceUrl).toBe('https://skills.sh/vercel-labs/skills/find-skills')
+      expect(results[1].downloads).toBe(263730)
+      expect(results[2].installSource).toBe('skills.sh:vercel-labs/agent-skills/vercel-composition-patterns')
+    })
+  })
+
+  describe('normalizeClawhub', () => {
+    it('should normalize fixture to unified results', () => {
+      const results = normalizeClawhub(clawhubSearchFixture)
+
+      expect(results).toHaveLength(2)
+
+      expect(results[0].name).toBe('Code Reviewer Pro')
+      expect(results[0].installSource).toBe('clawhub:devmaster/code-reviewer-pro')
+      expect(results[0].author).toBe('devmaster')
+      expect(results[0].sourceUrl).toBe('https://clawhub.ai/devmaster/skills/code-reviewer-pro')
+    })
+
+    it('drops results without an owner because clawhub slugs are not globally unique', () => {
+      const results = normalizeClawhub({
+        results: [
+          {
+            score: 1,
+            slug: 'shared-slug',
+            displayName: 'Shared Slug',
+            summary: 'Ambiguous publisher',
+            version: null,
+            updatedAt: 1
+          }
+        ]
+      })
+
+      expect(results).toEqual([])
+    })
+  })
+})
+
+// =============================================================================
+// Search aggregation
+// =============================================================================
+
+describe('searchSkills', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('searches only the selected source and reports its failure', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => skillsShFixture })
+    vi.stubGlobal('fetch', fetchMock)
+    const results = await searchSkills('vercel', 'skills.sh')
+    expect(results.map((item) => item.installSource)).toContain('skills.sh:vercel-labs/skills/find-skills')
+    expect(fetchMock.mock.calls.map(([url]) => new URL(url).hostname)).toEqual(['skills.sh'])
+    fetchMock.mockResolvedValue({ ok: false, status: 503 })
+    await expect(searchSkills('vercel', 'skills.sh')).rejects.toThrow(SKILL_SEARCH_FAILED_ERROR)
+  })
+
+  it('keeps leaderboard order and exact skill install targets across pages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          skills: skillsShFixture.skills.map(({ source, skillId, name, installs }) => ({
+            source,
+            skillId,
+            name,
+            installs
+          })),
+          page: 1,
+          hasMore: false
+        })
+      })
+    )
+    const page = await loadSkillsShLeaderboard(1)
+    expect(page.hasMore).toBe(false)
+    expect(page.items.map((item) => item.installSource)).toEqual(
+      skillsShFixture.skills.map((item) => 'skills.sh:' + item.id)
+    )
+    await expect(loadSkillsShLeaderboard(2)).rejects.toThrow('Invalid skills.sh pagination')
+  })
+
+  it('rejects empty nonterminal leaderboard pages instead of loading forever', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ skills: [], page: 0, hasMore: true }) })
+    )
+    await expect(loadSkillsShLeaderboard(0)).rejects.toThrow('Invalid skills.sh pagination')
+  })
+
+  it('should return partial results when some registries fail', async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      if (url.toString().startsWith('https://skills.sh/')) {
+        return {
+          ok: true,
+          json: async () => skillsShFixture
+        } as Response
+      }
+
+      throw new Error('network down')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const results = await searchSkills('vercel')
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(results).toHaveLength(3)
+    expect(results.every((result) => result.sourceRegistry === 'skills.sh')).toBe(true)
+  })
+
+  it('keeps same-named skills from different publishers and registries independently installable', async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      const requestUrl = url.toString()
+      let body: unknown
+
+      if (requestUrl.startsWith('https://skills.sh/')) {
+        body = {
+          query: 'review',
+          skills: [
+            {
+              id: 'first/repo/code-review',
+              skillId: 'code-review',
+              name: 'Code-Review',
+              installs: 10,
+              source: 'first/repo'
+            },
+            {
+              id: 'second/repo/code-review',
+              skillId: 'code-review',
+              name: 'code-review',
+              installs: 5,
+              source: 'second/repo'
+            }
+          ],
+          count: 2
+        }
+      } else if (requestUrl.startsWith('https://claude-plugins.dev/')) {
+        body = {
+          skills: [
+            {
+              id: 'plugin-code-review',
+              name: 'code-review',
+              namespace: 'third',
+              metadata: { repoOwner: 'third', repoName: 'repo', directoryPath: 'code-review' }
+            }
+          ]
+        }
+      } else {
+        body = { results: [] }
+      }
+
+      return { ok: true, json: async () => body } as Response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const results = await searchSkills('review')
+
+    expect(results.map((result) => result.installSource)).toEqual([
+      'skills.sh:first/repo/code-review',
+      'skills.sh:second/repo/code-review',
+      'claude-plugins:third/repo/code-review'
+    ])
+  })
+
+  it('offers one install when a registry repeats the same source with different display names', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL) => ({
+        ok: true,
+        json: async () =>
+          url.toString().startsWith('https://skills.sh/')
+            ? {
+                query: 'review',
+                skills: ['Code Review', 'Code Review Updated'].map((name) => ({
+                  id: 'owner/repo/code-review',
+                  skillId: 'code-review',
+                  name,
+                  installs: 10,
+                  source: 'owner/repo'
+                })),
+                count: 2
+              }
+            : url.toString().startsWith('https://claude-plugins.dev/')
+              ? { skills: [] }
+              : { results: [] }
+      }))
+    )
+
+    const results = await searchSkills('review')
+
+    expect(results.map((result) => ({ name: result.name, installSource: result.installSource }))).toEqual([
+      { name: 'Code Review', installSource: 'skills.sh:owner/repo/code-review' }
+    ])
+  })
+
+  it('should reject when all registries fail', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network down'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(searchSkills('vercel')).rejects.toThrow(SKILL_SEARCH_FAILED_ERROR)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('should reject when one registry returns malformed data and all others fail', async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      if (url.toString().startsWith('https://skills.sh/')) {
+        return {
+          ok: true,
+          json: async () => ({ skills: [{ id: 'missing-required-fields' }] })
+        } as Response
+      }
+
+      throw new Error('network down')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(searchSkills('vercel')).rejects.toThrow(SKILL_SEARCH_FAILED_ERROR)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+})

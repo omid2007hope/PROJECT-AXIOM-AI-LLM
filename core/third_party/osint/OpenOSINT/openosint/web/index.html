@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenOSINT</title>
+<!-- All assets are local — an OSINT tool must not announce its execution to CDNs.
+     See static/fonts/README.md and static/vendor/*/README.md for provenance. -->
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/vendor/tailwindcss/tailwind.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background-color: var(--bg); margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-dark: #1c2128;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --accent: #3fb950;
+    --accent-blue: #58a6ff;
+    --red: #f85149;
+    --yellow: #d29922;
+  }
+  :root.light {
+    --bg: #ffffff;
+    --surface: #f6f8fa;
+    --surface-dark: #eaeef2;
+    --border: #d0d7de;
+    --text-primary: #1f2328;
+    --text-secondary: #636c76;
+    --text-muted: #818b98;
+    --accent: #1a7f37;
+    --accent-blue: #0969da;
+    --red: #d1242f;
+    --yellow: #9a6700;
+  }
+
+  /* Themed utility classes */
+  .bg-app          { background-color: var(--bg); }
+  .bg-surface      { background-color: var(--surface); }
+  .bg-surface-dark { background-color: var(--surface-dark); }
+  .bg-border       { background-color: var(--border); }
+  .bg-accent       { background-color: var(--accent); }
+  .bg-overlay      { background-color: rgba(0,0,0,0.5); }
+  .border-app      { border-color: var(--border); }
+  .border-accent   { border-color: var(--accent); }
+  .text-primary    { color: var(--text-primary); }
+  .text-secondary  { color: var(--text-secondary); }
+  .text-muted      { color: var(--text-muted); }
+  .text-accent     { color: var(--accent); }
+  .text-accent-blue{ color: var(--accent-blue); }
+  .text-error      { color: var(--red); }
+  .text-warning    { color: var(--yellow); }
+  .text-bg         { color: var(--bg); }
+
+  /* Hover variants */
+  .hover\:text-primary:hover     { color: var(--text-primary); }
+  .hover\:text-secondary:hover   { color: var(--text-secondary); }
+  .hover\:bg-surface:hover       { background-color: var(--surface); }
+  .hover\:bg-border-50:hover     { background-color: color-mix(in srgb, var(--border) 50%, transparent); }
+  .hover\:bg-accent-80:hover     { background-color: color-mix(in srgb, var(--accent) 80%, black); }
+  .hover\:border-accent-40:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  .hover\:border-app:hover       { border-color: var(--border); }
+  .placeholder-muted::placeholder { color: var(--text-muted); }
+
+  .font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace !important; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  [x-cloak] { display: none !important; }
+
+  @keyframes _spin   { to { transform: rotate(360deg); } }
+  @keyframes _fadein { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+  @keyframes _blink  { 50% { opacity:0; } }
+
+  .c-spin   { animation: _spin 1s linear infinite; }
+  .c-fadein { animation: _fadein 0.15s ease; }
+  .c-blink  { animation: _blink 1s step-end infinite; }
+
+  /* markdown */
+  .md p { margin-bottom:.5em; }
+  .md p:last-child { margin-bottom:0; }
+  .md code { background:var(--surface-dark); border:1px solid var(--border); padding:.1em .3em; border-radius:3px; font-size:.83em; font-family:"JetBrains Mono",monospace; color:var(--accent); }
+  .md strong { color:var(--text-primary); font-weight:500; }
+  .md em { color:var(--text-secondary); font-style:italic; }
+  .md h1,.md h2,.md h3 { font-weight:500; color:var(--text-primary); margin:.7em 0 .3em; }
+  .md h1 { font-size:1.1em; }
+  .md h2 { font-size:1.05em; }
+  .md h3 { font-size:1em; }
+  .md ul,.md ol { padding-left:1.2em; margin-bottom:.5em; }
+  .md ul { list-style:disc; }
+  .md ol { list-style:decimal; }
+  .md li { margin-bottom:.15em; }
+  .md a { color:var(--text-secondary); text-decoration:underline; }
+  .md pre { background:var(--surface-dark); border:1px solid var(--border); padding:.65em .9em; border-radius:6px; overflow-x:auto; margin:.4em 0; }
+  .md pre code { background:none; border:none; padding:0; font-size:.8em; }
+
+  /* MapLibre's own CSS (loaded lazily, after Tailwind) sets .maplibregl-map
+     to position:relative — same specificity as our .absolute utility class,
+     so it wins the cascade by load order and the container collapses to 0
+     height. An ID selector always outranks it, regardless of load order. */
+  #globe-container { position:absolute; inset:0; }
+
+  /* MapLibre controls — theme to the app's surface/border palette so the
+     globe doesn't look like a bolted-on third-party widget. */
+  .maplibregl-ctrl-group { background:var(--surface) !important; border:1px solid var(--border) !important; box-shadow:none !important; }
+  .maplibregl-ctrl-group button { background:transparent !important; }
+  .maplibregl-ctrl-group button:hover { background:var(--border) !important; }
+  .maplibregl-ctrl-group button:not(:first-child) { border-top:1px solid var(--border) !important; }
+  .maplibregl-ctrl-attrib { background:rgba(0,0,0,0.45) !important; color:var(--text-secondary) !important; font-size:10px !important; }
+  .maplibregl-ctrl-attrib a { color:var(--text-secondary) !important; }
+  .maplibregl-ctrl-attrib-button { display:none !important; }
+  .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { font-family:inherit; }
+
+  #chat-area { scroll-behavior:smooth; }
+  textarea { font-family:inherit; }
+  textarea:focus { outline:none; }
+</style>
+</head>
+
+<body class="bg-app" style="font-family:'Inter',system-ui,sans-serif;">
+
+<!-- AUTHORIZATION GATE — separate Alpine island, fail-closed
+     showGate defaults true; init() clears it only when the gate should be skipped. -->
+<div x-data="authGate">
+  <div x-show="showGate" x-cloak
+       @keydown="handleKey($event)"
+       id="auth-gate-overlay"
+       role="dialog" aria-modal="true" aria-labelledby="gate-title"
+       class="fixed inset-0 z-[200] bg-overlay flex items-center justify-center p-4">
+    <div id="auth-gate-modal"
+         class="bg-surface border border-app rounded-lg max-w-md w-full p-6 shadow-xl c-fadein">
+      <h2 id="gate-title" class="text-base font-medium text-primary mb-3">Authorized use only</h2>
+      <p class="text-sm text-secondary leading-relaxed mb-6">
+        OpenOSINT is for lawful OSINT on targets you are authorized to investigate. By
+        continuing you confirm you have the necessary authorization and accept the
+        <a href="https://openosint.tech/demo/terms/" target="_blank" rel="noopener"
+           class="text-accent-blue hover:underline">Terms of Use</a>.
+      </p>
+      <div class="flex gap-3">
+        <button id="gate-accept"
+                @click="accept()"
+                class="flex-1 px-4 py-2.5 rounded-md bg-accent text-bg text-sm font-medium border border-accent hover:bg-accent-80 transition-colors">
+          I have authorization — continue
+        </button>
+        <button id="gate-exit"
+                @click="exit()"
+                class="flex-1 px-4 py-2.5 rounded-md border border-app text-secondary text-sm font-medium hover:text-primary hover:bg-border-50 transition-colors">
+          No — exit
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="main-app" x-data="openosint" class="h-screen flex flex-col font-sans text-sm text-primary overflow-hidden">
+
+<!-- SETTINGS MODAL -->
+<div x-show="showSettings" x-cloak
+     @click.self="showSettings = false"
+     class="fixed inset-0 z-50 bg-overlay flex items-center justify-center p-4"
+     x-transition:enter="transition ease-out duration-150"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-100"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0">
+  <div class="bg-surface border border-app rounded-lg max-w-md w-full p-6 shadow-xl max-h-[88vh] overflow-y-auto c-fadein">
+
+    <!-- header -->
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-sm font-medium">Settings</h2>
+      <button @click="showSettings = false"
+              class="w-7 h-7 flex items-center justify-center rounded-md text-muted hover:text-primary hover:bg-border-50 transition-colors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- LOCAL MODE (primary): keys are saved on this computer, through /api/setup, into the
+         data directory. The browser-only fields below become a secondary option. -->
+    <div x-show="saveToComputer" x-cloak data-testid="save-to-computer" class="mb-4">
+      <p class="text-xs font-medium text-muted uppercase tracking-wider mb-2">API keys</p>
+      <p class="text-muted text-xs leading-relaxed mb-3" data-testid="save-location-copy">
+        Saved on this computer in
+        <span class="font-mono text-secondary break-all" x-text="setupStatus?.config_path || 'the OpenOSINT data directory'"></span>,
+        readable only by you. Survives restarts. A real environment variable of the same name takes precedence.
+      </p>
+      <!-- This browser cannot save (typically Docker): say why, offer the token path. -->
+      <div x-show="setupStatus && !setupStatus.can_save" x-cloak
+           class="border border-app rounded-md p-3 space-y-2 mb-3" data-testid="setup-forbidden">
+        <p class="text-xs text-warning leading-relaxed" x-text="setupStatus?.forbidden_message"></p>
+        <label class="text-secondary text-xs block">Setup token (<span class="font-mono">OPENOSINT_SETUP_TOKEN</span>)</label>
+        <input type="password" x-model="setupToken" autocomplete="off" placeholder="Only if the server has one set"
+               class="w-full bg-app border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+      <div class="space-y-4" data-testid="server-keys">
+        <template x-for="g in setupGroups" :key="g.id">
+          <div class="space-y-3">
+            <p class="text-xs font-medium text-muted uppercase tracking-wider" x-text="g.title"></p>
+            <template x-for="k in g.fields" :key="k.key">
+              <div>
+                <div class="flex items-center justify-between mb-1 gap-2">
+                  <label class="text-secondary text-xs" x-text="k.label"></label>
+                  <a x-show="k.url" :href="k.url" target="_blank"
+                     :rel="(k.key === 'IP2LOCATION_API_KEY' || k.key.startsWith('BRIGHTDATA')) ? 'noopener sponsored' : 'noopener'"
+                     class="text-accent-blue hover:underline text-xs flex-none">Get a key ↗</a>
+                </div>
+                <input :type="k.secret ? 'password' : 'text'"
+                       x-model="setupData[k.key]"
+                       autocomplete="off"
+                       :placeholder="k.configured ? (k.secret ? '••••••••  configured — type to replace' : 'configured — type to replace') : k.key"
+                       class="w-full bg-app border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+                <p x-show="k.configured && !k.shadowed" class="text-accent text-xs mt-1" data-testid="configured-badge"
+                   x-text="'● configured (' + (k.source === 'config' ? 'saved on this computer' : k.source === 'environment' ? 'environment variable' : 'legacy .env file') + ')'"></p>
+                <p x-show="k.shadowed" class="text-warning text-xs mt-1" data-testid="shadowed-badge">
+                  ⚠ A saved value exists, but an environment variable of the same name overrides it. Unset the variable and restart to use the saved one.</p>
+                <p x-show="k.note" class="text-muted text-xs mt-1" x-text="k.note"></p>
+              </div>
+            </template>
+          </div>
+        </template>
+        <div class="flex items-center gap-3">
+          <button @click="saveApiKeys()" :disabled="setupBusy" data-testid="save-to-computer-button"
+                  class="bg-accent hover:bg-accent-80 text-bg rounded-md px-4 py-2 text-xs font-medium transition-colors disabled:opacity-50">
+            Save on this computer
+          </button>
+          <span x-show="setupMsg" x-text="setupMsg"
+                :class="setupOk ? 'text-accent' : 'text-error'"
+                class="text-xs font-mono break-words min-w-0"></span>
+        </div>
+      </div>
+      <button @click="showSessionOnly = !showSessionOnly" data-testid="session-only-toggle"
+              class="flex items-center gap-1.5 text-muted hover:text-secondary text-xs mt-5 transition-colors">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             :class="showSessionOnly ? 'rotate-180' : ''" class="transition-transform"><polyline points="6 9 12 15 18 9"/></svg>
+        Use only for this browser session (not saved)
+      </button>
+    </div>
+
+    <!-- Tool noise level: passive by default, active tools are an explicit opt-in -->
+    <div class="mb-5" :class="saveToComputer ? 'mt-5' : ''" data-testid="tools-noise">
+      <p class="text-xs font-medium text-muted uppercase tracking-wider mb-2">Tools &amp; noise level</p>
+      <label class="flex items-start gap-2 text-xs text-primary mb-2">
+        <input type="checkbox" class="mt-0.5"
+               :checked="policy.allow_active"
+               :disabled="!policy.can_change"
+               @change="setAllowActive($event.target.checked)">
+        <span>
+          Enable active tools (noisy or touches the target)
+          <span class="text-muted block">
+            Off by default. Turning this on lets the agent run tools that send many requests from your IP or contact
+            the target's infrastructure, which can trigger rate limits, WAF blocks and alerts. Max
+            <span x-text="policy.max_tool_calls"></span> tool calls per request.
+          </span>
+        </span>
+      </label>
+      <p x-show="policy.restricted" class="text-xs text-warning mb-2">Active tools are not available on this public/restricted instance<span x-show="policy.restriction_reason"> (<span x-text="policy.restriction_reason"></span>)</span>.</p>
+      <p x-show="policyMsg" class="text-xs text-error mb-2" x-text="policyMsg"></p>
+      <ul class="space-y-1">
+        <template x-for="t in tools" :key="t.name">
+          <li class="text-xs">
+            <span class="font-mono text-secondary" x-text="t.name"></span>
+            <span class="font-mono px-1 py-0.5 rounded border border-app bg-surface"
+                  :class="t.noise === 'passive' || t.noise === 'inherits' ? 'text-muted' : 'text-warning'"
+                  x-text="t.noise"></span>
+            <span x-show="!t.enabled" class="text-muted">(off)</span>
+            <span class="text-muted block" x-text="t.noise_note + (t.active_part ? ' ' + t.active_part : '')"></span>
+          </li>
+        </template>
+      </ul>
+    </div>
+
+    <div class="border-t border-app my-5"></div>
+
+    <!-- Browser-only keys (sessionStorage). The default on the public demo; secondary on a local install. -->
+    <div x-show="!saveToComputer || showSessionOnly" x-cloak data-testid="browser-only-keys"
+         :class="saveToComputer ? 'mt-3 pt-3 border-t border-app' : ''">
+    <!-- LLM Provider (BYOK — stored in sessionStorage) -->
+    <p class="text-xs font-medium text-muted uppercase tracking-wider mb-3">LLM Provider</p>
+    <div class="flex gap-2 mb-4">
+      <button @click="byok.provider = 'anthropic'; saveByok()"
+              :class="byok.provider === 'anthropic' ? 'bg-accent text-bg border-accent' : 'bg-app border-app text-secondary hover:border-app hover:text-primary'"
+              class="flex-1 px-3 py-2 rounded-md border text-xs font-medium transition-all">
+        Anthropic
+      </button>
+      <button @click="byok.provider = 'ollama'; saveByok()"
+              :class="byok.provider === 'ollama' ? 'bg-border text-primary border-app' : 'bg-app border-app text-secondary hover:border-app hover:text-primary'"
+              class="flex-1 px-3 py-2 rounded-md border text-xs font-medium transition-all">
+        Ollama
+      </button>
+      <button @click="byok.provider = 'openai'; saveByok()"
+              :class="byok.provider === 'openai' ? 'bg-border text-primary border-app' : 'bg-app border-app text-secondary hover:border-app hover:text-primary'"
+              class="flex-1 px-3 py-2 rounded-md border text-xs font-medium transition-all">
+        OpenAI-compat
+      </button>
+    </div>
+
+    <!-- Anthropic panel -->
+    <div x-show="byok.provider === 'anthropic'" class="bg-app border border-app rounded-md p-4 space-y-3 mb-4">
+      <div>
+        <label class="text-muted text-xs uppercase tracking-wider block mb-1.5">API Key</label>
+        <input x-model="byok.apiKey" @input="saveByok()" type="password" placeholder="sk-ant-api03-..."
+               class="w-full bg-surface border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+      <div>
+        <label class="text-muted text-xs uppercase tracking-wider block mb-1.5">Model</label>
+        <input x-model="byok.model" @input="saveByok()" placeholder="claude-sonnet-4-6"
+               class="w-full bg-surface border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+    </div>
+
+    <!-- Ollama panel -->
+    <div x-show="byok.provider === 'ollama'" class="bg-app border border-app rounded-md p-4 space-y-3 mb-4">
+      <div>
+        <label class="text-muted text-xs uppercase tracking-wider block mb-1.5">Host URL</label>
+        <input x-model="byok.baseUrl" @input="saveByok()" placeholder="http://localhost:11434"
+               class="w-full bg-surface border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+      <div>
+        <label class="text-muted text-xs uppercase tracking-wider block mb-1.5">Model</label>
+        <input x-model="byok.model" @input="saveByok()" placeholder="llama3.2"
+               class="w-full bg-surface border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+      <div class="flex items-center gap-3">
+        <button @click="testOllama()"
+                class="px-3 py-1.5 rounded-md border border-app text-secondary hover:text-primary text-xs transition-all">
+          Test connection
+        </button>
+        <span x-show="ollamaTestResult" x-text="ollamaTestResult"
+              :class="ollamaTestOk ? 'text-accent' : 'text-error'"
+              class="text-xs font-mono"></span>
+      </div>
+      <div x-show="window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'"
+           class="bg-surface border border-app rounded-md p-3 text-xs space-y-1">
+        <p class="text-warning font-medium">CORS setup required</p>
+        <p class="text-muted">Ollama blocks cross-origin requests by default. Start with:</p>
+        <pre class="font-mono text-accent text-xs mt-1 whitespace-pre-wrap break-all" x-text="`OLLAMA_ORIGINS=&quot;${window.location.origin}&quot; ollama serve`"></pre>
+        <p class="text-muted mt-1">macOS (persistent):</p>
+        <pre class="font-mono text-accent text-xs whitespace-pre-wrap break-all" x-text="`launchctl setenv OLLAMA_ORIGINS &quot;${window.location.origin}&quot;`"></pre>
+        <a href="https://github.com/ollama/ollama/blob/main/docs/faq.md#how-do-i-configure-ollama-server" target="_blank" rel="noopener"
+           class="text-accent-blue hover:underline text-xs mt-1 inline-block">Ollama CORS docs ↗</a>
+      </div>
+    </div>
+
+    <!-- OpenAI-compat panel -->
+    <div x-show="byok.provider === 'openai'" class="bg-app border border-app rounded-md p-4 space-y-3 mb-4">
+      <p class="text-muted text-xs leading-relaxed">
+        Any OpenAI-compatible endpoint (OpenRouter, LiteLLM, vLLM, llama.cpp, …).
+        <strong class="text-warning">api.openai.com blocks browser requests</strong> — use
+        <span class="font-mono text-accent text-xs">openrouter.ai/api/v1</span> instead.
+      </p>
+      <div>
+        <label class="text-muted text-xs uppercase tracking-wider block mb-1.5">Base URL</label>
+        <input x-model="byok.baseUrl" @input="saveByok()" placeholder="https://openrouter.ai/api/v1"
+               class="w-full bg-surface border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+      <div>
+        <label class="text-muted text-xs uppercase tracking-wider block mb-1.5">Model</label>
+        <input x-model="byok.model" @input="saveByok()" placeholder="openai/gpt-4o-mini"
+               class="w-full bg-surface border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+      <div>
+        <label class="text-muted text-xs uppercase tracking-wider block mb-1.5">API Key</label>
+        <input x-model="byok.apiKey" @input="saveByok()" type="password" placeholder="sk-..."
+               class="w-full bg-surface border border-app rounded-md px-3 py-2 text-sm text-primary focus:outline-none transition-colors">
+      </div>
+    </div>
+
+    <!-- Privacy notice -->
+    <p class="text-muted text-xs leading-relaxed mb-4 border border-app rounded-md px-3 py-2">
+      🔒 Keys stay in your browser (sessionStorage), sent only in-flight to the provider/proxy, never stored on our servers.
+    </p>
+
+    <div class="border-t border-app my-5"></div>
+
+
+    <!-- Tool API Keys — driven by /api/tools required_keys -->
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-xs font-medium text-muted uppercase tracking-wider">Tool API Keys</p>
+      <button @click="clearAllKeys()"
+              class="text-xs text-error hover:text-red-400 transition-colors">
+        Clear all keys
+      </button>
+    </div>
+    <p class="text-muted text-xs mb-3">Optional — tools without keys fall back to server env vars or return a prompt.</p>
+    <div class="space-y-4">
+      <template x-for="t in tools.filter(t => t.required_keys && t.required_keys.length > 0)" :key="t.name">
+        <div class="border border-app rounded-md p-3 space-y-2">
+          <p class="text-xs font-mono text-secondary" x-text="(t.icon || '') + ' ' + t.name"></p>
+          <template x-for="k in t.required_keys" :key="k">
+            <div>
+              <label class="text-muted text-xs block mb-1" x-text="k"></label>
+              <div class="relative">
+                <input :type="showByokKeys[k] ? 'text' : 'password'"
+                       :value="byokToolKeys[k] || ''"
+                       @input="byokToolKeys[k] = $event.target.value; saveToolKeys()"
+                       :placeholder="'Enter ' + k"
+                       class="w-full bg-app border border-app rounded-md px-3 py-2 text-xs text-primary focus:outline-none transition-colors pr-9">
+                <button @click="showByokKeys[k] = !showByokKeys[k]"
+                        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-secondary transition-colors">
+                  <svg x-show="!showByokKeys[k]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <svg x-show="showByokKeys[k]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+    </div>
+
+    <!-- sponsors footer -->
+    <template x-if="featuredSponsors.length > 0">
+      <div class="border-t border-app mt-4 pt-3">
+        <p class="text-muted text-xs mb-2">Featured integrations</p>
+        <template x-for="s in featuredSponsors" :key="s.name">
+          <a :href="s.url" target="_blank" rel="noopener sponsored"
+             class="flex items-center gap-2 text-secondary hover:text-primary text-xs transition-colors mb-1">
+            <span class="font-mono" x-text="s.name"></span>
+            <span class="text-muted">·</span>
+            <span class="text-muted truncate" x-text="s.tagline"></span>
+          </a>
+        </template>
+      </div>
+    </template>
+
+    <!-- footer -->
+    <div class="border-t border-app mt-4 pt-4 flex items-center justify-between">
+      <span class="text-muted text-xs font-mono">OpenOSINT <span x-text="version"></span></span>
+      <div class="flex items-center gap-3">
+        <a href="https://github.com/OpenOSINT/OpenOSINT" target="_blank" rel="noopener"
+           class="text-secondary hover:text-primary text-xs transition-colors">GitHub</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOP BAR -->
+<header class="flex-none h-12 bg-surface border-b border-app flex items-center px-4 gap-3 z-10">
+  <!-- wordmark -->
+  <div class="flex items-center flex-none">
+    <span class="font-mono font-medium text-sm">OpenOSINT</span>
+    <span class="text-muted text-xs ml-2 font-mono" x-text="version"></span>
+  </div>
+
+  <!-- center: backend status pill -->
+  <div class="flex-1 flex justify-center">
+    <button @click="showSettings = true"
+            class="text-xs px-3 py-1 rounded-full border border-app text-secondary bg-transparent hover:text-primary transition-colors cursor-pointer">
+      <span x-show="_isByokReady()">BYOK · <span x-text="byok.provider"></span> <span x-text="byok.model || ''"></span></span>
+      <span x-show="!_isByokReady() && aiBackend === 'claude'">Claude (server)</span>
+      <span x-show="!_isByokReady() && aiBackend === 'ollama'">Ollama (server)</span>
+      <span x-show="!_isByokReady() && aiBackend === 'openai'">OpenAI (server)</span>
+      <span x-show="!_isByokReady() && aiBackend === 'none' && serverSideFallback">Not configured — add key in Settings</span>
+      <span x-show="!_isByokReady() && !serverSideFallback">Demo mode — add key in Settings</span>
+    </button>
+  </div>
+
+  <!-- right actions -->
+  <div class="flex items-center gap-1 flex-none">
+    <a href="https://github.com/OpenOSINT/OpenOSINT"
+       target="_blank" rel="noopener noreferrer"
+       class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-app text-muted hover:text-primary hover:bg-surface text-xs transition-colors flex-none"
+       title="Star on GitHub">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      Star on GitHub
+    </a>
+    <button @click="toggleTheme()"
+            aria-label="Toggle theme"
+            :title="isLight ? 'Switch to dark theme' : 'Switch to light theme'"
+            class="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-primary hover:bg-surface transition-colors">
+      <!-- sun icon shown in dark mode -->
+      <svg x-show="!isLight" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <!-- moon icon shown in light mode -->
+      <svg x-show="isLight" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+    <button @click="showSettings = true"
+            aria-label="Settings"
+            title="Settings"
+            class="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-primary hover:bg-surface transition-colors">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+    <button @click="clearConversation()"
+            aria-label="Clear conversation"
+            title="Clear conversation"
+            :disabled="messages.length === 0"
+            class="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-primary hover:bg-surface disabled:opacity-25 disabled:cursor-not-allowed transition-colors">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- Main content row: left rail + view panes -->
+<div class="flex-1 flex overflow-hidden min-h-0">
+
+<!-- LEFT RAIL — CHAT / GLOBE / GRAPH. All three panes below stay mounted;
+     switching here only toggles x-show, so the WebGL globe context and the
+     Cytoscape instance are created once and never torn down. -->
+<nav class="flex-none w-16 flex flex-col border-r border-app bg-surface" style="user-select:none;-webkit-user-select:none">
+  <button @click="activeView = 'chat'"
+          :class="activeView === 'chat' ? 'text-primary bg-border' : 'text-muted hover:text-primary hover:bg-surface'"
+          class="flex flex-col items-center justify-center gap-1 py-3 transition-colors">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+    <span class="text-xs">Chat</span>
+  </button>
+  <button @click="activeView = 'globe'; globeUnseen = 0; $nextTick(() => window._globeFns?.onEnterGlobe?.(document.getElementById('globe-container')))"
+          :class="activeView === 'globe' ? 'text-primary bg-border' : 'text-muted hover:text-primary hover:bg-surface'"
+          class="flex flex-col items-center justify-center gap-1 py-3 transition-colors">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+    <span class="text-xs">Globe</span>
+    <span x-show="globeUnseen > 0 && activeView !== 'globe'" x-cloak data-testid="globe-badge"
+          class="rounded-full bg-accent text-bg px-1.5 leading-4 font-medium c-fadein" style="font-size:10px"
+          x-text="globeUnseen + (globeUnseen === 1 ? ' place' : ' places')"></span>
+  </button>
+  <button @click="activeView = 'graph'; $nextTick(() => window._graphFns?.resizeGraph())"
+          :class="activeView === 'graph' ? 'text-primary bg-border' : 'text-muted hover:text-primary hover:bg-surface'"
+          class="flex flex-col items-center justify-center gap-1 py-3 transition-colors">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="12" cy="18" r="3"/>
+      <line x1="7.5" y1="7.5" x2="10" y2="16"/><line x1="16.5" y1="7.5" x2="14" y2="16"/>
+    </svg>
+    <span class="text-xs">Graph</span>
+  </button>
+</nav>
+
+<!-- VIEW PANES -->
+<div class="flex-1 flex flex-col overflow-hidden min-h-0 relative">
+
+<!-- CHAT AREA -->
+<div id="chat-area"
+     x-show="activeView === 'chat'"
+     class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-4 py-6 min-h-full flex flex-col">
+
+    <!-- empty state -->
+    <div x-show="messages.length === 0"
+         class="flex-1 flex flex-col justify-center py-16">
+      <h1 class="text-lg font-mono font-medium text-primary mb-1">OpenOSINT</h1>
+      <p class="text-muted text-sm mb-8">AI-powered OSINT investigations. Enter a target to begin.</p>
+      <!-- demo-mode onboarding: server AI disabled, no BYOK key yet -->
+      <div x-show="!serverSideFallback && !_isByokReady()"
+           class="mb-8 border border-app rounded-lg p-4 bg-surface">
+        <p class="text-sm text-primary font-medium mb-1">Add your own API key to get started</p>
+        <p class="text-muted text-xs mb-3 leading-relaxed">
+          This is a live demo — server-side AI is disabled. Bring your own Anthropic, Ollama, or OpenRouter key to run real investigations.
+        </p>
+        <button @click="showSettings = true"
+                class="px-4 py-2 rounded-md bg-accent hover:bg-accent-80 text-bg text-xs font-medium transition-colors">
+          Open Settings →
+        </button>
+      </div>
+      <!-- first run: non-blocking, dismissible; says what works now and how to add an AI provider -->
+      <div x-show="showFirstRun" x-cloak data-testid="first-run"
+           class="mb-8 border border-app rounded-lg p-4 bg-surface">
+        <div class="flex items-start justify-between gap-3">
+          <p class="text-sm text-primary font-medium">Here is what works right now</p>
+          <button @click="dismissFirstRun()" aria-label="Dismiss"
+                  class="text-muted hover:text-primary text-xs transition-colors">✕</button>
+        </div>
+        <ul class="text-xs text-muted leading-relaxed mt-2 space-y-1.5 list-disc pl-4">
+          <li><span class="text-secondary">No key needed:</span>
+            <span class="font-mono" x-text="toolSummary.working.join(', ') || 'loading…'"></span>.
+            From a terminal they also run without any AI, e.g. <span class="font-mono text-accent">openosint dns example.com</span>.</li>
+          <li x-show="toolSummary.needKey.length">
+            <span x-text="toolSummary.needKey.length"></span> more tools need their own key (Shodan, VirusTotal, …). Add them any time under
+            Settings → Save keys to server; until then each one just tells you which key to add.</li>
+          <li x-show="toolSummary.needInstall.length">
+            Not installed here: <span class="font-mono" x-text="toolSummary.needInstall.join(', ')"></span>
+            — Settings shows the install command for each.</li>
+        </ul>
+        <p class="text-secondary text-xs mt-3 mb-1.5">To chat with the agent, connect an AI provider — one step (saved on this computer, <button @click="showSettings = true" class="text-accent-blue hover:underline">all keys in Settings</button>):</p>
+        <div x-show="!setupStatus || setupStatus.can_save" class="flex gap-2">
+          <input type="password" x-model="firstRunKey" autocomplete="off" placeholder="Anthropic API key (sk-ant-…)"
+                 @keydown.enter="saveFirstRunKey()"
+                 class="flex-1 min-w-0 bg-app border border-app rounded-md px-3 py-2 text-xs text-primary focus:outline-none transition-colors">
+          <button @click="saveFirstRunKey()" :disabled="setupBusy"
+                  class="px-4 py-2 rounded-md bg-accent hover:bg-accent-80 text-bg text-xs font-medium transition-colors disabled:opacity-50">Save</button>
+        </div>
+        <p x-show="setupStatus && !setupStatus.can_save" class="text-xs text-warning leading-relaxed"
+           x-text="setupStatus?.forbidden_message"></p>
+        <p x-show="setupMsg" x-text="setupMsg" :class="setupOk ? 'text-accent' : 'text-error'"
+           class="text-xs font-mono mt-2 break-words"></p>
+        <p class="text-muted text-xs mt-3 leading-relaxed">
+          No key? <a href="https://ollama.com" target="_blank" rel="noopener" class="text-accent-blue hover:underline">Ollama</a>
+          runs models on your own machine for free —
+          <button @click="showSettings = true; showSessionOnly = true; byok.provider = 'ollama'; saveByok()"
+                  class="text-accent-blue hover:underline">choose Ollama in Settings</button>.
+          Or <button @click="showSettings = true; showSessionOnly = true" class="text-accent-blue hover:underline">use a key for this browser session only</button>.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <template x-for="s in suggestions" :key="s.title">
+          <button @click="sendSuggestion(s.prompt)"
+                  class="border border-app rounded-md px-3 py-2 text-sm text-secondary hover:border-accent-40 hover:text-primary cursor-pointer inline-flex items-center gap-2 transition-colors bg-transparent">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" x-html="s.svgIcon"></svg>
+            <span x-text="s.title"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <!-- messages -->
+    <div x-show="messages.length > 0" class="space-y-1 pb-4">
+      <template x-for="(msg, mi) in messages" :key="mi">
+        <div class="c-fadein">
+
+          <!-- user message -->
+          <div x-show="msg.role === 'user'" class="flex flex-col items-end mb-4">
+            <p class="text-primary text-sm leading-relaxed whitespace-pre-wrap max-w-[80%] text-right" x-text="msg.content"></p>
+            <span class="text-muted text-xs mt-1 font-mono" x-text="msg.time || ''"></span>
+          </div>
+
+          <!-- assistant block -->
+          <div x-show="msg.role === 'assistant'" class="mb-6">
+            <div x-show="msg.parts?.length === 0"
+                 class="flex items-center gap-1.5 text-muted text-xs font-mono">
+              <span class="inline-block c-blink">_</span>thinking
+            </div>
+            <div class="space-y-3">
+              <template x-for="(part, pi) in msg.parts" :key="pi">
+                <div>
+                  <!-- text -->
+                  <div x-show="part.type === 'text'" class="text-sm text-primary leading-relaxed">
+                    <div class="md" x-html="renderMarkdown(part.content)"></div>
+                    <span x-show="part.streaming" class="text-accent ml-0.5 inline-block c-blink">|</span>
+                  </div>
+
+                  <!-- tool card -->
+                  <div x-show="part.type === 'tool'"
+                       class="bg-surface border border-app rounded-md mb-2 overflow-hidden">
+                    <div class="px-3 py-2 flex items-center justify-between">
+                      <button @click="part.collapsed = !part.collapsed"
+                              class="flex items-center gap-2 min-w-0 flex-1 text-left">
+                        <span class="font-mono text-xs text-secondary flex-none" x-text="part.tool"></span>
+                        <span x-show="part.isDemo" class="text-xs font-mono px-1 py-0.5 rounded border border-app text-warning bg-surface flex-none">demo</span>
+                        <span class="text-muted text-xs truncate" x-text="part.input || ''"></span>
+                      </button>
+                      <div class="flex items-center gap-2 flex-none ml-3">
+                        <span class="text-xs font-mono"
+                              :class="{
+                                'text-warning': part.status === 'running',
+                                'text-accent':  part.status === 'done',
+                                'text-error':   part.status === 'error'
+                              }">
+                          <span x-show="part.status === 'running'" class="inline-flex items-center gap-1">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="c-spin">
+                              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                            </svg>
+                            running
+                          </span>
+                          <span x-show="part.status === 'done'" x-text="part.elapsed ? part.elapsed + 's' : 'done'"></span>
+                          <span x-show="part.status === 'error'">error</span>
+                        </span>
+                        <button x-show="part.output" @click.stop="copyText(part.output)"
+                                class="text-muted hover:text-secondary transition-colors p-0.5">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                        </button>
+                        <button @click.stop="part.collapsed = !part.collapsed"
+                                class="text-muted hover:text-secondary transition-colors p-0.5">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                               :class="part.collapsed ? '' : 'rotate-180'"
+                               class="transition-transform">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div x-show="!part.collapsed && part.output"
+                         class="border-t border-app bg-app px-3 py-2 max-h-64 overflow-y-auto">
+                      <template x-for="(line, li) in (part.output || '').split('\n')" :key="li">
+                        <div class="font-mono text-xs leading-relaxed whitespace-pre-wrap break-all"
+                             :class="lineClass(line)"
+                             x-text="line || ' '"></div>
+                      </template>
+                    </div>
+                  </div>
+
+                </div>
+              </template>
+            </div>
+          </div>
+
+        </div>
+      </template>
+    </div>
+
+  </div>
+</div><!-- end chat-area -->
+
+<!-- GLOBE PANE — MapLibre lazy-mounts into #globe-container on first entry
+     into this view. Shift+drag on the globe box-selects a bbox and prefills
+     the chat composer (does not auto-send); tapping a point opens the pivot
+     panel below. -->
+<div x-show="activeView === 'globe'" x-cloak class="flex-1 relative">
+  <div id="globe-container" class="absolute inset-0"></div>
+  <!-- Consecutive tile-failure notice — the basemap can go down without the
+       globe itself being broken; findings/news points stay usable under it. -->
+  <div x-show="basemapUnavailable" x-cloak
+       class="absolute top-2 left-1/2 -translate-x-1/2 bg-surface border border-app rounded-md px-3 py-1.5 text-xs text-warning z-20 c-fadein">
+    Basemap imagery unavailable — points remain usable below.
+  </div>
+  <!-- GDELT news feed is down: say so instead of showing an empty news layer with no explanation. -->
+  <div x-show="newsUnavailable" x-cloak data-testid="news-unavailable"
+       class="absolute top-10 left-1/2 -translate-x-1/2 bg-surface border border-app rounded-md px-3 py-1.5 text-xs text-warning z-20 c-fadein">
+    News layer unavailable — the GDELT service is not responding. Try again later.
+  </div>
+  <!-- How far back the dots reach: a short first window must not read as "no news". Plain text only. -->
+  <div x-show="newsCoverage && !newsUnavailable" x-cloak data-testid="news-coverage"
+       class="absolute bottom-4 left-4 bg-surface border border-app rounded-md px-3 py-1.5 text-xs text-secondary z-20 c-fadein"
+       x-text="coverageText()"></div>
+  <!-- Pivot popover (shown on point tap) -->
+  <div x-show="globePivotFeature" x-cloak
+       class="absolute bottom-4 right-4 bg-surface border border-app rounded-lg shadow-xl p-3 z-20 w-56 text-xs c-fadein">
+    <div class="flex items-center justify-between mb-1.5">
+      <span class="font-mono text-accent uppercase tracking-wider"
+            x-text="globePivotFeature?.sourceId === 'gdelt-news' ? 'news' : 'finding'"></span>
+      <button @click="globePivotFeature = null" class="text-muted hover:text-primary transition-colors leading-none">✕</button>
+    </div>
+    <p class="text-primary font-medium mb-1 break-words leading-snug" x-text="globePivotLabel()"></p>
+    <!-- Headline/domain come from a worldwide news feed: text bindings only, never HTML. -->
+    <p x-show="globePivotTitle()" class="text-secondary mb-1 break-words leading-snug" x-text="globePivotTitle()"></p>
+    <p x-show="globePivotDomain()" class="text-muted mb-1 font-mono break-all" x-text="globePivotDomain()"></p>
+    <a x-show="globePivotUrl()" :href="globePivotUrl()" target="_blank" rel="noopener noreferrer"
+       class="text-accent-blue hover:underline text-xs break-all block mb-3" x-text="globePivotUrl()"></a>
+    <button @click="pivotOnGlobeFeature()"
+            class="w-full py-1.5 rounded-md bg-accent hover:bg-accent-80 text-bg text-xs font-medium transition-colors">
+      Pivot → Investigate
+    </button>
+  </div>
+</div><!-- end globe pane -->
+
+<!-- GRAPH PANE -->
+<div x-show="activeView === 'graph'" x-cloak class="flex-1 flex flex-col bg-app">
+  <!-- panel header -->
+  <div class="flex-none h-9 px-3 flex items-center gap-2 border-b border-app bg-surface text-xs">
+    <span class="text-muted font-mono flex-1">Entity Graph</span>
+    <span x-show="graphNodeCapHit" class="text-warning mr-1">⚠ 300-node cap</span>
+    <button @click="doExportPng()" title="Export PNG"
+            class="text-muted hover:text-secondary transition-colors px-1.5 py-0.5 rounded hover:bg-border-50">PNG</button>
+    <button @click="doExportJson()" title="Export JSON"
+            class="text-muted hover:text-secondary transition-colors px-1.5 py-0.5 rounded hover:bg-border-50">JSON</button>
+  </div>
+  <!-- Cytoscape canvas -->
+  <div class="flex-1 relative" style="min-height:0;">
+    <div id="graph-container" class="absolute inset-0"></div>
+    <!-- Empty-state hint before any investigation has populated the graph -->
+    <div x-show="!hasGraphData" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <p class="text-muted text-xs text-center leading-relaxed px-4">No graph data yet — start an investigation to populate it.</p>
+    </div>
+    <!-- Pivot popover (shown on node tap) -->
+    <div x-show="graphPivotNode" x-cloak
+         class="absolute bottom-4 right-4 bg-surface border border-app rounded-lg shadow-xl p-3 z-20 w-56 text-xs c-fadein">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="font-mono text-accent uppercase tracking-wider" x-text="graphPivotNode?.type || ''"></span>
+        <button @click="graphPivotNode = null" class="text-muted hover:text-primary transition-colors leading-none">✕</button>
+      </div>
+      <p class="text-primary font-medium mb-3 break-all leading-snug" x-text="graphPivotNode?.label || graphPivotNode?.id || ''"></p>
+      <button @click="pivotOnNode()"
+              class="w-full py-1.5 rounded-md bg-accent hover:bg-accent-80 text-bg text-xs font-medium transition-colors">
+        Pivot → Investigate
+      </button>
+    </div>
+  </div>
+</div><!-- end graph pane -->
+
+</div><!-- end view panes -->
+
+</div><!-- end main content row -->
+
+<!-- NOTICE BAR — shown after gate is passed; dismissed via localStorage -->
+<div x-show="gatePassed && !noticeDismissed" x-cloak
+     class="flex-none bg-surface border-t border-app px-4 py-2.5 flex items-center gap-3 text-xs">
+  <p class="flex-1 leading-relaxed text-secondary">
+    Your API keys live in your browser session only (sessionStorage, auto-cleared on tab close).
+    Theme preference and acceptance of these notices are saved in localStorage. No tracking or analytics.
+    &nbsp;<a href="https://openosint.tech/demo/privacy/" target="_blank" rel="noopener"
+       class="text-accent-blue hover:underline whitespace-nowrap">Privacy &amp; Cookie Notice</a>&nbsp;&middot;&nbsp;<a href="https://openosint.tech/demo/terms/" target="_blank" rel="noopener"
+       class="text-accent-blue hover:underline whitespace-nowrap">Terms of Use</a>
+  </p>
+  <button @click="dismissNotice()"
+          class="flex-none px-3 py-1.5 rounded-md border border-app text-secondary hover:text-primary hover:bg-border-50 transition-colors whitespace-nowrap">
+    Got it
+  </button>
+</div>
+
+<!-- INPUT BAR -->
+<div x-show="activeView === 'chat'" class="flex-none bg-app border-t border-app px-4 py-3">
+  <div class="max-w-2xl mx-auto">
+    <div class="border border-app rounded-md flex items-end gap-2 px-3 py-2 transition-colors">
+      <textarea
+        id="chat-input"
+        aria-label="Message input"
+        x-model="input"
+        @keydown.enter.exact.prevent="sendMessage()"
+        @input="autoResize($event.target)"
+        :disabled="isStreaming"
+        placeholder="Investigate a target or ask a question..."
+        rows="1"
+        style="min-height:22px; max-height:160px;"
+        class="flex-1 bg-transparent resize-none text-sm text-primary placeholder-muted overflow-y-auto font-sans leading-relaxed disabled:opacity-40"
+      ></textarea>
+      <button @click="sendMessage()"
+              :disabled="isStreaming || !input.trim()"
+              class="flex-none w-7 h-7 rounded bg-accent hover:bg-accent-80 disabled:opacity-30 disabled:cursor-not-allowed text-bg flex items-center justify-center transition-colors mb-0.5">
+        <svg x-show="!isStreaming" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+        </svg>
+        <svg x-show="isStreaming" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="c-spin">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end x-data -->
+
+<!-- ALPINE COMPONENT — must come before Alpine CDN -->
+<script>
+// Rejects any non-absolute-https exit URL to prevent open-redirect via injected config value.
+function _validExitUrl(url) {
+  try { const u = new URL(url); if (u.protocol === 'https:') return u.href; } catch {}
+  return 'https://openosint.tech';
+}
+
+document.addEventListener('alpine:init', () => {
+  // Authorization gate — fail-closed: showGate defaults true so the app stays
+  // behind the gate until init() confirms the user has already acknowledged.
+  Alpine.data('authGate', () => ({
+    showGate: true,
+
+    _cfg() {
+      const c = (window.OPENOSINT_CONFIG || {}).authGate || {};
+      return {
+        enabled:     c.enabled !== false,
+        exitUrl:     _validExitUrl(c.exitUrl),
+        rememberAck: c.rememberAck !== false,
+      };
+    },
+
+    init() {
+      const cfg = this._cfg();
+      if (!cfg.enabled)                                              { this.showGate = false; return; }
+      if (cfg.rememberAck && localStorage.getItem('openosint-ack')) { this.showGate = false; return; }
+      document.getElementById('main-app')?.setAttribute('inert', '');
+      this.$nextTick(() => document.getElementById('gate-accept')?.focus());
+    },
+
+    accept() {
+      const cfg = this._cfg();
+      if (cfg.rememberAck) localStorage.setItem('openosint-ack', '1');
+      this.showGate = false;
+      document.getElementById('main-app')?.removeAttribute('inert');
+      document.dispatchEvent(new CustomEvent('gate-accepted'));
+      this.$nextTick(() => document.getElementById('chat-input')?.focus());
+    },
+
+    exit() { window.location.href = this._cfg().exitUrl; },
+
+    handleKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); return; }
+      if (e.key !== 'Tab') return;
+      const modal = document.getElementById('auth-gate-modal');
+      if (!modal) return;
+      const focusable = [...modal.querySelectorAll('a[href], button:not([disabled])')];
+      if (!focusable.length) return;
+      e.preventDefault();
+      const idx = focusable.indexOf(document.activeElement);
+      const next = e.shiftKey
+        ? focusable[(idx - 1 + focusable.length) % focusable.length]
+        : focusable[(idx + 1) % focusable.length];
+      next?.focus();
+    },
+  }));
+
+  Alpine.data('openosint', () => ({
+    version: '',
+    messages: [],
+    chatHistory: [],
+    input: '',
+    isStreaming: false,
+    aiBackend: 'none',
+    showSettings: false,
+    showSessionOnly: false,
+    clientReady: false, // setup-client.js module loaded
+    setupMsg: '',
+    setupOk: false,
+    ollamaTestResult: '',
+    ollamaTestOk: false,
+    openaiTestResult: '',
+    openaiTestOk: false,
+    tools: [],
+    policy: { allow_active: false, can_change: false, restricted: false, max_tool_calls: 15, active_tools: [] },
+    policyMsg: '',
+    featuredSponsors: [],
+    showKeys: {},
+    showByokKeys: {},
+    setupData: {},
+    isLight: false,
+    agentLoopReady: false,
+    serverSideFallback: true,
+    hasGraphData: false,
+    activeView: 'chat',
+    graphNodeCapHit: false,
+    graphPivotNode: null,
+    globePivotFeature: null,
+    basemapUnavailable: false,
+    newsUnavailable: false,
+    newsCoverage: null,
+    globeUnseen: 0,
+    currentTarget: '',
+
+    // Gate / notice bar state (initialized from localStorage in init())
+    gatePassed: false,
+    noticeDismissed: false,
+
+    // BYOK LLM settings — persisted to sessionStorage (cleared on tab close)
+    byok: { provider: 'anthropic', apiKey: '', baseUrl: '', model: '' },
+    // Tool API keys — persisted to sessionStorage
+    byokToolKeys: {},
+
+    settings: {
+      chatModel: 'claude',
+      ollamaModel: 'llama3.2',
+      ollamaHost: 'http://localhost:11434',
+      openaiBaseUrl: '',
+      openaiModel: '',
+      openaiApiKey: '',
+    },
+
+    // Server-side key form: fields and "can this browser save?" come from /api/setup/status
+    setupStatus: null,
+    setupToken: '',
+    setupBusy: false,
+    healthLoaded: false,
+    firstRunDismissed: false,
+    firstRunKey: '',
+
+    suggestions: [
+      {
+        svgIcon: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/>',
+        title: 'Investigate email',
+        prompt: 'Investigate an email address — please ask me for it.',
+      },
+      {
+        svgIcon: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        title: 'Trace username',
+        prompt: 'Trace a username across social platforms — please ask me for it.',
+      },
+      {
+        svgIcon: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+        title: 'Analyze IP',
+        prompt: 'Analyze an IP address for geolocation and threat intel — please ask me for it.',
+      },
+      {
+        svgIcon: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+        title: 'Domain lookup',
+        prompt: 'Gather intelligence on a domain — please ask me for it.',
+      },
+    ],
+
+    // lifecycle
+    init() {
+      this.gatePassed = !!localStorage.getItem('openosint-ack');
+      this.noticeDismissed = !!localStorage.getItem('openosint-notice');
+      document.addEventListener('gate-accepted', () => { this.gatePassed = true; }, { once: true });
+      this.loadSettings();
+      this.loadByok();
+      try { this.firstRunDismissed = !!localStorage.getItem('openosint-firstrun-dismissed'); } catch {}
+      const theme = localStorage.getItem('openosint-theme') || 'dark';
+      this.isLight = theme === 'light';
+      if (this.isLight) document.documentElement.classList.add('light');
+      // Guard for ES module race (amendment 5): modules may not be ready yet.
+      const _onModulesReady = () => {
+        this.agentLoopReady = true;
+        this.clientReady = !!window._setupClient;
+        this.fetchSetupStatus();
+        const container = document.getElementById('graph-container');
+        if (container && window._graphFns) {
+          window._graphFns.initGraph(container);
+          window._graphPivotCallback = (nodeId, nodeData) => {
+            this.graphPivotNode = { id: nodeId, ...nodeData };
+          };
+        }
+        document.addEventListener('graph-node-cap', () => { this.graphNodeCapHit = true; });
+
+        // Globe input/output bindings — wired once; the globe itself lazy-
+        // inits on first GLOBE-view entry, but these callbacks are cheap to
+        // register up front.
+        if (window._globeFns) {
+          window._globeFns.onPointClick((feature, sourceId) => {
+            this.globePivotFeature = { feature, sourceId };
+          });
+          window._globeFns.onBoxSelect((bbox) => {
+            const [minLon, minLat, maxLon, maxLat] = bbox.map(n => Math.round(n * 10000) / 10000);
+            this.globePivotFeature = null;
+            this.activeView = 'chat';
+            this.input = `Investigate recent activity in the bounding box [${minLon}, ${minLat}, ${maxLon}, ${maxLat}] (min_lon, min_lat, max_lon, max_lat) — use search_gdelt_geo with query "*" and this bbox.`;
+            this.$nextTick(() => document.getElementById('chat-input')?.focus());
+          });
+          window._globeFns.onBasemapUnavailable((unavailable) => {
+            this.basemapUnavailable = unavailable;
+          });
+        }
+      };
+      if (window._agentLoopReady) {
+        _onModulesReady();
+      } else {
+        document.addEventListener('agent-loop-ready', _onModulesReady, { once: true });
+      }
+      this.$nextTick(() => {
+        this.fetchHealth();
+        this.fetchSponsors();
+        document.getElementById('chat-input')?.focus();
+      });
+    },
+
+    // BYOK sessionStorage helpers
+    loadByok() {
+      try {
+        const b = sessionStorage.getItem('openosint_byok');
+        if (b) Object.assign(this.byok, JSON.parse(b));
+        const tk = sessionStorage.getItem('openosint_tool_keys');
+        if (tk) this.byokToolKeys = JSON.parse(tk);
+      } catch {}
+    },
+    saveByok() {
+      try { sessionStorage.setItem('openosint_byok', JSON.stringify(this.byok)); } catch {}
+    },
+    saveToolKeys() {
+      try { sessionStorage.setItem('openosint_tool_keys', JSON.stringify(this.byokToolKeys)); } catch {}
+    },
+    dismissNotice() {
+      this.noticeDismissed = true;
+      localStorage.setItem('openosint-notice', '1');
+    },
+    clearAllKeys() {
+      this.byok = { provider: this.byok.provider, apiKey: '', baseUrl: '', model: '' };
+      this.byokToolKeys = {};
+      try {
+        sessionStorage.removeItem('openosint_byok');
+        sessionStorage.removeItem('openosint_tool_keys');
+      } catch {}
+    },
+
+    // Route to client-side ONLY when the selected provider actually has its credential.
+    _isByokReady() {
+      const p = this.byok.provider;
+      if (p === 'ollama') return this.ollamaTestOk;
+      return !!(this.byok.apiKey || '').trim();
+    },
+
+    // theme toggle
+    toggleTheme() {
+      this.isLight = !this.isLight;
+      if (this.isLight) {
+        document.documentElement.classList.add('light');
+        localStorage.setItem('openosint-theme', 'light');
+      } else {
+        document.documentElement.classList.remove('light');
+        localStorage.setItem('openosint-theme', 'dark');
+      }
+    },
+
+    // settings persistence
+    loadSettings() {
+      try {
+        const s = localStorage.getItem('openosint_settings');
+        if (s) Object.assign(this.settings, JSON.parse(s));
+      } catch {}
+    },
+
+    saveLocalSettings() {
+      try { localStorage.setItem('openosint_settings', JSON.stringify(this.settings)); } catch {}
+    },
+
+    // health / tools
+    async fetchHealth() {
+      try {
+        const r = await fetch('/api/health');
+        if (!r.ok) return;
+        const d = await r.json();
+        this.healthLoaded     = true;
+        this.version          = d.version    || this.version;
+        this.aiBackend        = d.ai_backend || 'none';
+        this.serverSideFallback = !d.demo_mode;
+        if (d.ollama_host) this.settings.ollamaHost = d.ollama_host;
+        if (this.aiBackend === 'ollama') this.settings.chatModel = 'ollama';
+        else if (this.aiBackend === 'openai') this.settings.chatModel = 'openai';
+        else if (this.aiBackend === 'claude') this.settings.chatModel = 'claude';
+        this.fetchTools();
+      } catch {}
+    },
+
+    async fetchTools() {
+      try {
+        const r = await fetch('/api/tools');
+        if (r.ok) this.tools = await r.json();
+        const p = await fetch('/api/policy');
+        if (p.ok) this.policy = await p.json();
+      } catch {}
+    },
+
+    async setAllowActive(value) {
+      this.policyMsg = '';
+      try {
+        const r = await fetch('/api/policy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allow_active: value }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { this.policyMsg = d.message || 'Could not change the mode.'; return; }
+        await this.fetchTools();
+      } catch { this.policyMsg = 'Could not reach the server.'; }
+    },
+
+    async fetchSponsors() {
+      try {
+        const r = await fetch('/api/sponsors');
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.status === 'ok') {
+          this.featuredSponsors = (d.sponsors || []).filter(s => s.tier === 'featured');
+        }
+      } catch {}
+    },
+
+    // messaging
+    sendSuggestion(prompt) {
+      this.input = prompt;
+      this.sendMessage();
+    },
+
+    async sendMessage() {
+      const text = this.input.trim();
+      if (!text || this.isStreaming) return;
+
+      const useClient = this._isByokReady();
+
+      // Amendment 5: guard against race where module hasn't loaded yet.
+      if (useClient && !this.agentLoopReady) {
+        this._pushError('Agent loop is initializing — please try again in a moment.');
+        return;
+      }
+
+      // Demo-mode guard: server LLM disabled and no BYOK key.
+      if (!useClient && !this.serverSideFallback) {
+        this.showSettings = true;
+        this._pushError('Server-side AI is disabled in demo mode. Add your API key in Settings to run investigations.');
+        return;
+      }
+
+      // Only probe the server backend when client path isn't available.
+      if (!useClient) {
+        try {
+          const testResp = await fetch('/api/chat/test');
+          if (testResp.ok) {
+            const td = await testResp.json();
+            this.aiBackend = td.backend || 'none';
+          }
+        } catch {}
+        if (this.aiBackend === 'none') {
+          this._pushError('No AI backend configured. Add an LLM provider key in Settings (for BYOK), or configure ANTHROPIC_API_KEY / OPENAI_BASE_URL on the server.');
+          return;
+        }
+      }
+
+      this.input = '';
+      this.$nextTick(() => {
+        const ta = document.getElementById('chat-input');
+        if (ta) { ta.style.height = 'auto'; ta.style.height = '22px'; }
+      });
+
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      this.messages.push({ role: 'user', content: text, time: now });
+      this.chatHistory.push({ role: 'user', content: text });
+
+      this.messages.push({ role: 'assistant', parts: [] });
+      const msgIdx = this.messages.length - 1;
+      this.isStreaming = true;
+      this.scrollToBottom();
+
+      if (useClient) {
+        await this._sendMessageClientSide(text, msgIdx);
+      } else {
+        await this._sendMessageServerSide(text, msgIdx);
+      }
+
+      this.isStreaming = false;
+      this.scrollToBottom();
+    },
+
+    // Client-side BYOK loop via agent-loop.js
+    async _sendMessageClientSide(text, msgIdx) {
+      const adapterSettings = {
+        provider: this.byok.provider,
+        apiKey: this.byok.apiKey,
+        baseUrl: this.byok.baseUrl || (this.byok.provider === 'ollama' ? 'http://localhost:11434' : ''),
+        model: this.byok.model,
+      };
+
+      let fullText = '';
+      const toolInputMap = {}; // tool_name → last input, for graph normalizer
+
+      const onEvent = (evt) => {
+        if (evt.type === 'text') {
+          const parts = this.messages[msgIdx].parts;
+          const last = parts.at(-1);
+          if (last?.type === 'text' && last.streaming) {
+            last.content += evt.content;
+          } else {
+            parts.push({ type: 'text', content: evt.content, streaming: true });
+          }
+          fullText += evt.content;
+          this.scrollToBottom();
+
+        } else if (evt.type === 'tool_start') {
+          // Close any open streaming text part first.
+          const parts = this.messages[msgIdx].parts;
+          const last = parts.at(-1);
+          if (last?.streaming) last.streaming = false;
+          parts.push({ type: 'tool', tool: evt.tool, input: evt.input || '', status: 'running', output: '', elapsed: null, collapsed: false, isDemo: false });
+          this.scrollToBottom();
+          // Graph: record tool input for normalizer; add root node on first call.
+          toolInputMap[evt.tool] = evt.input || '';
+          if (window._graphFns && window._makeTargetNode && evt.input) {
+            if (!this.currentTarget) {
+              this.currentTarget = evt.input;
+              const rootNode = window._makeTargetNode(evt.input);
+              window._graphFns.addToGraph({ nodes: [rootNode], edges: [] });
+              this.hasGraphData = true;
+            }
+          }
+
+        } else if (evt.type === 'tool_result') {
+          const parts = this.messages[msgIdx].parts;
+          for (let i = parts.length - 1; i >= 0; i--) {
+            if (parts[i].type === 'tool' && parts[i].tool === evt.tool && parts[i].status === 'running') {
+              parts[i].output = evt.output || '';
+              parts[i].elapsed = evt.elapsed;
+              parts[i].status = evt.isError ? 'error' : 'done';
+              parts[i].isDemo = evt.isDemo || false;
+              break;
+            }
+          }
+          this.scrollToBottom();
+          // Graph: extract entities from tool output and merge into graph.
+          if (window._graphFns && window._extractEntities) {
+            const toolTarget = toolInputMap[evt.tool] || this.currentTarget;
+            if (toolTarget) {
+              const { nodes, edges } = window._extractEntities(evt.tool, toolTarget, evt.output || '');
+              if (nodes.length || edges.length) {
+                window._graphFns.addToGraph({ nodes, edges });
+                if (!this.hasGraphData && nodes.length) this.hasGraphData = true;
+              }
+              this._pushGeoFeatures(evt.tool, toolTarget, evt.output);
+            }
+          }
+
+        } else if (evt.type === 'key_required') {
+          const keys = (evt.missing_keys || []).join(', ');
+          this.messages[msgIdx].parts.push({ type: 'text', content: `**Key required:** ${keys} — add it in Settings → Tool API Keys, then retry.`, streaming: false });
+          this.showSettings = true;
+          this.scrollToBottom();
+
+        } else if (evt.type === 'max_rounds') {
+          // Amendment 3: surface cap clearly, never die silently.
+          const parts = this.messages[msgIdx].parts;
+          const last = parts.at(-1);
+          if (last?.streaming) last.streaming = false;
+          parts.push({ type: 'text', content: 'Investigation stopped: too many tool-use rounds. Results above may be partial — refine your query or ask a follow-up.', streaming: false });
+          this.scrollToBottom();
+        } else if (evt.type === 'max_tool_calls') {
+          const parts = this.messages[msgIdx].parts;
+          const last = parts.at(-1);
+          if (last?.streaming) last.streaming = false;
+          parts.push({ type: 'text', content: evt.message, streaming: false });
+          this.scrollToBottom();
+
+        } else if (evt.type === 'error') {
+          const parts = this.messages[msgIdx].parts;
+          const last = parts.at(-1);
+          if (last?.streaming) last.streaming = false;
+          parts.push({ type: 'text', content: `Error: ${evt.message}`, streaming: false });
+          this.scrollToBottom();
+
+        } else if (evt.type === 'done') {
+          const parts = this.messages[msgIdx].parts;
+          const last = parts.at(-1);
+          if (last?.streaming) last.streaming = false;
+        }
+      };
+
+      await window._runAgentLoop(
+        text,
+        this.chatHistory.slice(0, -1),
+        adapterSettings,
+        this.byokToolKeys,
+        onEvent,
+      );
+
+      // Close any unclosed streaming part.
+      const last = this.messages[msgIdx].parts.at(-1);
+      if (last?.streaming) last.streaming = false;
+
+      if (this.messages[msgIdx].parts.length === 0) {
+        this.messages[msgIdx].parts.push({ type: 'text', content: 'No response received.', streaming: false });
+      }
+      if (fullText.trim()) this.chatHistory.push({ role: 'assistant', content: fullText.trim() });
+    },
+
+    // Server-side SSE path (self-hosters with env keys)
+    async _sendMessageServerSide(text, msgIdx) {
+      const sseToolInputMap = {}; // tool_name → last input, for graph normalizer
+      const payload = {
+        message: text,
+        history: this.chatHistory.slice(0, -1),
+        model: this.settings.chatModel,
+        ollama_model: this.settings.ollamaModel,
+        ollama_host: this.settings.ollamaHost,
+        openai_base_url: this.settings.openaiBaseUrl,
+        openai_model: this.settings.openaiModel,
+        openai_api_key: this.settings.openaiApiKey,
+      };
+
+      let fullText = '';
+      try {
+        const resp = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!resp.ok) {
+          let errDetail = `HTTP ${resp.status}`;
+          try { const e = await resp.json(); errDetail += ': ' + (e.detail || JSON.stringify(e)); } catch {}
+          this.messages[msgIdx].parts.push({ type: 'text', content: `Server error: ${errDetail}`, streaming: false });
+          this.isStreaming = false;
+          return;
+        }
+
+        if (!resp.body) {
+          this.messages[msgIdx].parts.push({ type: 'text', content: 'Error: response body is null (browser may not support streaming).', streaming: false });
+          this.isStreaming = false;
+          return;
+        }
+
+        const reader  = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let curText = null;
+        let gotEvent = false;
+
+        const flushText = () => { if (curText) { curText.streaming = false; curText = null; } };
+
+        outer: while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (!raw) continue;
+            let evt;
+            try { evt = JSON.parse(raw); } catch (e) { console.warn('SSE parse error:', line, e); continue; }
+            gotEvent = true;
+
+            if (evt.type === 'text') {
+              if (!curText) {
+                this.messages[msgIdx].parts.push({ type: 'text', content: '', streaming: true });
+                // Read back through the reactive proxy so incremental content mutations
+                // also trigger Alpine DOM updates (for Claude's word-by-word streaming).
+                curText = this.messages[msgIdx].parts[this.messages[msgIdx].parts.length - 1];
+              }
+              curText.content += evt.content;
+              fullText += evt.content;
+              this.scrollToBottom();
+
+            } else if (evt.type === 'tool_start') {
+              flushText();
+              this.messages[msgIdx].parts.push({
+                type: 'tool', tool: evt.tool, input: evt.input || '',
+                status: 'running', output: '', elapsed: null, collapsed: false,
+              });
+              this.scrollToBottom();
+              // Graph: record input; add root node on first tool call.
+              sseToolInputMap[evt.tool] = evt.input || '';
+              if (window._graphFns && window._makeTargetNode && evt.input && !this.currentTarget) {
+                this.currentTarget = evt.input;
+                window._graphFns.addToGraph({ nodes: [window._makeTargetNode(evt.input)], edges: [] });
+                this.hasGraphData = true;
+              }
+
+            } else if (evt.type === 'tool_result') {
+              const parts = this.messages[msgIdx].parts;
+              for (let i = parts.length - 1; i >= 0; i--) {
+                if (parts[i].type === 'tool' && parts[i].tool === evt.tool && parts[i].status === 'running') {
+                  parts[i].output = evt.output || '';
+                  parts[i].elapsed = evt.elapsed;
+                  parts[i].status = 'done';
+                  break;
+                }
+              }
+              this.scrollToBottom();
+              // Graph: extract and merge entities.
+              if (window._graphFns && window._extractEntities) {
+                const toolTarget = sseToolInputMap[evt.tool] || this.currentTarget;
+                if (toolTarget) {
+                  const { nodes, edges } = window._extractEntities(evt.tool, toolTarget, evt.output || '');
+                  if (nodes.length || edges.length) {
+                    window._graphFns.addToGraph({ nodes, edges });
+                    if (!this.hasGraphData && nodes.length) this.hasGraphData = true;
+                  }
+                  this._pushGeoFeatures(evt.tool, toolTarget, evt.output);
+                }
+              }
+
+            } else if (evt.type === 'done') {
+              flushText(); break outer;
+
+            } else if (evt.type === 'max_rounds') {
+              flushText();
+              this.messages[msgIdx].parts.push({ type: 'text', content: 'Investigation stopped: too many tool-use rounds. Results above may be partial.', streaming: false });
+              break outer;
+
+            } else if (evt.type === 'max_tool_calls') {
+              flushText();
+              this.messages[msgIdx].parts.push({ type: 'text', content: evt.message, streaming: false });
+              break outer;
+
+            } else if (evt.type === 'error') {
+              flushText();
+              this.messages[msgIdx].parts.push({ type: 'text', content: `Error: ${evt.message}`, streaming: false });
+              break outer;
+            }
+          }
+        }
+        flushText();
+        if (this.messages[msgIdx].parts.length === 0) {
+          this.messages[msgIdx].parts.push({ type: 'text', content: 'No response received from backend.', streaming: false });
+        }
+
+        if (fullText.trim()) {
+          this.chatHistory.push({ role: 'assistant', content: fullText.trim() });
+        } else if (this.messages[msgIdx].parts.some(p => p.type === 'tool')) {
+          const summary = this.messages[msgIdx].parts.filter(p => p.type === 'tool')
+            .map(p => `[Used ${p.tool} on "${p.input}"]`).join(' ');
+          this.chatHistory.push({ role: 'assistant', content: summary });
+        }
+
+      } catch (err) {
+        this.messages[msgIdx].parts.push({ type: 'text', content: `Connection error: ${err.message}`, streaming: false });
+      }
+    },
+
+    _pushError(msg) {
+      this.messages.push({ role: 'assistant', parts: [{ type: 'text', content: msg, streaming: false }] });
+    },
+
+    // Globe: route a tool result's geo features onto the right layer.
+    // search_gdelt_geo results accumulate in the gdelt-news source for the whole
+    // conversation (one entry per place, capped; clearConversation resets it);
+    // every other tool with geo output accumulates onto agent-findings one
+    // point at a time. New results bring the camera to them, and while the
+    // GLOBE pane is hidden they show as a badge on its nav button.
+    _pushGeoFeatures(tool, target, output) {
+      const down = window._geoFns?.gdeltServiceStatus(tool, output);
+      if (down !== null && down !== undefined) this.newsUnavailable = down;
+      if (!window._geoFns || !window._globeFns || !target) return;
+      const features = window._geoFns.extractGeoFeatures(tool, target, output || '');
+      if (tool === 'search_gdelt_geo') {
+        // An unavailable feed or an empty search leaves what is already on the globe alone.
+        if (down === true || !features.length) return;
+        this.newsCoverage = window._geoFns.newsCoverage(tool, output);
+        const merged = window._geoFns.mergeNewsFeatures(window._globeFns.getNewsFeatures(), features);
+        window._globeFns.setNewsFeatureCollection({ type: 'FeatureCollection', features: merged });
+      } else {
+        features.forEach(f => window._globeFns.addFinding(f));
+      }
+      if (!features.length) return;
+      window._globeFns.fitToFeatures(features);
+      const { news, findings } = window._globeFns.getFeatureCounts();
+      if (this.activeView !== 'globe') this.globeUnseen = news + findings;
+    },
+
+    // Plain text only; reads newsCoverage first so Alpine re-renders when it changes.
+    coverageText() {
+      return this.newsCoverage ? window._geoFns?.coverageLabel(this.newsCoverage) ?? '' : '';
+    },
+
+    // UI helpers
+    clearConversation() {
+      this.messages = []; this.chatHistory = [];
+      this.hasGraphData = false; this.graphNodeCapHit = false;
+      this.graphPivotNode = null; this.globePivotFeature = null; this.currentTarget = '';
+      this.newsUnavailable = false;
+      this.newsCoverage = null;
+      this.globeUnseen = 0;
+      if (window._graphFns) window._graphFns.clearGraph();
+      if (window._globeFns) {
+        window._globeFns.clearFindings();
+        window._globeFns.setNewsFeatureCollection({ type: 'FeatureCollection', features: [] });
+      }
+    },
+
+    scrollToBottom() {
+      this.$nextTick(() => {
+        const el = document.getElementById('chat-area');
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    },
+
+    autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    },
+
+    copyText(text) { navigator.clipboard.writeText(text || '').catch(() => {}); },
+
+    lineClass(text) {
+      if (!text) return 'text-muted';
+      if (text.startsWith('[+]'))                                         return 'text-accent';
+      if (text.startsWith('[-]') || text.startsWith('Scan error:') ||
+          text.startsWith('Error:') || text.startsWith('Internal error:')) return 'text-error';
+      if (text.startsWith('[!]') || text.includes('FLAGGED'))             return 'text-warning';
+      if (text.startsWith('[*]') || text.startsWith('[Censys]') ||
+          text.startsWith('[Shodan]') || text.startsWith('[VirusTotal]') ||
+          text.startsWith('[IP2Location]'))                                return 'text-secondary';
+      return 'text-muted';
+    },
+
+    renderMarkdown(text) {
+      if (!text) return '';
+      let h = text
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/```([\s\S]*?)```/g, (_,inner) => {
+          const code = inner.replace(/^[^\n]*\n/,'');
+          return `<pre><code>${code}</code></pre>`;
+        })
+        .replace(/`([^`\n]+)`/g,        '<code>$1</code>')
+        .replace(/\*\*([^*\n]+)\*\*/g,  '<strong>$1</strong>')
+        .replace(/\*([^*\n]+)\*/g,      '<em>$1</em>')
+        .replace(/^### (.+)$/gm,        '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm,         '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm,          '<h1>$1</h1>')
+        .replace(/^[*\-] (.+)$/gm,      '<li>$1</li>')
+        .replace(/^\d+\. (.+)$/gm,      '<li>$1</li>')
+        .replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+        .replace(/\n\n+/g, '</p><p>')
+        .replace(/\n/g,    '<br>');
+
+      if (!h.startsWith('<h') && !h.startsWith('<ul') && !h.startsWith('<pre'))
+        h = `<p>${h}</p>`;
+      return h;
+    },
+
+    // Server-side key save
+    // Local install (not the public demo, not a restricted request): keys are saved on this
+    // computer by default. The public demo keeps browser-only BYOK.
+    get saveToComputer() {
+      return this.serverSideFallback && !(this.setupStatus && this.setupStatus.restricted);
+    },
+
+    // Getters read reactive state BEFORE checking the module: Alpine only tracks what a
+    // getter touches, so returning early on a not-yet-loaded module would leave it
+    // subscribed to nothing and it would never re-render once the data arrives.
+    get setupGroups() {
+      const keys = this.setupStatus?.keys;
+      return this.clientReady ? window._setupClient.groupFields(keys) : [];
+    },
+
+    get toolSummary() {
+      const tools = this.tools;
+      return this.clientReady
+        ? window._setupClient.summarizeTools(tools)
+        : { working: [], needKey: [], needInstall: [] };
+    },
+
+    get showFirstRun() {
+      return this.serverSideFallback && this.healthLoaded && !this.firstRunDismissed
+        && this.aiBackend === 'none' && !this._isByokReady();
+    },
+
+    dismissFirstRun() {
+      this.firstRunDismissed = true;
+      try { localStorage.setItem('openosint-firstrun-dismissed', '1'); } catch {}
+    },
+
+    async fetchSetupStatus() {
+      try {
+        const r = await fetch('/api/setup/status');
+        if (r.ok) this.setupStatus = await r.json();
+      } catch {}
+    },
+
+    async saveApiKeys() {
+      const body = window._setupClient
+        ? window._setupClient.buildSetupBody(this.setupStatus?.keys, this.setupData)
+        : {};
+      await this._postSetup(body, 'Enter at least one key.');
+    },
+
+    async saveFirstRunKey() {
+      const key = (this.firstRunKey || '').trim();
+      await this._postSetup(key ? { ANTHROPIC_API_KEY: key } : {}, 'Paste your Anthropic key first.');
+      if (this.setupOk) this.firstRunKey = '';
+    },
+
+    async _postSetup(body, emptyMessage) {
+      this.setupMsg = '';
+      if (!window._setupClient) { this.setupOk = false; this.setupMsg = 'Still loading — try again in a moment.'; return; }
+      if (!Object.keys(body).length) { this.setupOk = false; this.setupMsg = emptyMessage; return; }
+      this.setupBusy = true;
+      try {
+        const r = await fetch('/api/setup', {
+          method: 'POST',
+          headers: window._setupClient.setupHeaders(this.setupToken),
+          body: JSON.stringify(body),
+        });
+        let data = null;
+        try { data = await r.json(); } catch {}
+        const result = window._setupClient.describeSetupResult(r.status, data);
+        this.setupOk = result.ok;
+        this.setupMsg = result.message;
+        if (r.ok) {
+          this.setupData = {};
+          await this.fetchHealth();
+          await this.fetchSetupStatus();
+        }
+      } catch {
+        this.setupOk = false;
+        this.setupMsg = 'Could not reach the server.';
+      } finally {
+        this.setupBusy = false;
+      }
+    },
+
+    // Ollama test — uses byok.baseUrl so the CORS test reflects the actual host.
+    async testOllama() {
+      this.ollamaTestResult = 'Testing...';
+      this.ollamaTestOk = false;
+      const host = (this.byok.baseUrl || 'http://localhost:11434').replace(/\/$/, '');
+      try {
+        const r = await fetch(host + '/api/tags', { signal: AbortSignal.timeout(4000) });
+        if (r.ok) { this.ollamaTestOk = true; this.ollamaTestResult = 'Connected'; }
+        else       { this.ollamaTestResult = `HTTP ${r.status}`; }
+      } catch (e) {
+        this.ollamaTestOk = false;
+        this.ollamaTestResult = e.message.includes('Failed to fetch')
+          ? 'CORS blocked or unreachable — see setup hint below'
+          : e.message;
+      }
+    },
+
+    async testOpenai() {
+      this.openaiTestResult = 'Testing...';
+      this.openaiTestOk = false;
+      // Probe through the server: the browser cannot reach an http:// endpoint
+      // from an https:// page (mixed-content) and cross-origin requests fail
+      // CORS. The server has no such restriction. Blank fields fall back to the
+      // server's configured OPENAI_BASE_URL / OPENAI_API_KEY.
+      try {
+        const r = await fetch('/api/openai/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            openai_base_url: this.settings.openaiBaseUrl,
+            openai_api_key: this.settings.openaiApiKey,
+          }),
+          signal: AbortSignal.timeout(6000),
+        });
+        const d = await r.json();
+        if (!d.reachable) {
+          this.openaiTestResult = 'Unreachable — check Base URL / that the endpoint is running';
+        } else if (d.auth_ok) {
+          this.openaiTestOk = true; this.openaiTestResult = 'Connected';
+        } else {
+          // Endpoint is up but rejected the key — the most common real-world case.
+          this.openaiTestResult = `Endpoint reachable but key rejected (HTTP ${d.status_code}). Check API key.`;
+        }
+      } catch (e) {
+        this.openaiTestResult = e.message;
+      }
+    },
+
+    // Entity graph actions
+    doExportPng() {
+      if (!window._graphFns) return;
+      const dataUrl = window._graphFns.exportPng();
+      if (!dataUrl) return;
+      const a = document.createElement('a');
+      a.href = dataUrl; a.download = 'openosint-graph.png'; a.click();
+    },
+    doExportJson() {
+      if (!window._graphFns) return;
+      const data = window._graphFns.exportJson();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'openosint-graph.json'; a.click();
+    },
+    pivotOnNode() {
+      if (!this.graphPivotNode) return;
+      const label = this.graphPivotNode.label || this.graphPivotNode.id;
+      this.graphPivotNode = null;
+      this.activeView = 'chat';
+      this.input = `Investigate ${label}`;
+      this.sendMessage();
+    },
+
+    // Globe pivot panel — label/url readers + the "Investigate" action.
+    // Titles, domains and URLs on news points are third-party text from GDELT's
+    // feed — never x-html them. Titles/domains render via x-text; the URL goes
+    // through safeHttpUrl and is rendered as a plain, properly-bound <a href>.
+    // (An older GDELT-style properties.html blurb is still read for its href only.)
+    globePivotLabel() {
+      const props = this.globePivotFeature?.feature?.properties || {};
+      return props.name || props.target || 'Unknown location';
+    },
+    globePivotTitle() {
+      const t = this.globePivotFeature?.feature?.properties?.title;
+      return typeof t === 'string' ? t : '';
+    },
+    globePivotDomain() {
+      const d = this.globePivotFeature?.feature?.properties?.domain;
+      return typeof d === 'string' ? d : '';
+    },
+    globePivotUrl() {
+      const props = this.globePivotFeature?.feature?.properties || {};
+      const m = typeof props.html === 'string' ? /href="([^"]+)"/.exec(props.html) : null;
+      const raw = props.url || (m ? m[1] : '');
+      return window._urlSafety ? window._urlSafety.safeHttpUrl(raw) : '';
+    },
+    pivotOnGlobeFeature() {
+      const f = this.globePivotFeature;
+      if (!f) return;
+      const label = this.globePivotLabel();
+      const url = this.globePivotUrl();
+      this.globePivotFeature = null;
+      this.activeView = 'chat';
+      this.input = url ? `Investigate ${label} (${url})` : `Investigate ${label}`;
+
+      // Land it in the same session graph the GRAPH view renders — same
+      // pattern as a chat-driven pivot, just sourced from the globe.
+      if (window._graphFns) {
+        const [lon, lat] = f.feature.geometry?.coordinates || [];
+        const nodeId = `geo:${f.sourceId}:${label.toLowerCase()}:${lon},${lat}`;
+        const node = {
+          id: nodeId,
+          type: f.sourceId === 'gdelt-news' ? 'article' : 'location',
+          label,
+          data: { source: 'globe', sourceId: f.sourceId, lat, lon, url },
+        };
+        const edges = [];
+        if (this.currentTarget && window._makeTargetNode) {
+          edges.push({ source: window._makeTargetNode(this.currentTarget).id, target: nodeId, label: 'geolocated' });
+        }
+        window._graphFns.addToGraph({ nodes: [node], edges });
+        this.hasGraphData = true;
+      }
+
+      this.sendMessage();
+    },
+
+    async saveOpenai() {
+      this.openaiTestResult = 'Saving...';
+      this.openaiTestOk = false;
+      // Persist to localStorage (per-request payload) AND to the server .env so
+      // the configuration survives reloads and is used as the env default.
+      this.settings.chatModel = 'openai';
+      this.saveLocalSettings();
+      const body = {};
+      if ((this.settings.openaiBaseUrl || '').trim()) body.OPENAI_BASE_URL = this.settings.openaiBaseUrl.trim();
+      if ((this.settings.openaiModel   || '').trim()) body.OPENAI_MODEL    = this.settings.openaiModel.trim();
+      if ((this.settings.openaiApiKey  || '').trim()) body.OPENAI_API_KEY  = this.settings.openaiApiKey.trim();
+      if (!Object.keys(body).length) {
+        this.openaiTestResult = 'Enter a Base URL first.';
+        return;
+      }
+      try {
+        const r = await fetch('/api/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error('Save failed');
+        this.openaiTestOk = true; this.openaiTestResult = 'Saved';
+        await this.fetchHealth();
+        setTimeout(() => { if (this.openaiTestResult === 'Saved') this.openaiTestResult = ''; }, 3000);
+      } catch (e) {
+        this.openaiTestResult = e.message || 'Failed to save.';
+      }
+    },
+  }));
+});
+</script>
+<script src="/static/config.js"></script>
+<script src="/static/vendor/cytoscape/cytoscape.min.js"></script>
+<script defer src="/static/vendor/alpinejs/alpine.min.js"></script>
+<script type="module">
+  import { runAgentLoop } from '/static/agent-loop.js';
+  import { makeTargetNode, extractEntities } from '/static/entity-graph.js';
+  import { initGraph, addToGraph, clearGraph, resizeGraph, exportPng, exportJson, getNodeRenderedBBox } from '/static/graph-renderer.js';
+  import { onEnterGlobe, resizeGlobe, addFinding, clearFindings, setNewsFeatureCollection, fitToFeatures, onBoxSelect, onPointClick, onBasemapUnavailable, isGlobeReady, getFeatureCounts, getNewsFeatures, getFindingsFeatures, pickRenderedPoint, flyTo } from '/static/globe-renderer.js';
+  import { extractGeoFeatures, mergeNewsFeatures, gdeltServiceStatus, newsCoverage, coverageLabel } from '/static/geo-extractor.js';
+  import { safeHttpUrl } from '/static/url-safety.js';
+  import * as setupClient from '/static/setup-client.js';
+  window._runAgentLoop    = runAgentLoop;
+  window._makeTargetNode  = makeTargetNode;
+  window._extractEntities = extractEntities;
+  window._graphFns        = { initGraph, addToGraph, clearGraph, resizeGraph, exportPng, exportJson, getNodeRenderedBBox };
+  window._globeFns        = { onEnterGlobe, resizeGlobe, addFinding, clearFindings, setNewsFeatureCollection, fitToFeatures, onBoxSelect, onPointClick, onBasemapUnavailable, isGlobeReady, getFeatureCounts, getNewsFeatures, getFindingsFeatures, pickRenderedPoint, flyTo };
+  window._geoFns          = { extractGeoFeatures, mergeNewsFeatures, gdeltServiceStatus, newsCoverage, coverageLabel };
+  window._urlSafety       = { safeHttpUrl };
+  window._setupClient     = setupClient;
+  window._agentLoopReady  = true;
+  document.dispatchEvent(new Event('agent-loop-ready'));
+</script>
+</body>
+</html>

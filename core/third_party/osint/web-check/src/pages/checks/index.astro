@@ -1,0 +1,68 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import CheckList from '@components/category/CheckList.astro';
+import CategoryLinks from '@components/category/CategoryLinks.astro';
+import ScanForm from '@components/form/ScanForm.astro';
+import { checkIds } from '@/data/checks';
+import { categoryIds } from '@/data/categories';
+import { checksIntro } from '@/data/about';
+
+const description =
+  `Reference for all ${checkIds.length} Web Check checks: what each one ` +
+  'looks at, why it matters, and the standards behind it.';
+---
+
+<PageLayout
+  title="Every Web Check, Explained | Web Check"
+  description={description}
+  keywords="website checks, osint reference, dns lookup, ssl check, http headers, seo audit"
+  breadcrumbs={[
+    { name: 'Web Check', item: '' },
+    { name: 'Checks', item: 'checks' },
+  ]}
+>
+  <section class="intro">
+    <h1>Every check, explained</h1>
+    <p class="tagline">
+      Web Check runs {checkIds.length} checks across {categoryIds.length} categories. Each one is
+      documented below: what it looks at, why it matters, and the standards behind it.
+    </p>
+    <p class="caveat">{checksIntro}</p>
+    <ScanForm label="Enter a URL to run the full report" />
+  </section>
+
+  <CheckList ids={checkIds} heading="All checks" showCategories />
+
+  <CategoryLinks heading="Browse by category" />
+</PageLayout>
+
+<style lang="scss">
+  .intro {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.25rem, 6vw, 3.5rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+    }
+
+    .tagline {
+      margin: 0;
+      max-width: 62ch;
+      font-size: 1.2rem;
+      line-height: 1.6;
+      color: var(--text-color-secondary);
+    }
+
+    .caveat {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text-color-tertiary);
+    }
+  }
+</style>

@@ -1,0 +1,197 @@
+/**
+ * Parses and normalizes product size strings into base units.
+ * Handles patterns like: 2x200g, 6x1L, 500ml, 24 rolls, 3 ct, 1kg, 12 pods
+ */
+
+export interface ParsedSize {
+  packCount: number;
+  sizeValue: number;
+  sizeUnit: string;
+  baseQuantity: number;
+  baseUnit: string;
+  rawText: string;
+}
+
+export interface SizeContext {
+  baseUnit: string;
+  marketCode: string;
+}
+
+// A Map, not an object literal: `UNIT_MAP['constructor']` on a literal
+// resolves through the prototype chain to a truthy Function, so
+// parseSize('5 constructor') used to return a ParsedSize with a NaN
+// baseQuantity and an undefined baseUnit instead of null.
+const UNIT_MAP = new Map<string, { base: string; factor: number }>([
+  ['kg', { base: 'g', factor: 1000 }],
+  ['kilo', { base: 'g', factor: 1000 }],
+  ['kilogram', { base: 'g', factor: 1000 }],
+  ['kilogramme', { base: 'g', factor: 1000 }],
+  ['g', { base: 'g', factor: 1 }],
+  // `gm` is how AE/IN/SA storefronts routinely write grams; without it a
+  // "400 gm" size fails to parse and the quantity window never runs.
+  ['gm', { base: 'g', factor: 1 }],
+  ['gram', { base: 'g', factor: 1 }],
+  ['gramme', { base: 'g', factor: 1 }],
+  ['mg', { base: 'g', factor: 0.001 }],
+  ['milligram', { base: 'g', factor: 0.001 }],
+  ['milligramme', { base: 'g', factor: 0.001 }],
+  ['l', { base: 'ml', factor: 1000 }],
+  ['lt', { base: 'ml', factor: 1000 }],
+  ['ltr', { base: 'ml', factor: 1000 }],
+  ['litre', { base: 'ml', factor: 1000 }],
+  ['liter', { base: 'ml', factor: 1000 }],
+  // BR/PT storefronts write "1,5 Litros"; `litros` resolves through the
+  // plural strip in normalizeUnit (#5445).
+  ['litro', { base: 'ml', factor: 1000 }],
+  ['ml', { base: 'ml', factor: 1 }],
+  ['millilitre', { base: 'ml', factor: 1 }],
+  ['milliliter', { base: 'ml', factor: 1 }],
+  ['cl', { base: 'ml', factor: 10 }],
+  ['centilitre', { base: 'ml', factor: 10 }],
+  ['centiliter', { base: 'ml', factor: 10 }],
+  ['oz', { base: 'g', factor: 28.3495 }],
+  ['ounce', { base: 'g', factor: 28.3495 }],
+  ['lb', { base: 'g', factor: 453.592 }],
+  ['pound', { base: 'g', factor: 453.592 }],
+  ['gallon', { base: 'ml', factor: 3785.41 }],
+  ['gal', { base: 'ml', factor: 3785.41 }],
+  ['fl', { base: 'ml', factor: 29.5735 }],
+  ['ct', { base: 'ct', factor: 1 }],
+  ['pc', { base: 'ct', factor: 1 }],
+  ['pcs', { base: 'ct', factor: 1 }],
+  ['piece', { base: 'ct', factor: 1 }],
+  ['pieces', { base: 'ct', factor: 1 }],
+  ['roll', { base: 'ct', factor: 1 }],
+  ['rolls', { base: 'ct', factor: 1 }],
+  ['pod', { base: 'ct', factor: 1 }],
+  ['pods', { base: 'ct', factor: 1 }],
+  ['sheet', { base: 'ct', factor: 1 }],
+  ['sheets', { base: 'ct', factor: 1 }],
+  ['sachet', { base: 'ct', factor: 1 }],
+  ['sachets', { base: 'ct', factor: 1 }],
+]);
+
+/**
+ * Resolve a raw unit token to its UNIT_MAP key. Direct hit first, then one
+ * trailing `s` is stripped, so every spelled-out unit gets its plural for free
+ * ("3 Liters", "500 grams", "2 kilos") without listing both forms. Units whose
+ * plural is already a key (`pcs`, `pieces`) resolve on the direct hit, so the
+ * fallback never re-resolves them.
+ *
+ * Deliberately absent, because each would loosen a gate rather than tighten it:
+ * `pack` (the pack pattern already consumes "N pack <size>", and mapping it would
+ * make every "N Pack" canonical name parse, weakening the adapter's
+ * missing-size rejection), `unidade(s)` (same, for the BR egg item), and
+ * `pint` (568ml imperial vs 473ml US — the magnitude is market-dependent).
+ */
+function normalizeUnit(raw: string): string | null {
+  const u = raw.toLowerCase().replace(/\.$/, '');
+  if (UNIT_MAP.has(u)) return u;
+  if (u.endsWith('s')) {
+    const singular = u.slice(0, -1);
+    if (UNIT_MAP.has(singular)) return singular;
+  }
+  return null;
+}
+
+// The pack prefix of /(?:^|\s)(\d+)\s*(?:[x×]|pack\b)\s*(.+)$/i. Its `(.+)$`
+// is checked in matchPack instead: as a regex it re-scanned the text up to the
+// last line break from every start, which is quadratic.
+const PACK_HEAD = /(?:^|\s)(\d+)\s*(?:[x×]|pack\b)\s*/gi;
+// A match never starts inside a digit run: one starting there implies the same
+// match from the run's first digit, which is further left. Without the
+// lookbehind every digit of a long run re-scanned the rest of it.
+const SIZE_PATTERN = /(?<!\d)(\d+(?:\.\d+)?)\s*([a-z]+)/i;
+
+const LINE_TERMINATORS = new Set(['\n', '\r', String.fromCharCode(0x2028), String.fromCharCode(0x2029)]);
+
+/** The full pack pattern's count and remainder, found in linear time. */
+function matchPack(text: string): { count: string; rest: string } | null {
+  // `.+` cannot cross a line terminator, so the remainder must start on the
+  // last line and be non-empty. The head's quantifiers cannot backtrack into a
+  // different split, so the first head that passes is the regex's match.
+  let lastLine = 0;
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (LINE_TERMINATORS.has(text.charAt(i))) {
+      lastLine = i + 1;
+      break;
+    }
+  }
+  PACK_HEAD.lastIndex = 0;
+  for (let m = PACK_HEAD.exec(text); m; m = PACK_HEAD.exec(text)) {
+    const restAt = PACK_HEAD.lastIndex;
+    if (restAt >= lastLine && restAt < text.length) return { count: m[1] ?? '', rest: text.slice(restAt) };
+    PACK_HEAD.lastIndex = m.index + 1;
+  }
+  return null;
+}
+
+/** Normalize numeric separators before either size or title matching. */
+export function normalizeDecimalSeparators(text: string): string {
+  return text
+    .replace(/(?<!\d)0,(\d+)/g, '0.$1')
+    .replace(/(\d),(\d{3})(?!\d)/g, '$1$2')
+    .replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
+}
+
+export function parseSize(raw: string | null | undefined, context?: SizeContext): ParsedSize | null {
+  if (!raw) return null;
+
+  const text = normalizeDecimalSeparators(raw.trim().toLowerCase());
+
+  const contextualUnit = context?.baseUnit === 'ct'
+    ? { pattern: /^(\d+)\s*(pack)$/, base: 'ct', factor: 1 }
+    : context?.baseUnit === 'ml' && context.marketCode === 'gb'
+      ? { pattern: /^(\d+(?:\.\d+)?)\s*(pints?)$/, base: 'ml', factor: 568.26125 }
+      : undefined;
+  const contextualMatch = contextualUnit?.pattern.exec(text);
+  if (contextualMatch && contextualUnit) {
+    const sizeValue = Number(contextualMatch[1]);
+    const baseQuantity = sizeValue * contextualUnit.factor;
+    if (!Number.isFinite(baseQuantity) || baseQuantity <= 0 ||
+      (contextualUnit.base === 'ct' && !Number.isSafeInteger(sizeValue))) return null;
+    return {
+      packCount: 1,
+      sizeValue,
+      sizeUnit: contextualMatch[2],
+      baseQuantity,
+      baseUnit: contextualUnit.base,
+      rawText: raw,
+    };
+  }
+
+  let packCount = 1;
+  let sizeStr = text;
+
+  const packMatch = matchPack(text);
+  if (packMatch) {
+    packCount = parseInt(packMatch.count, 10);
+    sizeStr = packMatch.rest.trim();
+  }
+
+  const sizeMatch = SIZE_PATTERN.exec(sizeStr);
+  if (!sizeMatch) return null;
+
+  const sizeValue = parseFloat(sizeMatch[1]);
+  const rawUnit = sizeMatch[2].toLowerCase().replace(/\.$/, '');
+  const unitKey = normalizeUnit(rawUnit);
+  const unitDef = unitKey ? UNIT_MAP.get(unitKey) : undefined;
+
+  if (!unitDef) return null;
+
+  const baseQuantity = packCount * sizeValue * unitDef.factor;
+
+  return {
+    packCount,
+    sizeValue,
+    sizeUnit: rawUnit,
+    baseQuantity,
+    baseUnit: unitDef.base,
+    rawText: raw,
+  };
+}
+
+export function unitPrice(price: number, size: ParsedSize): number {
+  if (size.baseQuantity === 0) return price;
+  return price / size.baseQuantity;
+}

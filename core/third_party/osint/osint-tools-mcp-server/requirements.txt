@@ -1,0 +1,11 @@
+# Core dependencies
+asyncio-atexit==1.0.1
+
+# OSINT Tools - These will be installed automatically
+sherlock-project
+holehe
+maigret
+theharvester
+
+# Note: SpiderFoot, GHunt, and Blackbird require manual installation
+# See the Prerequisites section in README.md for details

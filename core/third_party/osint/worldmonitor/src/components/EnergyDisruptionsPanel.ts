@@ -1,0 +1,338 @@
+import { Panel } from './Panel';
+import { escapeHtml, unsafeRawHtml } from '@/utils/sanitize';
+import { createLazyClient, getRpcBaseUrl, rpcFetch } from '@/services/rpc-client';
+import { attributionFooterHtml, ATTRIBUTION_FOOTER_CSS } from '@/utils/attribution-footer';
+
+import type {
+  ListEnergyDisruptionsResponse,
+  EnergyDisruptionEntry,
+} from '@/generated/client/worldmonitor/supply_chain/v1/service_client';
+import {
+  formatEventWindow,
+  formatCapacityOffline,
+  statusForEvent,
+  type DisruptionStatus,
+} from '@/shared/disruption-timeline';
+import { SupplyChainServiceClient } from '@/services/generated-rpc-clients';
+import { bindActivationKeys } from '@/utils/activation';
+
+const getSupplyChainClient = createLazyClient(() => new SupplyChainServiceClient(getRpcBaseUrl(), {
+  fetch: rpcFetch,
+}));
+
+// One glyph per event type so readers can scan the timeline by nature of
+// disruption. Kept terse — the type string itself is shown next to the glyph.
+const EVENT_GLYPH: Record<string, string> = {
+  sabotage:    '💥',
+  sanction:    '🚫',
+  maintenance: '🔧',
+  mechanical:  '⚙️',
+  weather:     '🌀',
+  commercial:  '💼',
+  war:         '⚔️',
+  other:       '•',
+};
+
+const STATUS_COLOR: Record<DisruptionStatus, string> = {
+  ongoing:  '#c0392b',
+  resolved: '#5d6d7e',
+  unknown:  '#6b7280',
+};
+
+const EVENT_TYPE_FILTERS: Array<{ key: string; label: string }> = [
+  { key: '',            label: 'All events' },
+  { key: 'sabotage',    label: 'Sabotage' },
+  { key: 'sanction',    label: 'Sanction' },
+  { key: 'mechanical',  label: 'Mechanical' },
+  { key: 'maintenance', label: 'Maintenance' },
+  { key: 'war',         label: 'War' },
+  { key: 'weather',     label: 'Weather' },
+  { key: 'commercial',  label: 'Commercial' },
+  { key: 'other',       label: 'Other' },
+];
+
+// Window and offline values may wrap between their parts ("2025-08-14 →
+// 2025-08-18", "15.0 bcm/yr · 1.60 mb/d") but never inside one.
+function wholeParts(text: string): string {
+  return text.split(/ ([→·]) /)
+    .map((part, i) => (i % 2 ? ` ${escapeHtml(part)} ` : `<span class="ed-val">${escapeHtml(part)}</span>`))
+    .join('');
+}
+
+function statusChip(status: DisruptionStatus): string {
+  const color = STATUS_COLOR[status] ?? STATUS_COLOR.unknown;
+  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  return `<span class="ed-badge" style="background:${color}">${escapeHtml(label)}</span>`;
+}
+
+/**
+ * Standalone reverse-chronological timeline of every disruption event in
+ * `energy:disruptions:v1`. Per plan §L #4 this panel is the primary
+ * disruption surface — PipelineStatusPanel and StorageFacilityMapPanel
+ * each render an *asset-scoped* slice of the same events in their drawer,
+ * but neither lists the global log.
+ *
+ * Click-through dispatches `energy:open-pipeline-detail` for pipelines
+ * (PipelineStatusPanel listens) and `wm:open-storage-atlas` for storage,
+ * which opens the Strategic Storage Atlas on that facility even when the
+ * panel is closed or not yet mounted (see EventHandlerManager and
+ * PanelLayoutManager.focusStorageFacility).
+ */
+export class EnergyDisruptionsPanel extends Panel {
+  private data: ListEnergyDisruptionsResponse | null = null;
+  private activeTypeFilter = '';
+  private ongoingOnly = false;
+
+  constructor() {
+    super({
+      id: 'energy-disruptions',
+      title: 'Energy Disruptions Log',
+      defaultRowSpan: 2,
+      infoTooltip:
+        'Curated log of disruption events affecting oil & gas pipelines and ' +
+        'storage facilities — sabotage, sanctions, maintenance, mechanical, ' +
+        'weather, war, commercial. Each event ties back to a seeded asset; ' +
+        'click a row to jump to the pipeline / storage panel with that event ' +
+        'highlighted. See /docs/methodology/disruptions for the schema.',
+    });
+
+    // Event delegation on the persistent `content` element. Panel.setContent
+    // debounces the DOM write by 150ms (see Panel.ts:1025), so attaching
+    // listeners immediately after setContent() in render() would target the
+    // stale DOM — chips, rows, and the ongoing-toggle button would all be
+    // silently non-interactive. Codex P1 on PR #3378.
+    //
+    // Delegating from the persistent parent sidesteps the debounce entirely:
+    // the handler uses `closest(...)` on the clicked element to route by
+    // data-attributes, so it works regardless of whether the DOM has
+    // flushed yet or has been re-rendered since the last filter change.
+    this.content.addEventListener('click', this.handleContentClick);
+    bindActivationKeys(this.content, '.ed-row');
+  }
+
+  private handleContentClick = (e: Event): void => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    const filterBtn = target.closest<HTMLButtonElement>('[data-filter-type]');
+    if (filterBtn) {
+      this.setTypeFilter(filterBtn.dataset.filterType ?? '');
+      return;
+    }
+
+    const ongoingBtn = target.closest<HTMLButtonElement>('[data-toggle-ongoing]');
+    if (ongoingBtn) {
+      this.toggleOngoingOnly();
+      return;
+    }
+
+    const row = target.closest<HTMLTableRowElement>('tr.ed-row');
+    if (row) {
+      const eventId = row.dataset.eventId;
+      const assetId = row.dataset.assetId;
+      const assetType = row.dataset.assetType;
+      if (eventId && assetId && assetType) {
+        this.dispatchOpenAsset(eventId, assetId, assetType);
+      }
+    }
+  };
+
+  public async fetchData(): Promise<void> {
+    try {
+      const live = await getSupplyChainClient().listEnergyDisruptions({
+        assetId: '',
+        assetType: '',
+        ongoingOnly: false,
+      });
+      if (!this.element?.isConnected) return;
+      // Distinguish upstream unavailability from a healthy empty result.
+      // The server contract (see list-energy-disruptions.ts) returns
+      // `upstreamUnavailable: true` only when Redis itself can't be
+      // read; an empty `events` array with `upstreamUnavailable: false`
+      // is a valid response shape the UI should render as "no events
+      // match" rather than as an error. Conflating the two previously
+      // showed a retry button on what was a legitimate empty state.
+      if (live.upstreamUnavailable) {
+        this.showError('Energy disruptions log unavailable', () => void this.fetchData());
+        return;
+      }
+      this.data = live;
+      this.render();
+    } catch (err) {
+      if (this.isAbortError(err)) return;
+      if (!this.element?.isConnected) return;
+      this.showError('Energy disruptions log error', () => void this.fetchData());
+    }
+  }
+
+  private setTypeFilter(type: string): void {
+    this.activeTypeFilter = type;
+    this.render();
+  }
+
+  private toggleOngoingOnly(): void {
+    this.ongoingOnly = !this.ongoingOnly;
+    this.render();
+  }
+
+  private filterEvents(): EnergyDisruptionEntry[] {
+    if (!this.data) return [];
+    let events = this.data.events;
+    if (this.activeTypeFilter) {
+      events = events.filter(e => e.eventType === this.activeTypeFilter);
+    }
+    if (this.ongoingOnly) {
+      events = events.filter(e => !e.endAt);
+    }
+    // Newest first. Server already sorts by startAt DESC but defensive
+    // sort keeps the UI stable when filters reshuffle.
+    return [...events].sort((a, b) => b.startAt.localeCompare(a.startAt));
+  }
+
+  private render(): void {
+    if (!this.data) return;
+
+    // Compute once — previously filterEvents() ran twice per render, once
+    // for the row HTML and again for filteredCount. Trivial for 52 events
+    // but the redundant sort on every render was noise. Codex P2.
+    const filtered = this.filterEvents();
+    const rows = filtered.map(e => this.renderRow(e)).join('');
+    const totalCount = this.data.events.length;
+    const ongoingCount = this.data.events.filter(e => !e.endAt).length;
+    const filteredCount = filtered.length;
+    const summary = this.activeTypeFilter || this.ongoingOnly
+      ? `${filteredCount} shown · ${totalCount} total · ${ongoingCount} ongoing`
+      : `${totalCount} events · ${ongoingCount} ongoing`;
+
+    const typeButtons = EVENT_TYPE_FILTERS.map(f => {
+      const active = f.key === this.activeTypeFilter;
+      return `<button class="ed-chip${active ? ' ed-chip-active' : ''}" data-filter-type="${escapeHtml(f.key)}">${escapeHtml(f.label)}</button>`;
+    }).join('');
+
+    const ongoingBtn = `<button class="ed-chip${this.ongoingOnly ? ' ed-chip-active' : ''}" data-toggle-ongoing>Ongoing only</button>`;
+
+    const attribution = attributionFooterHtml({
+      sourceType: 'classifier',
+      method: 'curated event log',
+      sampleSize: totalCount,
+      sampleLabel: 'disruption events',
+      updatedAt: this.data.fetchedAt,
+      classifierVersion: this.data.classifierVersion,
+      creditName: 'Operator press + regulator filings + OFAC/EU sanctions + major wire',
+      creditUrl: '/docs/methodology/disruptions',
+    });
+
+    this.setSafeContent(unsafeRawHtml(`
+      <div class="ed-wrap">
+        <div class="ed-summary">${escapeHtml(summary)}</div>
+        <div class="ed-filters">${typeButtons}${ongoingBtn}</div>
+        <div class="table-scroll" role="group" tabindex="0" aria-labelledby="${this.panelId}Title">
+          <table class="wm-table ed-table" role="table">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th scope="col" role="columnheader">Event</th>
+                <th scope="col" role="columnheader">Asset</th>
+                <th scope="col" role="columnheader">Window</th>
+                <th scope="col" role="columnheader">Offline</th>
+                <th scope="col" role="columnheader">Status</th>
+              </tr>
+            </thead>
+            <tbody role="rowgroup">${rows || `<tr role="row"><td role="cell" colspan="5" class="ed-empty">No events match the current filter.</td></tr>`}</tbody>
+          </table>
+        </div>
+        ${attribution}
+      </div>
+      ${ATTRIBUTION_FOOTER_CSS}
+      <style>
+        .ed-wrap { font-size: calc(11px * var(--wm-panel-effective-scale, 1)); container: ed-wrap / inline-size; }
+        .ed-summary { font-size: calc(10px * var(--wm-panel-effective-scale, 1)); color: var(--text-dim, #888); text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 6px 0; }
+        .ed-filters { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+        .ed-chip { background: rgba(255,255,255,0.04); color: var(--text-dim, #aaa); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 2px 8px; font-size: calc(10px * var(--wm-panel-effective-scale, 1)); cursor: pointer; }
+        .ed-chip:hover { background: rgba(255,255,255,0.08); color: var(--text, #eee); }
+        .ed-chip-active { background: #2980b9; border-color: #2980b9; color: #fff; }
+        .ed-chip-active:hover { background: #2471a3; }
+        .ed-table td { vertical-align: top; }
+        .ed-row { cursor: pointer; }
+        .ed-row:hover td { background: rgba(255,255,255,0.03); }
+        .ed-event { font-weight: 600; color: var(--text, #eee); }
+        .ed-sub { font-size: calc(9px * var(--wm-panel-effective-scale, 1)); color: var(--text-dim, #888); text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: break-word; }
+        .ed-desc { font-size: calc(10px * var(--wm-panel-effective-scale, 1)); text-transform: none; letter-spacing: normal; margin: 2px 0; }
+        .ed-asset-id { overflow-wrap: break-word; }
+        .ed-table .ed-val { white-space: nowrap; }
+        .ed-asset-type { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: calc(8px * var(--wm-panel-effective-scale, 1)); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; background: rgba(255,255,255,0.08); color: var(--text-secondary); margin-right: 4px; }
+        .ed-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: calc(9px * var(--wm-panel-effective-scale, 1)); font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.04em; }
+        .ed-empty { text-align: center; color: var(--text-dim, #888); padding: 20px; font-style: italic; }
+        .ed-offline { font-family: monospace; font-size: calc(10px * var(--wm-panel-effective-scale, 1)); color: var(--text, #eee); }
+        /* Five columns cannot fit a narrow column without splitting values, so
+           each row stacks: the event and the asset take the full width, and the
+           window, offline capacity and status share a line below. The
+           breakpoint is in em of the scaled wrap text (50em is 550px at 100%),
+           so a larger font-size setting stacks the rows in a wider column too. */
+        @container ed-wrap (max-width: 50em) {
+          .ed-table, .ed-table tbody { display: block; }
+          .ed-table thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+          .ed-table tr.ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px; border-bottom: 1px solid var(--border-subtle); }
+          .ed-table tr.ed-row td { padding: 0; border: 0; }
+          .ed-table tr.ed-row td:first-child, .ed-table tr.ed-row td.ed-asset { flex: 1 0 100%; }
+          .ed-table tr.ed-row td:last-child { margin-inline-start: auto; }
+          .ed-table tr.ed-row:hover { background: rgba(255,255,255,0.03); }
+          .ed-table tr.ed-row:hover td { background: none; }
+          .ed-table td[data-label]::before { content: attr(data-label) ' '; color: var(--text-dim, #888); }
+        }
+      </style>
+    `, 'legacy Panel.setContent() migration'));
+
+    // No inline listener attachment — the constructor registers a single
+    // delegated click handler on `this.content` that routes by data-
+    // attribute via `closest(...)`. Attaching listeners here would target
+    // the stale DOM because Panel.setContent() debounces by 150ms.
+  }
+
+  private dispatchOpenAsset(_eventId: string, assetId: string, assetType: string): void {
+    // Dispatch only the {pipelineId, facilityId} field the receiving
+    // drawers actually consume today. The row click jumps the user to the
+    // asset — they see the full disruption timeline for that asset and can
+    // locate the specific event visually. A future PR can add a
+    // `highlightEventId` contract with matching drawer-side rendering
+    // (scroll-into-view + visual emphasis); until then, emitting an unread
+    // field was a misleading API surface (Codex P2).
+    //
+    // Storage goes through 'wm:open-storage-atlas' (the same route as the
+    // map popup's "Open in Storage Atlas"): the atlas only claims a direct
+    // 'energy:open-storage-facility-detail' while the user can see it, so a
+    // closed, collapsed or deferred atlas would otherwise drop this click.
+    // The open-atlas route enables, mounts, reveals and then delivers it.
+    if (assetType === 'storage') {
+      window.dispatchEvent(new CustomEvent('wm:open-storage-atlas', { detail: { facilityId: assetId } }));
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('energy:open-pipeline-detail', { detail: { pipelineId: assetId } }));
+  }
+
+  private renderRow(e: EnergyDisruptionEntry): string {
+    const glyph = EVENT_GLYPH[e.eventType] ?? '•';
+    const status = statusForEvent({ startAt: e.startAt, endAt: e.endAt || undefined });
+    const eventWindow = formatEventWindow(e.startAt, e.endAt || undefined);
+    const offline = formatCapacityOffline(e.capacityOfflineBcmYr, e.capacityOfflineMbd);
+    const causeChain = e.causeChain.join(' → ') || '—';
+
+    return `
+      <tr class="ed-row" role="row" tabindex="0"
+          data-event-id="${escapeHtml(e.id)}"
+          data-asset-id="${escapeHtml(e.assetId)}"
+          data-asset-type="${escapeHtml(e.assetType)}">
+        <td role="cell">
+          <div class="ed-event">${glyph} ${escapeHtml(e.eventType)}</div>
+          <div class="ed-sub ed-desc">${escapeHtml(e.shortDescription)}</div>
+          <div class="ed-sub">${escapeHtml(causeChain)}</div>
+        </td>
+        <td role="cell" class="ed-asset">
+          <span class="ed-asset-type">${escapeHtml(e.assetType)}</span>
+          <span class="ed-asset-id">${escapeHtml(e.assetId)}</span>
+        </td>
+        <td role="cell">${wholeParts(eventWindow)}</td>
+        <td role="cell" data-label="Offline"><span class="ed-offline">${wholeParts(offline || '—')}</span></td>
+        <td role="cell">${statusChip(status)}</td>
+      </tr>`;
+  }
+}

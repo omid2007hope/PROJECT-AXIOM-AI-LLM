@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package worldmonitor.infrastructure.v1;
+
+import "buf/validate/validate.proto";
+
+// BaselineUpdate retains the request shape of the disabled compatibility endpoint.
+message BaselineUpdate {
+  // Activity type key.
+  string type = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1
+  ];
+  // Geographic region key. Only the global baseline is defined.
+  string region = 2 [(buf.validate.field).string.const = "global"];
+  // Submitted count. The disabled endpoint does not persist this value.
+  double count = 3;
+}
+
+// RecordBaselineSnapshotRequest is retained for compatibility. Client writes are disabled.
+message RecordBaselineSnapshotRequest {
+  // Metric updates retained for wire compatibility. The disabled endpoint rejects the request.
+  repeated BaselineUpdate updates = 1;
+}
+
+// RecordBaselineSnapshotResponse reports that no client baseline was updated.
+message RecordBaselineSnapshotResponse {
+  // Always zero because the endpoint is disabled.
+  int32 updated = 1;
+  // Error message if the request was invalid.
+  string error = 2;
+}

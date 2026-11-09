@@ -1,0 +1,266 @@
+name: Nightly Build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 17 * * *" # 1:00 BJ Time
+
+permissions:
+  contents: write
+  actions: write # Required for deleting artifacts
+
+jobs:
+  cleanup-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Calculate the date 14 days ago
+          cutoff_date=$(date -d "14 days ago" +%Y-%m-%d)
+
+          # List and delete artifacts older than cutoff date
+          gh api repos/$REPO/actions/artifacts --paginate | \
+          jq -r '.artifacts[] | select(.name | startswith("cherry-studio-nightly-")) | select(.created_at < "'$cutoff_date'") | .id' | \
+          while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api repos/$REPO/actions/artifacts/$artifact_id -X DELETE
+          done
+
+  check-repository:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ github.repository == 'CherryHQ/cherry-studio' }}
+    steps:
+      - name: Check if running in main repository
+        run: |
+          echo "Running in repository: ${{ github.repository }}"
+          echo "Should run: ${{ github.repository == 'CherryHQ/cherry-studio' }}"
+
+  nightly-build:
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [macos-latest, windows-2022, ubuntu-latest]
+      fail-fast: false
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: ".node-version"
+
+      - name: macos-latest dependencies fix
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install python-setuptools
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Generate date tag
+        id: date
+        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Enable Linux ARM64 addon builds
+        if: matrix.os == 'ubuntu-latest'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y rpm libglib2.0-dev libgdk-pixbuf-2.0-dev libevdev-dev libxtst-dev libx11-dev libxfixes-dev libwayland-dev
+          pnpm build:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=8192
+          MAIN_VITE_CHERRYAI_CLIENT_SECRET: ${{ secrets.MAIN_VITE_CHERRYAI_CLIENT_SECRET }}
+          MAIN_VITE_CHERRY_CLOUD_CLIENT_SECRET: ${{ secrets.MAIN_VITE_CHERRY_CLOUD_CLIENT_SECRET }}
+          SENTRY_SOURCE_MAP_UPLOAD: "true"
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          MAIN_VITE_MINERU_API_KEY: ${{ secrets.MAIN_VITE_MINERU_API_KEY }}
+          RENDERER_VITE_AIHUBMIX_SECRET: ${{ secrets.RENDERER_VITE_AIHUBMIX_SECRET }}
+          RENDERER_VITE_PPIO_APP_SECRET: ${{ secrets.RENDERER_VITE_PPIO_APP_SECRET }}
+
+      - name: Build Mac
+        if: matrix.os == 'macos-latest'
+        run: |
+          pnpm build:mac
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=8192
+          MAIN_VITE_CHERRYAI_CLIENT_SECRET: ${{ secrets.MAIN_VITE_CHERRYAI_CLIENT_SECRET }}
+          MAIN_VITE_CHERRY_CLOUD_CLIENT_SECRET: ${{ secrets.MAIN_VITE_CHERRY_CLOUD_CLIENT_SECRET }}
+          SENTRY_SOURCE_MAP_UPLOAD: "true"
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          MAIN_VITE_MINERU_API_KEY: ${{ secrets.MAIN_VITE_MINERU_API_KEY }}
+          RENDERER_VITE_AIHUBMIX_SECRET: ${{ secrets.RENDERER_VITE_AIHUBMIX_SECRET }}
+          RENDERER_VITE_PPIO_APP_SECRET: ${{ secrets.RENDERER_VITE_PPIO_APP_SECRET }}
+
+      - name: Build Windows
+        if: matrix.os == 'windows-2022'
+        run: |
+          pnpm build:win
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=8192
+          MAIN_VITE_CHERRYAI_CLIENT_SECRET: ${{ secrets.MAIN_VITE_CHERRYAI_CLIENT_SECRET }}
+          MAIN_VITE_CHERRY_CLOUD_CLIENT_SECRET: ${{ secrets.MAIN_VITE_CHERRY_CLOUD_CLIENT_SECRET }}
+          SENTRY_SOURCE_MAP_UPLOAD: "true"
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          MAIN_VITE_MINERU_API_KEY: ${{ secrets.MAIN_VITE_MINERU_API_KEY }}
+          RENDERER_VITE_AIHUBMIX_SECRET: ${{ secrets.RENDERER_VITE_AIHUBMIX_SECRET }}
+          RENDERER_VITE_PPIO_APP_SECRET: ${{ secrets.RENDERER_VITE_PPIO_APP_SECRET }}
+
+      - name: Rename artifacts with nightly format
+        shell: bash
+        run: |
+          mkdir -p renamed-artifacts
+          DATE=${{ steps.date.outputs.date }}
+
+          # Windows artifacts - based on actual file naming pattern
+          if [ "${{ matrix.os }}" == "windows-2022" ]; then
+            # Setup installer
+            find dist -name "*-win-x64-setup.exe" -exec cp {} renamed-artifacts/cherry-studio-nightly-${DATE}-win-x64-setup.exe \;
+            find dist -name "*-win-arm64-setup.exe" -exec cp {} renamed-artifacts/cherry-studio-nightly-${DATE}-win-arm64-setup.exe \;
+          fi
+
+          # macOS artifacts
+          if [ "${{ matrix.os }}" == "macos-latest" ]; then
+            find dist -name "*-mac-arm64.dmg" -exec cp {} renamed-artifacts/cherry-studio-nightly-${DATE}-mac-arm64.dmg \;
+            find dist -name "*-mac-x64.dmg" -exec cp {} renamed-artifacts/cherry-studio-nightly-${DATE}-mac-x64.dmg \;
+          fi
+
+          # Linux artifacts
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            find dist -name "*-linux-x64.AppImage" -exec cp {} renamed-artifacts/cherry-studio-nightly-${DATE}-linux-x64.AppImage \;
+            find dist -name "*-linux-arm64.AppImage" -exec cp {} renamed-artifacts/cherry-studio-nightly-${DATE}-linux-arm64.AppImage \;
+          fi
+
+      - name: List files to be uploaded
+        shell: bash
+        run: |
+          echo "准备上传的文件:"
+          if [ -x "$(command -v tree)" ]; then
+            tree renamed-artifacts
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            dir renamed-artifacts
+          else
+            ls -la renamed-artifacts
+          fi
+          echo "总计: $(find renamed-artifacts -type f | wc -l) 个文件"
+
+      - name: Upload nightly x64 installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: |
+            renamed-artifacts/*-x64-setup.exe
+            renamed-artifacts/*-x64.dmg
+            renamed-artifacts/*-x64.AppImage
+          archive: false
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload nightly arm64 installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: |
+            renamed-artifacts/*-arm64-setup.exe
+            renamed-artifacts/*-arm64.dmg
+            renamed-artifacts/*-arm64.AppImage
+          archive: false
+          if-no-files-found: error
+          retention-days: 3
+
+  Build-Summary:
+    name: Nightly downloads
+    needs: nightly-build
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Summarize nightly artifacts
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              ...context.repo,
+              run_id: context.runId,
+              per_page: 100
+            });
+            const platforms = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
+            const rows = [];
+            for (const artifact of artifacts.sort((a, b) => a.name.localeCompare(b.name))) {
+              const match = /^cherry-studio-nightly-(\d{4})(\d{2})(\d{2})-(win|mac|linux)-(x64|arm64)(?:-setup\.exe|\.dmg|\.AppImage)$/.exec(artifact.name);
+              if (artifact.expired || !match) continue;
+              const [, year, month, day, platform, arch] = match;
+              const date = `${year}-${month}-${day}`;
+              const size = `${(artifact.size_in_bytes / 1024 / 1024).toFixed(1)} MiB`;
+              const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts/${artifact.id}`;
+              rows.push(`| ${platforms[platform]} | ${arch} | ${date} | ${size} | [Download](${url}) |`);
+            }
+            const lines = [
+              '## ⚠️ 警告：这是每日构建版本',
+              '此版本为自动构建的不稳定版本，仅供测试使用。不建议在生产环境中使用。',
+              '安装此版本前请务必备份数据，并做好数据迁移准备。',
+              '',
+              '## ⚠️ Warning: This is a nightly build version',
+              'This version is an unstable version built automatically and is only for testing. It is not recommended to use it in a production environment.',
+              'Please backup your data before installing this version and prepare for data migration.',
+              '',
+              '## Nightly downloads',
+              '',
+              'Installers are available for 3 days. Sign in to GitHub to download the original file without an extra ZIP archive.',
+              '',
+              'Only available uploads are listed; check the build jobs for failures.',
+              ''
+            ];
+            if (rows.length) {
+              lines.push('| Platform | Architecture | Build date | Size | Download |',
+                '| --- | --- | --- | --- | --- |', ...rows);
+            } else {
+              lines.push('No nightly installers are available. Check the build jobs for details.');
+            }
+            await core.summary.addRaw(lines.join('\n') + '\n').write();

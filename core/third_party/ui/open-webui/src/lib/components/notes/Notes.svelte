@@ -1,0 +1,954 @@
+<script lang="ts">
+	import WorkspaceAccessModal from '$lib/components/workspace/common/WorkspaceAccessModal.svelte';
+	let accessModal: WorkspaceAccessModal;
+	import { marked } from 'marked';
+	import { toast } from 'svelte-sonner';
+	import fileSaver from 'file-saver';
+
+	const { saveAs } = fileSaver;
+
+	import dayjs from '$lib/dayjs';
+	import duration from 'dayjs/plugin/duration';
+	import relativeTime from 'dayjs/plugin/relativeTime';
+
+	dayjs.extend(duration);
+	dayjs.extend(relativeTime);
+
+	import { onMount, getContext, onDestroy } from 'svelte';
+
+	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
+
+	import { goto } from '$app/navigation';
+	import {
+		WEBUI_NAME,
+		config,
+		user,
+		pinnedNotes,
+		mobile,
+		showSidebar,
+		settings
+	} from '$lib/stores';
+	import {
+		createNewNote,
+		deleteNoteById,
+		getNoteById,
+		getNoteList,
+		searchNotes,
+		toggleNotePinnedStatusById,
+		getPinnedNoteList
+	} from '$lib/apis/notes';
+	import { capitalizeFirstLetter, copyToClipboard, formatNumber, getTimeRange } from '$lib/utils';
+	import { downloadNote, createNoteHandler } from './utils';
+
+	import EllipsisHorizontal from '../icons/EllipsisHorizontal.svelte';
+	import GarbageBin from '../icons/GarbageBin.svelte';
+	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
+	import Search from '../icons/Search.svelte';
+	import Spinner from '../common/Spinner.svelte';
+	import Tooltip from '../common/Tooltip.svelte';
+	import NoteMenu from './Notes/NoteMenu.svelte';
+	import ProfileImage from '$lib/components/chat/Messages/ProfileImage.svelte';
+	import FilesOverlay from '../chat/MessageInput/FilesOverlay.svelte';
+	import XMark from '../icons/XMark.svelte';
+	import DropdownOptions from '../common/DropdownOptions.svelte';
+	import Loader from '../common/Loader.svelte';
+	import SidebarIcon from '../icons/Sidebar.svelte';
+	import SplitCreateButton from '../common/SplitCreateButton.svelte';
+	import ChevronDown from '../icons/ChevronDown.svelte';
+	import ChevronUp from '../icons/ChevronUp.svelte';
+
+	let loaded = false;
+
+	let importFiles = '';
+	let importDocumentFiles: FileList | null = null;
+	let notesImportInputElement: HTMLInputElement;
+	let selectedNote = null;
+	let openNoteMenuId: string | null = null;
+	let showDeleteConfirm = false;
+	let shiftKey = false;
+
+	let notes = {};
+
+	let items = null;
+	let total = null;
+
+	let query = '';
+	let searchDebounceTimer: ReturnType<typeof setTimeout>;
+	let searchController: AbortController;
+
+	let sortKey = 'updated_at';
+	let sortDirection = 'desc';
+	let displayOption = null;
+	let viewOption = null;
+	let permission = null;
+
+	let page = 1;
+
+	let itemsLoading = false;
+	let allItemsLoaded = false;
+
+	const downloadHandler = async (type) => {
+		// Fetch the full note since the list response may not contain full content
+		const note = await getNoteById(localStorage.token, selectedNote.id).catch((error) => {
+			toast.error(`${error}`);
+			return null;
+		});
+
+		if (!note) return;
+
+		try {
+			await downloadNote(note, type);
+		} catch (error) {
+			toast.error(String(error));
+		}
+	};
+
+	const deleteNoteHandler = async (id) => {
+		const res = await deleteNoteById(localStorage.token, id).catch((error) => {
+			toast.error(`${error}`);
+			return null;
+		});
+
+		if (res) {
+			pinnedNotes.set(await getPinnedNoteList(localStorage.token).catch(() => []));
+			init();
+		}
+	};
+
+	const inputFilesHandler = async (inputFiles: File[]) => {
+		let imported = false;
+
+		for (const file of inputFiles) {
+			const isSupportedFile =
+				file.type === 'text/markdown' ||
+				file.type === 'text/plain' ||
+				/\.(md|txt)$/i.test(file.name);
+
+			if (!isSupportedFile) {
+				toast.error('Only txt and md files are allowed');
+				return;
+			}
+
+			const content = await file.text();
+			const name = file.name.replace(/\.(md|txt)$/i, '');
+
+			const res = await createNewNote(localStorage.token, {
+				title: name,
+				data: {
+					content: {
+						json: null,
+						html: marked.parse(content ?? ''),
+						md: content
+					}
+				},
+				meta: null,
+				access_grants: []
+			}).catch((error) => {
+				toast.error(`${error}`);
+				return null;
+			});
+
+			if (res) {
+				imported = true;
+			}
+		}
+
+		if (imported) {
+			init();
+		}
+	};
+
+	const reset = () => {
+		page = 1;
+		allItemsLoaded = false;
+		itemsLoading = false;
+		notes = {};
+	};
+
+	const loadMoreItems = async () => {
+		if (allItemsLoaded || itemsLoading) return;
+		page += 1;
+		await getItemsPage();
+	};
+
+	const init = async () => {
+		reset();
+		await getItemsPage();
+	};
+
+	const handleSearchInput = () => {
+		searchController?.abort();
+		itemsLoading = true;
+		clearTimeout(searchDebounceTimer);
+		searchDebounceTimer = setTimeout(() => {
+			if (loaded) {
+				init();
+			}
+		}, 300);
+	};
+
+	$: if (
+		loaded &&
+		sortKey !== undefined &&
+		sortDirection !== undefined &&
+		permission !== undefined &&
+		viewOption !== undefined
+	) {
+		init();
+	}
+
+	const noteUrl = (note) =>
+		query && note.data?.page_id
+			? `/notes/${note.id}?page=${encodeURIComponent(note.data.page_id)}&search=${encodeURIComponent(query)}`
+			: `/notes/${note.id}`;
+
+	const getItemsPage = async () => {
+		searchController?.abort();
+		searchController = new AbortController();
+		const { signal } = searchController;
+
+		itemsLoading = true;
+
+		if (viewOption === 'created') {
+			permission = null;
+		}
+
+		const res = await searchNotes(
+			localStorage.token,
+			query,
+			viewOption,
+			permission,
+			sortKey,
+			page,
+			sortKey ? sortDirection : null,
+			signal
+		).catch(() => {
+			return [];
+		});
+
+		if (signal.aborted) return;
+
+		if (res) {
+			total = res.total;
+			const pageItems = res.items;
+
+			if ((pageItems ?? []).length === 0) {
+				allItemsLoaded = true;
+			} else {
+				allItemsLoaded = false;
+			}
+
+			if (items && page > 1) {
+				const existingIds = new Set(items.map((item) => item.id));
+				const newItems = pageItems.filter((item) => !existingIds.has(item.id));
+				items = [...items, ...newItems];
+			} else {
+				items = pageItems;
+			}
+		}
+
+		itemsLoading = false;
+		return res;
+	};
+
+	const groupNotes = (res) => {
+		if (!Array.isArray(res)) {
+			return []; // Return empty array for invalid input
+		}
+
+		// Build the grouped object while tracking order
+		const grouped: Record<string, any[]> = {};
+		const orderedKeys: string[] = [];
+
+		for (const note of res) {
+			const timeRange = getTimeRange(note.updated_at / 1000000000);
+			if (!grouped[timeRange]) {
+				grouped[timeRange] = [];
+				orderedKeys.push(timeRange);
+			}
+			grouped[timeRange].push({
+				...note,
+				timeRange
+			});
+		}
+
+		// Return as array of [timeRange, notes] to preserve insertion order
+		return orderedKeys.map((key) => [key, grouped[key]] as [string, any[]]);
+	};
+
+	const setSortKey = (key: string) => {
+		if (sortKey === key) {
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortKey = key;
+			sortDirection = key === 'updated_at' ? 'desc' : 'asc';
+		}
+	};
+
+	let dragged = false;
+
+	const onDragOver = (e) => {
+		e.preventDefault();
+
+		// Check if a file is being dragged.
+		if (e.dataTransfer?.types?.includes('Files')) {
+			dragged = true;
+		} else {
+			dragged = false;
+		}
+	};
+
+	const onDragLeave = () => {
+		dragged = false;
+	};
+
+	const onDrop = async (e: DragEvent) => {
+		e.preventDefault();
+		console.log(e);
+
+		if (e.dataTransfer?.files) {
+			const inputFiles = Array.from(e.dataTransfer.files) as File[];
+			if (inputFiles && inputFiles.length > 0) {
+				console.log(inputFiles);
+				await inputFilesHandler(inputFiles);
+			}
+		}
+
+		dragged = false;
+	};
+
+	onMount(() => {
+		viewOption = localStorage?.noteViewOption ?? null;
+		displayOption = localStorage?.noteDisplayOption ?? null;
+
+		loaded = true;
+
+		const dropzoneElement = document.getElementById('notes-container');
+		dropzoneElement?.addEventListener('dragover', onDragOver);
+		dropzoneElement?.addEventListener('drop', onDrop);
+		dropzoneElement?.addEventListener('dragleave', onDragLeave);
+
+		let keyboardFocusedElement: Element | null = null;
+		const onFocusIn = (event: FocusEvent) => {
+			const target = event.target as Element;
+			keyboardFocusedElement = target.matches(':focus-visible:not(input, textarea)')
+				? target
+				: null;
+		};
+
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Shift' && document.activeElement !== keyboardFocusedElement) {
+				shiftKey = true;
+				openNoteMenuId = null;
+			}
+		};
+
+		const onKeyUp = (event: KeyboardEvent) => {
+			if (event.key === 'Shift') {
+				shiftKey = false;
+			}
+		};
+
+		const onBlur = () => {
+			shiftKey = false;
+		};
+
+		window.addEventListener('focusin', onFocusIn);
+		window.addEventListener('keydown', onKeyDown);
+		window.addEventListener('keyup', onKeyUp);
+		window.addEventListener('blur', onBlur);
+
+		return () => {
+			searchController?.abort();
+			clearTimeout(searchDebounceTimer);
+
+			window.removeEventListener('focusin', onFocusIn);
+			window.removeEventListener('keydown', onKeyDown);
+			window.removeEventListener('keyup', onKeyUp);
+			window.removeEventListener('blur', onBlur);
+
+			if (dropzoneElement) {
+				dropzoneElement?.removeEventListener('dragover', onDragOver);
+				dropzoneElement?.removeEventListener('drop', onDrop);
+				dropzoneElement?.removeEventListener('dragleave', onDragLeave);
+			}
+		};
+	});
+</script>
+
+<WorkspaceAccessModal bind:this={accessModal} resourceType="notes" onUpdated={init} />
+
+<svelte:head>
+	<!-- LICENSE covers this Open WebUI browser-title identifier.
+	Do not alter, remove, obscure, or replace it except as LICENSE permits:
+	https://docs.openwebui.com/license. -->
+	<title>
+		{$i18n.t('Notes')} / {$WEBUI_NAME}
+	</title>
+</svelte:head>
+
+<FilesOverlay show={dragged} />
+
+<div id="notes-container" class="w-full min-h-full h-full">
+	{#if loaded}
+		<input
+			id="notes-import-input"
+			bind:this={notesImportInputElement}
+			bind:files={importDocumentFiles}
+			type="file"
+			accept=".txt,.md,text/plain,text/markdown"
+			multiple
+			hidden
+			on:change={async () => {
+				if (!importDocumentFiles || importDocumentFiles.length === 0) return;
+
+				try {
+					await inputFilesHandler(Array.from(importDocumentFiles));
+					toast.success($i18n.t('Imported notes successfully'));
+				} catch (error) {
+					toast.error(`${error}`);
+				} finally {
+					importDocumentFiles = null;
+					notesImportInputElement.value = '';
+				}
+			}}
+		/>
+
+		<DeleteConfirmDialog
+			bind:show={showDeleteConfirm}
+			title={$i18n.t('Delete note?')}
+			on:confirm={() => {
+				deleteNoteHandler(selectedNote.id);
+				showDeleteConfirm = false;
+			}}
+		>
+			<div class=" text-sm text-gray-500 truncate">
+				{$i18n.t('This will delete')} <span class="  font-normal">{selectedNote.title}</span>.
+			</div>
+		</DeleteConfirmDialog>
+
+		<div class="flex items-center gap-0.5 md:gap-1 mb-1">
+			{#if $mobile}
+				<div class="{$showSidebar ? 'md:hidden' : ''} flex flex-none items-center">
+					<Tooltip
+						content={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
+						interactive={true}
+					>
+						<button
+							id="sidebar-toggle-button"
+							class="cursor-pointer flex rounded-lg hover:bg-gray-100 dark:hover:bg-gray-850 transition"
+							aria-label={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
+							on:click={() => {
+								showSidebar.set(!$showSidebar);
+							}}
+						>
+							<div class="self-center p-1.5">
+								<SidebarIcon className="size-4" />
+							</div>
+						</button>
+					</Tooltip>
+				</div>
+			{/if}
+
+			<div class="flex w-full items-center">
+				<div class="flex items-center gap-1 py-1 min-w-0">
+					<span class="min-w-fit px-1 text-sm select-none">{$i18n.t('Notes')}</span>
+					<span class="text-sm text-gray-500 dark:text-gray-500">
+						{total === null ? '' : formatNumber(total)}
+					</span>
+				</div>
+
+				<div class="ml-auto flex items-center gap-1">
+					<SplitCreateButton
+						actions={[
+							{
+								id: 'notes-new',
+								label: $i18n.t('Create'),
+								onClick: async () => {
+									const res = await createNoteHandler(
+										dayjs().locale($i18n.language).format('YYYY-MM-DD')
+									);
+
+									if (res) {
+										goto(`/notes/${res.id}`);
+									}
+								}
+							},
+							{
+								id: 'notes-import',
+								label: $i18n.t('Import txt/md'),
+								onClick: () => notesImportInputElement?.click()
+							}
+						]}
+					/>
+				</div>
+			</div>
+		</div>
+
+		<div class="space-y-1">
+			<div class="flex h-8 flex-1 items-center w-full gap-2">
+				<div class="flex min-w-0 flex-1 items-center">
+					<div class=" self-center ml-1 mr-3">
+						<Search className="size-3.5" />
+					</div>
+					<input
+						class=" w-full text-sm py-1 rounded-r-xl outline-hidden bg-transparent"
+						bind:value={query}
+						on:input={handleSearchInput}
+						placeholder={$i18n.t('Search Notes')}
+						aria-label={$i18n.t('Search Notes')}
+					/>
+
+					{#if query}
+						<div class="self-center pl-1.5 translate-y-[0.5px] rounded-l-xl bg-transparent">
+							<button
+								class="py-0.5 rounded-full transition hover:text-gray-900 dark:hover:text-gray-100 text-gray-500 dark:text-gray-400 px-0"
+								aria-label={$i18n.t('Clear search')}
+								on:click={() => {
+									query = '';
+									handleSearchInput();
+								}}
+							>
+								<XMark className="size-3" strokeWidth="2" />
+							</button>
+						</div>
+					{/if}
+				</div>
+
+				<div
+					class="flex max-w-[55%] shrink-0 overflow-x-auto scrollbar-none"
+					on:wheel={(e) => {
+						if (e.deltaY !== 0) {
+							e.preventDefault();
+							e.currentTarget.scrollLeft += e.deltaY;
+						}
+					}}
+				>
+					<div
+						class="flex w-fit gap-0.5 text-center text-sm rounded-full bg-transparent whitespace-nowrap"
+					>
+						<DropdownOptions
+							align="end"
+							bind:value={viewOption}
+							items={[
+								{ value: null, label: $i18n.t('All') },
+								{ value: 'created', label: $i18n.t('Created by you') },
+								{ value: 'shared', label: $i18n.t('Shared with you') }
+							]}
+							onChange={(value) => {
+								if (value) {
+									localStorage.noteViewOption = value;
+								} else {
+									delete localStorage.noteViewOption;
+								}
+							}}
+						/>
+
+						{#if [null, 'shared'].includes(viewOption)}
+							<DropdownOptions
+								align="end"
+								bind:value={permission}
+								items={[
+									{ value: null, label: $i18n.t('Write') },
+									{ value: 'read_only', label: $i18n.t('Read Only') }
+								]}
+							/>
+						{/if}
+
+						<DropdownOptions
+							align="end"
+							bind:value={displayOption}
+							items={[
+								{ value: null, label: $i18n.t('List') },
+								{ value: 'grid', label: $i18n.t('Grid') }
+							]}
+							onChange={() => {
+								if (displayOption) {
+									localStorage.noteDisplayOption = displayOption;
+								} else {
+									delete localStorage.noteDisplayOption;
+								}
+							}}
+						/>
+					</div>
+				</div>
+			</div>
+
+			{#if items !== null && total !== null}
+				{#if (items ?? []).length > 0}
+					{@const groupedNotes = groupNotes(items)}
+
+					<div class="@container h-full my-1">
+						<div>
+							{#if displayOption === null}
+								<div
+									class="flex w-full items-center gap-2 px-2 pb-2 text-xs text-gray-400 dark:text-gray-600"
+								>
+									<div class="flex min-w-0 flex-1 items-center">
+										<button
+											class="flex min-w-0 items-center gap-1 py-0.5 text-left"
+											type="button"
+											on:click={() => setSortKey('name')}
+										>
+											{$i18n.t('Title')}
+											{#if sortKey === 'name'}
+												{#if sortDirection === 'asc'}
+													<ChevronUp className="size-2" />
+												{:else}
+													<ChevronDown className="size-2" />
+												{/if}
+											{/if}
+										</button>
+									</div>
+
+									<div class="ml-2 flex shrink-0 items-center justify-end gap-2">
+										<div class="hidden w-44 shrink-0 md:block"></div>
+										<div class="size-5 shrink-0"></div>
+										<button
+											class="flex w-24 shrink-0 items-center justify-end gap-1 py-0.5 text-right"
+											type="button"
+											on:click={() => setSortKey('updated_at')}
+										>
+											{$i18n.t('Updated at')}
+											{#if sortKey === 'updated_at'}
+												{#if sortDirection === 'asc'}
+													<ChevronUp className="size-2" />
+												{:else}
+													<ChevronDown className="size-2" />
+												{/if}
+											{/if}
+										</button>
+									</div>
+								</div>
+							{/if}
+
+							{#each groupedNotes as [timeRange, notesList], idx}
+								<div class="w-full px-2 pb-1 text-xs text-gray-500 dark:text-gray-500">
+									{$i18n.t(timeRange)}
+								</div>
+
+								{#if displayOption === null}
+									<div
+										class="{groupedNotes.length - 1 !== idx ? 'mb-3' : ''} gap-y-0.5 flex flex-col"
+									>
+										<!-- Preserve the former row label for i18n extraction: $i18n.t('Open note') -->
+										{#each notesList as note, idx (note.id)}
+											<div
+												class="group flex min-h-8 w-full items-center gap-2 rounded-xl px-2 py-[0.375rem] text-left transition hover:bg-gray-50 focus-within:bg-gray-50 dark:hover:bg-gray-900 dark:focus-within:bg-gray-900"
+												role="presentation"
+												on:click={(e) => {
+													if (e.target instanceof Element && e.target.closest('a')) return;
+													goto(noteUrl(note));
+												}}
+											>
+												<div class="flex min-w-0 flex-1 items-center gap-2">
+													<Tooltip content={note.title} className="min-w-0" placement="top-start">
+														<a
+															href={noteUrl(note)}
+															dir="auto"
+															class="focus-ring block h-[1.25rem] truncate rounded text-[0.8125rem] leading-5 text-gray-800 group-hover:underline focus-visible:underline dark:text-gray-200"
+														>
+															{note.title}
+														</a>
+													</Tooltip>
+
+													<Tooltip
+														content={dayjs(note.updated_at / 1000000)
+															.locale($i18n.language)
+															.format('LLLL')}
+													>
+														<div
+															class="shrink-0 truncate text-[0.6875rem] leading-5 text-gray-400 dark:text-gray-600"
+														>
+															{dayjs(note.updated_at / 1000000)
+																.locale($i18n.language)
+																.fromNow()}
+														</div>
+													</Tooltip>
+												</div>
+
+												<div class="ml-2 flex shrink-0 items-center justify-end gap-2">
+													<div
+														class="hidden max-w-44 shrink-0 truncate text-right text-[0.6875rem] leading-5 text-gray-500 dark:text-gray-500 md:block"
+													>
+														<Tooltip
+															content={note?.user?.email ?? $i18n.t('Deleted User')}
+															className="min-w-0"
+															placement="top-start"
+														>
+															<span class="flex min-w-0 max-w-44 items-center gap-1.75">
+																<ProfileImage
+																	src={note?.user?.id
+																		? `/api/v1/users/${note.user.id}/profile/image`
+																		: '/user.png'}
+																	className="size-4 shrink-0 rounded-full!"
+																/>
+																<span class="min-w-0 max-w-24 truncate">
+																	{capitalizeFirstLetter(
+																		note?.user?.name ?? note?.user?.email ?? $i18n.t('Deleted User')
+																	)}
+																</span>
+															</span>
+														</Tooltip>
+													</div>
+
+													{#if shiftKey}
+														<Tooltip content={$i18n.t('Delete')}>
+															<button
+																class="flex {($settings?.highContrastMode ?? false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+																type="button"
+																aria-label={$i18n.t('Delete')}
+																on:click={(e) => {
+																	e.preventDefault();
+																	e.stopPropagation();
+																	deleteNoteHandler(note.id);
+																}}
+															>
+																<GarbageBin className="size-3.5" />
+															</button>
+														</Tooltip>
+													{:else}
+														<NoteMenu
+															onAccess={(note.user_id === $user?.id &&
+																$user?.permissions?.sharing?.notes) ||
+															$user?.role === 'admin'
+																? () => accessModal.open(note.id)
+																: null}
+															show={openNoteMenuId === note.id}
+															onDownload={(type) => {
+																selectedNote = note;
+
+																downloadHandler(type);
+															}}
+															onCopyLink={async () => {
+																const baseUrl = window.location.origin;
+																const res = await copyToClipboard(`${baseUrl}/notes/${note.id}`);
+
+																if (res) {
+																	toast.success($i18n.t('Copied link to clipboard'));
+																} else {
+																	toast.error($i18n.t('Failed to copy link'));
+																}
+															}}
+															onDelete={() => {
+																selectedNote = note;
+																showDeleteConfirm = true;
+															}}
+															isPinned={$pinnedNotes.some((n) => n.id === note.id)}
+															onPin={async () => {
+																await toggleNotePinnedStatusById(localStorage.token, note.id);
+																pinnedNotes.set(
+																	await getPinnedNoteList(localStorage.token).catch(() => [])
+																);
+																init();
+															}}
+															onChange={(state) => {
+																openNoteMenuId = state ? note.id : null;
+															}}
+														>
+															<button
+																class="flex {($settings?.highContrastMode ?? false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+																type="button"
+																aria-label={$i18n.t('Note Menu')}
+																on:click={(e) => {
+																	e.preventDefault();
+																	e.stopPropagation();
+																	openNoteMenuId = openNoteMenuId === note.id ? null : note.id;
+																}}
+															>
+																<EllipsisHorizontal className="size-3.5" />
+															</button>
+														</NoteMenu>
+													{/if}
+												</div>
+											</div>
+										{/each}
+									</div>
+								{:else if displayOption === 'grid'}
+									<div
+										class="{groupedNotes.length - 1 !== idx
+											? 'mb-3'
+											: ''} grid grid-cols-[repeat(auto-fill,minmax(min(160px,100%),1fr))] gap-2.5 p-3"
+									>
+										{#each notesList as note, idx (note.id)}
+											<div
+												class="group relative flex h-26 min-w-0 w-full flex-col rounded-md border border-black/[0.06] bg-gray-50/40 p-2 text-left transition-colors duration-75 hover:bg-gray-50/40 focus-within:bg-gray-50/40 dark:border-white/[0.06] dark:bg-gray-900 dark:hover:bg-white/4 dark:focus-within:bg-white/4"
+											>
+												<div class="flex min-w-0 items-start">
+													<a href={noteUrl(note)} class="min-w-0 flex-1 pr-5">
+														<Tooltip content={note.title} placement="top-start">
+															<div
+																class="line-clamp-2 break-words text-xs text-gray-800 dark:text-gray-200"
+															>
+																{note.title}
+															</div>
+														</Tooltip>
+													</a>
+
+													{#if shiftKey}
+														<Tooltip content={$i18n.t('Delete')}>
+															<button
+																class="absolute right-1 top-1 flex {($settings?.highContrastMode ??
+																false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded text-gray-400 transition hover:bg-gray-50/40 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/4 dark:hover:text-gray-400"
+																type="button"
+																aria-label={$i18n.t('Delete')}
+																on:click={(e) => {
+																	e.preventDefault();
+																	e.stopPropagation();
+																	deleteNoteHandler(note.id);
+																}}
+															>
+																<GarbageBin className="size-3.5" />
+															</button>
+														</Tooltip>
+													{:else}
+														<NoteMenu
+															onAccess={(note.user_id === $user?.id &&
+																$user?.permissions?.sharing?.notes) ||
+															$user?.role === 'admin'
+																? () => accessModal.open(note.id)
+																: null}
+															onDownload={(type) => {
+																selectedNote = note;
+
+																downloadHandler(type);
+															}}
+															onCopyLink={async () => {
+																const baseUrl = window.location.origin;
+																const res = await copyToClipboard(`${baseUrl}/notes/${note.id}`);
+
+																if (res) {
+																	toast.success($i18n.t('Copied link to clipboard'));
+																} else {
+																	toast.error($i18n.t('Failed to copy link'));
+																}
+															}}
+															onDelete={() => {
+																selectedNote = note;
+																showDeleteConfirm = true;
+															}}
+															isPinned={$pinnedNotes.some((n) => n.id === note.id)}
+															onPin={async () => {
+																await toggleNotePinnedStatusById(localStorage.token, note.id);
+																pinnedNotes.set(
+																	await getPinnedNoteList(localStorage.token).catch(() => [])
+																);
+																init();
+															}}
+														>
+															<button
+																class="absolute right-1 top-1 flex {($settings?.highContrastMode ??
+																false)
+																	? 'size-6'
+																	: 'size-5'} shrink-0 items-center justify-center rounded text-gray-400 transition hover:bg-gray-50/40 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/4 dark:hover:text-gray-400"
+																type="button"
+																aria-label={$i18n.t('Note Menu')}
+															>
+																<EllipsisHorizontal className="size-3" />
+															</button>
+														</NoteMenu>
+													{/if}
+												</div>
+
+												<a
+													href={noteUrl(note)}
+													class="mt-2 min-h-0 flex-1 overflow-hidden text-[0.6875rem] leading-4 text-gray-500 dark:text-gray-400"
+													style="mask-image: linear-gradient(to bottom, black 65%, transparent 100%);"
+												>
+													<div class="line-clamp-4 whitespace-pre-line break-words">
+														{note.data?.content?.md || $i18n.t('No content')}
+													</div>
+												</a>
+
+												<a href={noteUrl(note)} class="mt-2 block min-w-0">
+													<div
+														class="flex min-w-0 w-full items-center justify-between gap-1 text-[0.5625rem] leading-3 text-gray-500 dark:text-gray-400"
+													>
+														<Tooltip
+															content={note?.user?.email ?? $i18n.t('Deleted User')}
+															className="min-w-0"
+															placement="top-start"
+														>
+															<span class="flex min-w-0 max-w-44 items-center gap-1.75">
+																<ProfileImage
+																	src={note?.user?.id
+																		? `/api/v1/users/${note.user.id}/profile/image`
+																		: '/user.png'}
+																	className="size-4 shrink-0 rounded-full!"
+																/>
+																<span class="min-w-0 max-w-24 truncate">
+																	{capitalizeFirstLetter(
+																		note?.user?.name ?? note?.user?.email ?? $i18n.t('Deleted User')
+																	)}
+																</span>
+															</span>
+														</Tooltip>
+
+														<Tooltip
+															content={dayjs(note.updated_at / 1000000)
+																.locale($i18n.language)
+																.format('LLLL')}
+														>
+															<div class="max-w-full shrink-0 truncate">
+																{dayjs(note.updated_at / 1000000)
+																	.locale($i18n.language)
+																	.fromNow()}
+															</div>
+														</Tooltip>
+													</div>
+												</a>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							{/each}
+
+							{#if !allItemsLoaded}
+								<Loader
+									on:visible={(e) => {
+										if (!itemsLoading) {
+											loadMoreItems();
+										}
+									}}
+								>
+									<div
+										class="w-full flex justify-center py-4 text-xs animate-pulse items-center gap-2"
+									>
+										<Spinner className=" size-4" />
+										<div class=" ">{$i18n.t('Loading...')}</div>
+									</div>
+								</Loader>
+							{/if}
+						</div>
+					</div>
+				{:else}
+					<div class="flex min-h-[calc(100dvh-13rem)] w-full flex-col items-center justify-center">
+						<div class="max-w-sm text-center text-gray-900 dark:text-gray-100">
+							<div class="mb-1.5 text-sm">
+								{$i18n.t('No Notes')}
+							</div>
+
+							<div class="text-xs leading-5 text-gray-500">
+								{$i18n.t('Create your first note from the Create menu.')}
+							</div>
+						</div>
+					</div>
+				{/if}
+			{:else}
+				<div class="w-full h-full flex justify-center items-center py-10">
+					<Spinner className="size-4" />
+				</div>
+			{/if}
+		</div>
+	{:else}
+		<div class="w-full h-full flex justify-center items-center">
+			<Spinner className="size-4" />
+		</div>
+	{/if}
+</div>

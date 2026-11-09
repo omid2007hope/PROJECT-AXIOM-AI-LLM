@@ -1,0 +1,76 @@
+{
+  "signedContributors": [
+    {
+      "name": "SonoTommy",
+      "id": 148005572,
+      "comment_id": 4842237809,
+      "created_at": "2026-06-30T10:11:39Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 14
+    },
+    {
+      "name": "SonoTommy",
+      "id": 148005572,
+      "comment_id": 4842294477,
+      "created_at": "2026-06-30T10:17:30Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 14
+    },
+    {
+      "name": "kriptoburak",
+      "id": 8755484,
+      "comment_id": 4936833449,
+      "created_at": "2026-07-10T15:22:42Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 25
+    },
+    {
+      "name": "mikemikimike",
+      "id": 186855910,
+      "comment_id": 5162937901,
+      "created_at": "2026-08-03T06:13:04Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 42
+    },
+    {
+      "name": "Dessalines39394",
+      "id": 245616256,
+      "comment_id": 5352701904,
+      "created_at": "2026-08-20T07:19:42Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 47
+    },
+    {
+      "name": "gueneykoese",
+      "id": 33182471,
+      "comment_id": 5498900036,
+      "created_at": "2026-09-01T18:59:00Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 50
+    },
+    {
+      "name": "shoyann",
+      "id": 165009858,
+      "comment_id": 5777483271,
+      "created_at": "2026-09-22T13:33:46Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 65
+    },
+    {
+      "name": "octo-patch",
+      "id": 266937838,
+      "comment_id": 5830244010,
+      "created_at": "2026-09-25T09:40:30Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 40
+    },
+    {
+      "name": "salmonumbrella",
+      "id": 182032677,
+      "comment_id": 6533050362,
+      "created_at": "2026-10-30T20:42:26Z",
+      "repoId": 1230831838,
+      "pullRequestNo": 85
+    }
+  ]
+}

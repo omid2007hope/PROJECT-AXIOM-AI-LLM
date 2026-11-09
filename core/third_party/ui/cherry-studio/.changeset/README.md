@@ -1,0 +1,104 @@
+# Changesets
+
+This folder contains configuration and changeset files for managing package versioning and publishing in the Cherry Studio monorepo.
+
+## What is Changesets?
+
+Changesets is a tool to help manage versioning and publishing for multi-package repositories. It tracks changes to packages and automates:
+
+- Version bumping based on semantic versioning
+- Changelog generation
+- Package publishing
+- Dependency updates between packages
+
+## Quick Start
+
+### Adding a changeset
+
+When you make changes that should be published, run:
+
+```bash
+pnpm changeset add
+```
+
+This will:
+
+1. Ask which packages have changed
+2. Ask for the type of change (patch/minor/major)
+3. Ask for a description of the change
+4. Create a changeset file in `.changeset/`
+
+> **Note**: CI will check that PRs modifying packages include a changeset.
+
+Run `pnpm changeset:check` to validate pending changesets. Do not include packages
+listed in `config.json`'s `ignore` setting: their changesets survive versioning and
+prevent the release action from reaching npm publication. PR CI and the release
+workflow reject these entries. Empty changesets (`pnpm changeset add --empty`)
+remain valid for changes that need no package release.
+
+### Versioning and publishing
+
+Versioning and publishing are handled automatically by CI — you do **not** need to run `changeset version` or `changeset publish` locally. See the [CI/CD Integration](#cicd-integration) section below.
+
+## Configuration
+
+See `config.json` for the changeset configuration:
+
+- **changelog**: Uses `@changesets/changelog-github` to generate GitHub-linked changelogs
+- **access**: `public` - packages are published publicly
+- **baseBranch**: `main` - PRs target this branch
+- **updateInternalDependencies**: `patch` - internal deps are updated on any change
+
+## Packages managed
+
+| Package | Description |
+| --- | --- |
+| `@cherrystudio/web-search` | Portable web-search protocols and optional content utilities |
+| `@cherrystudio/provider-registry` | Cross-platform provider/model catalogs, schemas, and lookup |
+| `@cherrystudio/ai-core` | Unified AI Provider Interface |
+| `@cherrystudio/ai-sdk-provider` | AI SDK provider bundle with CherryIN routing |
+| `@cherrystudio/extension-table-plus` | Table extension for Tiptap |
+| `@cherrystudio/file-preview` | Portable React previews for PDF, DOCX, PPTX, XLSX and images |
+| `@cherrystudio/remote-protocol` | Remote access schemas and Agent recovery contracts |
+| `@cherrystudio/remote-transport` | Encrypted Noise XX transport and JSON-RPC |
+
+### Dependency relationships
+
+```
+ai-core (peer-depends on) → ai-sdk-provider
+remote-transport → remote-protocol
+```
+
+Changeset automatically handles updating peer dependency ranges when `ai-sdk-provider` is published.
+
+## CI/CD Integration
+
+The release workflow (`.github/workflows/release-packages.yml`) uses [changesets/action](https://github.com/changesets/changesets/blob/main/packages/action/README.md) and works in two phases:
+
+Runs are serialized without cancelling an ongoing npm publication. Immediately
+before running Changesets, the workflow checks that its event commit is still the
+current remote `main`. Obsolete runs skip versioning and publishing. If no newer
+eligible run is queued (for example, the latest push only changed unrelated files),
+start a new manual `Release Packages` run on `main`; re-running an old event keeps
+its obsolete commit.
+
+### Phase 1 — Accumulate changes
+
+When a PR containing changeset files is merged to `main`, the action detects pending changesets and **creates or updates** a "Version Packages" PR. This PR:
+
+- Bumps package versions based on all accumulated changesets
+- Generates/updates `CHANGELOG.md` for each package
+- Deletes consumed changeset files
+
+Multiple PRs with changesets can merge before a release — the Version Packages PR keeps updating to include all of them.
+
+### Phase 2 — Publish
+
+When a maintainer decides it's time to release, they **merge the Version Packages PR**. This triggers the workflow again, and since there are no more pending changesets, the action runs `pnpm changeset:publish` to publish the updated packages to npm.
+
+**In short**: changesets accumulate automatically; you control when to release by merging the Version Packages PR.
+
+## Learn more
+
+- [Changesets documentation](https://github.com/changesets/changesets)
+- [Common questions](https://github.com/changesets/changesets/blob/main/docs/common-questions.md)

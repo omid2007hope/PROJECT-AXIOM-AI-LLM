@@ -1,0 +1,1109 @@
+# openosint/agent.py
+"""
+OpenOSINT AI Agent.
+
+Implements the agentic loop using either:
+  - The Anthropic native tool use API (default, ``provider="anthropic"``).
+  - A local Ollama model (``provider="ollama"``).
+  - Any OpenAI-compatible chat-completions endpoint (``provider="openai"``) —
+    LiteLLM, llama-swap, vLLM, LM Studio, etc.
+
+All agents share the same ``run()`` interface and return an ``AgentResponse``.
+No manual JSON parsing.  The model issues hard stops when it needs a tool,
+the real tool executes, the output goes back.  Tool results come from real
+executions; the model can still misread or misattribute them.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+from dataclasses import dataclass, field
+from typing import Any
+
+import anthropic
+
+from openosint.tools.generate_dorks import run_dork_osint
+from openosint.tools.scrape_url import run_scrape_url_osint
+from openosint.tools.search_abuseipdb import run_abuseipdb_osint
+from openosint.tools.search_breach import run_breach_osint
+from openosint.tools.search_censys import run_censys_osint
+from openosint.tools.search_dns import run_dns_osint
+from openosint.tools.search_rdap import run_rdap_osint
+from openosint.tools.search_domain import run_domain_osint
+from openosint.tools.search_dorks_live import run_dorks_live_osint
+from openosint.tools.search_email import run_email_osint
+from openosint.tools.search_gdelt_geo import run_gdelt_geo_osint, split_geojson_fence
+from openosint.tools.search_github import run_github_osint
+from openosint.tools.search_ip import run_ip_osint
+from openosint.tools.search_ip2location import run_ip2location_osint
+from openosint.tools.search_paste import run_paste_osint
+from openosint.tools.search_phone import run_phone_osint
+from openosint.tools.search_shodan import run_shodan_osint
+from openosint.tools.search_username import run_username_osint
+from openosint.tools.search_virustotal import run_virustotal_osint
+from openosint.tools.search_whois import run_whois_osint
+from openosint.tools.search_footprint import run_footprint_osint
+from openosint.pivot import investigate_graph_for_agent
+from openosint.tool_policy import (
+    ToolBudget,
+    current_budget,
+    disabled_result,
+    filter_definitions,
+    is_tool_enabled,
+    use_budget,
+)
+
+logger = logging.getLogger(__name__)
+
+_MAX_TOKENS = 4096
+
+# Pinned deliberately. Dateless Claude model IDs are NOT evergreen
+# pointers — from the 4.6 generation on, a dateless ID maps to one
+# fixed snapshot. Revisit when a newer Sonnet ships.
+# Override at runtime with ANTHROPIC_MODEL.  (reviewed 2026-09)
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
+
+_warned_openosint_model_deprecated = False
+
+
+def default_anthropic_model() -> str:
+    """Return the Anthropic model to use.
+
+    Resolution order: $ANTHROPIC_MODEL > $OPENOSINT_MODEL (deprecated, warns
+    once) > DEFAULT_ANTHROPIC_MODEL. Resolved at call time (not as a
+    module-level import-time constant) so a .env loaded later by the entry
+    point is always honoured.
+    """
+    global _warned_openosint_model_deprecated
+
+    anthropic_model = os.environ.get("ANTHROPIC_MODEL", "").strip()
+    if anthropic_model:
+        return anthropic_model
+
+    legacy_model = os.environ.get("OPENOSINT_MODEL", "").strip()
+    if legacy_model:
+        if not _warned_openosint_model_deprecated:
+            logger.warning(
+                "OPENOSINT_MODEL is deprecated and will be removed in a future "
+                "release; use ANTHROPIC_MODEL instead."
+            )
+            _warned_openosint_model_deprecated = True
+        return legacy_model
+
+    return DEFAULT_ANTHROPIC_MODEL
+
+# ---------------------------------------------------------------------------
+# Tool definitions — Anthropic format
+# ---------------------------------------------------------------------------
+
+TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "name": "search_email",
+        "description": (
+            "Enumerate online accounts and services associated with an email "
+            "address using holehe. Use when the user provides an email to investigate."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"email": {"type": "string", "description": "Target email address."}},
+            "required": ["email"],
+        },
+    },
+    {
+        "name": "search_username",
+        "description": (
+            "Enumerate social networks and platforms where a username is registered "
+            "using sherlock. Never pass a full name with spaces — derive username variations."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "username": {"type": "string", "description": "Target username or alias."}
+            },
+            "required": ["username"],
+        },
+    },
+    {
+        "name": "search_breach",
+        "description": (
+            "Check if an email address appears in known data breaches via HaveIBeenPwned. "
+            "Only call this with a valid email address, never with a name."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"email": {"type": "string", "description": "Target email address."}},
+            "required": ["email"],
+        },
+    },
+    {
+        "name": "search_whois",
+        "description": "Retrieve WHOIS registration data for a domain.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Target domain (e.g. example.com)."}
+            },
+            "required": ["domain"],
+        },
+    },
+    {
+        "name": "search_ip",
+        "description": "Retrieve geolocation, ASN, and hostname data for an IP address.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"ip": {"type": "string", "description": "Target IP address."}},
+            "required": ["ip"],
+        },
+    },
+    {
+        "name": "search_domain",
+        "description": "Enumerate subdomains of a target domain using sublist3r.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Target domain (e.g. example.com)."}
+            },
+            "required": ["domain"],
+        },
+    },
+    {
+        "name": "generate_dorks",
+        "description": (
+            "Generate targeted Google dork URLs for any target string. "
+            "Always run this first when investigating a full name to discover "
+            "real usernames and emails before calling other tools."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "Any target: name, email, username, or domain.",
+                }
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "search_paste",
+        "description": "Search Pastebin dumps for mentions of an email or username.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Email address or username to search for.",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_phone",
+        "description": (
+            "Gather carrier, country, and line type data for a phone number. Use E.164 format."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "phone": {
+                    "type": "string",
+                    "description": "Target phone number in E.164 format (e.g. +14155552671).",
+                }
+            },
+            "required": ["phone"],
+        },
+    },
+    {
+        "name": "search_shodan",
+        "description": (
+            "Query Shodan for host intelligence or banner searches. "
+            "If the query looks like an IP address, performs a host lookup. "
+            "Otherwise performs a keyword/service search. Uses SHODAN_API_KEY."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "IP address for host lookup, or a Shodan search query.",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_virustotal",
+        "description": (
+            "Check IP, domain, URL, or file hash against VirusTotal's 70+ antivirus "
+            "engines and threat intelligence. Auto-detects input type. "
+            "Uses VIRUSTOTAL_API_KEY."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": (
+                        "IPv4 address, domain, full URL (http/https), "
+                        "or file hash (MD5/SHA-1/SHA-256) to check."
+                    ),
+                }
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "search_censys",
+        "description": (
+            "Search Censys for internet-facing infrastructure data. "
+            "For IPs: returns open ports, services, ASN. "
+            "For domains: returns certificate history, SANs, and issuer information. "
+            "Uses CENSYS_API_ID and CENSYS_SECRET."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "IPv4 address or domain name to look up.",
+                }
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "search_ip2location",
+        "description": (
+            "Enhanced IP intelligence using IP2Location Security Plan. "
+            "Returns geolocation, ISP, ASN, and detects VPN, proxy, Tor exit nodes, "
+            "and datacenter hosting. Sponsored integration. "
+            "Uses IP2LOCATION_API_KEY."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ip": {
+                    "type": "string",
+                    "description": "Target IPv4 or IPv6 address.",
+                }
+            },
+            "required": ["ip"],
+        },
+    },
+    {
+        "name": "search_abuseipdb",
+        "description": (
+            "Check an IP address against the AbuseIPDB v2 API for abuse reputation. "
+            "Returns abuse confidence score (0–100%), total reports, country, ISP, domain, "
+            "and last reported timestamp. Use this when investigating suspicious IPs "
+            "to determine if they are known attackers, spammers, or malicious actors. "
+            "Uses ABUSEIPDB_API_KEY."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ip": {
+                    "type": "string",
+                    "description": "Target IPv4 or IPv6 address.",
+                }
+            },
+            "required": ["ip"],
+        },
+    },
+    {
+        "name": "search_github",
+        "description": (
+            "Search GitHub for a username, email address, or keyword. "
+            "For exact username matches: returns full profile (bio, location, company, "
+            "follower counts, public repos/gists), recent repository list with languages "
+            "and star counts, and email addresses discovered from public commit history. "
+            "For other queries: returns the top 5 matching GitHub accounts. "
+            "Optional GITHUB_TOKEN raises the unauthenticated rate limit (60 req/h) to 5000 req/h."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "GitHub username, email address, or keyword to search for.",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_rdap",
+        "description": (
+            "Structured domain registration lookup via RDAP, the machine-readable successor to WHOIS: "
+            "registrar, registration and expiry dates, name servers and status codes. Registrant "
+            "contact details are redacted by policy and never returned. No API key required. "
+            "Use alongside search_whois to confirm registration dates and registrar."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "type": "string",
+                    "description": "Target domain (e.g. example.com).",
+                }
+            },
+            "required": ["domain"],
+        },
+    },
+    {
+        "name": "search_dns",
+        "description": (
+            "Comprehensive DNS record enumeration for a domain including A, AAAA, MX, NS, "
+            "TXT, CNAME, and SOA records. Highlights email security misconfigurations: "
+            "missing SPF, weak SPF policy (+all/~all), missing or unenforced DMARC (p=none), "
+            "and missing DKIM across common selectors. No external API or credentials required. "
+            "Use for domain investigations alongside search_whois and search_domain — it reveals "
+            "email infrastructure and security posture."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "type": "string",
+                    "description": "Target domain (e.g. example.com).",
+                }
+            },
+            "required": ["domain"],
+        },
+    },
+    {
+        "name": "search_gdelt_geo",
+        "description": (
+            "Search recent, geolocated worldwide news from GDELT's 15-minute article "
+            "feed (headlines and URLs matched against the query; places come from the "
+            "articles' location mentions). No API key required. Use for situational "
+            "awareness of events in a region, or to find geolocated news mentioning a "
+            "target. The result says how far back it covers; the first call after "
+            "startup may cover only the last 15 minutes while older articles load. "
+            "Optionally scope the search to a bounding box (e.g. from a user-selected "
+            "map area); use query \"*\" to list all coverage inside it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Keywords matched against article headlines and URLs. Supports "
+                        "quoted phrases and OR groups. Use \"*\" for everything in the bbox."
+                    ),
+                },
+                "timespan": {
+                    "type": "integer",
+                    "description": (
+                        "Lookback in minutes (15–1440, capped at the loaded window, "
+                        "6 hours by default). Defaults to 60."
+                    ),
+                },
+                "maxpoints": {
+                    "type": "integer",
+                    "description": "Maximum point features to return (1–500). Defaults to 250.",
+                },
+                "bbox": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                    "description": (
+                        "Optional [min_lon, min_lat, max_lon, max_lat] to scope results "
+                        "to a bounding box."
+                    ),
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_dorks_live",
+        "description": (
+            "Execute Google dork queries for a target via the Bright Data SERP API, "
+            "returning live structured results (title, URL, snippet). "
+            "Use after generate_dorks when you need actual search results, not just URLs. "
+            "Runs up to 5 dorks by default — each is a billable API call. "
+            "Uses BRIGHTDATA_API_KEY and BRIGHTDATA_SERP_ZONE."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "Any target: name, email, username, or domain.",
+                }
+            },
+            "required": ["target"],
+        },
+    },
+    {
+        "name": "scrape_url",
+        "description": (
+            "Fetch any public URL through the Bright Data Web Unlocker API, bypassing "
+            "Cloudflare, CAPTCHA, and other bot-protection. Returns the page as clean "
+            "Markdown. Use to retrieve content from URLs discovered by other tools when "
+            "direct access is blocked. "
+            "Uses BRIGHTDATA_API_KEY and BRIGHTDATA_UNLOCKER_ZONE."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Full URL to fetch (must start with http:// or https://).",
+                }
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "search_footprint",
+        "description": (
+            "Collect a target's public search-engine footprint via the Bright Data SERP API. "
+            "Detects the entity type (email, username, domain, phone, or full name) and runs "
+            "entity-type-aware Google queries, returning structured results (title, URL, snippet) "
+            "and Entity Correlation Graph nodes/edges for discovered domains and profiles. "
+            "Use when you need a targeted, type-aware SERP sweep rather than generic dork URLs. "
+            "Uses BRIGHTDATA_API_KEY and BRIGHTDATA_SERP_ZONE."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": (
+                        "OSINT target: email address, username, domain name, phone number, "
+                        "or full name."
+                    ),
+                },
+                "max_queries": {
+                    "type": "integer",
+                    "description": "Max SERP queries to run (default 3). Each query is billable.",
+                },
+            },
+            "required": ["target"],
+        },
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Tool executor (shared by both agents)
+# ---------------------------------------------------------------------------
+
+_TOOL_MAP: dict[str, Any] = {
+    "search_email": lambda a: run_email_osint(a["email"], timeout_seconds=120),
+    "search_username": lambda a: run_username_osint(a["username"], timeout_seconds=180),
+    "search_breach": lambda a: run_breach_osint(a["email"], timeout_seconds=15),
+    "search_whois": lambda a: run_whois_osint(a["domain"], timeout_seconds=15),
+    "search_ip": lambda a: run_ip_osint(a["ip"], timeout_seconds=10),
+    "search_domain": lambda a: run_domain_osint(a["domain"], timeout_seconds=120),
+    "generate_dorks": lambda a: run_dork_osint(a["target"]),
+    "search_paste": lambda a: run_paste_osint(a["query"], timeout_seconds=15),
+    "search_phone": lambda a: run_phone_osint(a["phone"], timeout_seconds=60),
+    "search_shodan": lambda a: run_shodan_osint(a["query"], timeout_seconds=30),
+    "search_virustotal": lambda a: run_virustotal_osint(a["target"], timeout_seconds=30),
+    "search_censys": lambda a: run_censys_osint(a["target"], timeout_seconds=30),
+    "search_ip2location": lambda a: run_ip2location_osint(a["ip"], timeout_seconds=30),
+    "search_abuseipdb": lambda a: run_abuseipdb_osint(a["ip"], timeout_seconds=30),
+    "search_github": lambda a: run_github_osint(a["query"], timeout_seconds=30),
+    "search_dns": lambda a: run_dns_osint(a["domain"], timeout_seconds=10),
+    "search_rdap": lambda a: run_rdap_osint(a["domain"], timeout_seconds=15),
+    "search_gdelt_geo": lambda a: run_gdelt_geo_osint(
+        a["query"],
+        timeout_seconds=15,
+        timespan=int(a.get("timespan", 60)),
+        maxpoints=int(a.get("maxpoints", 250)),
+        bbox=tuple(a["bbox"]) if a.get("bbox") else None,
+    ),
+    "search_dorks_live": lambda a: run_dorks_live_osint(a["target"], timeout_seconds=30),
+    "scrape_url": lambda a: run_scrape_url_osint(a["url"], timeout_seconds=60),
+    "search_footprint": lambda a: run_footprint_osint(
+        a["target"],
+        max_queries=int(a.get("max_queries", 3)),
+        timeout_seconds=30,
+    ),
+    # Conservative budgets: agent context runs inside a running event loop,
+    # so we await the coroutine directly — never asyncio.run().
+    "investigate_graph": lambda a: investigate_graph_for_agent(
+        a["seed"],
+        max_depth=int(a.get("max_depth", 1)),
+        max_entities=int(a.get("max_entities", 15)),
+        max_tool_calls=int(a.get("max_tool_calls", 20)),
+        timeout_seconds=int(a.get("timeout_seconds", 30)),
+    ),
+}
+
+SYSTEM_PROMPT = """You are OpenOSINT, an expert OSINT analyst assistant running in a terminal.
+
+INVESTIGATION STRATEGY:
+- For a full name target: always start with generate_dorks to discover real identifiers.
+- For an email: run search_email and search_breach.
+- For a username: run search_username and search_paste.
+- For a domain: run search_whois, search_rdap, search_domain, and search_dns to reveal subdomains, registration data, DNS records, and email security posture.
+- For an IP: run search_ip and optionally search_shodan or search_censys for open ports/services.
+- For a GitHub username or handle: use search_github to retrieve profile data, repos, and commit-discovered emails.
+- For IP reputation/abuse: use search_abuseipdb to get the abuseConfidenceScore — a score above 50% indicates a high-risk IP; combine with search_ip or search_shodan for full context.
+- For a domain or IP infrastructure: use search_censys for certificate history and port data.
+- For a Shodan query or banners: use search_shodan.
+- For live Google search results on a target: use search_dorks_live (uses BRIGHTDATA_API_KEY).
+- For a targeted, entity-type-aware SERP sweep (email/username/domain/phone/name): use search_footprint (uses BRIGHTDATA_API_KEY). Prefer this over search_dorks_live when you know the entity type.
+- To fetch a URL that blocks direct access (Cloudflare/CAPTCHA): use scrape_url (uses BRIGHTDATA_API_KEY).
+- For real-time geolocated news coverage of a region or event (no key required): use search_gdelt_geo. If the user has selected a map area, pass its bbox with query "*". Tell the user how far back the result covers.
+- Chain tools intelligently: use findings from each step to decide the next.
+- Never run search_email or search_breach with a full name — only with actual email addresses.
+- Never run search_username with spaces in the name.
+
+REPORTING:
+After completing the investigation write a structured report:
+## Summary
+## Online Presence
+## Data Breaches (if any)
+## Conclusion & Recommendations
+
+CRITICAL RULES:
+- NEVER invent, guess, or fabricate information not returned by tools.
+- If a tool returns no results, report exactly that.
+- Be honest about ambiguity — if multiple people share the name, say so.
+- Never ask the user for API keys or credentials, and never decline a tool call on the assumption that a credential is missing — call the tool and report whatever error it returns.
+- For general questions or chat, respond normally without calling tools."""
+
+
+# ---------------------------------------------------------------------------
+# Dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ToolCall:
+    """Represents a single tool invocation during the agent loop."""
+
+    name: str
+    input: dict[str, Any]
+    result: str = ""
+
+
+@dataclass
+class AgentResponse:
+    """Complete response from one agent turn."""
+
+    content: str
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    error: str = ""
+    limit_reached: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Shared turn helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_first_text(content: list[Any]) -> str:
+    """Return text from the first text block in an Anthropic content list."""
+    for block in content:
+        if hasattr(block, "text"):
+            return block.text
+    return ""
+
+
+async def _execute_tool(
+    tool_name: str,
+    tool_input: dict[str, Any],
+    on_tool_call: Any,
+) -> str:
+    """Invoke on_tool_call callback then run the tool, returning its string result.
+
+    A tool the current mode doesn't offer returns a structured "disabled" result even
+    if the model asks for it anyway; a call past the request's budget is refused.
+    """
+    # Every request counts against the budget, including unknown and disabled tools: a model
+    # that keeps asking for a refused tool must still hit the cap instead of looping forever.
+    budget = current_budget()
+    if budget is not None and not budget.try_consume():
+        return budget.message()
+    if tool_name not in _TOOL_MAP:
+        return f"Error: unknown tool '{tool_name}'."
+    if not is_tool_enabled(tool_name):
+        return disabled_result(tool_name)
+    if on_tool_call is not None:
+        await on_tool_call(tool_name, tool_input)
+    return await _TOOL_MAP[tool_name](tool_input)
+
+
+def _system_prompt() -> str:
+    """SYSTEM_PROMPT plus a note that only the offered tools exist in this mode."""
+    return (
+        SYSTEM_PROMPT
+        + "\n\nAVAILABLE TOOLS: use only the tools you are given; some tools mentioned above may be "
+        "disabled in this mode. If a tool result says a tool is disabled, do not retry it; tell the "
+        "user how to enable it. Each user request has a tool-call limit; prefer the most informative calls."
+    )
+
+
+def _capped_response(
+    budget: ToolBudget, tool_calls: list[ToolCall], last_text: str, history: list[dict[str, Any]]
+) -> AgentResponse:
+    """End the turn with an explicit message when the model asked for more calls than allowed."""
+    content = f"{last_text}\n\n⚠ {budget.message()}".strip()
+    history.append({"role": "assistant", "content": content})
+    return AgentResponse(content=content, tool_calls=tool_calls, limit_reached=True)
+
+
+class _BudgetedRun:
+    """Mixin: ``run()`` gives each user request its own tool-call budget (or a shared one)."""
+
+    async def run(
+        self,
+        prompt: str,
+        on_tool_call: Any = None,
+        budget: ToolBudget | None = None,
+    ) -> AgentResponse:
+        """
+        Execute one agent turn.
+
+        Parameters
+        ----------
+        prompt:
+            User message or OSINT target description.
+        on_tool_call:
+            Optional async callback invoked before each tool execution.
+            Signature: ``async def on_tool_call(name: str, input: dict) -> None``
+        budget:
+            Tool-call budget. Defaults to a fresh ``OPENOSINT_MAX_TOOL_CALLS`` budget per
+            call; investigate_multi passes one shared budget for all targets.
+
+        Returns
+        -------
+        AgentResponse
+            Final text response and list of tool calls made.
+        """
+        with use_budget(budget or ToolBudget()):
+            return await self._run(prompt, on_tool_call)  # type: ignore[attr-defined]
+
+
+async def _process_tool_turn(
+    messages: list[dict[str, Any]],
+    tool_calls: list[ToolCall],
+    on_tool_call: Any,
+    response_content: list[Any],
+) -> None:
+    """Execute all tool_use blocks in one Anthropic response turn."""
+    tool_results = []
+    for block in response_content:
+        if block.type != "tool_use":
+            continue
+        result = await _execute_tool(block.name, block.input, on_tool_call)
+        tool_calls.append(ToolCall(name=block.name, input=block.input, result=result))
+        logger.info("Tool executed: %s → %d chars", block.name, len(result))
+        # The provider gets the stripped text — every subsequent round of
+        # this investigation resends the whole message list, and raw
+        # coordinates are dead weight to a model. ToolCall.result above
+        # keeps the full output for CLI/REPL display.
+        model_text, _ = split_geojson_fence(result)
+        tool_results.append(
+            {
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": model_text,
+            }
+        )
+    messages.append({"role": "user", "content": tool_results})
+
+
+def _build_ollama_assistant_message(msg: Any) -> dict[str, Any]:
+    """Serialize an Ollama message with tool_calls into the dict format for history."""
+    return {
+        "role": "assistant",
+        "content": msg.content or "",
+        "tool_calls": [
+            {
+                "function": {
+                    "name": ollama_tool_call.function.name,
+                    "arguments": ollama_tool_call.function.arguments,
+                }
+            }
+            for ollama_tool_call in msg.tool_calls
+        ],
+    }
+
+
+async def _process_ollama_tool_turn(
+    messages: list[dict[str, Any]],
+    tool_calls: list[ToolCall],
+    on_tool_call: Any,
+    ollama_msg: Any,
+) -> None:
+    """Execute all tool calls from one Ollama response and append results to messages."""
+    messages.append(_build_ollama_assistant_message(ollama_msg))
+    for ollama_tool_call in ollama_msg.tool_calls:
+        tool_name = ollama_tool_call.function.name
+        tool_input = dict(ollama_tool_call.function.arguments)
+        result = await _execute_tool(tool_name, tool_input, on_tool_call)
+        tool_calls.append(ToolCall(name=tool_name, input=tool_input, result=result))
+        logger.info("Ollama tool executed: %s → %d chars", tool_name, len(result))
+        messages.append({"role": "tool", "content": result})
+
+
+# ---------------------------------------------------------------------------
+# Anthropic agent
+# ---------------------------------------------------------------------------
+
+
+class OpenOSINTAgent(_BudgetedRun):
+    """
+    Stateful OSINT agent backed by the Anthropic API.
+
+    Maintains conversation history across turns so the model
+    can reference previous findings within a session.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.client = anthropic.AsyncAnthropic(
+            api_key=api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        self.model = model or default_anthropic_model()
+        self.history: list[dict[str, Any]] = []
+
+    def clear_history(self) -> None:
+        """Reset conversation memory."""
+        self.history = []
+
+    async def _run(self, prompt: str, on_tool_call: Any = None) -> AgentResponse:
+        self.history.append({"role": "user", "content": prompt})
+        messages: list[dict[str, Any]] = list(self.history)
+        tool_calls: list[ToolCall] = []
+        budget = current_budget() or ToolBudget()
+        try:
+            while True:
+                response = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=_MAX_TOKENS,
+                    system=_system_prompt(),
+                    tools=filter_definitions(TOOL_DEFINITIONS),  # type: ignore[arg-type]
+                    messages=messages,  # type: ignore[arg-type]
+                )
+                if response.stop_reason == "end_turn":
+                    text = _extract_first_text(response.content)
+                    self.history.append({"role": "assistant", "content": response.content})
+                    return AgentResponse(content=text, tool_calls=tool_calls)
+                if response.stop_reason == "tool_use":
+                    messages.append({"role": "assistant", "content": response.content})
+                    await _process_tool_turn(messages, tool_calls, on_tool_call, response.content)
+                    if budget.denied:
+                        return _capped_response(
+                            budget, tool_calls, _extract_first_text(response.content), self.history
+                        )
+                else:
+                    break
+        except anthropic.AuthenticationError:
+            return AgentResponse(
+                content="",
+                error="Invalid API key. Set ANTHROPIC_API_KEY in your .env or environment.",
+            )
+        except anthropic.APIConnectionError:
+            return AgentResponse(
+                content="",
+                error="Cannot reach the Anthropic API. Check your internet connection.",
+            )
+        except anthropic.NotFoundError:
+            name = (
+                os.environ.get("ANTHROPIC_MODEL")
+                or os.environ.get("OPENOSINT_MODEL")
+                or DEFAULT_ANTHROPIC_MODEL
+            )
+            logger.warning("Anthropic model not found: %s", name)
+            return AgentResponse(
+                content="",
+                error=f"Model '{name}' not found. Check ANTHROPIC_MODEL, or remove it to use the default.",
+            )
+        except Exception as exc:
+            logger.exception("Unexpected error in Anthropic agent loop.")
+            return AgentResponse(content="", error=str(exc))
+        return AgentResponse(content="", error="Unexpected agent loop exit.")
+
+
+# ---------------------------------------------------------------------------
+# Ollama agent
+# ---------------------------------------------------------------------------
+
+
+def _to_ollama_tools(defs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert Anthropic-format tool definitions to Ollama/OpenAI format."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": definition["name"],
+                "description": definition["description"],
+                "parameters": definition["input_schema"],
+            },
+        }
+        for definition in defs
+    ]
+
+
+
+
+class OllamaAgent(_BudgetedRun):
+    """
+    Stateful OSINT agent backed by a local Ollama model.
+
+    Requires the ``ollama`` Python library and a running Ollama daemon.
+    No Anthropic API key is needed.
+
+    The agent follows the same tool-use loop as ``OpenOSINTAgent``:
+    tool_use → execute real binary → feed real output back → loop until done.
+    """
+
+    def __init__(
+        self,
+        model: str = "llama3.2",
+        host: str = "http://localhost:11434",
+    ) -> None:
+        self.model = model
+        self.host = host
+        self.history: list[dict[str, Any]] = []
+
+    def clear_history(self) -> None:
+        """Reset conversation memory."""
+        self.history = []
+
+    async def _run(self, prompt: str, on_tool_call: Any = None) -> AgentResponse:
+        try:
+            import ollama  # type: ignore
+        except ImportError:
+            return AgentResponse(
+                content="",
+                error=(
+                    "The 'ollama' Python library is not installed.\n"
+                    "Install it with:  pip install ollama\n\n"
+                    "NOTE: pip install ollama only installs the Python client — "
+                    "it does NOT install the Ollama runtime binary.\n"
+                    "You must also install the Ollama application separately:\n"
+                    "  macOS/Linux:  curl -fsSL https://ollama.com/install.sh | sh\n"
+                    "  Windows:      https://ollama.com/download/windows\n\n"
+                    "After installing, start Ollama and pull a model:\n"
+                    "  ollama serve\n"
+                    "  ollama pull llama3.2\n"
+                    "Then retry:  openosint --provider ollama"
+                ),
+            )
+
+        self.history.append({"role": "user", "content": prompt})
+        messages: list[Any] = [
+            {"role": "system", "content": _system_prompt()},
+            *self.history,
+        ]
+        tool_calls: list[ToolCall] = []
+        budget = current_budget() or ToolBudget()
+
+        try:
+            client = ollama.AsyncClient(host=self.host)
+            while True:
+                response = await client.chat(
+                    model=self.model,
+                    messages=messages,
+                    tools=_to_ollama_tools(filter_definitions(TOOL_DEFINITIONS)),
+                )
+                msg = response.message
+                if not msg.tool_calls:
+                    text = msg.content or ""
+                    self.history.append({"role": "assistant", "content": text})
+                    return AgentResponse(content=text, tool_calls=tool_calls)
+                await _process_ollama_tool_turn(messages, tool_calls, on_tool_call, msg)
+                if budget.denied:
+                    return _capped_response(budget, tool_calls, msg.content or "", self.history)
+        except Exception as exc:
+            err_str = str(exc)
+            # Surface a clear, actionable error when the Ollama server is not running
+            if any(
+                kw in err_str.lower()
+                for kw in (
+                    "connection refused",
+                    "connect error",
+                    "failed to connect",
+                    "cannot connect",
+                )
+            ):
+                logger.debug("Ollama server unreachable at %s: %s", self.host, err_str)
+                return AgentResponse(
+                    content="",
+                    error=(
+                        f"[ERROR] Ollama server is not running at {self.host}\n\n"
+                        "Make sure Ollama is installed (https://ollama.com) and running:\n"
+                        "  macOS/Linux:  curl -fsSL https://ollama.com/install.sh | sh\n"
+                        "  Windows:      https://ollama.com/download/windows\n\n"
+                        "  ollama serve          # start in terminal\n"
+                        "  ollama pull llama3.2  # pull a model first\n\n"
+                        "Then retry:  openosint --provider ollama"
+                    ),
+                )
+            logger.exception("Unexpected error in Ollama agent loop.")
+            return AgentResponse(content="", error=err_str)
+
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible agent  (LiteLLM, llama-swap, vLLM, LM Studio, …)
+# ---------------------------------------------------------------------------
+
+
+# OpenAI and Ollama share the same function-tool schema (_to_ollama_tools).
+
+
+def _build_openai_assistant_message(msg: Any) -> dict[str, Any]:
+    """Serialize an OpenAI assistant message with tool_calls into history dict form."""
+    return {
+        "role": "assistant",
+        "content": msg.content or "",
+        "tool_calls": [
+            {
+                "id": openai_tool_call.id,
+                "type": "function",
+                "function": {
+                    "name": openai_tool_call.function.name,
+                    "arguments": openai_tool_call.function.arguments,
+                },
+            }
+            for openai_tool_call in msg.tool_calls
+        ],
+    }
+
+
+async def _process_openai_tool_turn(
+    messages: list[dict[str, Any]],
+    tool_calls: list[ToolCall],
+    on_tool_call: Any,
+    openai_msg: Any,
+) -> None:
+    """Execute all tool calls from one OpenAI response and append results to messages."""
+    messages.append(_build_openai_assistant_message(openai_msg))
+    for openai_tool_call in openai_msg.tool_calls:
+        tool_name = openai_tool_call.function.name
+        raw_args = openai_tool_call.function.arguments
+        try:
+            tool_input = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
+        except (json.JSONDecodeError, TypeError):
+            tool_input = {"input": raw_args}
+        result = await _execute_tool(tool_name, tool_input, on_tool_call)
+        tool_calls.append(ToolCall(name=tool_name, input=tool_input, result=result))
+        logger.info("OpenAI tool executed: %s → %d chars", tool_name, len(result))
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": openai_tool_call.id,
+                "content": result,
+            }
+        )
+
+
+class OpenAICompatibleAgent(_BudgetedRun):
+    """
+    Stateful OSINT agent backed by any OpenAI-compatible chat-completions API.
+
+    Works with gateways and local inference servers that speak the OpenAI
+    ``/v1/chat/completions`` protocol — LiteLLM, llama-swap, vLLM, LM Studio,
+    Ollama's ``/v1`` shim, etc.  Requires the ``openai`` Python library.
+
+    The agent follows the same tool-use loop as ``OpenOSINTAgent``:
+    tool_call → execute real binary → feed real output back → loop until done.
+    """
+
+    def __init__(
+        self,
+        model: str = "gpt-4o-mini",
+        base_url: str = "http://localhost:4000/v1",
+        api_key: str | None = None,
+    ) -> None:
+        self.model = model
+        self.base_url = base_url
+        # Many local servers ignore the key, but the SDK requires a non-empty string.
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "") or "sk-no-key-required"
+        self.history: list[dict[str, Any]] = []
+
+    def clear_history(self) -> None:
+        """Reset conversation memory."""
+        self.history = []
+
+    async def _run(self, prompt: str, on_tool_call: Any = None) -> AgentResponse:
+        try:
+            import openai  # type: ignore
+        except ImportError:
+            return AgentResponse(
+                content="",
+                error=(
+                    "The 'openai' Python library is not installed.\n"
+                    "Install it with:  pip install openai\n\n"
+                    "Then retry:  openosint --provider openai"
+                ),
+            )
+
+        self.history.append({"role": "user", "content": prompt})
+        messages: list[Any] = [
+            {"role": "system", "content": _system_prompt()},
+            *self.history,
+        ]
+        tool_calls: list[ToolCall] = []
+        budget = current_budget() or ToolBudget()
+
+        try:
+            client = openai.AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+            while True:
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    tools=_to_ollama_tools(filter_definitions(TOOL_DEFINITIONS)),
+                    tool_choice="auto",
+                    max_tokens=_MAX_TOKENS,
+                )
+                if not response.choices:
+                    return AgentResponse(
+                        content="",
+                        error=(
+                            f"OpenAI endpoint returned no choices from {self.base_url}. "
+                            "Verify the model supports tool/function calling."
+                        ),
+                    )
+                msg = response.choices[0].message
+                if not msg.tool_calls:
+                    text = msg.content or ""
+                    self.history.append({"role": "assistant", "content": text})
+                    return AgentResponse(content=text, tool_calls=tool_calls)
+                await _process_openai_tool_turn(messages, tool_calls, on_tool_call, msg)
+                if budget.denied:
+                    return _capped_response(budget, tool_calls, msg.content or "", self.history)
+        except openai.AuthenticationError:
+            return AgentResponse(
+                content="",
+                error=(
+                    f"Authentication failed for the OpenAI-compatible endpoint at "
+                    f"{self.base_url}.  Check your API key (OPENAI_API_KEY)."
+                ),
+            )
+        except openai.APIConnectionError:
+            return AgentResponse(
+                content="",
+                error=(
+                    f"[ERROR] Cannot reach the OpenAI-compatible server at {self.base_url}\n\n"
+                    "This provider expects a self-hosted OpenAI-compatible gateway "
+                    "(LiteLLM, vLLM, LM Studio, llama.cpp, …) — it does NOT talk to "
+                    "OpenAI's own API by default. Verify your server is running, e.g.:\n"
+                    "  openosint --provider openai \\\n"
+                    "    --openai-base-url http://localhost:4000/v1 \\\n"
+                    "    --openai-model gpt-4o-mini\n\n"
+                    "To reach hosted OpenAI instead, set:\n"
+                    "  OPENAI_BASE_URL=https://api.openai.com/v1\n"
+                    "  OPENAI_API_KEY=sk-...\n"
+                    "  openosint --provider openai --openai-model gpt-4o"
+                ),
+            )
+        except Exception as exc:
+            logger.exception("Unexpected error in OpenAI-compatible agent loop.")
+            return AgentResponse(content="", error=str(exc))

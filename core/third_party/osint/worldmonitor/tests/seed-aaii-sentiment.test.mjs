@@ -1,0 +1,285 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+
+const { extractSentimentData, parseHtmlSentiment, parseXlsRows, excelDateToISO, readAaiiPage, MAX_AAII_PAGE_BYTES } = await import('../scripts/seed-aaii-sentiment.mjs');
+const { buildAaiiXlsFixture, FIXTURE_FIRST_SERIAL, FIXTURE_WEEKS } = await import('./helpers/aaii-xls-fixture.mjs');
+
+describe('AAII Sentiment seed parsing', () => {
+  describe('excelDateToISO', () => {
+    it('converts known serial dates correctly', () => {
+      assert.equal(excelDateToISO(1), '1900-01-01');
+      assert.equal(excelDateToISO(59), '1900-02-28');
+      assert.equal(excelDateToISO(61), '1900-03-01'); // serial 60 is Lotus bug
+      assert.equal(excelDateToISO(46115), '2026-04-03');
+    });
+
+    it('returns null for invalid inputs', () => {
+      assert.equal(excelDateToISO(0), null);
+      assert.equal(excelDateToISO(-5), null);
+      assert.equal(excelDateToISO('abc'), null);
+    });
+  });
+
+  describe('extractSentimentData', () => {
+    it('extracts data from rows with header row containing Bullish/Neutral/Bearish', () => {
+      const rows = [
+        ['Date', 'Bullish', 'Neutral', 'Bearish', 'Bull-Bear Spread'],
+        [46115, 0.357, 0.213, 0.43, null],  // 2026-04-03 as Excel serial
+        [46108, 0.224, 0.218, 0.558, null],  // 2026-03-27
+        [46101, 0.192, 0.237, 0.571, null],  // 2026-03-20
+      ];
+      const result = extractSentimentData(rows);
+      assert.ok(result.length === 3, `Expected 3 rows, got ${result.length}`);
+      assert.equal(result[0].date, '2026-04-03');
+      assert.equal(result[0].bullish, 35.7);
+      assert.equal(result[0].bearish, 43.0);
+      assert.equal(result[0].neutral, 21.3);
+      assert.equal(result[0].spread, -7.3);
+    });
+
+    it('handles percentages > 1 (already in percentage form)', () => {
+      const rows = [
+        ['Date', 'Bullish', 'Neutral', 'Bearish'],
+        ['2026-01-02', 43.1, 31.6, 25.3],
+      ];
+      const result = extractSentimentData(rows);
+      assert.ok(result.length === 1);
+      assert.equal(result[0].bullish, 43.1);
+      assert.equal(result[0].bearish, 25.3);
+      assert.equal(result[0].neutral, 31.6);
+      assert.equal(result[0].spread, 17.8);
+    });
+
+    it('handles fractions (0-1 range) and converts to percentages', () => {
+      const rows = [
+        ['Date', 'Bullish', 'Neutral', 'Bearish'],
+        ['2026-01-02', 0.45, 0.30, 0.25],
+      ];
+      const result = extractSentimentData(rows);
+      assert.ok(result.length === 1);
+      assert.equal(result[0].bullish, 45);
+      assert.equal(result[0].bearish, 25);
+      assert.equal(result[0].neutral, 30);
+    });
+
+    it('reads M/D/YYYY strings as UTC calendar dates in any process time zone', () => {
+      const rows = [
+        ['Date', 'Bullish', 'Neutral', 'Bearish'],
+        ['1/2/2026', 40, 30, 30],
+      ];
+      assert.equal(extractSentimentData(rows)[0].date, '2026-01-02');
+    });
+
+    it('returns empty array when no header found', () => {
+      const rows = [
+        ['foo', 'bar', 'baz'],
+        [1, 2, 3],
+      ];
+      const result = extractSentimentData(rows);
+      assert.equal(result.length, 0);
+    });
+
+    it('skips rows with null bull/bear values', () => {
+      const rows = [
+        ['Date', 'Bullish', 'Neutral', 'Bearish'],
+        ['2026-01-02', 43.1, 31.6, 25.3],
+        ['2026-01-09', null, 28.0, null],
+        ['2026-01-16', 35.0, 30.0, 35.0],
+      ];
+      const result = extractSentimentData(rows);
+      assert.equal(result.length, 2);
+    });
+
+    it('computes neutral when missing', () => {
+      const rows = [
+        ['Date', 'Bullish', 'Bearish'],
+        ['2026-01-02', 40.0, 30.0],
+      ];
+      const result = extractSentimentData(rows);
+      assert.ok(result.length === 1);
+      assert.equal(result[0].neutral, 30.0);
+    });
+
+    it('sorts output by date descending', () => {
+      const rows = [
+        ['Date', 'Bullish', 'Neutral', 'Bearish'],
+        ['2026-01-02', 40, 30, 30],
+        ['2026-03-01', 35, 35, 30],
+        ['2026-02-01', 42, 28, 30],
+      ];
+      const result = extractSentimentData(rows);
+      assert.equal(result[0].date, '2026-03-01');
+      assert.equal(result[1].date, '2026-02-01');
+      assert.equal(result[2].date, '2026-01-02');
+    });
+  });
+
+  describe('parseHtmlSentiment', () => {
+    it('extracts percentages from AAII-style HTML with tableTxt class', () => {
+      const html = `
+        <span>Week ending October 14, 2026</span>
+        <table>
+          <tr><td class="tableTxt">35.7%</td></tr>
+          <tr><td class="tableTxt">21.3%</td></tr>
+          <tr><td class="tableTxt">43.0%</td></tr>
+        </table>
+      `;
+      const result = parseHtmlSentiment(html);
+      assert.ok(result.length === 1);
+      assert.equal(result[0].bullish, 35.7);
+      assert.equal(result[0].neutral, 21.3);
+      assert.equal(result[0].bearish, 43.0);
+      assert.equal(result[0].spread, -7.3);
+    });
+
+    it('extracts the current ssv2 gauge and dates it to the reporting Thursday', () => {
+      const html = `
+        <span class="ssv2-gauge-week">Week ending October 21, 2026</span>
+        <div class="ssv2-slabel bull">Bullish</div><div class="ssv2-snum bull">36.9%</div><div class="ssv2-savg">Avg 37.5%</div>
+        <div class="ssv2-slabel neut">Neutral</div><div class="ssv2-snum neut">17.3%</div><div class="ssv2-savg">Avg 31.0%</div>
+        <div class="ssv2-slabel bear">Bearish</div><div class="ssv2-snum bear">45.8%</div><div class="ssv2-savg">Avg 31.5%</div>
+      `;
+      const result = parseHtmlSentiment(html);
+      assert.deepEqual(result, [{ date: '2026-10-22', bullish: 36.9, neutral: 17.3, bearish: 45.8, spread: -8.9 }]);
+    });
+
+    it('reads ssv2 values by class, not by position', () => {
+      const html = `
+        <span>Week ending October 21, 2026</span>
+        <div class="ssv2-snum bear">45.8%</div>
+        <div class="ssv2-snum bull">36.9%</div>
+        <div class="ssv2-snum neut">17.3%</div>
+      `;
+      const [row] = parseHtmlSentiment(html);
+      assert.equal(row.bullish, 36.9);
+      assert.equal(row.bearish, 45.8);
+      assert.equal(new Date(row.date + 'T12:00:00Z').getUTCDay(), 4);
+    });
+
+    it('returns empty array when fewer than 3 percentages found', () => {
+      const html = `<td class="tableTxt">35.7%</td><td class="tableTxt">21.3%</td>`;
+      const result = parseHtmlSentiment(html);
+      assert.equal(result.length, 0);
+    });
+
+    it('rejects an undated reading instead of assigning the current date', () => {
+      const html = `
+        <td class="tableTxt">40.0%</td>
+        <td class="tableTxt">30.0%</td>
+        <td class="tableTxt">30.0%</td>
+      `;
+      const result = parseHtmlSentiment(html);
+      assert.deepEqual(result, []);
+    });
+
+    it('rejects an invalid source date instead of rolling it into another month', () => {
+      const html = '<span>Week ending February 30, 2026</span><div class="ssv2-snum bull">40%</div><div class="ssv2-snum neut">30%</div><div class="ssv2-snum bear">30%</div>';
+      assert.deepEqual(parseHtmlSentiment(html), []);
+    });
+
+    it('scans a capped page of unclosed cell openers in linear time', () => {
+      // `[^>]*` crossed '<' and ran to the end of the page, so each unclosed
+      // opener rescanned the rest of it: well over a minute at the cap.
+      const size = MAX_AAII_PAGE_BYTES;
+      for (const unit of ['<td class="tableTxt"', '<td', 'class="ssv2-snum bull"']) {
+        const html = '<span>Week ending October 14, 2026</span>' + unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+        const started = performance.now();
+        assert.deepEqual(parseHtmlSentiment(html), [], unit);
+        const elapsed = performance.now() - started;
+        // The ssv2 scan looks at most 64 characters past each class attribute.
+        assert.ok(elapsed < 1000, `${unit}: ${elapsed.toFixed(0)} ms`);
+      }
+    });
+  });
+
+  describe('readAaiiPage', () => {
+    it('stops reading an endless page at the byte cap', async () => {
+      let pulled = 0;
+      const chunk = new Uint8Array(1 << 20).fill(0x20);
+      const response = new Response(new ReadableStream({
+        pull(controller) {
+          if (pulled >= 64 * chunk.length) return controller.close();
+          pulled += chunk.length;
+          controller.enqueue(chunk);
+        },
+        // No read-ahead: each chunk is pulled only when the reader asks for it.
+      }, { highWaterMark: 0 }));
+      await assert.rejects(readAaiiPage(response), /RESPONSE_TOO_LARGE/);
+      assert.ok(pulled <= MAX_AAII_PAGE_BYTES + chunk.length, `pulled ${pulled} bytes`);
+    });
+
+    it('reads a page within the cap as text', async () => {
+      assert.equal(await readAaiiPage(new Response('<p>Week ending</p>')), '<p>Week ending</p>');
+    });
+  });
+
+  describe('parseXlsRows', () => {
+    it('returns empty array for empty buffer', () => {
+      const result = parseXlsRows(new ArrayBuffer(0));
+      assert.deepEqual(result, []);
+    });
+
+    it('reads the Workbook stream through the FAT chain and extracts every week', () => {
+      const rows = parseXlsRows(buildAaiiXlsFixture());
+      const data = extractSentimentData(rows);
+      assert.equal(data.length, FIXTURE_WEEKS);
+      const last = FIXTURE_WEEKS - 1;
+      assert.equal(data[0].date, excelDateToISO(FIXTURE_FIRST_SERIAL + 7 * last));
+      assert.equal(data[0].bullish, 20 + (last % 40));
+      assert.equal(data[0].bearish, 15 + (last % 30));
+      assert.equal(data.at(-1).date, '1987-07-24');
+    });
+
+    it('reads a shared string split across a CONTINUE record', () => {
+      const rows = parseXlsRows(buildAaiiXlsFixture());
+      assert.deepEqual(rows[2].slice(0, 4), ['Date', 'Bullish', 'Neutral', 'Bearish']);
+    });
+
+    it('skips footer summary rows', () => {
+      // The fixture's footer is "Count '25" with counts of 52, which V8 parses as a 2001 date.
+      const data = extractSentimentData(parseXlsRows(buildAaiiXlsFixture()));
+      assert.equal(data.length, FIXTURE_WEEKS);
+      assert.ok(!data.some((w) => w.bullish === 52 && w.bearish === 52), 'footer counts leaked in as a week');
+    });
+
+    it('decodes cached FORMULA results', () => {
+      const rows = parseXlsRows(buildAaiiXlsFixture());
+      const w = 10;
+      assert.equal(rows[3 + w][6], ((20 + (w % 40)) - (15 + (w % 30))) / 100);
+    });
+
+    it('does not expand a self-referencing DIFAT chain past the file size', () => {
+      // 1 KB compound file: header claims a huge FAT whose DIFAT sector points at itself.
+      const buf = new ArrayBuffer(1024);
+      const bytes = new Uint8Array(buf);
+      const dv = new DataView(buf);
+      [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1].forEach((b, j) => { bytes[j] = b; });
+      dv.setUint16(0x1E, 9, true);
+      dv.setUint32(0x2C, 0x7FFFFFFF, true); // numFatSectors
+      dv.setUint32(0x38, 4096, true);
+      dv.setUint32(0x44, 0, true); // first DIFAT sector = 0
+      for (let j = 0; j < 109; j++) dv.setUint32(0x4C + j * 4, 0, true);
+      dv.setUint32(512 + 127 * 4, 0, true); // DIFAT sector 0 chains to itself
+      const started = Date.now();
+      assert.deepEqual(parseXlsRows(buf), []);
+      assert.ok(Date.now() - started < 500, 'DIFAT expansion was not bounded');
+    });
+
+    it('rejects a Workbook stream larger than the file', () => {
+      const buf = buildAaiiXlsFixture();
+      const bytes = new Uint8Array(buf);
+      const dv = new DataView(buf);
+      const dirOff = (dv.getUint32(0x30, true) + 1) * 512;
+      dv.setUint32(dirOff + 128 + 0x78, 0xFFFFFFF0, true); // Workbook entry size
+      assert.deepEqual(parseXlsRows(bytes.buffer), []);
+    });
+
+    it('returns empty array for non-XLS data', () => {
+      const buf = new ArrayBuffer(100);
+      const view = new Uint8Array(buf);
+      for (let i = 0; i < 100; i++) view[i] = i;
+      const result = parseXlsRows(buf);
+      assert.deepEqual(result, []);
+    });
+  });
+});

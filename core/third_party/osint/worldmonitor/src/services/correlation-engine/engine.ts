@@ -1,0 +1,567 @@
+// boundary-ignore: AppContext is an aggregate type that lives in app/ by design
+import type { AppContext } from '@/app/app-context';
+import type {
+  DomainAdapter,
+  CorrelationDomain,
+  SignalEvidence,
+  ConvergenceCard,
+  ClusterState,
+  TrendDirection,
+} from './types';
+import { haversineKm } from '@/utils/distance';
+
+import { premiumFetch } from '@/services/premium-fetch';
+import { hasPremiumAccess } from '@/services/panel-gating';
+import { IntelligenceServiceClient } from '@/services/generated-rpc-clients';
+import type { CorrelationRuntimeMode } from '@/services/correlation-runtime-mode';
+
+const LLM_SCORE_THRESHOLD = 60;
+const LLM_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const LLM_MAX_CONCURRENT = 3;
+const RUN_TARGET_MS = 100;
+const SLOW_RUNS_BEFORE_WARNING = 2;
+
+interface LlmCacheEntry {
+  assessment: string;
+  timestamp: number;
+}
+
+export class CorrelationEngine {
+  private adapters: DomainAdapter[] = [];
+  private cards: Map<string, ConvergenceCard[]> = new Map();
+  private previousClusters: Map<string, ClusterState[]> = new Map();
+  private llmCache: Map<string, LlmCacheEntry> = new Map();
+  private intelligenceClient: InstanceType<typeof IntelligenceServiceClient>;
+  private running = false;
+  private llmInFlight = new Set<string>();
+  private assessmentCards = new Map<CorrelationDomain, ConvergenceCard[]>();
+  private attemptedAssessments = new WeakSet<ConvergenceCard>();
+  private assessmentGeneration = 0;
+  private consecutiveSlowRuns = 0;
+  private peakSlowRunMs = 0;
+  private warnedForCurrentSlowStreak = false;
+  private runtimeMode: CorrelationRuntimeMode = 'legacy';
+
+  constructor() {
+    // Use '' base URL — requests go to current origin, same as other panels.
+    // premiumFetch — deductSituation is in PREMIUM_RPC_PATHS. globalThis.fetch
+    // (the generated default) would 401 signed-in browser pros so the LLM
+    // assessment never lands. See #3242 review HIGH(new) #1 for the bug class.
+    this.intelligenceClient = new IntelligenceServiceClient('', { fetch: premiumFetch });
+  }
+
+  registerAdapter(adapter: DomainAdapter): void {
+    this.adapters.push(adapter);
+    this.cards.set(adapter.domain, []);
+    this.previousClusters.set(adapter.domain, []);
+  }
+
+  /**
+   * Returns true when this call actually computed, false when it was skipped
+   * because a run was already in flight.
+   *
+   * The skip is not reachable today — this method's body contains no `await`,
+   * so `running` is never true across a yield point. The return value exists so
+   * the contract stays correct if that ever changes: callers must not publish
+   * `getCards()` after a skipped run, because on a first-run overlap the card
+   * map still holds its initial empty arrays and would blank live panels.
+   */
+  async run(ctx: AppContext, runtimeMode: CorrelationRuntimeMode = 'legacy'): Promise<boolean> {
+    if (this.running) return false;
+    this.runtimeMode = runtimeMode;
+    this.running = true;
+    try {
+      this.pruneLlmCache();
+      const t0 = performance.now();
+
+      for (const adapter of this.adapters) {
+        const signals = adapter.collectSignals(ctx);
+        const clusters = this.clusterSignals(signals, adapter);
+        const scored = this.scoreClusters(clusters, adapter);
+        const filtered = scored.filter(c => c.score >= adapter.threshold);
+        const withTrend = this.applyTrends(filtered, adapter);
+        const cards = withTrend.map(c => this.toCard(c, adapter));
+
+        // Sort descending by score
+        cards.sort((a, b) => b.score - a.score);
+        this.cards.set(adapter.domain, cards);
+
+        // Save cluster state for next cycle trend detection
+        this.previousClusters.set(
+          adapter.domain,
+          withTrend.map(c => c.state),
+        );
+      }
+
+      const elapsed = performance.now() - t0;
+      this.recordRunDuration(elapsed);
+
+      document.dispatchEvent(new CustomEvent('wm:correlation-updated', {
+        detail: { domains: this.adapters.map(a => a.domain) },
+      }));
+    } finally {
+      this.running = false;
+    }
+    return true;
+  }
+
+  getCards(domain: string): ConvergenceCard[] {
+    return this.cards.get(domain) ?? [];
+  }
+
+  getAllCards(): ConvergenceCard[] {
+    return Array.from(this.cards.values()).flat();
+  }
+
+  getRuntimeMode(): CorrelationRuntimeMode {
+    return this.runtimeMode;
+  }
+
+  private recordRunDuration(elapsedMs: number): void {
+    if (!Number.isFinite(elapsedMs) || elapsedMs <= RUN_TARGET_MS) {
+      this.consecutiveSlowRuns = 0;
+      this.peakSlowRunMs = 0;
+      this.warnedForCurrentSlowStreak = false;
+      return;
+    }
+
+    this.consecutiveSlowRuns++;
+    this.peakSlowRunMs = Math.max(this.peakSlowRunMs, elapsedMs);
+    if (
+      this.consecutiveSlowRuns < SLOW_RUNS_BEFORE_WARNING
+      || this.warnedForCurrentSlowStreak
+    ) {
+      return;
+    }
+
+    this.warnedForCurrentSlowStreak = true;
+    console.warn(
+      `[CorrelationEngine] run() exceeded ${RUN_TARGET_MS}ms for `
+      + `${this.consecutiveSlowRuns} consecutive runs `
+      + `(latest ${elapsedMs.toFixed(0)}ms, peak ${this.peakSlowRunMs.toFixed(0)}ms)`,
+    );
+  }
+
+  // ── Clustering ──────────────────────────────────────────────
+
+  private clusterSignals(
+    signals: SignalEvidence[],
+    adapter: DomainAdapter,
+  ): SignalCluster[] {
+    if (signals.length === 0) return [];
+
+    switch (adapter.clusterMode) {
+      case 'country':
+        return this.clusterByCountry(signals);
+      case 'entity':
+        return this.clusterByEntity(signals);
+      default:
+        return this.clusterByProximity(signals, adapter.spatialRadius);
+    }
+  }
+
+  private clusterByCountry(signals: SignalEvidence[]): SignalCluster[] {
+    const byCountry = new Map<string, SignalEvidence[]>();
+    for (const s of signals) {
+      if (!s.country) continue;
+      const list = byCountry.get(s.country) ?? [];
+      list.push(s);
+      byCountry.set(s.country, list);
+    }
+    const clusters: SignalCluster[] = [];
+    for (const [country, sigs] of byCountry) {
+      if (sigs.length < 2) continue;
+      clusters.push({ signals: sigs, country });
+    }
+    return clusters;
+  }
+
+  private clusterByEntity(signals: SignalEvidence[]): SignalCluster[] {
+    // Compound patterns checked first to avoid false positives from ambiguous
+    // single words ("bank" → "river bank", "reserve" → "nature reserve")
+    const COMPOUND_PATTERNS = [
+      'supply chain', 'rare earth', 'central bank', 'interest rate',
+      'trade war', 'oil price', 'gas price', 'federal reserve',
+    ];
+    const SINGLE_KEYS = new Set([
+      'oil', 'gas', 'sanctions', 'trade', 'tariff', 'commodity', 'currency',
+      'energy', 'wheat', 'crude', 'gold', 'silver', 'copper', 'bitcoin',
+      'crypto', 'inflation', 'embargo', 'opec', 'semiconductor', 'dollar',
+      'yuan', 'euro',
+    ]);
+    const tokenMap = new Map<string, SignalEvidence[]>();
+
+    for (const s of signals) {
+      const lower = s.label.toLowerCase();
+      // Try compound patterns first
+      let matchedKey = COMPOUND_PATTERNS.find(p => lower.includes(p));
+      if (!matchedKey) {
+        const words = lower.split(/\W+/);
+        matchedKey = words.find(w => SINGLE_KEYS.has(w));
+      }
+      if (!matchedKey) continue; // drop unmatched signals to avoid false convergence
+      const key = matchedKey;
+      const list = tokenMap.get(key) ?? [];
+      list.push(s);
+      tokenMap.set(key, list);
+    }
+
+    const clusters: SignalCluster[] = [];
+    for (const [key, sigs] of tokenMap) {
+      if (sigs.length < 2) continue;
+      clusters.push({ signals: sigs, entityKey: key });
+    }
+    return clusters;
+  }
+
+  private clusterByProximity(
+    signals: SignalEvidence[],
+    radiusKm: number,
+  ): SignalCluster[] {
+    // Grid-based spatial indexing + union-find: O(n * k) where k = avg signals per cell.
+    // Cells are cellSizeDeg wide in both axes, so a column is the same longitude band
+    // at every latitude. In-radius neighbors are at most one row apart, but a degree of
+    // longitude shrinks toward the poles, so they can be several columns apart.
+    // spatialRadius 0 means no proximity clustering (types.ts), and a non-positive
+    // radius would make the column span infinite.
+    if (!(radiusKm > 0)) return [];
+    const DEG_PER_KM_LAT = 1 / 111;
+    const EARTH_RADIUS_KM = 6371; // the radius haversineKm uses
+    const cellSizeDeg = radiusKm * DEG_PER_KM_LAT;
+    const maxColSpan = Math.ceil(360 / cellSizeDeg);
+    const sinHalfRadius = Math.sin(radiusKm / EARTH_RADIUS_KM / 2);
+    // Columns to scan either side of a cell in `row`. Neighbors lie in rows
+    // row-1..row+1; for two points at |lat| <= maxAbsLat within radiusKm, haversine
+    // gives sin(dLon / 2) <= sin(radiusKm / 2R) / cos(maxAbsLat).
+    const colSpanForRow = (row: number): number => {
+      const maxAbsLat = Math.min(90, Math.max(
+        Math.abs((row - 1) * cellSizeDeg),
+        Math.abs((row + 2) * cellSizeDeg),
+      ));
+      const ratio = sinHalfRadius / Math.cos(maxAbsLat * Math.PI / 180);
+      if (!(ratio < 1)) return maxColSpan;
+      const maxDeltaLonDeg = 2 * Math.asin(ratio) * 180 / Math.PI;
+      return Math.min(maxColSpan, Math.ceil(maxDeltaLonDeg / cellSizeDeg + 1e-9));
+    };
+
+    // Union-Find with path compression
+    const parent: number[] = signals.map((_, i) => i);
+    const find = (i: number): number => {
+      while (parent[i] !== i) { parent[i] = parent[parent[i]!]!; i = parent[i]!; }
+      return i;
+    };
+    const union = (a: number, b: number): void => {
+      const ra = find(a), rb = find(b);
+      if (ra !== rb) parent[ra] = rb;
+    };
+
+    // Index valid signals into spatial grid
+    const grid = new Map<string, number[]>();
+    const validIndices: number[] = [];
+    for (let i = 0; i < signals.length; i++) {
+      const s = signals[i]!;
+      if (s.lat == null || s.lon == null) continue;
+      validIndices.push(i);
+      const cellRow = Math.floor(s.lat / cellSizeDeg);
+      const cellCol = Math.floor(s.lon / cellSizeDeg);
+      const key = `${cellRow}:${cellCol}`;
+      const list = grid.get(key);
+      if (list) list.push(i); else grid.set(key, [i]);
+    }
+
+    // Check the neighborhood for each cell: one row either side, colSpan columns either side
+    for (const [key, indices] of grid) {
+      const sep = key.indexOf(':');
+      const row = Number(key.slice(0, sep));
+      const col = Number(key.slice(sep + 1));
+      const colSpan = colSpanForRow(row);
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -colSpan; dc <= colSpan; dc++) {
+          const neighbors = grid.get(`${row + dr}:${col + dc}`);
+          if (!neighbors) continue;
+          for (const i of indices) {
+            const si = signals[i]!;
+            for (const j of neighbors) {
+              if (i >= j) continue;
+              const sj = signals[j]!;
+              if (haversineKm(si.lat!, si.lon!, sj.lat!, sj.lon!) <= radiusKm) {
+                union(i, j);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Collect clusters from union-find roots
+    const clusterMap = new Map<number, SignalEvidence[]>();
+    for (const i of validIndices) {
+      const root = find(i);
+      const list = clusterMap.get(root);
+      if (list) list.push(signals[i]!); else clusterMap.set(root, [signals[i]!]);
+    }
+
+    const clusters: SignalCluster[] = [];
+    for (const sigs of clusterMap.values()) {
+      if (sigs.length >= 2) {
+        clusters.push({ signals: sigs });
+      }
+    }
+    return clusters;
+  }
+
+  // ── Scoring ─────────────────────────────────────────────────
+
+  private scoreClusters(
+    clusters: SignalCluster[],
+    adapter: DomainAdapter,
+  ): ScoredCluster[] {
+    return clusters.map(cluster => {
+      // Aggregate max severity per signal type
+      const perType = new Map<string, number>();
+      for (const s of cluster.signals) {
+        const current = perType.get(s.type) ?? 0;
+        perType.set(s.type, Math.max(current, s.severity));
+      }
+
+      // Weighted sum of per-type maxima
+      let weightedSum = 0;
+      for (const [type, severity] of perType) {
+        const weight = adapter.weights[type] ?? 0;
+        weightedSum += severity * weight;
+      }
+
+      // Diversity bonus (capped at 30)
+      const uniqueTypes = perType.size;
+      const diversityBonus = Math.min(30, Math.max(0, (uniqueTypes - 2)) * 12);
+      const finalScore = Math.min(100, weightedSum + diversityBonus);
+
+      // Compute centroid for geographic clusters
+      // Longitude uses circular mean (atan2 of unit-circle components) to
+      // handle the antimeridian correctly — arithmetic mean of 179° and -179°
+      // would give 0° instead of ±180°.
+      let centroidLat: number | undefined;
+      let centroidLon: number | undefined;
+      const geoSignals = cluster.signals.filter(s => s.lat != null && s.lon != null);
+      if (geoSignals.length > 0) {
+        centroidLat = geoSignals.reduce((sum, s) => sum + s.lat!, 0) / geoSignals.length;
+        const toRad = Math.PI / 180;
+        const toDeg = 180 / Math.PI;
+        let sinSum = 0, cosSum = 0;
+        for (const s of geoSignals) {
+          sinSum += Math.sin(s.lon! * toRad);
+          cosSum += Math.cos(s.lon! * toRad);
+        }
+        centroidLon = Math.atan2(sinSum, cosSum) * toDeg;
+      }
+
+      // Collect unique countries
+      const countries = [...new Set(cluster.signals.map(s => s.country).filter(Boolean) as string[])];
+
+      const state: ClusterState = {
+        key: cluster.country ?? cluster.entityKey ?? `${centroidLat?.toFixed(1)},${centroidLon?.toFixed(1)}`,
+        centroidLat,
+        centroidLon,
+        country: cluster.country,
+        entityKey: cluster.entityKey,
+        score: finalScore,
+        timestamp: Date.now(),
+      };
+
+      return { cluster, score: finalScore, countries, centroidLat, centroidLon, state };
+    });
+  }
+
+  // ── Trend Detection ─────────────────────────────────────────
+
+  private applyTrends(
+    scored: ScoredCluster[],
+    adapter: DomainAdapter,
+  ): ScoredClusterWithTrend[] {
+    const previous = this.previousClusters.get(adapter.domain) ?? [];
+    const halfRadius = adapter.spatialRadius / 2;
+
+    return scored.map(sc => {
+      let trend: TrendDirection = 'stable';
+
+      const match = previous.find(prev => {
+        if (sc.state.country && prev.country) return sc.state.country === prev.country;
+        if (sc.state.entityKey && prev.entityKey) return sc.state.entityKey === prev.entityKey;
+        if (sc.centroidLat != null && sc.centroidLon != null &&
+            prev.centroidLat != null && prev.centroidLon != null) {
+          return haversineKm(sc.centroidLat, sc.centroidLon, prev.centroidLat, prev.centroidLon) <= halfRadius;
+        }
+        return false;
+      });
+
+      if (match) {
+        const delta = sc.score - match.score;
+        if (delta > 5) trend = 'escalating';
+        else if (delta < -5) trend = 'de-escalating';
+      }
+
+      return { ...sc, trend };
+    });
+  }
+
+  // ── Card Generation ─────────────────────────────────────────
+
+  private toCard(
+    sc: ScoredClusterWithTrend,
+    adapter: DomainAdapter,
+  ): ConvergenceCard {
+    const title = adapter.generateTitle(sc.cluster.signals, {
+      entityKey: sc.cluster.entityKey,
+      country: sc.cluster.country,
+    });
+    const location = sc.centroidLat != null && sc.centroidLon != null
+      ? { lat: sc.centroidLat, lon: sc.centroidLon, label: sc.state.key }
+      : undefined;
+
+    return {
+      id: `${adapter.domain}:${sc.state.key}`,
+      domain: adapter.domain,
+      title,
+      score: Math.round(sc.score),
+      signals: sc.cluster.signals,
+      location,
+      countries: sc.countries,
+      trend: sc.trend,
+      timestamp: Date.now(),
+    };
+  }
+
+  // ── LLM Assessment ─────────────────────────────────────────
+
+  /** Assess only the evidence selected for display, whether seeded or computed locally. */
+  assessCards(domain: CorrelationDomain, cards: ConvergenceCard[]): void {
+    this.assessmentCards.set(domain, cards);
+    this.drainAssessments();
+  }
+
+  clearAssessments(): void {
+    this.assessmentGeneration++;
+    this.llmCache.clear();
+    for (const cards of this.assessmentCards.values()) {
+      for (const card of cards) delete card.assessment;
+    }
+    const domains = [...this.assessmentCards.keys()];
+    this.assessmentCards.clear();
+    this.attemptedAssessments = new WeakSet();
+    document.dispatchEvent(new CustomEvent('wm:correlation-updated', {
+      detail: { domains, assessmentUpdate: true },
+    }));
+  }
+
+  private drainAssessments(): void {
+    if (!hasPremiumAccess()) return;
+    const changed = new Set<CorrelationDomain>();
+    for (const card of [...this.assessmentCards.values()].flat()) {
+      if (card.score < LLM_SCORE_THRESHOLD) continue;
+
+      const cacheKey = this.llmCacheKey(card);
+      const cached = this.llmCache.get(cacheKey);
+      if (cached && (Date.now() - cached.timestamp) < LLM_CACHE_TTL_MS) {
+        if (card.assessment !== cached.assessment) {
+          card.assessment = cached.assessment;
+          changed.add(card.domain);
+        }
+        continue;
+      }
+
+      if (this.llmInFlight.has(cacheKey)) {
+        continue;
+      }
+      if (this.attemptedAssessments.has(card) || this.llmInFlight.size >= LLM_MAX_CONCURRENT) continue;
+      this.attemptedAssessments.add(card);
+      this.llmInFlight.add(cacheKey);
+      void this.fetchAssessment(card, cacheKey).finally(() => {
+        this.llmInFlight.delete(cacheKey);
+        // Re-scan only the currently selected cards; replaced/closed panels
+        // must not leave obsolete paid work waiting behind the concurrency cap.
+        this.drainAssessments();
+      });
+    }
+    if (changed.size) {
+      document.dispatchEvent(new CustomEvent('wm:correlation-updated', {
+        detail: { domains: [...changed], assessmentUpdate: true },
+      }));
+    }
+  }
+
+  private llmCacheKey(card: ConvergenceCard): string {
+    // Match the prompt evidence; a cluster ID or type/score bucket can outlive it.
+    return JSON.stringify([
+      card.domain, card.score, card.trend, card.countries, card.location,
+      card.signals.map(({ type, label, severity }) => [type, label, severity]),
+    ]);
+  }
+
+  private async fetchAssessment(
+    card: ConvergenceCard,
+    cacheKey: string,
+  ): Promise<string | undefined> {
+    const generation = this.assessmentGeneration;
+    try {
+      const signalSummary = card.signals
+        .map(s => `- [${s.type}] ${s.label} (severity: ${s.severity})`)
+        .join('\n');
+
+      const domainLabels: Record<string, string> = {
+        military: 'military force posture and strike packaging',
+        escalation: 'conflict escalation dynamics',
+        economic: 'economic warfare and sanctions impact',
+        disaster: 'cascading disaster and infrastructure failure',
+      };
+
+      const query = `Analyze this ${domainLabels[card.domain] ?? card.domain} convergence pattern. ` +
+        `${card.signals.length} signals detected in ${card.countries.join(', ') || card.location?.label || 'region'}:\n${signalSummary}\n\n` +
+        `Convergence score: ${card.score}/100. Trend: ${card.trend}. ` +
+        `What does this pattern indicate? Assess likelihood and potential implications in 2-3 sentences.`;
+
+      const geoContext = card.countries.length > 0
+        ? `Countries: ${card.countries.join(', ')}`
+        : card.location
+          ? `Location: ${card.location.label} (${card.location.lat.toFixed(2)}, ${card.location.lon.toFixed(2)})`
+          : '';
+
+      const resp = await this.intelligenceClient.deductSituation({ query, geoContext, framework: '' });
+
+      if (resp.analysis && generation === this.assessmentGeneration && hasPremiumAccess()) {
+        this.llmCache.set(cacheKey, { assessment: resp.analysis, timestamp: Date.now() });
+        return resp.analysis;
+      }
+    } catch (err) {
+      console.warn(`[CorrelationEngine] LLM assessment failed for ${card.domain}:`, err);
+    }
+  }
+
+  pruneLlmCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.llmCache) {
+      if (now - entry.timestamp > LLM_CACHE_TTL_MS) {
+        this.llmCache.delete(key);
+      }
+    }
+  }
+}
+
+// Internal types
+interface SignalCluster {
+  signals: SignalEvidence[];
+  country?: string;
+  entityKey?: string;
+}
+
+interface ScoredCluster {
+  cluster: SignalCluster;
+  score: number;
+  countries: string[];
+  centroidLat?: number;
+  centroidLon?: number;
+  state: ClusterState;
+}
+
+interface ScoredClusterWithTrend extends ScoredCluster {
+  trend: TrendDirection;
+}

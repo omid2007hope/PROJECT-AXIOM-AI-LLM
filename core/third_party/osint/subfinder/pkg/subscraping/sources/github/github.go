@@ -1,0 +1,329 @@
+// Package github GitHub search package
+// Based on gwen001's https://github.com/gwen001/github-search github-subdomains
+package github
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"net/http"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	jsoniter "github.com/json-iterator/go"
+
+	"github.com/tomnomnom/linkheader"
+
+	"github.com/projectdiscovery/gologger"
+	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
+)
+
+type textMatch struct {
+	Fragment string `json:"fragment"`
+}
+
+type item struct {
+	Name        string      `json:"name"`
+	HTMLURL     string      `json:"html_url"`
+	TextMatches []textMatch `json:"text_matches"`
+}
+
+type response struct {
+	TotalCount int    `json:"total_count"`
+	Items      []item `json:"items"`
+}
+
+// Source is the passive scraping agent
+type Source struct {
+	mu      sync.Mutex
+	stats   subscraping.Statistics
+	apiKeys []string
+}
+
+// runState holds counters shared only by workers of one run.
+type runState struct {
+	errors   atomic.Int32
+	results  atomic.Int32
+	requests atomic.Int32
+}
+
+// Run function returns all subdomains found with the service
+func (s *Source) Run(ctx context.Context, domain string, session *subscraping.Session) <-chan subscraping.Result {
+	results := make(chan subscraping.Result)
+	s.mu.Lock()
+	apiKeys := s.apiKeys
+	s.mu.Unlock()
+
+	go func() {
+		var stats subscraping.Statistics
+		var run runState
+		defer func(startTime time.Time) {
+			stats.TimeTaken = time.Since(startTime)
+			stats.Errors = int(run.errors.Load())
+			stats.Results = int(run.results.Load())
+			stats.Requests = int(run.requests.Load())
+			s.mu.Lock()
+			s.stats = stats
+			s.mu.Unlock()
+			close(results)
+		}(time.Now())
+
+		if len(apiKeys) == 0 {
+			gologger.Debug().Msgf("Cannot use the %s source because there was no key defined for it.", s.Name())
+			stats.Skipped = true
+			return
+		}
+
+		tokens := NewTokenManager(apiKeys)
+
+		searchURL := fmt.Sprintf("https://api.github.com/search/code?per_page=100&q=%s&sort=created&order=asc", domain)
+		s.enumerate(ctx, searchURL, tokens, session, results, &run, 0)
+	}()
+
+	return results
+}
+
+// retries counts the rate-limit retries already spent on this URL. A new URL
+// starts over at zero, so a page that succeeds does not eat into the budget of
+// the pages after it.
+func (s *Source) enumerate(ctx context.Context, searchURL string, tokens *Tokens, session *subscraping.Session, results chan subscraping.Result, run *runState, retries int) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
+	token := tokens.Get()
+	headers := map[string]string{
+		"Accept": "application/vnd.github.v3.text-match+json", "Authorization": "token " + token.Hash,
+	}
+
+	// Initial request to GitHub search
+	run.requests.Add(1)
+	resp, err := session.Get(ctx, searchURL, "", headers)
+	isForbidden := resp != nil && resp.StatusCode == http.StatusForbidden
+	if err != nil && !isForbidden {
+		results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+		run.errors.Add(1)
+		session.DiscardHTTPResponse(resp)
+		return
+	}
+
+	// Retry enumerarion after Retry-After seconds on rate limit abuse detected
+	ratelimitRemaining, _ := strconv.ParseInt(resp.Header.Get("X-Ratelimit-Remaining"), 10, 64)
+	if isForbidden && ratelimitRemaining == 0 {
+		retryAfterSeconds, _ := strconv.ParseInt(resp.Header.Get("Retry-After"), 10, 64)
+		tokens.setCurrentTokenExceeded(retryAfterSeconds)
+		session.DiscardHTTPResponse(resp)
+
+		// Tokens.Get hands the pool out round robin without skipping the ones
+		// already marked exceeded, so when every token is rate limited this
+		// retry had nothing to stop it: one stack frame per 403, recursing
+		// until the process died with a stack overflow. Give each token one
+		// attempt at this URL, then report the rate limit and let the run end.
+		if retries+1 >= len(tokens.pool) {
+			results <- subscraping.Result{
+				Source: s.Name(), Type: subscraping.Error,
+				Error: fmt.Errorf("github rate limit reached on every token, results may be incomplete"),
+			}
+			run.errors.Add(1)
+			return
+		}
+
+		s.enumerate(ctx, searchURL, tokens, session, results, run, retries+1)
+		return
+	}
+
+	var data response
+
+	// Marshall json response
+	err = jsoniter.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+		run.errors.Add(1)
+		session.DiscardHTTPResponse(resp)
+		return
+	}
+
+	session.DiscardHTTPResponse(resp)
+
+	err = s.processItems(ctx, data.Items, s.Name(), session, results, run)
+	if err != nil {
+		results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+		run.errors.Add(1)
+		return
+	}
+
+	// Links header, first, next, last...
+	linksHeader := linkheader.Parse(resp.Header.Get("Link"))
+	// Process the next link recursively
+	for _, link := range linksHeader {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if link.Rel == "next" {
+			nextURL, err := url.QueryUnescape(link.URL)
+			if err != nil {
+				results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+				run.errors.Add(1)
+				return
+			}
+			s.enumerate(ctx, nextURL, tokens, session, results, run, 0)
+		}
+	}
+}
+
+// processItems processes GitHub response items.
+func (s *Source) processItems(ctx context.Context, items []item, name string, session *subscraping.Session, results chan subscraping.Result, run *runState) error {
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(items))
+
+	for _, responseItem := range items {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		wg.Add(1)
+		go func(responseItem item) {
+			defer wg.Done()
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			run.requests.Add(1)
+			resp, err := session.SimpleGet(ctx, rawURL(responseItem.HTMLURL))
+			if err != nil {
+				if resp != nil && resp.StatusCode != http.StatusNotFound {
+					session.DiscardHTTPResponse(resp)
+				}
+				errChan <- err
+				return
+			}
+
+			if resp.StatusCode == http.StatusOK {
+				scanner := bufio.NewScanner(resp.Body)
+				for scanner.Scan() {
+					select {
+					case <-ctx.Done():
+						session.DiscardHTTPResponse(resp)
+						return
+					default:
+					}
+					line := scanner.Text()
+					if line == "" {
+						continue
+					}
+					for _, subdomain := range extractSubdomains(session.Extractor, line) {
+						select {
+						case <-ctx.Done():
+							session.DiscardHTTPResponse(resp)
+							return
+						case results <- subscraping.Result{Source: name, Type: subscraping.Subdomain, Value: subdomain}:
+							run.results.Add(1)
+						}
+					}
+				}
+				session.DiscardHTTPResponse(resp)
+			}
+
+			for _, textMatch := range responseItem.TextMatches {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				for _, subdomain := range extractSubdomains(session.Extractor, textMatch.Fragment) {
+					select {
+					case <-ctx.Done():
+						return
+					case results <- subscraping.Result{Source: name, Type: subscraping.Subdomain, Value: subdomain}:
+						run.results.Add(1)
+					}
+				}
+			}
+		}(responseItem)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Normalize content before matching: query unescape, and turn tabs and new line chars into spaces
+func normalizeContent(content string) string {
+	normalizedContent, _ := url.QueryUnescape(content)
+	// Escaped whitespace separates hosts. Deleting it would join a host with
+	// the text after it, so the extractor would reject the host.
+	normalizedContent = strings.ReplaceAll(normalizedContent, "\\t", " ")
+	normalizedContent = strings.ReplaceAll(normalizedContent, "\\n", " ")
+	return normalizedContent
+}
+
+// extractSubdomains returns the hosts found in content. A cookie domain such
+// as ".foo.example.com" yields ".foo.example.com", which is not a valid host,
+// so its leading dots are removed.
+func extractSubdomains(extractor subscraping.SubdomainExtractor, content string) []string {
+	subdomains := extractor.Extract(normalizeContent(content))
+	for i := range subdomains {
+		subdomains[i] = strings.TrimLeft(subdomains[i], ".")
+	}
+	return subdomains
+}
+
+// Raw URL to get the files code and match for subdomains
+func rawURL(htmlURL string) string {
+	domain := strings.ReplaceAll(htmlURL, "https://github.com/", "https://raw.githubusercontent.com/")
+	return strings.ReplaceAll(domain, "/blob/", "/")
+}
+
+// Name returns the name of the source
+func (s *Source) Name() string {
+	return "github"
+}
+
+func (s *Source) IsDefault() bool {
+	return false
+}
+
+func (s *Source) HasRecursiveSupport() bool {
+	return false
+}
+
+func (s *Source) KeyRequirement() subscraping.KeyRequirement {
+	return subscraping.RequiredKey
+}
+
+func (s *Source) NeedsKey() bool {
+	return s.KeyRequirement() == subscraping.RequiredKey
+}
+
+func (s *Source) AddApiKeys(keys []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.apiKeys = slices.Clone(keys)
+}
+
+// Statistics returns a snapshot of the most recently completed run.
+func (s *Source) Statistics() subscraping.Statistics {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stats
+}

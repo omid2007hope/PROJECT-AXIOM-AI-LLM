@@ -1,0 +1,146 @@
+import * as z from 'zod'
+
+import { ENDPOINT_TYPE, MODEL_CAPABILITY, type ModelCapability, objectValues } from '@cherrystudio/provider-registry'
+import { CHERRY_CLOUD_PROVIDER_ID } from '@shared/data/presets/cherryai'
+import { createUniqueModelId } from '@shared/data/types/model'
+import { cherryCloudAccountPlansSchema, cherryCloudModelFeatureSchema } from '@shared/ipc/schemas/cherryCloud'
+
+const base64Url32BytesSchema = z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/)
+const utcDateTimeSchema = z.iso.datetime()
+
+function isSecureOrLoopbackUrl(value: string): boolean {
+  const url = new URL(value)
+  if (url.username || url.password) return false
+  if (url.protocol === 'https:') return true
+  return (
+    url.protocol === 'http:' &&
+    (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]')
+  )
+}
+
+// A development backend configured through MAIN_VITE_CHERRY_CLOUD_API_ORIGIN may serve plain HTTP on a LAN
+// address; production builds never set it, so only the exact configured origin is exempt.
+function isConfiguredDevelopmentOrigin(value: string): boolean {
+  const configuredOrigin = import.meta.env.MAIN_VITE_CHERRY_CLOUD_API_ORIGIN?.trim()
+  if (!configuredOrigin) return false
+  const url = new URL(value)
+  return !url.username && !url.password && url.origin === new URL(configuredOrigin).origin
+}
+
+export const createDesktopAuthorizationResponseSchema = z.looseObject({
+  authorization_id: z.uuid(),
+  authorization_url: z
+    .url()
+    .refine(
+      (value) => isSecureOrLoopbackUrl(value) || isConfiguredDevelopmentOrigin(value),
+      'Authorization URL must use HTTPS, loopback HTTP, or the configured development origin'
+    ),
+  expires_at: utcDateTimeSchema
+})
+
+const tokenSetSchema = z.looseObject({
+  token_type: z.literal('Bearer'),
+  access_token: base64Url32BytesSchema,
+  expires_in: z.number().int().positive(),
+  refresh_token: base64Url32BytesSchema,
+  session_id: z.uuid(),
+  session_expires_at: utcDateTimeSchema
+})
+
+const entitlementSchema = z.looseObject({
+  plan_id: z.uuid(),
+  plan_name: z.string().min(1),
+  is_free: z.boolean(),
+  status: z.enum(['inactive', 'active', 'expired']),
+  model_ids: z.array(z.string().min(1))
+})
+
+const quotaPoolSchema = z.looseObject({
+  model_ids: z.array(z.string().min(1)),
+  windows: z.array(z.looseObject({ remaining_units: z.number().int().nonnegative() })).min(1)
+})
+
+export const accountSnapshotSchema = z.looseObject({
+  account: z.looseObject({
+    id: z.uuid(),
+    display_name: z.string().min(1).optional()
+  }),
+  session: z.looseObject({
+    id: z.uuid(),
+    expires_at: utcDateTimeSchema
+  }),
+  device: z.looseObject({
+    id: z.uuid()
+  }),
+  entitlements: z.array(entitlementSchema).default([]),
+  quota_pools: z.array(quotaPoolSchema).default([])
+})
+
+export const accountPlansSchema = cherryCloudAccountPlansSchema
+
+export const exchangeDesktopAuthorizationResponseSchema = z.looseObject({
+  token_set: tokenSetSchema,
+  account: accountSnapshotSchema
+})
+
+export const refreshProductSessionResponseSchema = z.looseObject({
+  token_set: tokenSetSchema
+})
+
+const cloudModelIdSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (modelId) => {
+      try {
+        createUniqueModelId(CHERRY_CLOUD_PROVIDER_ID, modelId)
+        return true
+      } catch {
+        return false
+      }
+    },
+    { message: 'model ID cannot contain reserved route characters' }
+  )
+
+const cloudEndpointTypeSchema = z.enum([ENDPOINT_TYPE.ANTHROPIC_MESSAGES, ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS])
+const KNOWN_MODEL_CAPABILITIES = new Set<string>(objectValues(MODEL_CAPABILITY))
+const cloudModelCapabilitiesSchema = z
+  .array(z.string())
+  .transform((capabilities) =>
+    capabilities.filter((capability): capability is ModelCapability => KNOWN_MODEL_CAPABILITIES.has(capability))
+  )
+  .optional()
+
+export const cloudModelListSchema = z.looseObject({
+  data: z.array(
+    z.looseObject({
+      id: cloudModelIdSchema,
+      display_name: z.string().min(1),
+      endpoint_type: cloudEndpointTypeSchema,
+      context_window: z.number().int().positive(),
+      max_output_tokens: z.number().int().positive(),
+      capabilities: cloudModelCapabilitiesSchema,
+      available_features: z.array(cherryCloudModelFeatureSchema).min(1)
+    })
+  )
+})
+
+// The fields of the CN client notification protocol (cloud-api `api/control-cn/notifications.yaml`) the client relies on.
+export const notificationReadySchema = z.looseObject({ cursor: z.string().min(1) })
+
+export const cloudNotificationSchema = z.looseObject({
+  id: z.string().min(1),
+  cursor: z.string().min(1),
+  refresh: z.array(z.string()).optional()
+})
+
+export const cloudNotificationPageSchema = z.looseObject({
+  items: z.array(cloudNotificationSchema),
+  next_cursor: z.string().min(1),
+  has_more: z.boolean()
+})
+
+// Stream error frames carry the code at the top level, unlike the JSON error bodies of HTTP responses.
+export const notificationErrorFrameSchema = z.looseObject({ code: z.string() })
+
+export type CloudNotification = z.infer<typeof cloudNotificationSchema>

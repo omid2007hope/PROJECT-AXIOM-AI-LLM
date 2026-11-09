@@ -1,0 +1,46 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import CategoryHero from '@components/category/CategoryHero.astro';
+import CheckList from '@components/category/CheckList.astro';
+import CategoryLinks from '@components/category/CategoryLinks.astro';
+import { categories, type CategoryId } from '@/data/categories';
+import { checksInCategory } from '@/data/checks';
+
+interface Props {
+  category: CategoryId;
+}
+
+const { category } = Astro.props;
+const info = categories[category];
+const ids = checksInCategory(category);
+---
+
+<PageLayout
+  title={`${info.title} | Web Check`}
+  description={info.description}
+  keywords={info.keywords}
+  breadcrumbs={[
+    { name: 'Web Check', item: '' },
+    { name: info.label, item: category },
+  ]}
+>
+  <CategoryHero category={category} info={info} count={ids.length} />
+  <CheckList ids={ids} />
+  <section class="why">
+    <h2>What this tells you</h2>
+    {info.why.map((paragraph) => (
+      <p>{paragraph}</p>
+    ))}
+  </section>
+  <CategoryLinks current={category} />
+</PageLayout>
+
+<style lang="scss">
+  @use '@styles/global.scss' as *;
+
+  .why p {
+    max-width: 68ch;
+    line-height: 1.65;
+    color: var(--text-color-secondary);
+  }
+</style>

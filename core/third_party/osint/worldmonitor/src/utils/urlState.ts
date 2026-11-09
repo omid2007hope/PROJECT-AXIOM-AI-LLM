@@ -1,0 +1,210 @@
+import type { MapLayers } from '@/types';
+import type { MapView, TimeRange } from '@/components/Map';
+import { LAYER_REGISTRY } from '@/config/map-layer-definitions';
+
+// The registry is typed Record<keyof MapLayers, …>, so every layer is here; a
+// hand-kept copy fell behind it and silently dropped 20 layers from deep links.
+const LAYER_KEYS = Object.keys(LAYER_REGISTRY) as (keyof MapLayers)[];
+
+const TIME_RANGES: TimeRange[] = ['1h', '6h', '24h', '48h', '7d', 'all'];
+const VIEW_VALUES: MapView[] = ['global', 'america', 'mena', 'eu', 'asia', 'latam', 'africa', 'oceania'];
+
+export interface ParsedMapUrlState {
+  view?: MapView;
+  zoom?: number;
+  lat?: number;
+  lon?: number;
+  timeRange?: TimeRange;
+  layers?: MapLayers;
+  country?: string;
+  expanded?: boolean;
+  chokepoint?: string;
+}
+
+/**
+ * True when applying this initial URL state starts an async camera move, so
+ * the immediate URL sync after boot must be skipped: getCenter() would report
+ * stale intermediate coordinates until the flight settles. Three cases:
+ *
+ *   - a lat+lon pair: applyInitialUrlState calls setCenter() only when both
+ *     are present, and setCenter flies.
+ *   - a bare zoom with no view preset: setZoom() animates.
+ *   - a chokepoint deep link: it opens after renderer readiness.
+ *
+ * `view` alone never qualifies. Every renderer writes state.view
+ * synchronously at the top of setView(), so the debounced read is correct,
+ * and the initial Globe/SVG view is applied before the sync listener exists,
+ * so those renderers need the immediate write to publish the URL at all.
+ */
+export function urlHasAsyncFlyTo(
+  state: Pick<ParsedMapUrlState, 'view' | 'lat' | 'lon' | 'zoom' | 'chokepoint'> | null | undefined,
+): boolean {
+  const { view, lat, lon, zoom, chokepoint } = state ?? {};
+  return (
+    (lat !== undefined && lon !== undefined)
+    || (!view && zoom !== undefined)
+    || chokepoint !== undefined
+  );
+}
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+/** SearchAction and dashboard deep links share `?q=`. Cap keeps a pasted URL bounded. */
+export const DASHBOARD_SEARCH_QUERY_MAX_CHARS = 200;
+
+export function readDashboardSearchQuery(search: string): string | null {
+  const raw = new URLSearchParams(search).get('q');
+  if (raw == null) return null;
+  const query = raw.trim();
+  if (!query) return null;
+  return query.length > DASHBOARD_SEARCH_QUERY_MAX_CHARS
+    ? query.slice(0, DASHBOARD_SEARCH_QUERY_MAX_CHARS)
+    : query;
+}
+
+const parseEnumParam = <T extends string>(
+  params: URLSearchParams,
+  key: string,
+  allowed: readonly T[]
+): T | undefined => {
+  const value = params.get(key);
+  return value && allowed.includes(value as T) ? (value as T) : undefined;
+};
+
+const parseClampedFloatParam = (
+  params: URLSearchParams,
+  key: string,
+  min: number,
+  max: number
+): number | undefined => {
+  const rawValue = params.get(key);
+  const value = rawValue ? Number.parseFloat(rawValue) : NaN;
+  return Number.isFinite(value) ? clamp(value, min, max) : undefined;
+};
+
+export function parseMapUrlState(
+  search: string,
+  fallbackLayers: MapLayers
+): ParsedMapUrlState {
+  const params = new URLSearchParams(search);
+
+  const view = parseEnumParam(params, 'view', VIEW_VALUES);
+  const zoom = parseClampedFloatParam(params, 'zoom', 1, 10);
+  const lat = parseClampedFloatParam(params, 'lat', -90, 90);
+  const lon = parseClampedFloatParam(params, 'lon', -180, 180);
+  const timeRange = parseEnumParam(params, 'timeRange', TIME_RANGES);
+
+  const countryParam = params.get('country');
+  const country = countryParam && /^[A-Z]{2}$/i.test(countryParam.trim()) ? countryParam.trim().toUpperCase() : undefined;
+
+  const expandedParam = params.get('expanded');
+  const expanded = expandedParam === '1' ? true : undefined;
+
+  // Chokepoint deep-link (?chokepoint=bab_el_mandeb): opens the waterway popup on
+  // the live map. Value is a canonical chokepoint/waterway id (lowercase, snake).
+  // The map resolves it against STRATEGIC_WATERWAYS and no-ops on an unknown id,
+  // so this only needs to reject obviously malformed input.
+  const chokepointParam = params.get('chokepoint');
+  const chokepoint = chokepointParam && /^[a-z][a-z0-9_]{1,40}$/i.test(chokepointParam.trim())
+    ? chokepointParam.trim().toLowerCase()
+    : undefined;
+
+  const layersParam = params.get('layers');
+  let layers: MapLayers | undefined;
+  if (layersParam !== null) {
+    layers = { ...fallbackLayers };
+    const normalizedLayers = layersParam.trim();
+    if (normalizedLayers !== '' && normalizedLayers !== 'none') {
+      const requested = new Set(
+        normalizedLayers
+          .split(',')
+          .map((layer) => layer.trim())
+          .filter(Boolean)
+      );
+      if (requested.has('satelliteImagery')) {
+        requested.delete('satelliteImagery');
+        requested.add('satellites');
+      }
+      LAYER_KEYS.forEach((key) => {
+        layers![key] = requested.has(key);
+      });
+    } else {
+      LAYER_KEYS.forEach((key) => {
+        layers![key] = false;
+      });
+    }
+  }
+
+  return {
+    view,
+    zoom,
+    lat,
+    lon,
+    timeRange,
+    layers,
+    country,
+    expanded,
+    chokepoint,
+  };
+}
+
+export function buildMapUrl(
+  baseUrl: string,
+  state: {
+    view: MapView;
+    zoom: number;
+    center?: { lat: number; lon: number } | null;
+    timeRange: TimeRange;
+    layers: MapLayers;
+    country?: string;
+    expanded?: boolean;
+    chokepoint?: string;
+  }
+): string {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    // window.location.origin can be "null" string in some in-app browsers / WebViews
+    url = new URL(window.location.href);
+  }
+  const params = new URLSearchParams();
+
+  if (state.center && Number.isFinite(state.center.lat) && Number.isFinite(state.center.lon)) {
+    params.set('lat', state.center.lat.toFixed(4));
+    params.set('lon', state.center.lon.toFixed(4));
+  }
+
+  params.set('zoom', state.zoom.toFixed(2));
+  params.set('view', state.view);
+  params.set('timeRange', state.timeRange);
+
+  const activeLayers = LAYER_KEYS.filter((layer) => state.layers[layer]);
+  params.set('layers', activeLayers.length > 0 ? activeLayers.join(',') : 'none');
+
+  if (state.country) {
+    params.set('country', state.country);
+  }
+
+  if (state.expanded) {
+    params.set('expanded', '1');
+  }
+
+  if (state.chokepoint) {
+    params.set('chokepoint', state.chokepoint);
+  }
+
+  url.search = params.toString();
+  return url.toString();
+}
+
+/**
+ * The map URL sync owns the query string, not the fragment. Another surface
+ * (Clerk's hash-routed sign-up resume) can be routing on `location.hash`.
+ */
+export function withUrlFragment(url: string, hash: string): string {
+  const next = new URL(url);
+  next.hash = hash;
+  return next.toString();
+}

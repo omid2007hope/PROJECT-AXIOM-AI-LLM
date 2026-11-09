@@ -1,0 +1,211 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import ScanForm from '@components/form/ScanForm.astro';
+import CheckList from '@components/category/CheckList.astro';
+import PillLinks from '@components/molecules/PillLinks.astro';
+import TermList from '@components/molecules/TermList.astro';
+import { checks, relatedChecks, type CheckId } from '@/data/checks';
+import { categories } from '@/data/categories';
+import { glossary } from '@/data/glossary';
+
+interface Props {
+  check: CheckId;
+}
+
+const { check } = Astro.props;
+const info = checks[check];
+
+// Uncategorised checks fall back to a full report rather than a scoped one
+const scanCheck = info.categories.length ? check : undefined;
+const scanLabel = scanCheck
+  ? `Enter a URL to run the ${info.title} check`
+  : 'Enter a URL to run the full report';
+
+// Resources are either a bare URL or a titled link
+const resources = info.resources.map((resource) =>
+  typeof resource === 'string' ? { title: resource, link: resource } : resource,
+);
+
+const tags = info.categories.map((c) => ({ label: categories[c].label, href: `/${c}` }));
+const labels = tags.map((tag) => tag.label);
+const keywords = [info.title, ...labels, 'website check'].join(', ').toLowerCase();
+
+const related = relatedChecks(check);
+const terms = Object.entries(glossary).filter(([, term]) => term.check === check);
+---
+
+<PageLayout
+  title={`${info.title} | Web Check`}
+  description={info.summary}
+  keywords={keywords}
+  breadcrumbs={[
+    { name: 'Web Check', item: '' },
+    { name: 'Checks', item: 'checks' },
+    { name: info.title, item: check },
+  ]}
+>
+  <section class="hero">
+    <p class="crumbs">
+      <a href="/checks">All checks</a>
+    </p>
+    <h1>{info.title}</h1>
+    <p class="summary">{info.summary}</p>
+    <PillLinks links={tags} />
+    <ScanForm tool={scanCheck} label={scanLabel} />
+  </section>
+
+  <div class="body">
+    <article>
+      <h2>What it is</h2>
+      <p>{info.description}</p>
+      <h2>Why it matters</h2>
+      <p>{info.use}</p>
+    </article>
+
+    {terms.length > 0 && (
+      <section class="terms">
+        <h2>Key terms</h2>
+        <TermList terms={terms} linkToGlossary />
+      </section>
+    )}
+
+    <aside>
+      <!-- {
+        info.screenshot && (
+          <figure>
+            <img src={info.screenshot} alt={`${info.title} results`} loading="lazy" />
+            <figcaption>{info.title} as it appears in a report</figcaption>
+          </figure>
+        )
+      } -->
+      {resources.length > 0 && (
+        <div class="resources">
+          <h2>Further reading</h2>
+          <ul>
+            {resources.map((resource) => (
+              <li>
+                <a href={resource.link} target="_blank" rel="noreferrer">
+                  {resource.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </aside>
+  </div>
+
+  {related.length > 0 && <CheckList ids={related} heading="Related checks" />}
+</PageLayout>
+
+<style lang="scss">
+  @use '@styles/media-queries.scss' as *;
+
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 4rem;
+
+    .crumbs {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text-color-tertiary);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.25rem, 6vw, 3.5rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+    }
+
+    .summary {
+      margin: 0;
+      max-width: 60ch;
+      font-size: 1.2rem;
+      line-height: 1.6;
+      color: var(--text-color-secondary);
+    }
+  }
+
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    gap: 3rem;
+    margin-bottom: 4rem;
+
+    @include tablet-landscape-down {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+  }
+
+  article {
+    p {
+      max-width: 68ch;
+      line-height: 1.7;
+      color: var(--text-color-secondary);
+    }
+
+    h2:not(:first-child) {
+      margin-top: 2.5rem;
+    }
+  }
+
+  article h2,
+  .terms h2 {
+    font-size: 1.4rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .terms {
+    grid-column: 1 / -1;
+  }
+
+  aside {
+    grid-area: 1 / 2;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+
+    @include tablet-landscape-down {
+      grid-area: auto;
+    }
+
+    figure {
+      margin: 0;
+
+      img {
+        border-radius: 6px;
+        border: 1px solid var(--primary-transparent);
+      }
+
+      figcaption {
+        margin-top: 0.5rem;
+        font-size: 0.8rem;
+        text-align: center;
+        color: var(--text-color-tertiary);
+      }
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .resources ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+  }
+</style>

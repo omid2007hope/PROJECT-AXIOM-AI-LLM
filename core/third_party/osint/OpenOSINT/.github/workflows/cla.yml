@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CLA Assistant — enforces signing of CLA.md before PRs can be merged.
+#
+# REQUIRED SECRET (add once in GitHub → Settings → Secrets and variables →
+# Actions → New repository secret):
+#
+#   Name:  PERSONAL_ACCESS_TOKEN
+#   Value: A GitHub Personal Access Token (classic)
+#          Required scopes: repo  (tick the top-level "repo" checkbox)
+#          This allows the action to push the updated signatures.json back to
+#          the repository after each contributor signs.
+#
+# To create the PAT:
+#   GitHub → Settings → Developer settings → Personal access tokens →
+#   Tokens (classic) → Generate new token (classic)
+#   Check "repo" scope → copy the token → paste as the secret value above.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+name: CLA Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla-assistant:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.comment.body == 'recheck' ||
+       github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') ||
+      github.event_name == 'pull_request_target'
+    steps:
+      - name: CLA Assistant
+        uses: cla-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        with:
+          path-to-signatures: '.github/cla/signatures.json'
+          path-to-document: 'https://github.com/${{ github.repository }}/blob/main/CLA.md'
+          branch: 'main'
+          allowlist: 'bot*'

@@ -1,0 +1,78 @@
+import { motion } from 'motion/react';
+import { ArrowRight, Check } from 'lucide-react';
+import { t } from '../i18n';
+import depthProofStats from '../generated/depth-stats.json';
+import { DASHBOARD_PATH } from '../routes';
+import { SectionHeading } from './SectionHeading';
+
+export const PricingTeaser = () => (
+  <section id="pricing" className="py-24 px-6 border-t border-wm-border">
+    <div className="max-w-4xl mx-auto">
+      <SectionHeading
+        eyebrow={t('welcome.pricing.eyebrow')}
+        title={`${t('welcome.pricing.title1')} ${t('welcome.pricing.title2')}`}
+        subtitle={t('welcome.pricing.sub')}
+      />
+      <div className="grid md:grid-cols-2 gap-6">
+        <motion.div
+          initial={false}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.5 }}
+          className="bg-wm-card border border-wm-border rounded-xl p-8 flex flex-col"
+        >
+          <h3 className="font-display font-medium text-2xl mb-1">{t('welcome.pricing.freeTitle')}</h3>
+          <div className="font-mono text-xs text-wm-muted mb-4">$0</div>
+          <p className="text-sm text-wm-muted mb-4">{t('welcome.pricing.freeDesc', depthProofStats)}</p>
+          <ul className="space-y-2.5 mb-6 flex-1">
+            {[1, 2, 3, 4].map(n => (
+              <li key={n} className="flex items-start gap-2 text-sm">
+                <Check className="w-4 h-4 text-wm-muted shrink-0 mt-0.5" aria-hidden="true" />
+                {t(`welcome.pricing.freeF${n}`)}
+              </li>
+            ))}
+          </ul>
+          <a
+            href={DASHBOARD_PATH}
+            data-umami-event="welcome-cta"
+            data-umami-event-target="welcome-pricing-free"
+            className="inline-flex min-h-10 py-2 items-center justify-center gap-2 rounded-md bg-wm-green px-5 text-sm font-medium text-wm-bg transition-colors hover:bg-green-300"
+          >
+            {t('welcome.nav.launch')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
+          </a>
+        </motion.div>
+        <motion.div
+          initial={false}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="bg-wm-card border border-wm-border rounded-xl p-8 relative overflow-hidden flex flex-col"
+        >
+          <div className="absolute top-0 left-0 w-full h-0.5 bg-wm-green" aria-hidden="true" />
+          <h3 className="font-display font-medium text-2xl mb-1">{t('welcome.pricing.proTitle')}</h3>
+          <div className="font-mono text-xs text-wm-muted mb-4">{t('welcome.pricing.note')}</div>
+          <p className="text-sm text-wm-muted mb-4">{t('welcome.pricing.proDesc')}</p>
+          <ul className="space-y-2.5 mb-6 flex-1">
+            {[1, 2, 3, 4, 5].map(n => (
+              <li key={n} className="flex items-start gap-2 text-sm">
+                <Check className="w-4 h-4 text-wm-muted shrink-0 mt-0.5" aria-hidden="true" />
+                {t(`welcome.pricing.proF${n}`)}
+              </li>
+            ))}
+          </ul>
+          <a
+            href="/pro#pricing"
+            data-umami-event="welcome-cta"
+            data-umami-event-target="welcome-pricing-pro"
+            className="inline-flex min-h-10 py-2 items-center justify-center gap-2 rounded-md bg-wm-green px-5 text-sm font-medium text-wm-bg transition-colors hover:bg-green-300"
+          >
+            {t('welcome.pricing.cta')} <ArrowRight className="w-3 h-3" aria-hidden="true" />
+          </a>
+        </motion.div>
+      </div>
+      {/* geo.new reads roughly the first 2,500 words of the page, so the
+          YMYL disclaimer (EAT-18) sits here rather than under the FAQ. */}
+      <p className="mt-8 text-center text-xs text-wm-muted">{t('welcome.pricing.disclaimer')}</p>
+    </div>
+  </section>
+);

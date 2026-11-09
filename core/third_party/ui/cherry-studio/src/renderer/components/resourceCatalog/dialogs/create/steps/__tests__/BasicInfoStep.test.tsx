@@ -1,0 +1,158 @@
+vi.mock('@renderer/components/cherryCloud/CherryCloudModelSelector', async () => {
+  const selector = await import('@renderer/components/ModelSelector')
+  return {
+    CherryCloudModelSelector: selector.ModelSelector
+  }
+})
+
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type * as CherryStudioUi from '@cherrystudio/ui'
+import { Form } from '@cherrystudio/ui'
+import { AgentRuntimeSummary } from '@renderer/components/AgentRuntimeOption'
+import type * as EditDialogSharedModule from '@renderer/components/resourceCatalog/dialogs/components/EditDialogShared'
+import type { Model, UniqueModelId } from '@shared/data/types/model'
+
+import type { ResourceCreateWizardFormValues } from '../../types'
+import { BasicInfoStep } from '../BasicInfoStep'
+
+const { mockUseModelById } = vi.hoisted(() => ({
+  mockUseModelById: vi.fn()
+}))
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
+vi.mock('@cherrystudio/ui', async (importOriginal) => await importOriginal<typeof CherryStudioUi>())
+
+vi.mock('@renderer/components/ModelSelector', () => ({
+  ModelSelector: () => null
+}))
+
+vi.mock('@renderer/hooks/useModel', () => ({
+  useModelById: mockUseModelById
+}))
+
+vi.mock('@renderer/hooks/useProvider', () => ({
+  useProviderDisplayName: () => ''
+}))
+
+vi.mock('@renderer/components/resourceCatalog/dialogs/components/EditDialogShared', async () => {
+  const actual = await vi.importActual<typeof EditDialogSharedModule>(
+    '@renderer/components/resourceCatalog/dialogs/components/EditDialogShared'
+  )
+
+  return {
+    ...actual,
+    AvatarField: () => <div data-testid="avatar-field" />
+  }
+})
+
+function Harness({
+  modelId = null,
+  showAgentFields = false
+}: {
+  modelId?: UniqueModelId | null
+  showAgentFields?: boolean
+}) {
+  const form = useForm<ResourceCreateWizardFormValues>({
+    defaultValues: {
+      avatar: '💬',
+      name: '',
+      description: '',
+      agentType: 'pi-durable',
+      permissionMode: 'auto',
+      modelId,
+      prompt: '',
+      knowledgeBaseIds: [],
+      skillIds: []
+    }
+  })
+
+  return (
+    <Form {...form}>
+      <BasicInfoStep form={form} portalContainer={null} fallbackAvatar="💬" showAgentFields={showAgentFields} />
+      <output data-testid="permission-mode">{form.watch('permissionMode')}</output>
+    </Form>
+  )
+}
+
+afterEach(cleanup)
+
+beforeAll(() => {
+  HTMLElement.prototype.hasPointerCapture = () => false
+  HTMLElement.prototype.setPointerCapture = () => {}
+  HTMLElement.prototype.scrollIntoView = () => {}
+})
+
+beforeEach(() => {
+  mockUseModelById.mockReset()
+  mockUseModelById.mockReturnValue({ model: undefined })
+})
+
+describe('BasicInfoStep', () => {
+  it('focuses the name field by default', async () => {
+    render(<Harness />)
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('library.config.dialogs.create.name_placeholder')).toHaveFocus()
+    )
+  })
+
+  it('integrates the avatar picker into the name field', () => {
+    render(<Harness />)
+
+    expect(screen.getByText('library.config.dialogs.create.avatar_name_label')).toBeVisible()
+    const avatarButton = screen.getByRole('button', { name: 'library.config.dialogs.create.avatar_aria' })
+    const inputGroup = avatarButton.closest('[data-slot="input-group"]')
+
+    expect(inputGroup).not.toBeNull()
+    expect(
+      within(inputGroup as HTMLElement).getByPlaceholderText('library.config.dialogs.create.name_placeholder')
+    ).toBeVisible()
+  })
+
+  it('hides runtime configuration while keeping smart approval for new agents', () => {
+    render(<Harness showAgentFields />)
+
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.queryByText('library.config.agent.field.runtime.label')).not.toBeInTheDocument()
+    expect(screen.queryByText('library.config.agent.field.runtime.immutable_hint')).not.toBeInTheDocument()
+    expect(screen.queryByText('library.config.agent.field.runtime.option.pi_durable')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('library.config.agent.field.permission_mode.label')).toHaveTextContent(
+      'agent.settings.tooling.permissionMode.auto.title'
+    )
+  })
+
+  it.each(['pi', 'claude-code'] as const)('still displays the runtime summary for an existing %s agent', (runtime) => {
+    function ExistingAgentRuntime() {
+      const { t } = useTranslation()
+      return <AgentRuntimeSummary value={runtime} t={t} />
+    }
+
+    render(<ExistingAgentRuntime />)
+
+    const key = runtime === 'pi' ? 'pi' : 'claude_code'
+    expect(screen.getByText(`library.config.agent.field.runtime.option.${key}`)).toBeVisible()
+    expect(screen.getByText(`library.config.agent.field.runtime.option_description.${key}`)).toBeVisible()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+  })
+
+  it('clears the missing-model warning when a prefilled model resolves asynchronously', async () => {
+    const modelId = 'openai::gpt-4o' as UniqueModelId
+    const view = render(<Harness modelId={modelId} />)
+
+    expect(screen.getByText('library.config.basic.model_not_found')).toBeInTheDocument()
+
+    mockUseModelById.mockReturnValue({
+      model: { id: modelId, name: 'GPT-4o', providerId: 'openai' } as Model
+    })
+    view.rerender(<Harness modelId={modelId} />)
+
+    await waitFor(() => expect(screen.queryByText('library.config.basic.model_not_found')).not.toBeInTheDocument())
+  })
+})

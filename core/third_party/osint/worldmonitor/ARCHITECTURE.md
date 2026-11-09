@@ -1,0 +1,512 @@
+# Architecture
+
+> **Inventory ownership**: map layers, services, protos, locales, CI workflows, and freshness sources are defined by their registries. `npm run docs:check` verifies registry and fixed-contract documentation; generated snapshots are refreshed with `npm run docs:stats`.
+>
+> **Ownership rule**: When deployment topology, API surface, desktop runtime, or bootstrap keys change, this document must be updated in the same PR.
+
+> **Design philosophy**: For the "why" behind architectural decisions, intelligence tradecraft, and algorithmic choices, see [Design Philosophy](docs/architecture.mdx).
+
+World Monitor is a real-time global intelligence dashboard built as a TypeScript single-page application. It aggregates data from dozens of external sources covering geopolitics, military activity, financial markets, cyber threats, climate events, maritime tracking, and aviation into a unified operational picture rendered through an interactive map and a grid of specialized panels.
+
+---
+
+## 1. System Overview
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                        Browser / Desktop                        │
+│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌─────────────┐  │
+│  │ DeckGLMap│  │ GlobeMap │  │  Panels    │  │  Workers     │  │
+│  │(deck.gl) │  │(globe.gl)│  │(Panel base)│  │(ML, analysis)│  │
+│  └────┐─────┘  └────┐─────┘  └─────┐─────┘  └─────────────┘  │
+│       └──────────────┴─────────────┘                           │
+│                         │ fetch /api/*                          │
+└─────────────────────────┴───────────────────────────────────┘
+                          │
+           ┌──────────────┼──────────────┐
+           │              │              │
+    ┌──────▼──────┐ ┌─────▼─────┐ ┌─────▼──────┐
+    │   Vercel    │ │  Railway  │ │   Tauri    │
+    │ Edge Funcs  │ │ AIS Relay │ │  Sidecar   │
+    │ + Middleware│ │ + Seeds   │ │ (Node.js)  │
+    └──────┬──────┘ └─────┬─────┘ └─────┬──────┘
+           │              │              │
+           └──────────────┼──────────────┘
+                          │
+                   ┌──────▼──────┐
+                   │   Upstash   │
+                   │    Redis    │
+                   └──────┬──────┘
+                          │
+              ┌───────────┼───────────┐
+              │           │           │
+        ┌─────▼───┐ ┌─────▼───┐ ┌────▼────┐
+        │ Finnhub │ │  Yahoo  │ │ ACLED   │
+        │ OpenSky │ │  GDELT  │ │ UCDP    │
+        │ CoinGeck│ │  FRED   │ │ FIRMS   │
+        │   ...   │ │   ...   │ │   ...   │
+        └─────────┘ └─────────┘ └─────────┘
+           866 observed source hosts
+```
+
+**Source files**: `package.json`, `vercel.json`
+
+---
+
+## 2. Deployment Topology
+
+| Service | Platform | Role |
+|---------|----------|------|
+| SPA + Edge Functions | Vercel | Static files, API endpoints, middleware (bot filtering, social OG) |
+| CORS Preflight Worker | Cloudflare | Edge CORS for `api.worldmonitor.app` — short-circuits OPTIONS, stamps CORS headers on responses |
+| AIS Relay | Railway | WebSocket proxy (AIS stream), seed loops (market, aviation, GPSJAM, risk scores, UCDP, positive events), RSS proxy, OREF polling |
+| Macro Seed Bundle | Railway | Daily SGE physical-premium cohort, bounded histories, physical-divergence read model, health metadata, and transition cooldowns |
+| Resilience Seed Bundle | Railway | Resilience/static/food seeds plus the daily five-factor scorecard cohort and read-model publisher |
+| Consumer Prices | Railway | Containerized price scrapers (Playwright, per-country baskets) + Redis publisher for the consumer-prices dataset |
+| Redis | Upstash | Cache layer with stampede protection, seed-meta freshness tracking, rate limiting |
+| Convex | Convex Cloud | Billing/entitlements (Dodo), user state and API keys, broadcast/email, contact + waitlist forms, historical intelligence memory (vector search) |
+| Documentation | Mintlify | Public docs, proxied through Vercel at `/docs` |
+| Desktop App | Tauri 2.x | macOS (ARM64, x64), Windows (x64), Linux (x64, ARM64) with bundled Node.js sidecar |
+| Container Image | GHCR | Multi-arch Docker image (nginx serving built SPA, proxies API to upstream) |
+
+**Source files**: `vercel.json`, `docker/Dockerfile`, `scripts/ais-relay.cjs`, `consumer-prices-core/Dockerfile`, `workers/api-cors-preflight/wrangler.toml`, `convex/schema.ts`, `src-tauri/tauri.conf.json`
+
+**Cloudflare zone config (dashboard-managed, NOT in this repo):** the apex `worldmonitor.app` → `www` 301 is a Cloudflare Dynamic Redirect rule ("apex to www (exclude agent-discoverable paths)") whose exemption list is load-bearing: `/.well-known/*`, `/robots.txt`, `/auth.md`, `/security.txt`, `/mcp`, `/mcp/*`, `/oauth/*`, and `/agent/auth` are served on the apex, never redirected. Dropping the `/mcp*` exemptions breaks every apex-URL MCP client; dropping `/oauth/*` re-breaks OAuth dynamic client registration — a redirected POST becomes a GET and dies with 405 (issue #4938); dropping `/auth.md` breaks the `agent_auth.skill` link, which readiness scanners require to equal `<issuer>/auth.md`. When editing the rule, mind expression precedence: `and` binds tighter than `or`, so a new exemption must be added as its own `or` term **inside** the `not (…)` group (appending `and not …` after the last term is a silent no-op). `mcp-live-smoke.yml` probes the MCP/OAuth members of this list (`/mcp`, `/.well-known/oauth-authorization-server`, its `agent_auth.skill` `/auth.md`, and the OAuth endpoints it declares) every 15 minutes and fails on the redirect fingerprint; the `robots.txt` / `security.txt` exemptions are crawler-facing and have no automated probe.
+
+**Cloudflare cache rules (zone-side, one of them generated here):** the zone's cache phase carries a blanket `Bypass cache - WWW documents` rule that makes every extensionless/HTML path on `www` ineligible for the edge cache. A cache rule outranks origin cache headers, so a correct `CDN-Cache-Control` on a document route buys nothing on its own — that is why the crawlable corpus answered `cf-cache-status: DYNAMIC` on every route for months while `tests/deploy-config.test.mjs` stayed green (issue #7659). Cloudflare evaluates matching cache rules in order and the last one to set a field wins, so eligibility is restored by *appending* a later rule, `WWW corpus HTML …`, which claims the `CONTENT_CORPUS_PREFIXES` families, since #7747 the blog, the Mintlify-proxied docs and the root agent text files (`EDGE_CACHED_FAMILIES` / `AGENT_TEXT_FILES`), and since #7804 the entry documents `/` and `/dashboard` (`ENTRY_DOCUMENTS`) — admitting an HTML document only for requests that want the HTML representation (no RSC headers, no markdown/plain media type in any `Accept` value, and on `/` none of the AI User-Agents `middleware.ts` routes to `/home.md`), because those URLs negotiate on request headers Cloudflare cannot key on; `.md`/`.txt`/`.xml` files are single-representation and exempt. The dashboard-managed `WWW entry HTML …` rule that used to cover `/` and `/dashboard` with no such guard sat one position earlier and, as the last matching writer, re-admitted every request the guard declined (#7804); it is listed in `RETIRED_CACHE_RULES`, reported by `--check` as drift wherever it sits, and deleted by `--apply` once the claim has landed. The rule is generated from that surface model by `scripts/cloudflare-cache-rule.mjs` (`--print` / `--check` / `--apply`) so it cannot drift from the vercel.json header rules it mirrors; `tests/cloudflare-cache-rule.test.mjs` pins its shape offline and `--check` compares it against the live zone.
+
+---
+
+## 3. Frontend Architecture
+
+### Entry and Initialization
+
+`src/main.ts` initializes Sentry error tracking, Vercel analytics, dynamic meta tags, runtime fetch patches (desktop sidecar redirection), theme application, and creates the `App` instance.
+
+`App.init()` runs in 8 phases:
+
+1. **Storage + i18n**: IndexedDB, language detection, locale loading
+2. **ML Worker**: ONNX model prep (embeddings, sentiment, summarization)
+3. **Sidecar**: Wait for desktop sidecar readiness (desktop only)
+4. **Bootstrap**: Two-tier concurrent hydration from `/api/bootstrap` (fast 3s + slow 5s timeouts)
+5. **Layout**: PanelLayoutManager renders map and panels
+6. **UI**: SignalModal, IntelligenceGapBadge, BreakingNewsBanner, correlation engine
+7. **Data**: Parallel `loadAllData()` + viewport-conditional `primeVisiblePanelData()`
+8. **Refresh**: Variant-specific polling intervals via `startSmartPollLoop()`
+
+### Component Model
+
+All panels extend the `Panel` base class (109 classes across `src/components`). Panels render via `setContent(html)` (debounced 150ms) and use event delegation on a stable `this.content` element. Panels support resizable row/col spans persisted to localStorage.
+
+### Dual Map System
+
+- **DeckGLMap**: WebGL rendering via deck.gl + maplibre-gl. Supports ScatterplotLayer, GeoJsonLayer, PathLayer, IconLayer, PolygonLayer, ArcLayer, HeatmapLayer, H3HexagonLayer. PMTiles protocol for self-hosted basemap tiles. Supercluster for marker clustering.
+- **Loaded news selection**: `MapContainer.onNewsClicked()` caches and forwards the callback to each renderer's `setOnNewsClick()`. The callback receives `Pick<NewsLocationMarker, 'article' | 'title'>`: optional original loaded article `{link, title, source}` and the displayed marker title. Existing markers without article metadata remain valid. The plugin uses this loaded identity to publish its latest interaction with current view context; it does not track popup visibility or fetch more data on selection.
+- **GlobeMap**: 3D interactive globe via globe.gl. Single merged `htmlElementsData` array with `_kind` discriminator. Earth texture, atmosphere shader, auto-rotate after idle.
+
+Layer definitions live in `src/config/map-layer-definitions.ts`, each specifying renderer support (flat/globe), premium status, variant filtering, and i18n keys.
+
+### State Management
+
+No external state library. `AppContext` is a central mutable object holding: map references, panel instances, panel/layer settings, all cached data (news, markets, predictions, clusters, intelligence caches), in-flight request tracking, and UI component references. URL state syncs bidirectionally via `src/utils/urlState.ts` (debounced 250ms).
+
+### Web Workers
+
+- **analysis.worker.ts**: News clustering (Jaccard similarity), cross-domain correlation detection
+- **ml.worker.ts**: ONNX inference via `@xenova/transformers` (MiniLM-L6 embeddings, sentiment, summarization, NER), in-worker vector store for headline memory
+- **vector-db.ts**: IndexedDB-backed vector store for semantic search
+
+### Variant System
+
+Detected by hostname (`tech.worldmonitor.app` → tech, `finance.worldmonitor.app` → finance, etc.) or localStorage on desktop. Controls: default panels, map layers, refresh intervals, theme, UI text. Variant change resets all settings to defaults.
+
+**Source files**: `src/main.ts`, `src/App.ts`, `src/app/`, `src/components/Panel.ts`, `src/components/DeckGLMap.ts`, `src/components/GlobeMap.ts`, `src/config/variant.ts`, `src/workers/`
+
+---
+
+## 4. API Layer
+
+### Edge Functions
+
+The `api/` directory holds two kinds of endpoints, both deployed as Vercel Edge Functions:
+
+- **Domain intelligence gateways** — generated from proto contracts and backed by handlers under `server/worldmonitor/**`. The per-domain thin entry points (`api/<domain>/v<N>/[rpc].ts`) are produced via `createDomainGateway` (`server/gateway.ts`) and esbuild-bundled, so the *deployed* artifact is self-contained even though the source composes server-side modules.
+- **Operational endpoints** — hand-written for concerns that don't fit the contract model: auth/session, checkout and customer portal, MCP, bootstrap/health, notifications, cache invalidation, and user workflows (e.g. `api/create-checkout.ts`, `api/customer-portal.ts`, `api/mcp.ts`, `api/user-prefs.ts`).
+
+Compact health separates actionable `problems` from bounded `pending` diagnostics. Both retain the source diagnosis. Pending deadlines also bound the Redis verdict cache lifetime.
+
+Edge functions are bundled per file: each deployed function may not pull in unrelated modules at runtime, a constraint enforced by `tests/edge-functions.test.mjs` and the pre-push esbuild bundle check. Hand-written endpoints that genuinely cannot be proto-defined are listed in `api/api-route-exceptions.json` and enforced by `npm run lint:api-contract`.
+
+### Shared Helpers
+
+| File | Purpose |
+|------|---------|
+| `_cors.js` | Origin allowlist (worldmonitor.app, Vercel previews, tauri://localhost, localhost) |
+| `_rate-limit.js` | Upstash sliding window rate limiting, IP extraction |
+| `_api-key.js` | Origin-aware API key validation (desktop requires key, trusted browser exempt) |
+| `_relay.js` | Factory for proxying requests to Railway relay service |
+
+### Gateway Factory
+
+`server/gateway.ts` provides `createDomainGateway(routes)` for per-domain Edge Function bundles. Pipeline:
+
+1. Origin check (403 if disallowed)
+2. CORS headers
+3. OPTIONS preflight
+4. API key validation
+5. Rate limiting (endpoint-specific, then global fallback)
+6. Route matching (static Map lookup, then dynamic `{param}` scan)
+7. POST-to-GET compatibility (for stale clients). Unmatched POSTs with a trusted `Content-Length` under 1 MB may be retried as GET when a GET handler exists for the path. The body is all-or-nothing: JSON objects of scalars and scalar arrays become query parameters; object values, nested/non-scalar array members, non-object JSON, malformed JSON, and unread bodies return 400 without applying a partial translation. Empty or whitespace-only bodies still fall through to GET with no extra query parameters. Unknown paths still 404/405. Array expansion remains capped at 200 values per key.
+8. Handler execution with error boundary
+9. ETag generation (FNV-1a hash) + 304 Not Modified
+10. Cache header application
+
+### Cache Tiers
+
+| Tier | s-maxage | Use case |
+|------|----------|----------|
+| fast | 300s | Live event streams, flight status |
+| medium | 600s | Market quotes, stock analysis |
+| slow | 1800s | ACLED events, cyber threats |
+| static | 7200s | Humanitarian summaries, ETF flows |
+| daily | 86400s | Critical minerals, static reference data |
+| no-store | 0 | Vessel snapshots, aircraft tracking |
+
+### Domain Handlers
+
+`server/worldmonitor/<domain>/v1/handler.ts` exports handler objects with per-RPC functions. Each RPC function uses `cachedFetchJson()` from `server/_shared/redis.ts` for cache-miss coalescing: concurrent requests for the same key share a single upstream fetch and Redis write.
+
+The `scorecard/v1` domain is an exception to request-time upstream fetching. Its generated `ScorecardService` country, list, and bloc RPCs read one frozen cohort from `scorecard:five-factor:v1:read-model`, then use `scorecard:five-factor:v1` only as a bounded last-good fallback. The canonical pure adapters and country scorer live under `scripts/scorecard/v1/` for the scripts-root Railway publisher; a checked generator emits Edge-safe copies under the server domain, which owns Redis reads, bloc scoring, and public response conversion. See [Five-factor scorecard v1 architecture](docs/architecture/five-factor-scorecard-v1.md).
+
+The `supply-chain/v1` country-vulnerability, ranking, and chokepoint-dependency RPCs also read a Railway-published cohort instead of fetching upstream data at request time. `seed-supply-vulnerability.mjs` scores each country and builds the chokepoint inverse index in one pass, writes country and chokepoint shards into the inactive Redis slot, and switches the shared cohort pointer only after every shard is valid. The manifest and every shard carry an explicit redistribution-policy version; readers reject an older unmarked cohort until the matching publisher activates a current one. Every direct RPC or MCP response fails closed on provider inputs whose programmatic redistribution is restricted, including requests with freely mintable browser-session tokens. The canonical cohort retains the full attribution-bound evidence for internal audit, but the restricted values do not leave through these routes. The three routes are also `no-store`.
+
+`IntelligenceService.GetCountryCoverage` is the inverse case: it serves an agent surface that must agree, event for event, with what the browser country panel renders. Rather than reimplement the panel's rules server-side, the rules were moved to `shared/` and both sides import them — `country-headline-match.ts` (which country a headline is primarily about), `threat-keyword-classifier.ts` (lane and severity), and `country-timeline-events.ts` (36-hour incident clustering and structured-record precedence). A second copy of any of these is the defect this arrangement exists to prevent, and the ordering between them is load-bearing: cluster first, then filter by country, because a cluster is represented by its earliest member.
+
+Its coverage half fetches Google News at request time through `news/v1`'s shared fetcher rather than standing up a second RSS transport; its structured half composes five existing first-party RPCs. Because several of those upstream handlers catch their own failures and return an empty array, this route cannot learn about an outage from a thrown error — it reads the backing seed key's own hit/miss/error status instead, and reports `failed` rather than `empty` when the cache is unreadable. Producers that genuinely cannot prove they were reached report `unknown`. `degraded` covers only `stale` and `failed`, the states that mean something changed; the per-producer `sources` block, always populated, is where the guarantee lives that an empty event list is never silently healthy.
+
+`MarketService.GetPhysicalDivergenceIndex` is also a read-model RPC. The daily macro seed bundle normalizes SGE SHAU/SHAG benchmarks against the independently timestamped COMEX and FX snapshots, appends bounded per-metal history, and atomically publishes `market:physical-divergence:v1`, its health metadata, activation marker, and transition cooldowns. The Edge handler revalidates the stored contract and re-ages every input clock before it serves the response; the route is `no-store` so independently aging cohorts are never joined through a stale shared cache. MCP reads the same normalized snapshot, and the commodities panel renders the same explicit `ok`, `insufficient_history`, `stale_input`, or `missing_input` states. See [Physical divergence index methodology](docs/methodology/physical-divergence-index.mdx).
+
+**Source files**: `api/`, `server/gateway.ts`, `server/router.ts`, `server/_shared/redis.ts`, `server/worldmonitor/`
+
+---
+
+## 5. Proto/RPC Contract System
+
+The project uses the **sebuf** framework built on Protocol Buffers:
+
+```
+proto/ definitions
+    ↓ buf generate
+src/generated/client/   (TypeScript RPC client stubs)
+src/generated/server/   (TypeScript server message types)
+docs/api/               (OpenAPI v3 specs)
+```
+
+Service definitions use `(sebuf.http.config)` annotations to map RPCs to HTTP verbs and paths. GET fields require `(sebuf.http.query)` annotation. `repeated string` fields need `parseStringArray()` in the handler. `int64` maps to `string` in TypeScript.
+
+CI enforces generated code freshness via `.github/workflows/proto-check.yml`: runs `make generate` and fails if output differs from committed files.
+
+**Source files**: `proto/`, `Makefile`, `src/generated/`, `.github/workflows/proto-check.yml`
+
+---
+
+## 6. Data Pipeline
+
+### Bootstrap Hydration
+
+`/api/bootstrap` reads cached keys from Redis in a single batch call. The SPA fetches two tiers concurrently (fast + slow) with separate abort controllers and timeouts. Large or opt-in datasets use a public, CDN-shielded single-key request and are consumed through `ensureHydrated(key)` only when their panel renders. Tier-hydrated data is consumed by panels via `getHydratedData(key)`.
+
+### Seed Scripts
+
+`scripts/seed-*.mjs` fetch upstream data, transform it, and write to Redis via `atomicPublish()` from `scripts/_seed-utils.mjs`. Atomic publish acquires a Redis lock (SET NX), validates data, writes the cache key, writes `seed-meta:<key>` with `{ fetchedAt, recordCount }`, and releases the lock.
+
+`seed-five-factor-scorecard.mjs` runs inside Railway's measured `seed-bundle-resilience` placement. It reads only landed source snapshots, builds the closed scorecard evidence ledger, stages a narrow hash read model, and atomically switches the canonical cohort and read model with one idempotent Lua publication. `seed-meta:scorecard:five-factor` and health coverage remain separate from deployment and production-acceptance evidence.
+
+`seed-supply-vulnerability.mjs` runs once per durable turn in the static-reference Railway bundle after its mirrored inputs. It publishes `supply-chain:vulnerability:cohort:v1` plus two-slot country and chokepoint shards, then writes separate activation and seed-health metadata. The cohort pointer is the read authority; compatibility manifests are not independent publication clocks.
+
+### AIS Relay Seed Loops
+
+The Railway relay service (`scripts/ais-relay.cjs`) runs continuous seed loops:
+
+- Market data (stocks, commodities, crypto, stablecoins, sectors, ETF flows, gulf quotes)
+- Aviation (international delays)
+- Positive events
+- GPSJAM (GPS interference)
+- Risk scores (CII)
+- UCDP events
+
+These are the primary seeders. Standalone `seed-*.mjs` scripts on Railway cron are secondary/backup.
+
+The market backup bundle also persists 14 days of timestamped hourly Yahoo closes for the news-to-market correlation panel. This series is an on-demand bootstrap key, so it does not increase the default hydration payload.
+
+### Refresh Scheduling
+
+`startSmartPollLoop()` supports: exponential backoff (max 4x), viewport-conditional refresh (only if panel is near viewport), tab-pause (suspend when hidden), and staggered flush on tab visibility (150ms delays).
+
+### Health Monitoring
+
+`api/health.js` checks every bootstrap and standalone key. For each key it reads `seed-meta:<key>` and compares `fetchedAt` against `maxStaleMin`. Cascade groups handle fallback chains (e.g., theater-posture: live, stale, backup). Returns per-key status: OK, STALE, WARN, EMPTY.
+
+**Source files**: `api/bootstrap.js`, `api/health.js`, `scripts/_seed-utils.mjs`, `scripts/seed-*.mjs`, `scripts/ais-relay.cjs`, `src/services/bootstrap.ts`, `src/app/refresh-scheduler.ts`
+
+---
+
+## 7. Desktop Architecture
+
+### Tauri Shell
+
+Tauri 2.x (Rust) manages the app lifecycle, system tray, and IPC commands:
+
+- **Secret management**: Read/write platform keyring (macOS Keychain, Windows Credential Manager, Linux keyring)
+- **Sidecar control**: Spawn Node.js process, probe port, inject environment variables
+- **Window management**: Three trusted windows (main, settings, live-channels) with Edit menu for macOS clipboard shortcuts
+
+### Node.js Sidecar
+
+`src-tauri/sidecar/local-api-server.mjs` runs on a dynamic port. It dynamically loads Edge Function handler modules from `api/`, injects secrets from the keyring via environment variables, and monkey-patches `globalThis.fetch` to force IPv4 (Node.js tries IPv6 first, but many government APIs have broken IPv6).
+
+### Fetch Patching
+
+`installRuntimeFetchPatch()` in `src/services/runtime.ts` replaces `window.fetch` on the desktop renderer. All `/api/*` requests route to the sidecar with `Authorization: Bearer <token>` (5-min TTL from Tauri IPC). If the sidecar fails, requests fall back to the cloud API.
+
+Seed-owned scorecard RPC paths are always cloud-preferred on desktop. The sidecar does not carry the Railway-published scorecard cohort, so routing these paths locally would create a false unavailable state instead of using the authenticated cloud API.
+
+**Source files**: `src-tauri/src/main.rs`, `src-tauri/sidecar/local-api-server.mjs`, `src/services/runtime.ts`, `src/services/tauri-bridge.ts`
+
+---
+
+## 8. Security Model
+
+### Trust Boundaries
+
+```
+Browser ↔ Vercel Edge ↔ Upstream APIs
+Desktop ↔ Sidecar ↔ Cloud API / Upstream APIs
+```
+
+### Content Security Policy
+
+Three CSP sources that must stay in sync:
+
+1. `index.html` `<meta>` tag (development, Tauri fallback)
+2. `vercel.json` HTTP header (production, overrides meta)
+3. `src-tauri/tauri.conf.json` (desktop)
+
+### Authentication
+
+API keys are required for non-browser origins. Trusted browser origins (production domains, Vercel preview deployments, localhost) are exempt. Premium RPC paths always require a key.
+
+### Bot Protection
+
+`middleware.ts` filters automated traffic: blocks known crawler user-agents on API and asset paths, allows social preview bots (Twitter, Facebook, LinkedIn, Telegram, Discord) on story and OG endpoints.
+
+### Rate Limiting
+
+Per-IP sliding window via Upstash with per-endpoint overrides for high-traffic paths.
+
+### Desktop Secret Storage
+
+Secrets are stored in the platform keyring (never plaintext), injected into the sidecar via Tauri IPC, and scoped to an allowlist of environment variable keys.
+
+**Source files**: `middleware.ts`, `vercel.json`, `index.html`, `src-tauri/tauri.conf.json`, `api/_api-key.js`, `server/_shared/rate-limit.ts`
+
+---
+
+## 9. Caching Architecture
+
+### Four-Layer Hierarchy
+
+```
+Bootstrap seed (Railway writes to Redis on schedule)
+    ↓ miss
+In-memory cache (per Vercel instance, short TTL)
+    ↓ miss
+Redis (Upstash, cross-instance, cachedFetchJson coalesces concurrent misses)
+    ↓ miss
+Upstream API fetch (result cached back to Redis + seed-meta written)
+```
+
+### Cache Key Rules
+
+Every RPC handler with shared cache MUST include request-varying parameters in the cache key. Failure to do so causes cross-request data leakage.
+
+### ETag / Conditional Requests
+
+`server/gateway.ts` computes an FNV-1a hash of each response body and returns it as an `ETag`. Clients send `If-None-Match` and receive `304 Not Modified` when content is unchanged.
+
+### CDN Integration
+
+`CDN-Cache-Control` headers give Cloudflare edge (when enabled) longer TTLs than `Cache-Control`, since CF can revalidate via ETag without full payload transfer.
+
+The header only sets the TTL; it does not make a response cacheable. Cloudflare decides eligibility from its cache rules first, and HTML documents on `www` are bypassed by default (see the cache-rule note in §2). Adding `CDN-Cache-Control` to a new document route therefore has to be paired with a zone rule that re-admits it — by extending the surface model in `scripts/cloudflare-cache-rule.mjs` (`CONTENT_CORPUS_PREFIXES` for a new corpus family, `ENTRY_DOCUMENTS` for an exact-path entry document, `EDGE_CACHED_FAMILIES` / `AGENT_TEXT_FILES` otherwise) and re-running `scripts/cloudflare-cache-rule.mjs --apply`; `tests/cloudflare-cache-rule.test.mjs` fails when the two halves disagree.
+
+### Seed Metadata
+
+Every cache write also writes `seed-meta:<key>` with `{ fetchedAt, recordCount }`. The health endpoint reads these to determine data freshness and raise staleness alerts.
+
+The five-factor scorecard adds an atomic two-key read pattern: `scorecard:five-factor:v1` is the auditable evidence-plus-result rollback unit, while `scorecard:five-factor:v1:read-model` serves country fields and the compact list without downloading the multi-megabyte canonical value. Both keys switch and retain TTL together; malformed hash fields fall back to the canonical last-good cohort.
+
+**Source files**: `server/_shared/redis.ts`, `server/gateway.ts`, `api/health.js`
+
+---
+
+## 10. Testing
+
+### Unit and Integration
+
+`node:test` runner. Test files in `tests/*.test.{mjs,mts}` cover: server handlers, cache keying, circuit breakers, edge function constraints, data validation, market quote dedup, health checks, panel config guardrails, and variant layer filtering.
+
+### Sidecar and API Tests
+
+`api/*.test.mjs` and `src-tauri/sidecar/*.test.mjs` test CORS handling, YouTube embed proxying, and local API server behavior.
+
+### End-to-End
+
+Playwright specs in `e2e/*.spec.ts` test theme toggling, circuit breaker persistence, keyword spike flows, mobile map interactions, runtime fetch patching, and visual regression via golden screenshot comparison per variant.
+
+### Edge Function Guardrails
+
+`tests/edge-functions.test.mjs` validates that all non-helper `api/*.js` files are self-contained: no `node:` built-in imports, no cross-directory `../server/` or `../src/` imports. The pre-push hook also runs an esbuild bundle check on each endpoint.
+
+### Pre-Push Hook
+
+Runs before every `git push`:
+
+1. TypeScript check (`tsc --noEmit` for src and API)
+2. CJS syntax validation
+3. Edge function esbuild bundle check
+4. Edge function import guardrail test
+5. Markdown lint
+6. MDX lint (Mintlify compatibility)
+7. Version sync check
+8. Documentation contracts (`npm run docs:check`) when workflows, the CI/CD table, the docs checker, or the hook change
+
+**Source files**: `tests/`, `e2e/`, `playwright.config.ts`, `.husky/pre-push`
+
+---
+
+## 11. CI/CD
+
+| Workflow | Trigger | Checks |
+|----------|---------|--------|
+| `typecheck.yml` | PR, push to main | `tsc --noEmit` (TypeScript 7) for src, API, contract-test, e2e and Convex tsconfigs |
+| `lint-code.yml` | PR, push to main | Biome lint + sebuf API-contract enforcement; `lint:outbound-deadlines` fails any `fetch()` call with no signal (`scripts/audit-outbound-calls.mjs --check`); markdownlint-cli2 in a `markdown` job that runs on every push to main and, on PRs, only when markdown, its config, or package.json changes; `doc-anchors` exports the authored docs with `mint export --disable-openapi` (preloading `scripts/mint-export-preload.mjs`, which stubs Mint's crash-prone online probe and names pages that fail to render) and checks every anchor against the rendered pages |
+| `test.yml` | PR, push to main | Unit/integration suite, always-on docs-stats and published-link guardrails (including docs-only changes; docs-stats runs `npm run generate:check`, which fails when any committed derived file in `scripts/generate-derived.mjs` is stale), plus conditional digest-image, resilience-validation and Zapier Mocha gates. Zapier uses a locked npm install on integration, shared event registry, workflow or ownership guard changes. `test:data` runs on five unit shards balanced by measured per-file durations: the `changes` job looks up the newest `data-test-durations-v1-*` cache entry once, every shard restores that exact entry (falling back together to the committed `scripts/shared/data-test-durations.json` when there is none), and one shard per run, rotating from the shard that saved the restored entry, blends its own timings into a new entry whether the run passed or failed, plus `unit-built-output` for the suites that read built output. Both check out full history blobless (`filter: blob:none`): suites and the health-probe cutover gate read commit history, and the few old blobs they need are fetched on demand. Unit shards also need `scripts/` deps, so the seeder import check links Railway seeders' named package imports against the container's dependency tree, and `blog-site/` deps. They restore both installed trees from one `actions/cache` entry keyed on the two manifests, lockfiles and `.npmrc` files plus the vendored `file:` dependency, and install and save them only on a miss; `WM_EXPECT_SCRIPTS_DEPS` fails a shard whose `scripts/` tree is missing, and setup-node's npm cache stays off in that job. `unit-built-output` restores its `blog-site/` and `pro-test/` installed trees the same way (`built-output-deps-v1-*`, keyed on both trees' install inputs and `vendor/**`), installs and saves them only on a miss, then runs the build half of `build:pro`; its setup-node npm cache is off as well. When browser inputs change, `variant-smoke-pro-webmcp` runs on two matrix runners: `webmcp` (the strict WebMCP smoke in Chrome) and `pro-gates` (prehydration checks, then the `/pro` gates, including the landing nav fit in every locale, in one `test:e2e:pro-gates` Playwright run); both build `/pro` first, and their `setup-node` npm cache is keyed on `pro-test/package-lock.json` because the pro-test install inside `build:pro` is the only thing that reads it. The `desktop-rust` job installs the same pinned Rust release as `build-desktop.yml`. The `sidecar` job runs its suite on repository Node 24 and then on the exact bundled runtime from `scripts/download-node.sh`, including signed-checksum verification; the verified runtime is cached under a key hashed from that script, and a cache miss retries the download up to three times. The job then builds the sidecar handler bundles on Node 24, and the shipped runtime runs `scripts/check-sidecar-shipped-routes.mjs` over them, which stages the `tauri.conf.json` resources the way Tauri ships them (no `node_modules`) and requires every route module to load, so a route that imports an unshipped package or file fails CI instead of silently falling back to the cloud on desktop. The `desktop-node-windows` job runs the same downloader on `windows-latest` through Git Bash, as the release build does, then runs the bundled `node.exe`; it fires on the `desktop_config` filter, which covers `scripts/download-node.sh`. The `consumer-prices` job installs Redis with the cached local action and requires its publisher expiry/concurrency regression to run in CI. |
+| `e2e-visual.yml` | Path-filtered PR, nightly cron, manual | Deterministic map goldens (`test:e2e:visual`) plus named harness chrome captures; evidence only — not a deploy-gate required check |
+| `publish-e2e-screenshots.yml` | After a nightly or manual `E2E Visual` run completes on main (not PRs) | Optional S3 sync of the chrome gallery when `E2E_SCREENSHOT_*` is configured; otherwise the Actions artifact is the durable copy |
+| `proto-check.yml` | PR (proto changes) | Generated code matches committed output at the exact PR head (`internal-generate`; on internal branches `internal-auto-generate` commits any drift) and, in parallel, at the PR merge result (`internal-merge-freshness`). When a generated commit is pushed, the aggregate `proto-freshness` ignores the superseded head's merge verdict and the new commit gets its own run |
+| `pro-bundle-freshness.yml` | PR (pro bundle changes) | Committed pro data bundle artifacts are fresh |
+| `feed-validation.yml` | PR (feed changes), daily cron | RSS feed reachability and validation |
+| `resilience-snapshot-refresh.yml` | Monthly cron, manual | Captures the current full-universe CRI ranking, rebuilds crawlable country metadata and the sitemap, regenerates the docs date manifest that `pretest:data` would, runs every data suite that reads the rebuilt artifacts, and opens one review PR per UTC month. Opens the PR with `REVIEW_PR_TOKEN` and arms auto-merge, so it merges itself once the required checks pass |
+| `resilience-snapshot-rehearsal.yml` | PR (resilience snapshot, corpus generators, docs date generator, any data test), manual | Replays the refresh's rebuild-and-verify step, read from `resilience-snapshot-refresh.yml`, against a drifted copy of the committed snapshot: re-dated to today, the last-ranked country demoted, ranked countries moved a few places to a rank with a different score, greyed-out countries' headline figures moved one coverage step (`scripts/rehearse-resilience-snapshot-refresh.mjs`). Skips PRs whose changed tests the refresh would not verify. A test pinned to the committed snapshot fails on the PR that added it instead of on the next monthly refresh. Not a deploy-gate required check |
+| `crawlable-pulse-refresh.yml` | Weekly Monday 04:41 UTC, manual | Re-freezes the committed crawlable live pulse (country risk, chokepoint status, crisis HAPI summaries), rebuilds the corpus, sitemap, welcome teaser strip and llms-full accuracy section, prunes superseded snapshots, and opens one review PR per ISO week. The corpus build rejects a pulse older than 10 days, so this workflow is what keeps `/countries/*`, `/chokepoints/*` and `/crises/*` buildable as well as current. A capture whose verification fails still opens as a draft PR carrying the capture, so the fix lands in that branch instead of costing a re-freeze. Opens the PR with `REVIEW_PR_TOKEN` and arms auto-merge, so it merges itself once the required checks pass. A draft PR from a failed verification is left for a human to mark ready |
+| `crawlable-pulse-rehearsal.yml` | PR (pulse capture, corpus generators, refresh verify tests), manual | Replays the refresh's build and verify steps, read from `crawlable-pulse-refresh.yml`, against a drifted copy of the committed capture: re-dated to today, methodology versions bumped, CII and chokepoint readings rotated (`scripts/rehearse-crawlable-pulse-refresh.mjs`). A test pinned to the committed capture fails on the PR that added it instead of on the next weekly refresh. Not a deploy-gate required check |
+| `seo-gsc-weekly.yml` | Weekly Tuesday 05:17 UTC, manual | Collects the Search Console snapshot (`docs/research/seo-ai-visibility/gsc/<date>.json` plus its markdown summary) through `scripts/seo-gsc-collect.mjs --live`, then the Bing Webmaster snapshot (`docs/research/seo-ai-visibility/bing/<date>.json` plus markdown) through `scripts/seo-bing-collect.mjs --live`, then the Umami referral snapshot (`docs/research/seo-ai-visibility/umami/<date>.json` plus markdown) through `scripts/seo-umami-collect.mjs --live`, then regenerates the AI-visibility baseline and scorecard (`docs/research/seo-ai-visibility/baselines/<date>.json` and `scorecards/<date>.md`) from those snapshots through `scripts/seo-weekly-baseline.mjs`, compared with the newest earlier baseline, and opens one review PR per ISO week carrying all of it. The Bing step is optional and non-blocking: without `BING_WEBMASTER_API_KEY` it skips with a notice, and a Bing failure (`continue-on-error`) still ships the Search Console snapshot, with the PR body saying which case applied. The Umami step follows the same rule on `UMAMI_API_USERNAME` and `UMAMI_API_PASSWORD`. The baseline step needs no credential and is also `continue-on-error`: a missing snapshot becomes an unavailable source with a reason, and a failure writes neither file and is noted in the PR body. The "Verify the snapshot contract" step runs the collector and baseline tests (`tests/seo-weekly-baseline.test.mjs` among them). Gated on `GSC_SERVICE_ACCOUNT_JSON` and `GSC_PROPERTY`: with either secret absent the guard job records a notice and the collect job never starts, so the pending prerequisite does not read as a failure. Opens the PR with `REVIEW_PR_TOKEN` and arms auto-merge, so it merges itself once the required checks pass |
+| `pulse-freshness-monitor.yml` | Daily 07:17 UTC, manual | Watches the row above. Reports in one open issue when the committed pulse snapshot passes 8 days (the fail-closed signal, which also covers a schedule GitHub auto-disabled after 60 days of repo inactivity) or when the last refresh run did not succeed (the fast signal). A failed run that the newest snapshot postdates is superseded, not a finding. Closes the issue with a comment once the pulse is healthy again. Never a build requirement |
+| `open-data-chokepoints.yml` | Daily 06:23 UTC, manual (`dry_run` defaults to true), PR (generator, its tests, or the workflow) | Publishes the public chokepoint status open dataset (`/data/v1/chokepoints/`, CC BY 4.0) from the public `GetChokepointStatus` endpoint. The snapshot job saves the API response and a preview build as an artifact; the publish job (the cron, or a manual run with `dry_run` unchecked) writes that day's JSON and CSV to the permanent Redis archive (`open-data:chokepoints:v1:*`, index and day key in one transaction) and stamps `seed-meta:open-data:chokepoints`. `api/open-data-chokepoints.js` serves the files through a `vercel.json` rewrite; `README.md` and `schema.json` stay static. No PR and no deploy. `/api/health` alarms (`openDataChokepoints`) after 48 hours without a publish |
+| `github-stars-refresh.yml` | Monthly cron, manual | Re-freezes the committed GitHub star count for the homepage InteractionCounter, verifies the snapshot, prunes superseded snapshots, and opens one review PR per UTC month. The prerender lookup rejects stars older than 45 days, so this workflow is what keeps `welcome.html` buildable as well as truthful. Opens the PR with `REVIEW_PR_TOKEN` and arms auto-merge, so it merges itself once the required checks pass |
+| `review-pr-token-check.yml` | Weekly Monday 06:11 UTC, manual | Checks the `REVIEW_PR_TOKEN` secret that the four bot-PR workflows (crawlable pulse, SEO weekly, resilience snapshot, GitHub stars) open and auto-merge their PRs with, through `scripts/check-review-pr-token.mjs`. Goes red when the secret is missing, rejected, or expires within 21 days, so the token is rotated before those PRs fall back to waiting for a human |
+| `mcp-live-smoke.yml` | 6-hourly cron, push to main (smoke paths), manual | Anonymous strict-client walk of the production MCP surface on apex + www (capability walk, auth wall, OAuth endpoint routing — #4937/#4938 regression net) |
+| `mcp-preset-liveness.yml` | Weekly Monday 06:23 UTC, manual | Checks hosted Quick Connect presets from `MCP_PRESETS`; records HTTP/network findings in one open issue, outside PR and deployment gates |
+| `live-video-source-audit.yml` | Daily 05:17 UTC, manual | Plays every entry in `src/config/live-video-sources.ts` in headless Chromium as if embedded on worldmonitor.app, then keeps one open issue listing the webcam and Live News slots that need a replacement, where each shows and why. The canaries are probed first on their own page; while one plays, a YouTube player that stalls in the batched page (never ready, no verdict, or listed live but never played) is checked alone up to twice within an 8-minute budget and counts as dead only if both checks stall. HLS 403/451/429/5xx, HLS timeouts, connection errors and incomplete certificate chains, a blocked player API, a missing live signal and stalled players while no canary plays are listed as unverifiable from the runner, and empty slots hidden from viewers as unfilled; neither counts as a finding. The issue closes itself when no slot needs attention and is reopened, never duplicated, when a slot regresses; the run fails when every audit canary fails twice. Outside PR and deployment gates |
+| `live-api-cache-auth.yml` | 6-hourly cron, push to main (sweep paths), manual | Production cache/auth posture sweep: fake auth stays no-store and is never a cached 200, anonymous public surfaces stay cacheable, MCP/OAuth surfaces stay protocol-valid (#4497 regression net; suite was inert until #5379 wired the gate on, and the step fails if it executes 0 assertions) |
+| `china-decision-parity-live.yml` | 6-hourly cron, push to main (audit paths), manual (optional staging URL) | Live half of the China decision-signal parity audit: probes the deployed composition RPC and the public `chinaDecisionSignals` bootstrap projection for the six-domain contract and a canonical snapshot under one hour old (#5643 — the probe existed but nothing invoked it, and `--require-live` keeps a lost `--url` from passing vacuously) |
+| `tps-open-data-live.yml` | Twice-daily cron, push to main (adapter/suite paths), manual | Live contract probe of the two official Toronto Police open-data sources (ArcGIS MCI + CKAN Calls); fails if fewer than 2 mandatory source probes execute (the suite was inert until this workflow set LIVE_TPS_OPEN_DATA_TESTS=1, and `node --test` exits 0 on an all-skip run) |
+| `openrouter-free-models-live.yml` | Daily cron, push to main (model policy/suite paths), manual | Checks that both OpenRouter free-chain models in `scripts/lib/llm-model-policy.cjs` are still usable for free: listed on `/models` at zero price, not within 14 days of `expiration_date`, and holding a zero-price endpoint outside `OPENROUTER_PROVIDER_ROUTING.ignore`; with the optional `OPENROUTER_API_KEY` secret it also sends one real completion per model. A delisted `:free` slug returns HTTP 404 on every call (#8570). Fails unless each live case passes by name |
+| `security-audit.yml` | PR, push to main, daily cron, manual | Audit-specific sparse checkouts preserve each workspace's npm configuration for production lockfile audits, including Railway scripts and the Zapier integration, plus RustSec Cargo.lock advisories; fixable Rust findings block, dated decisions/no-fix findings remain visible, and daily sweeps require database availability |
+| `codeql.yml` | Daily cron (03:23 UTC, all six languages), manual; not on PRs or pushes | Advanced CodeQL scans; init and analyze share one release pin and Dependabot update group. Skips only the generated `vendor/vercel-og/dist` bundle (`paths-ignore`). Findings reach Code scanning when the next daily scan after a change lands on main completes. Default-branch runs then delete all but the newest overlay-base cache per job and language. Requires the default-setup handover in CONTRIBUTING.md |
+| `railway-deploy-drift.yml` | Hourly cron, manual | Runs two independent read-only checks against the exact production fleet: Viewer-safe source/build/deploy configuration drift and deployment/Git-closure drift. It has no mutation, dispatch, retry, approval, or acceptance-baseline path. Installs the pinned Railway CLI through `scripts/install-railway-cli.mjs`, which retries a failed binary download from GitHub releases twice. |
+| `railway-registry-sync.yml` | Push to `main` touching Railway desired state or reconciler code, manual | Resolves the current `main` revision before checkout, so a run that main outpaced or an older re-run applies the newest registry rather than its trigger SHA (attempts created before #9274 keep the old refusal on re-run; dispatch a new run), then applies registry-managed production configuration from that revision with the dedicated mutation token, then verifies it with the separate Viewer identity. Audits configuration only — the deployment-history check is legitimately red during post-merge build lag. Installs the pinned Railway CLI through `scripts/install-railway-cli.mjs`, which retries a failed binary download from GitHub releases twice. |
+| `railway-deploy-trigger.yml` | Manual rollback only | Keeps the legacy reconciler quiesced unless an operator explicitly activates the bounded rollback path; it does not own normal Railway deployment creation. Installs the pinned Railway CLI through `scripts/install-railway-cli.mjs`, which retries a failed binary download from GitHub releases twice. |
+| `analytics-collector-monitor.yml` | 15-minute cron, manual | Probes the self-hosted Umami collector directly (heartbeat, tracker script, ingest route) and fails when events are being dropped — Railway reported a green deployment through the 4-day #5565 blackout, so deployment status is not trusted here |
+| `deploy-error-canary.yml` | Hourly cron, manual | Compares per-route API error rates over the last two hours with the preceding seven days in Axiom; fails on qualifying regressions, missing configuration, or invalid query results |
+| `umami-storage-monitor.yml` | 15-minute cron, manual | Reads the Umami Postgres Railway volume and the `umami-retention` deployment history without mutation, carries a bounded history between runs as an artifact, and fails on capacity or projected days-to-full thresholds, or when the retention runner's newest deployment that ran is `CRASHED`. Installs the pinned Railway CLI through `scripts/install-railway-cli.mjs`, which retries a failed binary download from GitHub releases twice. |
+| `sentry-resolve-pin-audit.yml` | Daily cron, manual | Read-only audit of resolved Sentry issues (#7838): fails when a resolution carries an `inRelease`, `inNextRelease` or `inCommit` pin instead of a plain resolve. The GitHub integration adds such a pin whenever a commit body says `Fixes WORLDMONITOR-XX`, and browser events all carry a static semver release, so a pinned issue can never reopen and reads resolved forever while the bug keeps firing. It reports only the short ID, permalink and pin value, never the resolver identity Sentry attaches alongside the pin |
+| `postmerge-deploy-monitor.yml` | 10-minute cron, manual | Alarms on a failed post-merge production deploy (#6376): reads the newest completed run on `main` of `convex-deploy.yml`, `deploy-railway-reconcile-control.yml` and `deploy-worker.yml` and fails when the deploy job did not run/succeed — covers the un-gated deployers outside `deploy-gate.yml`'s PR smoke list |
+| `ci-health-scan.yml` | Weekly cron (Monday 06:23 UTC), manual | Scans Test, Typecheck, Lint Code and Proto Generation Check (`scripts/check-ci-health.mjs`) for four deterministic findings: a job that failed then passed on a re-run (flaky), a job cancelled on `main` after 10+ minutes in any attempt (timeout), a workflow's two newest decided `main` runs failing (on a corroborated run listing), and a job whose median on successful `main` runs rose 20% and 30s+ week over week (naming any steps new that week). Each finding is one rolling issue titled `CI health (<kind>): <workflow> / <job>`, updated while open and never closed automatically; only issues opened by `github-actions[bot]` are rewritten, and workflow/job names are reduced to plain labels because fork PR runs control them. Read-only apart from issue writes |
+| `perf-style-layout-budget.yml` | Twice-daily cron, manual (URL + budget inputs) | The #4536 forced-reflow gate the desktop main-thread baseline named but nothing enforced: captures `/dashboard` with the Playwright harness and fails when the `styleLayout` share of attributed main-thread self-time exceeds budget. Gates the *share*, not absolute ms, and runs scheduled rather than per-PR because lab absolutes are host-contention contaminated (KTD1) while the decomposition is stable. A report that measured nothing returns `unmeasured`, never a pass |
+| `contributor-trust.yml` | PR | Gates untrusted first-time-contributor runs |
+| `issue-ui-evidence.yml` | Issue opened or edited | The bug report form refuses an empty screenshot field but cannot check that it holds an image, so this catches the rest: an issue from outside the maintainer set whose title or body says `UI` and carries no screenshot, recording or image link gets the `needs-screenshot` label and one comment asking for the image. The label clears on the edit that attaches one. Never closes or reopens an issue. Maintainer, collaborator and bot issues are exempt. The decision reads the issue's current state from the API, not the webhook snapshot; issue text reaches the script only through the payload file and that read |
+| `stacked-merge-guard.yml` | PR (including base edits), push to main | Required pre-merge check (#7006): fails when a PR's base is not `main` and that base branch's own PR is already merged, which is how a stacked child can show MERGED while `main` never receives the commits |
+| `orphaned-stacked-merge-monitor.yml` | PR closed and merged | Post-merge safety net for #7006: retargets open children of a merged parent, flags children GitHub closed when the parent branch was deleted and strands their open children, then fails when the merge commit is not an ancestor of `main`, opens an issue, and comments on the purple PR |
+| `deploy-gate.yml` | After Test/Typecheck/Lint Code/Security Audit/Stacked Merge Guard/Proto Generation Check complete | Aggregates required smoke-gate statuses onto the head SHA for branch protection. A non-passing read is re-polled once after 60s for stale check results (#5479), except when every non-passing check is pending and one of the workflows in `GATED_WORKFLOWS` is still running for that head: its completion evaluates again, so the pending status is published at once. Evaluations check out one commit and only `.github/scripts`; the stale-base drift phase unshallows the clone when it runs |
+| `bot-pr-deploy-gate.yml` | Called by the workflows that open review PRs (crawlable pulse, SEO weekly, resilience snapshot, GitHub stars) | A PR opened with `github.token` fires no `workflow_run` event for its CI, so `deploy-gate.yml` reached it only on its 30-minute sweep (#10090). Waits for the PR's `pull_request` runs to finish, then dispatches `deploy-gate.yml` for the PR head (`.github/scripts/dispatch-bot-pr-gate.sh`). Skips PRs opened with a user or app token |
+| `indexnow-submit.yml` | Successful Production deployment, manual | Submits deployment-relevant canonical URLs to IndexNow only after their host-specific ownership keys are directly reachable |
+| `convex-deploy.yml` | Push to main, manual | Type-checks `convex/` with TypeScript 7, then deploys Convex backend functions |
+| `deploy-worker.yml` | Push to main (worker paths), manual | Deploys the `api-cors-preflight` Cloudflare Worker; retries Cloudflare API rate limits (10429) with backoff via `scripts/cf-rate-limit-retry.mjs` and runs one deploy at a time |
+| `deploy-railway-reconcile-control.yml` | Push to main (control-plane paths), manual | Tests and deploys the isolated SQLite-backed Durable Object used for Railway reconciliation leases, attempts, dispatch holds, and the global mutation-uncertain barrier; deployment does not itself activate the trigger cutover |
+| `railway-deploy-trigger-watchdog.yml` | Manual rollback only | Checks the legacy rollback surface only when an operator dispatches it; it can authorize a fenced replacement only when both legacy activation flags are explicitly enabled |
+| `railway-reconcile-manual-recovery.yml` | Protected manual dispatch only | Evidence-bound break-glass resolution for ambiguous dispatch holds or post-mutation barriers; records immutable supersession and delegates any retry to the ordinary lease-aware workflow rather than carrying a Railway deploy token. Installs the pinned Railway CLI through `scripts/install-railway-cli.mjs`, which retries a failed binary download from GitHub releases twice. |
+| `desktop-release-train.yml` | Push to main (release inputs), daily cron, manual | Compares the checked-in desktop version with the latest published release, creates a compatible release tag, and dispatches the atomic multi-platform desktop build |
+| `build-desktop.yml` | Release tag, push, manual | Multi-platform Tauri build, code signing (macOS), AppImage library stripping (Linux), smoke test. Every checkout runs with `persist-credentials: false` (releases publish through `gh` with `GITHUB_TOKEN`) and the Rust release is pinned to the same exact version as `test.yml` and `test-linux-app.yml`, guarded by `tests/ci-workflow-coverage.test.mts` |
+| `docker-publish.yml` | Release, push to main (`docker/**`, `.dockerignore`, this workflow), daily cron (02:19 UTC), manual | Multi-arch image (amd64, arm64) pushed to GHCR. A release tag, whether a person published it or `build-desktop.yml` dispatched the build for a release it published with `GITHUB_TOKEN` (which raises no event), cuts the version tags and, unless it is a pre-release, moves `latest`; a push to main, the cron and a dispatch against main publish `sha-<commit>` alone and never move `latest`. So a Dependabot base-image bump or a Docker config change is built, smoke-tested and published within minutes of merging; application changes, already built before merge by Test's `unit-built-output`, reach a `sha-*` image with the daily cron; everything reaches `latest` with the next release. Both `FROM` lines in `docker/Dockerfile` are digest-pinned, so a base fix reaches the registry only once Dependabot has moved the pin on `main`. This is also the only workflow that builds and pushes `docker/Dockerfile`'s image, so before any push it loads the amd64 image and requests its live routes; a failed push-triggered or scheduled run opens or re-comments a tracking issue, because nothing else watches an unattended publish |
+| `publish-cli.yml` | `cli-v*` tag, manual | Tests and publishes the `worldmonitor` npm CLI (`cli/`) via OIDC trusted publishing (no token) with provenance |
+| `publish-python.yml` | `py-v*` tag, manual | Tests and publishes the `worldmonitor-sdk` PyPI package (`sdk/python/`) via OIDC trusted publishing (no token) with attestations |
+| `publish-ruby.yml` | `gem-v*` tag, manual | Tests and publishes the `worldmonitor` gem (`sdk/ruby/`) via RubyGems OIDC trusted publishing (no token) |
+| `publish-go.yml` | `sdk/go/v*` tag, manual | Vets/tests the Go SDK module (`sdk/go/`) at the tag and warms proxy.golang.org so the version is go-gettable and indexed on pkg.go.dev |
+| `rust-sdk.yml` | Path-filtered PR, push to main | Formats, lints, tests, packages, and builds documentation for the Rust SDK (`sdk/rust/`) |
+| `publish-rust.yml` | Manual from main, existing `rust-vX.Y.Z` tag | Defaults to a dry run. Verifies tag version and main ancestry, then optionally publishes the exact verified Rust SDK commit through crates.io OIDC. The first release requires a manual maintainer publish |
+| `publish-mcp-registry.yml` | Push to main (manifest inputs), daily cron, published release, manual | Derives the public MCP Registry manifest from the server card, validates it with the pinned publisher, and publishes it through the `mcp-registry-publish` environment; publication is idempotent and fails closed when a published version's payload changed |
+| `mirror-claude-plugin.yml` | Push to main (`claude-plugin/**`, this workflow), manual | Copies `claude-plugin/` to `koala73/worldmonitor-plugins`, the repository the Claude directory tracks (its validator rejects this repository's size); pushes with the `PLUGINS_MIRROR_DEPLOY_KEY` write deploy key and skips when the mirror already matches |
+| `test-linux-app.yml` | Twice-weekly schedule (Mon/Thu 05:23 UTC), manual | Desktop Canary (Linux): installed-app build + launch, hard-fails on crashed app, unreachable sidecar, or blank render (#5902). The blank-render gate counts unique screenshot colors with `identify -format %k`, because `identify -verbose` omits `Colors:` above 1024 colors (#10008). Builds with the same pinned Rust release as `build-desktop.yml` |
+
+The Railway `umami` runtime is built from `Dockerfile.umami`, which pins the
+upstream v3.2.0 release and applies the reviewed session-data upsert fix.
+The separate `umami-retention` cron uses `Dockerfile.umami-retention` and the
+bounded SQL contract. The old collector is drained to zero before the patched
+image runs its schema migration as a monitored one-off; schema verification,
+patched-runtime write acceptance, and retention are independent operational
+gates.
+
+**Source files**: `.github/workflows/`, `.husky/pre-push`. The workflow list is CI-checked against `.github/workflows/*.yml` by `npm run docs:check` — a new workflow file must be added to this table.
+
+---
+
+## 12. Directory Reference
+
+```
+.
+├── api/                    Vercel Edge Functions (self-contained JS)
+│   ├── _*.js               Shared helpers (CORS, rate-limit, API key, relay, Sentry, session)
+│   └── <domain>/           Domain endpoints (aviation/, climate/, conflict/, ...)
+├── blog-site/              Static blog (built into public/blog/)
+├── cli/                    Official `worldmonitor` npm CLI (zero-dep ESM, MCP-first; published via cli-v* tag)
+├── consumer-prices-core/   Consumer-price collection service (Playwright scrapers, per-country baskets; Railway/Docker)
+├── convex/                 Convex backend (billing/entitlements, user state, broadcast, forms, intel history)
+├── data/                   Static data (telegram channels, OREF threat translations, gamma irradiators)
+├── deploy/                 Deployment configs (nginx)
+├── docker/                 Dockerfile + nginx config for Railway
+├── docs/                   Mintlify documentation site
+├── e2e/                    Playwright E2E specs
+├── pro-test/               Standalone Pro QA app (separate package)
+├── proto/                  Protobuf service definitions (sebuf framework)
+├── public/                 Static assets served as-is (favicons, textures, .well-known agent-skills/MCP, llms.txt)
+├── scripts/                Seed scripts, build helpers, relay service
+├── server/                 Server-side code (bundled into Edge Functions)
+│   ├── _shared/            Redis, rate-limit, LLM, caching utilities
+│   ├── gateway.ts          Domain gateway factory
+│   ├── router.ts           Route matching
+│   └── worldmonitor/       Domain handlers (mirrors proto structure)
+├── shared/                 Cross-platform JSON configs (markets, RSS domains)
+├── src/                    Browser SPA (TypeScript)
+│   ├── app/                App orchestration managers
+│   ├── bootstrap/          Startup/recovery (chunk reload, deferred Sentry, SW update)
+│   ├── components/         Panel subclasses + map components
+│   ├── config/             Variant, panel, layer, market configurations
+│   ├── data/               Static JSON datasets (conservation, renewable, happiness)
+│   ├── e2e/                Map test harnesses (consumed by Playwright specs)
+│   ├── embed/              Embeddable widget loader
+│   ├── generated/          Proto-generated client/server stubs (DO NOT EDIT)
+│   ├── locales/            i18n translation files
+│   ├── services/           Business logic organized by domain
+│   ├── shared/             Cross-cutting helpers (premium paths, registries, staleness)
+│   ├── shims/              Runtime shims (child-process for sidecar)
+│   ├── styles/             Global CSS (layers, themes, panel styles)
+│   ├── types/              TypeScript type definitions
+│   ├── utils/              Shared utilities (circuit-breaker, theme, URL state)
+│   └── workers/            Web Workers (analysis, ML, vector DB)
+├── src-tauri/              Tauri desktop shell (Rust)
+│   └── sidecar/            Node.js sidecar API server
+├── tests/                  Unit/integration tests (node:test)
+└── workers/                Cloudflare Workers (edge CORS preflight for api.worldmonitor.app)
+```

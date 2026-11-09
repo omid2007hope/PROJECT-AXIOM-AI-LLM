@@ -1,0 +1,61 @@
+---
+import { checks, checkIds } from '@/data/checks';
+
+interface Props {
+  name: string;
+}
+
+const { name } = Astro.props;
+
+// get-ip has no card of its own, and other checks need it
+const skippable = checkIds.filter((id) => id !== 'get-ip');
+---
+
+<ul>
+  {skippable.map((id) => (
+    <li>
+      <label>
+        <input type="checkbox" name={name} value={id} />
+        {checks[id].title}
+      </label>
+    </li>
+  ))}
+</ul>
+
+<style lang="scss">
+  ul {
+    columns: 10rem;
+    column-gap: 1.5rem;
+    margin: 0;
+    padding: 0 0 1rem;
+    list-style: none;
+  }
+
+  li {
+    break-inside: avoid;
+  }
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    transition: color 0.2s ease;
+
+    &:hover,
+    &:has(:checked) {
+      color: var(--text-color);
+    }
+  }
+
+  input {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--primary);
+    cursor: inherit;
+  }
+</style>

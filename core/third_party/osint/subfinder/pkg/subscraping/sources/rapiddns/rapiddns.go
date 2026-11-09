@@ -1,0 +1,132 @@
+// Package rapiddns is a RapidDNS Scraping Engine in Golang
+package rapiddns
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"regexp"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
+)
+
+var pagePattern = regexp.MustCompile(`class="page-link" href="/subdomain/[^"]+\?page=(\d+)">`)
+
+// Source is the passive scraping agent
+type Source struct {
+	mu    sync.Mutex
+	stats subscraping.Statistics
+}
+
+// Run function returns all subdomains found with the service
+func (s *Source) Run(ctx context.Context, domain string, session *subscraping.Session) <-chan subscraping.Result {
+	results := make(chan subscraping.Result)
+
+	go func() {
+		var stats subscraping.Statistics
+		defer func(startTime time.Time) {
+			stats.TimeTaken = time.Since(startTime)
+			s.mu.Lock()
+			s.stats = stats
+			s.mu.Unlock()
+			close(results)
+		}(time.Now())
+
+		// Honor an optional per-source result limit (0 = no limit) so a single
+		// domain can't drain an API quota by paginating to the end.
+		maxResults := session.MaxResults
+
+		page := 1
+		maxPages := 1
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			stats.Requests++
+			resp, err := session.SimpleGet(ctx, fmt.Sprintf("https://rapiddns.io/subdomain/%s?page=%d&full=1", domain, page))
+			if err != nil {
+				results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+				stats.Errors++
+				session.DiscardHTTPResponse(resp)
+				return
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+				stats.Errors++
+				session.DiscardHTTPResponse(resp)
+				return
+			}
+
+			session.DiscardHTTPResponse(resp)
+
+			src := string(body)
+			for _, subdomain := range session.Extractor.Extract(src) {
+				select {
+				case <-ctx.Done():
+					return
+				case results <- subscraping.Result{Source: s.Name(), Type: subscraping.Subdomain, Value: subdomain}:
+					stats.Results++
+				}
+				if maxResults > 0 && stats.Results >= maxResults {
+					return
+				}
+			}
+
+			if maxPages == 1 {
+				matches := pagePattern.FindAllStringSubmatch(src, -1)
+				if len(matches) > 0 {
+					lastMatch := matches[len(matches)-1]
+					if len(lastMatch) > 1 {
+						maxPages, _ = strconv.Atoi(lastMatch[1])
+					}
+				}
+			}
+
+			if page >= maxPages {
+				break
+			}
+			page++
+		}
+	}()
+
+	return results
+}
+
+// Name returns the name of the source
+func (s *Source) Name() string {
+	return "rapiddns"
+}
+
+func (s *Source) IsDefault() bool {
+	return false
+}
+
+func (s *Source) HasRecursiveSupport() bool {
+	return false
+}
+
+func (s *Source) KeyRequirement() subscraping.KeyRequirement {
+	return subscraping.NoKey
+}
+
+func (s *Source) NeedsKey() bool {
+	return s.KeyRequirement() == subscraping.RequiredKey
+}
+
+func (s *Source) AddApiKeys(_ []string) {
+	// no key needed
+}
+
+// Statistics returns a snapshot of the most recently completed run.
+func (s *Source) Statistics() subscraping.Statistics {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stats
+}

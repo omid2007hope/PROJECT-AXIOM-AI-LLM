@@ -1,0 +1,110 @@
+---
+import PageLayout from '@layouts/Page.astro';
+
+interface Props {
+  status: number;
+  statusText: string;
+  heading: [string, string];
+  message: string;
+}
+
+const { status, statusText, heading, message } = Astro.props;
+const [lead, accent] = heading;
+
+const links = [
+  { label: 'Home', href: '/' },
+  { label: 'All checks', href: '/checks' },
+  { label: 'About', href: '/about' },
+  { label: 'Report an issue', href: 'https://github.com/lissy93/web-check/issues' },
+];
+---
+
+<PageLayout title={`${lead} ${accent} | Web Check`} description={message}>
+  <section class="error">
+    <code class="status">
+      HTTP/1.1 {status} {statusText}
+    </code>
+    <h1>
+      {lead} <em>{accent}</em>
+    </h1>
+    <p class="message">{message}</p>
+    <ul class="links">
+      {links.map((link) => (
+        <li>
+          <a href={link.href}>{link.label}</a>
+        </li>
+      ))}
+    </ul>
+  </section>
+</PageLayout>
+
+<style lang="scss">
+  .error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    text-align: center;
+
+    .status {
+      padding: 0.25rem 0.5rem;
+      border: 1px solid var(--primary-transparent);
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--primary-increased-contrast);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.5rem, 7vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+
+      em {
+        color: var(--primary);
+      }
+    }
+
+    .message {
+      margin: 0;
+      max-width: 42rem;
+      font-size: 1.25rem;
+      line-height: 1.5;
+      text-wrap: balance;
+      color: var(--text-color-secondary);
+    }
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+
+    a {
+      display: flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text-color);
+      font-weight: 600;
+      transition:
+        border-color 0.25s ease,
+        color 0.25s ease;
+
+      &:hover,
+      &:focus-visible {
+        border-color: var(--primary);
+        color: var(--primary-increased-contrast);
+        text-decoration: none;
+      }
+    }
+  }
+</style>

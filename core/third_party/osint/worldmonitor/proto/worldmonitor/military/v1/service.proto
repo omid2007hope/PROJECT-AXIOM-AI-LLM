@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package worldmonitor.military.v1;
+
+import "sebuf/http/annotations.proto";
+import "worldmonitor/military/v1/list_military_flights.proto";
+import "worldmonitor/military/v1/get_theater_posture.proto";
+import "worldmonitor/military/v1/get_aircraft_details.proto";
+import "worldmonitor/military/v1/get_aircraft_details_batch.proto";
+import "worldmonitor/military/v1/get_wingbits_status.proto";
+import "worldmonitor/military/v1/get_usni_fleet_report.proto";
+import "worldmonitor/military/v1/list_military_bases.proto";
+import "worldmonitor/military/v1/get_wingbits_live_flight.proto";
+import "worldmonitor/military/v1/list_defense_patents.proto";
+import "worldmonitor/military/v1/get_defense_industrial_base.proto";
+
+// MilitaryService provides APIs for military flight and vessel tracking
+// sourced from ADS-B providers, Wingbits enrichment, and AIS data.
+service MilitaryService {
+  option (sebuf.http.service_config) = {base_path: "/api/military/v1"};
+
+  // ListMilitaryFlights returns paginated military aircraft observations within a bounding box, including callsign, position, altitude, operator, and source fields.
+  rpc ListMilitaryFlights(ListMilitaryFlightsRequest) returns (ListMilitaryFlightsResponse) {
+    option (sebuf.http.config) = {path: "/list-military-flights", method: HTTP_METHOD_GET};
+  }
+
+  // Retrieve military posture assessments for all cached theaters, including posture levels, active flights, operations and assessment times in regional monitoring.
+  rpc GetTheaterPosture(GetTheaterPostureRequest) returns (GetTheaterPostureResponse) {
+    option (sebuf.http.config) = {path: "/get-theater-posture", method: HTTP_METHOD_GET};
+  }
+
+  // Retrieve Wingbits aircraft enrichment by ICAO24 hex, including available aircraft type and build details. PRO-gated. Requires an active Pro subscription.
+  rpc GetAircraftDetails(GetAircraftDetailsRequest) returns (GetAircraftDetailsResponse) {
+    option (sebuf.http.config) = {path: "/get-aircraft-details", method: HTTP_METHOD_GET};
+  }
+
+  // Retrieve Wingbits enrichment for multiple ICAO24 aircraft identifiers in one request, with aircraft details and requested versus fetched result counts.
+  rpc GetAircraftDetailsBatch(GetAircraftDetailsBatchRequest) returns (GetAircraftDetailsBatchResponse) {
+    option (sebuf.http.config) = {path: "/get-aircraft-details-batch", method: HTTP_METHOD_POST};
+  }
+
+  // Check whether Wingbits aircraft enrichment is configured for World Monitor, using the configuration flag before requesting aircraft details or batch enrichment.
+  rpc GetWingbitsStatus(GetWingbitsStatusRequest) returns (GetWingbitsStatusResponse) {
+    option (sebuf.http.config) = {path: "/get-wingbits-status", method: HTTP_METHOD_GET};
+  }
+
+  // Retrieve the latest parsed USNI Fleet Tracker report, with article date, source link, fleet summary and cache status for understanding published naval activity.
+  rpc GetUSNIFleetReport(GetUSNIFleetReportRequest) returns (GetUSNIFleetReportResponse) {
+    option (sebuf.http.config) = {path: "/get-usni-fleet-report", method: HTTP_METHOD_GET};
+  }
+
+  // Explore military bases by country, type, map bounds and zoom level, with base details and server-side clusters for geographic military infrastructure analysis.
+  rpc ListMilitaryBases(ListMilitaryBasesRequest) returns (ListMilitaryBasesResponse) {
+    option (sebuf.http.config) = {path: "/list-military-bases", method: HTTP_METHOD_GET};
+  }
+
+  // GetWingbitsLiveFlight returns one aircraft's live Wingbits ECS position by ICAO24 hex, with its schedule, delays and a Planespotters photo, cached 30 seconds.
+  rpc GetWingbitsLiveFlight(GetWingbitsLiveFlightRequest) returns (GetWingbitsLiveFlightResponse) {
+    option (sebuf.http.config) = {path: "/get-wingbits-live-flight", method: HTTP_METHOD_GET};
+  }
+
+  // ListDefensePatents returns weekly-seeded USPTO filings by key defense and dual-use assignees, filterable by CPC class and assignee, up to 100 rows.
+  rpc ListDefensePatents(ListDefensePatentsRequest) returns (ListDefensePatentsResponse) {
+    option (sebuf.http.config) = {path: "/list-defense-patents", method: HTTP_METHOD_GET};
+  }
+
+  // GetDefenseIndustrialBase returns annual military capacity and five-year arms-supplier dependency aggregates for one country.
+  rpc GetDefenseIndustrialBase(GetDefenseIndustrialBaseRequest) returns (GetDefenseIndustrialBaseResponse) {
+    option (sebuf.http.config) = {path: "/get-defense-industrial-base", method: HTTP_METHOD_GET};
+  }
+}

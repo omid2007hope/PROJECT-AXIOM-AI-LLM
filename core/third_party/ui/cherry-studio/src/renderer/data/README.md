@@ -1,0 +1,64 @@
+# Renderer Data Layer
+
+This directory contains the renderer process data services.
+
+## Documentation
+
+- **Overview**: [docs/dev/references/data/README.md](../../../docs/dev/references/data/README.md)
+- **Cache**: [cache-overview.md](../../../docs/dev/references/data/cache-overview.md) | [cache-usage.md](../../../docs/dev/references/data/cache-usage.md) | [cache-schema-guide.md](../../../docs/dev/references/data/cache-schema-guide.md)
+- **Preference**: [preference-overview.md](../../../docs/dev/references/data/preference-overview.md) | [preference-usage.md](../../../docs/dev/references/data/preference-usage.md)
+- **DataApi**: [data-api-in-renderer.md](../../../docs/dev/references/data/data-api-in-renderer.md)
+
+## Directory Structure
+
+```
+src/renderer/data/
+├── DataApiService.ts       # User Data API service
+├── InfiniteQueryCacheManager.ts # Bounded retention for inactive infinite-query groups
+├── PreferenceService.ts    # Preferences management
+├── CacheService.ts         # Three-tier caching system
+└── hooks/
+    ├── createInfiniteQueryRetentionMiddleware.ts # Configurable bounded retention for infinite-query consumers
+    ├── useDataApi.ts       # useQuery, useMutation, useInfiniteQuery, useInfiniteFlatItems, usePaginatedQuery, useDataChange, useReadCache, useWriteCache, useInvalidateCache, prefetch
+    ├── useReorder.ts       # optimistic drag-and-drop reordering
+    ├── usePreference.ts    # usePreference, useMultiplePreferences
+    └── useCache.ts         # useCache, useSharedCache, useSharedCacheValue, usePersistCache
+```
+
+## Quick Start
+
+```typescript
+// Data API
+import { useQuery, useMutation } from '@data/hooks/useDataApi'
+const { data } = useQuery('/topics')
+const { trigger: createTopic } = useMutation('/topics', 'POST')
+
+// Preferences
+import { usePreference } from '@data/hooks/usePreference'
+const [language, setLanguage] = usePreference('app.language')
+
+// Cache (three-tier renderer cache)
+import { useCache, useSharedCache, usePersistCache } from '@data/hooks/useCache'
+const [isSelecting, setIsSelecting] = useCache('chat.multi_select_mode')
+
+// Non-reactive DataApi cache control (snapshot read / overlay write / invalidate)
+import { useReadCache, useWriteCache, useInvalidateCache } from '@data/hooks/useDataApi'
+```
+
+### Reordering sortable resources
+
+For any resource that exposes drag-and-drop ordering, use `useReorder` — it
+handles optimistic updates, PATCH dispatch, revalidation, and rollback on top
+of `useMutation`.
+
+```tsx
+const { data } = useQuery('/mcp-servers')
+const { applyReorderedList } = useReorder('/mcp-servers')
+return <ReorderableList items={data?.items ?? []} getId={getId} renderItem={renderRow} onReorder={applyReorderedList} />
+```
+
+The full end-to-end design — database schema helpers, API endpoint composition,
+service-layer helpers (`insertWithOrderKey` / `insertManyWithOrderKey` / `applyMoves` /
+`resetOrder`), migrator helpers, renderer integration, migration checklist, FAQ
+— lives in the **[Reorder Guide](../../../docs/dev/references/data/data-ordering-guide.md)**.
+The guide is the canonical reference for both main- and renderer-side work.

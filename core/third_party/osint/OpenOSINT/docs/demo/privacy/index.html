@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo privacy and cookie notice | OpenOSINT</title>
+<meta name="description" content="Privacy and cookie notice for the bring-your-own-key OpenOSINT demo at demo.openosint.tech. Draft, dated 2026-06-26.">
+<link rel="canonical" href="https://openosint.tech/demo/privacy/">
+<meta name="theme-color" content="#16181b">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/assets/fonts/HankenGrotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+<meta property="og:site_name" content="OpenOSINT">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Demo privacy and cookie notice | OpenOSINT">
+<meta property="og:description" content="Privacy and cookie notice for the bring-your-own-key OpenOSINT demo at demo.openosint.tech. Draft, dated 2026-06-26.">
+<meta property="og:url" content="https://openosint.tech/demo/privacy/">
+<meta property="og:image" content="https://openosint.tech/assets/social-card.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="OpenOSINT: the OSINT toolkit for AI agents. Agent Skill, MCP server and CLI.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Demo privacy and cookie notice | OpenOSINT">
+<meta name="twitter:description" content="Privacy and cookie notice for the bring-your-own-key OpenOSINT demo at demo.openosint.tech. Draft, dated 2026-06-26.">
+<meta name="twitter:image" content="https://openosint.tech/assets/social-card.png">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="logo" href="/"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3"/><path d="M11 6v10M6 11h10" stroke="currentColor" stroke-width="1.5"/></svg>OpenOSINT</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/docs/">Docs</a>
+      <a href="/tools/">Tools</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+    </nav>
+    <div class="bar-right">
+      <a class="btn btn-small" href="https://app.openosint.tech/?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=nav">Hosted products</a>
+      <details class="menu">
+        <summary>Menu</summary>
+        <div class="menu-panel">
+          <a href="/docs/">Docs</a>
+          <a href="/tools/">Tools</a>
+          <a href="/blog/">Blog</a>
+          <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap page">
+  <article class="prose">
+    <h1 id="intro">PRIVACY &amp; COOKIE NOTICE &mdash; OPENOSINT DEMO</h1>
+<!-- DRAFT NOTICE -->
+<p class="note">
+&#9888; DRAFT &mdash; This document has not been reviewed by legal counsel. It is provided as a
+good-faith description of actual data flows and must be reviewed before treating it as a
+final legal disclosure.
+</p>
+<div class="indent">
+<p><b>Applies to:</b> the interactive BYOK demo at <a href="https://demo.openosint.tech">demo.openosint.tech</a>.</p>
+<p><b>Does not apply to:</b> OpenOSINT Cloud (the authenticated paid service) &mdash; see
+<a href="/privacy/">openosint.tech/privacy</a> for that service.</p>
+<p><b>Contact:</b> <a href="mailto:commercial@openosint.tech">commercial@openosint.tech</a></p>
+</div>
+
+<h2 id="storage">1. BROWSER STORAGE &mdash; COMPLETE INVENTORY</h2>
+<div class="indent">
+<p>The demo uses only functional browser storage. There are no cookies. All items listed below
+are set and read exclusively by client-side JavaScript; nothing is transmitted to our servers
+except the in-flight API calls described in &sect;2.</p>
+
+<div class="table-wrap" tabindex="0" role="region" aria-label="Table"><table>
+<tr>
+  <th>Storage type</th>
+  <th>Key</th>
+  <th>What it holds</th>
+  <th>When cleared</th>
+</tr>
+<tr>
+  <td><code>sessionStorage</code></td>
+  <td><code>openosint_byok</code></td>
+  <td>Your chosen LLM provider name, API key, base URL, and model. Set when you enter
+  credentials in Settings.</td>
+  <td>Automatically when the browser tab is closed or the session ends.</td>
+</tr>
+<tr>
+  <td><code>sessionStorage</code></td>
+  <td><code>openosint_tool_keys</code></td>
+  <td>Optional tool API keys you supply (e.g. Shodan, VirusTotal). Set when you enter
+  them in Settings.</td>
+  <td>Automatically when the browser tab is closed or the session ends.</td>
+</tr>
+<tr>
+  <td><code>localStorage</code></td>
+  <td><code>openosint-theme</code></td>
+  <td><code>&ldquo;light&rdquo;</code> or <code>&ldquo;dark&rdquo;</code> &mdash; your
+  preferred colour scheme. Set when you toggle the theme button.</td>
+  <td>Persists until you clear site data or the browser clears storage. Contains no personal data.</td>
+</tr>
+<tr>
+  <td><code>localStorage</code></td>
+  <td><code>openosint_settings</code></td>
+  <td>Miscellaneous UI preferences (selected provider, Ollama host URL, etc.). Does not
+  hold API keys under normal use.</td>
+  <td>Persists until you clear site data. Contains no personal data under normal use.</td>
+</tr>
+<tr>
+  <td><code>localStorage</code></td>
+  <td><code>openosint-ack</code></td>
+  <td>A flag (<code>&ldquo;1&rdquo;</code>) recording that you accepted the authorization
+  gate. Prevents the gate from re-appearing on subsequent visits to the same browser.</td>
+  <td>Persists until you clear site data. Contains no personal data.</td>
+</tr>
+<tr>
+  <td><code>localStorage</code></td>
+  <td><code>openosint-notice</code></td>
+  <td>A flag (<code>&ldquo;1&rdquo;</code>) recording that you dismissed this notice bar.
+  Prevents the bar from reappearing.</td>
+  <td>Persists until you clear site data. Contains no personal data.</td>
+</tr>
+</table></div>
+</div>
+
+<h2 id="apikeys">2. YOUR API KEYS &mdash; HOW THEY ARE USED</h2>
+<div class="indent">
+<p>This is a <b>Bring Your Own Key (BYOK)</b> demo. If you enter an API key (Anthropic,
+OpenRouter, Shodan, etc.) it is stored <b>in your browser session only</b>
+(<code>sessionStorage</code>). It is transmitted <b>exclusively</b> in outbound HTTP
+requests that perform the OSINT lookup you requested &mdash; directly to the LLM provider or
+through the proxy you configured. We do not log, copy, or store your key server-side.</p>
+<p>When you close the tab, your session storage is cleared and your key is gone from the
+browser. No copy remains on our infrastructure.</p>
+</div>
+
+<h2 id="cdns">3. THIRD-PARTY SCRIPT CONNECTIONS</h2>
+<div class="indent">
+<p>The demo page loads the following resources from third-party CDNs on every page load.
+None of these services set cookies or track users on this page; they deliver script and font
+files. Your IP address reaches their servers as a byproduct of the HTTP requests.</p>
+<ul>
+  <li><b>Google Fonts</b> (fonts.googleapis.com, fonts.gstatic.com) &mdash; Inter and
+  JetBrains Mono typefaces.</li>
+  <li><b>Tailwind CSS CDN</b> (cdn.tailwindcss.com) &mdash; CSS utility framework.</li>
+  <li><b>Cytoscape.js</b> (cdnjs.cloudflare.com) &mdash; graph visualization library.</li>
+  <li><b>Alpine.js, cytoscape-fcose</b> (cdn.jsdelivr.net) &mdash; UI reactivity and
+  graph layout plugin.</li>
+</ul>
+<p>There are <b>no analytics scripts, no advertising scripts, no fingerprinting scripts</b>
+on this page. No Google Analytics, Google Tag Manager, Meta Pixel, Hotjar, Plausible, or
+equivalent service is loaded.</p>
+</div>
+
+<h2 id="nocookies">4. COOKIES</h2>
+<div class="indent">
+<p>The demo sets <b>no HTTP cookies</b>. All persistence uses <code>localStorage</code> and
+<code>sessionStorage</code> as described in &sect;1. Because there are no non-essential cookies
+or trackers, no cookie consent wall is required or shown &mdash; only an informational
+notice bar.</p>
+</div>
+
+<h2 id="thirdparty">5. THIRD-PARTY DATA SOURCES</h2>
+<div class="indent">
+<p>When you run an investigation the demo calls external OSINT data APIs (WHOIS registrars,
+IP geolocation providers, HaveIBeenPwned, Shodan, VirusTotal, etc.) on your behalf. Each
+provider has its own privacy policy. Results may include personal data about third parties;
+you are responsible for having a lawful basis to investigate any target you submit.</p>
+</div>
+
+<h2 id="contact">6. CONTACT</h2>
+<div class="indent">
+<p><a href="mailto:commercial@openosint.tech">commercial@openosint.tech</a></p>
+</div>
+
+<hr>
+<div id="footer">
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td class="mhead-l">OpenOSINT Demo</td>
+<td class="mhead-c">Privacy &amp; Cookie Notice</td>
+<td class="mhead-r">2026-06-26</td>
+</tr>
+</table>
+</div>
+
+  </article>
+</div>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <ul class="footer-links">
+      <li><a href="/blog/">Blog</a></li>
+      <li><a href="/tools/">Tools</a></li>
+      <li><a href="/commercial/">Commercial</a></li>
+      <li><a href="/sponsors.html">Sponsors</a></li>
+      <li><a href="/terms/">Terms</a></li>
+      <li><a href="/privacy/">Privacy</a></li>
+      <li><a href="/acceptable-use/">Acceptable Use</a></li>
+      <li><a href="/subprocessors/">Subprocessors</a></li>
+      <li><a href="mailto:commercial@openosint.tech">Contact</a></li>
+    </ul>
+    <span>&copy; 2026 Tommaso Bertocchi, Trieste, Italy</span>
+  </div>
+</footer>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  if (!navigator.clipboard) return;
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "copy"; b.textContent = "Copy"; b.setAttribute("aria-label", "Copy code");
+  b.addEventListener("click", function () {
+    var code = pre.querySelector("code") || pre;
+    navigator.clipboard.writeText(code.innerText).then(function () {
+      b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+    });
+  });
+  pre.appendChild(b);
+});
+</script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "8c1e6e8590b649a5803fbbd3356aa7d2"}'></script>
+</body>
+</html>

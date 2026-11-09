@@ -1,0 +1,147 @@
+---
+import AnimatedInput from '@components/form/AnimatedInput.astro';
+import AnimatedButton from '@components/form/AnimatedButton.astro';
+import Icon from '@components/molecules/Icon.svelte';
+import { categories, categoryIds } from '@/data/categories';
+
+interface Props {
+  tool?: string;
+  label: string;
+  buttonLabel?: string;
+  showCategories?: boolean;
+}
+
+const { tool, label, buttonLabel = 'Analyze', showCategories = false } = Astro.props;
+---
+
+<form class="scan-form" action="/check" autocomplete="off" data-tool={tool}>
+  <label for="url-input">{label}</label>
+  <div class="controls">
+    <AnimatedInput />
+    <AnimatedButton label={buttonLabel}>
+      {showCategories && (
+        <button
+          type="button"
+          class="toggle"
+          popovertarget="scan-categories"
+          aria-label="Run one category"
+        >
+          <Icon name="chevron" />
+        </button>
+      )}
+    </AnimatedButton>
+  </div>
+  {showCategories && (
+    <div id="scan-categories" class="categories" popover>
+      {categoryIds.map((id) => (
+        <button type="submit" name="tool" value={id}>
+          <Icon name={categories[id].icon} />
+          {categories[id].label}
+        </button>
+      ))}
+    </div>
+  )}
+  {tool && <input type="hidden" name="tool" value={tool} />}
+</form>
+
+<script>
+  import { normalizeAddress } from '../../client/utils/address-type-checker';
+
+  // Send the visitor straight to the results page, keeping any category or check filter
+  const scan = (form: HTMLFormElement, event: SubmitEvent) => {
+    event.preventDefault();
+    const input = form.querySelector<HTMLInputElement>('input[name="url"]');
+    const target = normalizeAddress(input?.value);
+    if (!target) return;
+    const tool = (event.submitter as HTMLButtonElement | null)?.value || form.dataset.tool;
+    window.location.href = `/${tool || 'check'}/${target}`;
+  };
+
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLFormElement>('form.scan-form').forEach((form) => {
+      if (form.dataset.bound) return;
+      form.dataset.bound = 'true';
+      form.addEventListener('submit', (event) => scan(form, event));
+    });
+  });
+</script>
+
+<style lang="scss">
+  @use '@styles/global.scss' as *;
+
+  .scan-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 46rem;
+
+    label {
+      color: var(--text-color-secondary);
+    }
+
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+
+      :global(.input-container) {
+        flex: 1;
+        min-width: 0;
+      }
+
+      :global(.button) {
+        white-space: nowrap;
+      }
+
+      @include mobile-down {
+        flex-direction: column;
+      }
+    }
+
+    .toggle {
+      flex: none;
+      padding: 0 1rem;
+      border-left: 2px solid var(--text-color-tertiary);
+      anchor-name: --scan-categories;
+
+      &:hover,
+      &:focus,
+      &:focus-visible {
+        background: var(--primary-transparent);
+        color: var(--primary-increased-contrast);
+      }
+    }
+
+    .categories {
+      position-anchor: --scan-categories;
+      inset: auto;
+      top: anchor(bottom);
+      right: anchor(right);
+      margin: 0.5rem 0 0;
+      padding: 0.25rem;
+      border: 1px solid var(--primary-transparent);
+      border-radius: 4px;
+      background: var(--background-raised);
+      color: var(--text-color);
+
+      button {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        width: 100%;
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 3px;
+        background: none;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+          background: var(--primary-transparent);
+          color: var(--primary-increased-contrast);
+        }
+      }
+    }
+  }
+</style>

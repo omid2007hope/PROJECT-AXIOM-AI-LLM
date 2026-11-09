@@ -1,0 +1,16 @@
+name: ip
+label: "IP Address Investigation"
+target_type: ip
+steps:
+  - id: geolocation
+    tool: search_ip
+    section: "Geolocation & ASN"
+  - id: dorks
+    tool: generate_dorks
+    section: "Google Dork URLs"
+  - id: shodan
+    tool: search_shodan
+    section: "Shodan Host Intelligence"
+  - id: virustotal
+    tool: search_virustotal
+    section: "VirusTotal Reputation"

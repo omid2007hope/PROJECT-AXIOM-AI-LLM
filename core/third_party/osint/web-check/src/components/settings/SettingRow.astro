@@ -1,0 +1,158 @@
+---
+import type { Setting } from '@/data/settings';
+import Icon from '@components/molecules/Icon.svelte';
+import Select from '@components/molecules/Select.astro';
+import Segmented from '@components/molecules/Segmented.astro';
+import ThemeSwitcher from '@components/molecules/ThemeSwitcher.astro';
+import Toggle from '@components/molecules/Toggle.astro';
+import SkippedChecks from '@components/settings/SkippedChecks.astro';
+
+type Props = Setting;
+
+const { key, label, hint, control, options = [], button, media } = Astro.props;
+
+const id = `setting-${key}`;
+const hintId = hint && `${id}-hint`;
+const isList = control === 'checks';
+const hasField = ['toggle', 'select', 'action'].includes(control);
+
+// The checks list is long, so that row folds open instead
+const Row = isList ? 'details' : 'div';
+const Head = isList ? 'summary' : 'div';
+const Label = hasField ? 'label' : 'span';
+---
+
+<Row class="row">
+  <Head class="head">
+    <span class="text">
+      <Label for={hasField ? id : undefined}>{label}</Label>
+      {hint && (
+        <span class="hint" id={hintId}>
+          {hint}
+          {media && <span class="forced">Turned on in your device settings</span>}
+        </span>
+      )}
+    </span>
+    {control === 'theme' && <ThemeSwitcher />}
+    {control === 'toggle' && <Toggle id={id} name={key} aria-describedby={hintId} />}
+    {control === 'select' && (
+      <Select id={id} name={key} options={options} aria-describedby={hintId} />
+    )}
+    {control === 'segmented' && <Segmented label={label} name={key} options={options} />}
+    {control === 'action' && (
+      <button
+        type="button"
+        id={id}
+        class="action"
+        data-action={key}
+        aria-describedby={hintId}
+        aria-live="polite"
+      >
+        {button}
+      </button>
+    )}
+    {isList && (
+      <span class="count">
+        <span class="skipped-count">None skipped</span>
+        <Icon name="chevron" size={0.7} />
+      </span>
+    )}
+  </Head>
+  {isList && <SkippedChecks name={key} />}
+</Row>
+
+<style lang="scss">
+  .row + .row {
+    border-top: 1px solid var(--line);
+  }
+
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+    padding: 0.9rem 0;
+  }
+
+  .text {
+    display: flex;
+    flex: 1 1 12rem;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .hint {
+    font-size: 0.85rem;
+    color: var(--text-color-secondary);
+  }
+
+  // Only shows once the OS has locked the toggle on
+  .forced {
+    display: none;
+  }
+  .row:has(:disabled) .forced {
+    display: block;
+  }
+
+  summary {
+    list-style: none;
+    cursor: pointer;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+    &:focus {
+      outline: none;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  }
+
+  .count {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.9rem;
+    color: var(--text-color-secondary);
+
+    :global(svg) {
+      transition: rotate 0.25s ease;
+    }
+  }
+
+  details[open] .count :global(svg) {
+    rotate: 180deg;
+  }
+
+  .action {
+    flex: none;
+    padding: 0.5rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+    border-radius: 4px;
+    background: none;
+    color: var(--danger);
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+
+    &:hover {
+      background: color-mix(in srgb, var(--danger) 12%, transparent);
+    }
+    &[data-armed] {
+      background: var(--danger);
+      color: var(--background);
+    }
+    &:focus {
+      outline: none;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+  }
+</style>

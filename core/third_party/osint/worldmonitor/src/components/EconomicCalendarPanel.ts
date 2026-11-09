@@ -1,0 +1,220 @@
+import { Panel } from './Panel';
+import { createLazyClient, getRpcBaseUrl, rpcFetch } from '@/services/rpc-client';
+import { EconomicServiceClient } from '@/services/generated-rpc-clients';
+import { addLocalDays, localYmd } from '@/utils/local-date';
+import { t } from '@/services/i18n';
+import { escapeHtml, unsafeRawHtml } from '@/utils/sanitize';
+
+const getEconomicClient = createLazyClient(() => new EconomicServiceClient(getRpcBaseUrl(), { fetch: rpcFetch }));
+
+const COUNTRY_FLAGS: Record<string, string> = {
+  US: '🇺🇸',
+  GB: '🇬🇧',
+  UK: '🇬🇧',
+  EU: '🇪🇺',
+  EUR: '🇪🇺',
+  EA: '🇪🇺',
+  DE: '🇩🇪',
+  FR: '🇫🇷',
+  JP: '🇯🇵',
+  CN: '🇨🇳',
+  CA: '🇨🇦',
+  AU: '🇦🇺',
+};
+
+const EU_COUNTRIES = new Set(['EU', 'EA', 'EUR', 'DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'PT', 'FI', 'IE', 'GR']);
+
+type RegionFilter = 'all' | 'us' | 'eu';
+
+const IMPACT_COLORS: Record<string, string> = {
+  high: '#e74c3c',
+  medium: '#f39c12',
+  low: 'rgba(255,255,255,0.3)',
+};
+
+interface EconomicEvent {
+  event: string;
+  country: string;
+  date: string;
+  impact: string;
+  actual: string;
+  estimate: string;
+  previous: string;
+  unit: string;
+}
+
+function groupByDate(events: EconomicEvent[]): Map<string, EconomicEvent[]> {
+  const map = new Map<string, EconomicEvent[]>();
+  for (const ev of events) {
+    const key = ev.date || 'Unknown';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(ev);
+  }
+  return map;
+}
+
+function formatDateGroup(dateStr: string): string {
+  if (!dateStr || dateStr === 'Unknown') return 'Unknown';
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function fmtVal(val: string, unit: string): string {
+  if (!val) return '—';
+  return unit ? `${val} ${unit}` : val;
+}
+
+function countdown(dateStr: string): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return '';
+  const days = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days < 0) return Math.abs(days) < 14 ? `${Math.abs(days)}d ago` : `${Math.round(Math.abs(days) / 7)}w ago`;
+  if (days < 14) return `in ${days}d`;
+  return `in ${Math.round(days / 7)}w`;
+}
+
+export class EconomicCalendarPanel extends Panel {
+  private _hasData = false;
+  private _events: EconomicEvent[] = [];
+  private _region: RegionFilter = 'all';
+
+  constructor() {
+    super({ id: 'economic-calendar', title: 'Economic Calendar', showCount: false, infoTooltip: t('components.economicCalendar.infoTooltip') });
+    this.content.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-region]');
+      if (!btn) return;
+      const region = btn.dataset.region as RegionFilter;
+      if (region && region !== this._region) {
+        this._region = region;
+        this._render();
+      }
+    });
+  }
+
+  public async fetchData(): Promise<boolean> {
+    this.showLoading('Loading economic calendar...');
+    try {
+      const client = getEconomicClient();
+      const today = new Date();
+      // Local-time day keys: toISOString() is UTC-based and shifted the
+      // window a day for users far from UTC, dropping their local "today".
+      const fromDate = localYmd(today);
+      const toDate = localYmd(addLocalDays(today, 30));
+      const resp = await client.getEconomicCalendar({ fromDate, toDate });
+
+      if (resp.unavailable || !resp.events || resp.events.length === 0) {
+        if (!this._hasData) this.showError('Economic calendar data unavailable.', () => void this.fetchData());
+        return false;
+      }
+
+      this._events = resp.events as EconomicEvent[];
+      this._hasData = true;
+      this._render();
+      return true;
+    } catch (err) {
+      if (this.isAbortError(err)) return false;
+      if (!this._hasData) this.showError('Failed to load economic calendar.', () => void this.fetchData());
+      return false;
+    }
+  }
+
+  private _filterEvents(): EconomicEvent[] {
+    if (this._region === 'us') return this._events.filter((e) => e.country === 'US');
+    if (this._region === 'eu') return this._events.filter((e) => EU_COUNTRIES.has(e.country));
+    return this._events;
+  }
+
+  private _renderRegionTabs(): string {
+    const tabs: { key: RegionFilter; label: string }[] = [
+      { key: 'all', label: 'All' },
+      { key: 'us',  label: 'US' },
+      { key: 'eu',  label: 'EU' },
+    ];
+    return `<div style="display:flex;gap:4px;padding:0 14px 10px">` +
+      tabs.map(({ key, label }) => {
+        const active = this._region === key;
+        return `<button data-region="${key}" style="
+          padding:3px 10px;font-size:calc(10px * var(--wm-panel-effective-scale, 1));font-weight:600;letter-spacing:0.04em;
+          border-radius:3px;border:none;cursor:pointer;
+          background:${active ? 'rgba(255,255,255,0.15)' : 'transparent'};
+          color:${active ? 'var(--text)' : 'rgba(255,255,255,0.35)'};
+        ">${escapeHtml(label)}</button>`;
+      }).join('') +
+    `</div>`;
+  }
+
+  private _render(): void {
+    if (!this._hasData) {
+      this.showError('No upcoming economic events.', () => void this.fetchData());
+      return;
+    }
+
+    const filtered = this._filterEvents();
+    const grouped = groupByDate(filtered);
+    let bodyRows = '';
+
+    for (const [date, events] of grouped) {
+      bodyRows += `<tr class="ec-date-row"><td colspan="3">${escapeHtml(formatDateGroup(date))}</td></tr>`;
+
+      for (const ev of events) {
+        const impact = (ev.impact || 'low').toLowerCase();
+        const impactColor = IMPACT_COLORS[impact] ?? IMPACT_COLORS.low;
+        const flag = COUNTRY_FLAGS[ev.country] ?? escapeHtml(ev.country);
+        const isHigh = impact === 'high';
+
+        // Right column: actual value when released, countdown otherwise
+        let rightLabel: string;
+        let rightClass: string;
+        if (ev.actual) {
+          rightLabel = escapeHtml(fmtVal(ev.actual, ev.unit));
+          rightClass = 'ec-actual';
+        } else {
+          rightLabel = escapeHtml(countdown(ev.date));
+          rightClass = 'ec-countdown';
+        }
+
+        bodyRows += `<tr>
+          <td class="ec-event">
+            <span style="margin-right:5px">${flag}</span><span style="font-weight:${isHigh ? 600 : 400}">${escapeHtml(ev.event)}</span>
+          </td>
+          <td class="ec-impact">
+            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${impactColor};vertical-align:middle"></span>
+          </td>
+          <td class="ec-value ${rightClass}">${rightLabel}</td>
+        </tr>`;
+      }
+    }
+
+    const emptyMsgText = this._region === 'all'
+      ? 'No upcoming economic events'
+      : 'No events for selected region';
+    const emptyMsg = filtered.length === 0
+      ? `<tr><td colspan="3" class="ec-empty">${escapeHtml(emptyMsgText)}</td></tr>`
+      : '';
+
+    const html = `${this._renderRegionTabs()}<div style="padding:0 14px 12px;">
+      <table class="wm-table ec-table">
+        <colgroup>
+          <col style="width:auto">
+          <col style="width:24px">
+          <col style="width:72px">
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">EVENT</th>
+            <th scope="col"></th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody>${emptyMsg}${bodyRows}</tbody>
+      </table>
+    </div>`;
+
+    this.setSafeContent(unsafeRawHtml(html, 'legacy Panel.setContent() migration'));
+  }
+}

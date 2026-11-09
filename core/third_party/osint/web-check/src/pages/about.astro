@@ -1,0 +1,151 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import { about, supportUs, fairUse, privacy, license } from '@/data/about';
+import { checkIds } from '@/data/checks';
+
+const authorName = 'Alicia Sykes';
+const authorLink = 'https://aliciasykes.com';
+const repoLink = 'https://github.com/lissy93/web-check';
+const licenseLink = `${repoLink}/blob/master/LICENSE`;
+const currentYear = new Date().getFullYear();
+
+const elsewhere = [
+  { title: `All ${checkIds.length} checks, explained`, link: '/checks' },
+  { title: 'Run your own instance', link: '/self-hosted-setup' },
+  { title: 'Use the API', link: '/web-check-api' },
+];
+---
+
+<PageLayout
+  title="About | Web Check"
+  description="What Web Check is, who makes it, how to support it, and its terms of use."
+  keywords="web check, about, open source, mit license, fair use, privacy"
+  breadcrumbs={[
+    { name: 'Web Check', item: '' },
+    { name: 'About', item: 'about' },
+  ]}
+>
+  <section class="intro">
+    <h1>About Web Check</h1>
+    {about.map((paragraph) => (
+      <p>{paragraph}</p>
+    ))}
+    <p>
+      It's built and maintained by <a href={authorLink}>{authorName}</a>, and the source is on{' '}
+      <a href={repoLink}>GitHub</a>.
+    </p>
+    <ul class="elsewhere">
+      {elsewhere.map((link) => (
+        <li>
+          <a href={link.link}>{link.title}</a>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Support the project</h2>
+    {supportUs.map((paragraph) => (
+      <p set:html={paragraph} />
+    ))}
+  </section>
+
+  <section>
+    <h2>Fair use</h2>
+    <ul>
+      {fairUse.map((rule) => (
+        <li>{rule}</li>
+      ))}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Privacy</h2>
+    {privacy.map((paragraph) => (
+      <p>{paragraph}</p>
+    ))}
+  </section>
+
+  <section>
+    <h2>License</h2>
+    <p>
+      Web Check is distributed under the <a href={licenseLink}>MIT license</a>, ©{' '}
+      <a href={authorLink}>{authorName}</a>
+      {currentYear}. It's free to use, modify and distribute in both personal and commercial
+      settings.
+    </p>
+    <pre>{license}</pre>
+  </section>
+</PageLayout>
+
+<style lang="scss">
+  section {
+    margin-bottom: 4rem;
+
+    h1 {
+      margin: 0 0 1.5rem;
+      font-size: clamp(2.25rem, 6vw, 3.5rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      font-size: 1.6rem;
+      margin-bottom: 1rem;
+    }
+
+    p,
+    li {
+      max-width: 68ch;
+      line-height: 1.7;
+      color: var(--text-color-secondary);
+    }
+
+    ul {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
+
+  .elsewhere {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    list-style: none;
+    padding: 0;
+    margin-top: 1.5rem;
+
+    a {
+      display: block;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text-color);
+      font-weight: 600;
+      transition:
+        border-color 0.25s ease,
+        color 0.25s ease;
+
+      &:hover,
+      &:focus-visible {
+        border-color: var(--primary);
+        color: var(--primary-increased-contrast);
+        text-decoration: none;
+      }
+    }
+  }
+
+  pre {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--background-raised);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--text-color-tertiary);
+    overflow-x: auto;
+    max-width: fit-content;
+  }
+</style>

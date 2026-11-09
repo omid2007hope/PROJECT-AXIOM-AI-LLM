@@ -1,0 +1,456 @@
+import type { Range, ScrollToOptions, VirtualItem, VirtualizerOptions } from '@tanstack/react-virtual'
+import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
+import React, { memo, useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
+
+import { ScrollArea } from '@cherrystudio/ui'
+import { cn } from '@cherrystudio/ui/lib/utils'
+
+type InheritedVirtualizerOptions = Partial<
+  Omit<
+    VirtualizerOptions<HTMLDivElement, Element>,
+    | 'count' // determined by items.length
+    | 'getScrollElement' // determined by internal scrollerRef
+    | 'estimateSize' // promoted to a required prop
+    | 'rangeExtractor' // isSticky provides a simpler abstraction
+  >
+>
+
+type DynamicVirtualListScrollerProps = Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  'children' | 'className' | 'onScroll' | 'ref' | 'role' | 'style'
+> & {
+  [key: `data-${string}`]: string | number | boolean | undefined
+}
+
+export interface DynamicVirtualListRef {
+  /** Resets any prev item measurements. */
+  measure: () => void
+  /** Returns the scroll element for the virtualizer. */
+  scrollElement: () => HTMLDivElement | null
+  /** Scrolls the virtualizer to the pixel offset provided. */
+  scrollToOffset: (offset: number, options?: ScrollToOptions) => void
+  /** Scrolls the virtualizer to the items of the index provided. */
+  scrollToIndex: (index: number, options?: ScrollToOptions) => void
+  /** Resizes an item. */
+  resizeItem: (index: number, size: number) => void
+  /** Returns the total size in pixels for the virtualized items. */
+  getTotalSize: () => number
+  /** Returns the virtual items for the current state of the virtualizer. */
+  getVirtualItems: () => VirtualItem[]
+  /** Returns the virtual row indexes for the current state of the virtualizer. */
+  getVirtualIndexes: () => number[]
+}
+
+export interface DynamicVirtualListProps<T> extends InheritedVirtualizerOptions {
+  ref?: React.Ref<DynamicVirtualListRef>
+
+  /** Use an ancestor as the scroll viewport instead of creating a nested scroller. */
+  externalScrollElement?: HTMLDivElement | null
+
+  /**
+   * List data
+   */
+  list: T[]
+
+  /**
+   * List item renderer function
+   */
+  children: (item: T, index: number) => React.ReactNode
+
+  /**
+   * List size (height or width, default is 100%)
+   */
+  size?: string | number
+
+  /**
+   * List item size estimator function (initial estimation)
+   */
+  estimateSize: (index: number) => number
+
+  /**
+   * Sticky item predicate, cannot be used with rangeExtractor
+   */
+  isSticky?: (index: number) => boolean
+
+  /** Item indexes that must remain mounted outside the visible range. */
+  keepMountedIndexes?: readonly number[]
+
+  /**
+   * Get the depth/level of an item for hierarchical sticky positioning
+   * Used with isSticky to determine ancestor relationships
+   */
+  getItemDepth?: (index: number) => number
+
+  /**
+   * Range extractor function, cannot be used with isSticky
+   */
+  rangeExtractor?: (range: Range) => number[]
+
+  /**
+   * List item container style
+   */
+  itemContainerStyle?: React.CSSProperties
+
+  /**
+   * Scroll container style
+   */
+  scrollerStyle?: React.CSSProperties
+
+  /** Layout classes for the scroll area root. */
+  scrollAreaClassName?: string
+
+  scrollHideDelay?: number
+
+  /**
+   * Scroll container role
+   */
+  role?: React.AriaRole
+
+  /**
+   * Exposes the internal scroll container DOM node.
+   */
+  scrollElementRef?: React.Ref<HTMLDivElement>
+
+  /**
+   * Additional attributes for the internal scroll container.
+   */
+  scrollerProps?: DynamicVirtualListScrollerProps
+
+  /**
+   * Hide the scrollbar automatically when scrolling is stopped
+   */
+  autoHideScrollbar?: boolean
+
+  /**
+   * Header content to display above the list
+   */
+  header?: React.ReactNode
+
+  /**
+   * Additional CSS class name for the container
+   */
+  className?: string
+
+  /**
+   * Scroll handler for the internal scroll container
+   */
+  onScroll?: React.UIEventHandler<HTMLDivElement>
+}
+
+function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
+  if (!ref) return
+  if (typeof ref === 'function') {
+    ref(value)
+    return
+  }
+  ref.current = value
+}
+
+function DynamicVirtualList<T>(props: DynamicVirtualListProps<T>) {
+  const {
+    ref,
+    externalScrollElement,
+    list,
+    children,
+    size,
+    estimateSize,
+    isSticky,
+    keepMountedIndexes = [],
+    getItemDepth,
+    rangeExtractor: customRangeExtractor,
+    itemContainerStyle,
+    scrollerStyle,
+    scrollAreaClassName,
+    scrollHideDelay = 2000,
+    role = 'region',
+    scrollElementRef,
+    scrollerProps,
+    autoHideScrollbar = false,
+    header,
+    className,
+    onScroll,
+    ...restOptions
+  } = props
+
+  const internalScrollerRef = useRef<HTMLDivElement>(null)
+  const setScrollerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      internalScrollerRef.current = node
+      assignRef(scrollElementRef, node)
+    },
+    [scrollElementRef]
+  )
+
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [externalScrollMargin, setExternalScrollMargin] = useState(0)
+  const usesExternalScroll = externalScrollElement !== undefined
+  const horizontal = restOptions.horizontal
+  const scrollMargin = usesExternalScroll ? externalScrollMargin : (restOptions.scrollMargin ?? 0)
+
+  useLayoutEffect(() => {
+    const content = contentRef.current
+    const scrollElement = usesExternalScroll ? externalScrollElement : internalScrollerRef.current
+    if (!usesExternalScroll || !scrollElement || !content) return undefined
+
+    const measureScrollMargin = () => {
+      const contentRect = content.getBoundingClientRect()
+      const scrollRect = scrollElement.getBoundingClientRect()
+      setExternalScrollMargin(
+        horizontal
+          ? contentRect.left - scrollRect.left + scrollElement.scrollLeft - scrollElement.clientLeft
+          : contentRect.top - scrollRect.top + scrollElement.scrollTop - scrollElement.clientTop
+      )
+    }
+    measureScrollMargin()
+    const observer = new ResizeObserver(measureScrollMargin)
+    // Preceding siblings can move the list without resizing a min-height ancestor.
+    for (let element: HTMLElement | null = content; element; element = element.parentElement) {
+      observer.observe(element)
+      if (element === scrollElement) break
+      for (let sibling = element.previousElementSibling; sibling; sibling = sibling.previousElementSibling) {
+        observer.observe(sibling)
+      }
+    }
+    return () => observer.disconnect()
+  }, [externalScrollElement, usesExternalScroll, horizontal, isSticky, header])
+
+  const activeStickyIndexesRef = useRef<number[]>([])
+
+  const stickyIndexes = useMemo(() => {
+    if (!isSticky) return []
+    return list.map((_, index) => (isSticky(index) ? index : -1)).filter((index) => index !== -1)
+  }, [list, isSticky])
+
+  const internalStickyRangeExtractor = useCallback(
+    (range: Range) => {
+      const activeStickies: number[] = []
+
+      if (getItemDepth) {
+        // With depth information, we can build a proper ancestor chain
+        // Find all sticky items before the visible range
+        const stickiesBeforeRange = stickyIndexes.filter((index) => index < range.startIndex)
+
+        if (stickiesBeforeRange.length > 0) {
+          // Find the depth of the first visible item (or last sticky before it)
+          const firstVisibleIndex = range.startIndex
+          const referenceDepth = getItemDepth(firstVisibleIndex)
+
+          // Build ancestor chain: include all sticky parents
+          const ancestorChain: number[] = []
+          let minDepth = referenceDepth
+
+          // Walk backwards from the last sticky before visible range
+          for (let i = stickiesBeforeRange.length - 1; i >= 0; i--) {
+            const stickyIndex = stickiesBeforeRange[i]
+            const stickyDepth = getItemDepth(stickyIndex)
+
+            // Include this sticky if it's a parent (smaller depth) of our reference
+            if (stickyDepth < minDepth) {
+              ancestorChain.unshift(stickyIndex)
+              minDepth = stickyDepth
+            }
+          }
+
+          activeStickies.push(...ancestorChain)
+        }
+      } else {
+        // Fallback: without depth info, just use the last sticky before range
+        const lastStickyBeforeRange = [...stickyIndexes].reverse().find((index) => index < range.startIndex)
+        if (lastStickyBeforeRange !== undefined) {
+          activeStickies.push(lastStickyBeforeRange)
+        }
+      }
+
+      // Update the ref with current active stickies
+      activeStickyIndexesRef.current = activeStickies
+
+      // Merge the active sticky indexes and the default range extractor
+      const next = new Set([...activeStickyIndexesRef.current, ...defaultRangeExtractor(range)])
+
+      // Sort the set to maintain proper order
+      return [...next].sort((a, b) => a - b)
+    },
+    [stickyIndexes, getItemDepth]
+  )
+
+  const baseRangeExtractor = customRangeExtractor ?? (isSticky ? internalStickyRangeExtractor : undefined)
+  const rangeExtractorWithKeptIndexes = useCallback(
+    (range: Range) => {
+      const extracted = baseRangeExtractor?.(range) ?? defaultRangeExtractor(range)
+      return [
+        ...new Set([...extracted, ...keepMountedIndexes.filter((index) => index >= 0 && index < list.length)])
+      ].sort((a, b) => a - b)
+    },
+    [baseRangeExtractor, keepMountedIndexes, list.length]
+  )
+  const resolvedRangeExtractor = keepMountedIndexes.length > 0 ? rangeExtractorWithKeptIndexes : baseRangeExtractor
+
+  const virtualizer = useVirtualizer({
+    ...restOptions,
+    count: list.length,
+    getScrollElement: () => (usesExternalScroll ? externalScrollElement : internalScrollerRef.current),
+    scrollMargin,
+    estimateSize,
+    rangeExtractor: resolvedRangeExtractor
+  })
+  const previousListLengthRef = useRef(list.length)
+
+  useLayoutEffect(() => {
+    const wasEmpty = previousListLengthRef.current === 0
+    previousListLengthRef.current = list.length
+
+    if (wasEmpty && list.length > 0) {
+      virtualizer.measure()
+    }
+  }, [list.length, virtualizer])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      measure: () => virtualizer.measure(),
+      scrollElement: () => virtualizer.scrollElement,
+      scrollToOffset: (offset, options) => virtualizer.scrollToOffset(offset, options),
+      scrollToIndex: (index, options) => virtualizer.scrollToIndex(index, options),
+      resizeItem: (index, size) => virtualizer.resizeItem(index, size),
+      getTotalSize: () => virtualizer.getTotalSize(),
+      getVirtualItems: () => virtualizer.getVirtualItems(),
+      getVirtualIndexes: () => virtualizer.getVirtualIndexes()
+    }),
+    [virtualizer]
+  )
+
+  const virtualItems = virtualizer.getVirtualItems()
+  const totalSize = virtualizer.getTotalSize()
+  const maxStickyDepth = stickyIndexes.reduce((max, index) => Math.max(max, getItemDepth?.(index) ?? 0), 0)
+  let previousStickyEnd = 0
+  const hasFixedItemSize = horizontal
+    ? itemContainerStyle?.width !== undefined
+    : itemContainerStyle?.height !== undefined
+  const measureItemElement = hasFixedItemSize ? undefined : virtualizer.measureElement
+
+  const viewportProps = {
+    ...scrollerProps,
+    ref: setScrollerRef,
+    className: cn('dynamic-virtual-list', isSticky && 'isolate', className),
+    role,
+    onScroll,
+    style: scrollerStyle
+  }
+
+  const content = (
+    <>
+      {header}
+      <div
+        ref={contentRef}
+        style={{
+          position: 'relative',
+          ...(isSticky && { display: 'flex', flexDirection: horizontal ? 'row' : 'column' }),
+          width: horizontal ? `${totalSize}px` : '100%',
+          height: !horizontal ? `${totalSize}px` : '100%'
+        }}>
+        {virtualItems.map((virtualItem) => {
+          const isItemSticky = stickyIndexes.includes(virtualItem.index)
+          const isItemActiveSticky = isItemSticky && activeStickyIndexesRef.current.includes(virtualItem.index)
+
+          const isItemClamped =
+            isItemSticky && (isItemActiveSticky || virtualItem.index >= (virtualizer.range?.startIndex ?? 0))
+          const depth = getItemDepth?.(virtualItem.index) ?? 0
+          let ancestorDepth = depth
+          let stickyOffset = 0
+          for (let i = stickyIndexes.length - 1; i >= 0 && ancestorDepth > 0; i--) {
+            const index = stickyIndexes[i]
+            if (index >= virtualItem.index) continue
+            const candidateDepth = getItemDepth?.(index) ?? 0
+            if (candidateDepth < ancestorDepth) {
+              stickyOffset += virtualItems.find((item) => item.index === index)?.size ?? estimateSize(index)
+              ancestorDepth = candidateDepth
+            }
+          }
+          const naturalOffset = virtualItem.start - scrollMargin
+          // In-flow gaps preserve virtual coordinates while native sticky follows compositor scrolling.
+          const flowGap = naturalOffset - previousStickyEnd
+          if (isItemClamped) previousStickyEnd = naturalOffset + virtualItem.size
+
+          // Check if this item is visually covered by sticky items
+          // If covered, disable pointer events to prevent hover/click bleeding through
+          const isCoveredBySticky = (() => {
+            if (!activeStickyIndexesRef.current.length) return false
+            if (isItemActiveSticky) return false // Sticky items themselves are not covered
+
+            // Calculate if this item's visual position is under any sticky header
+            const itemVisualTop = virtualItem.start
+            let totalStickyHeight = 0
+            for (const stickyIdx of activeStickyIndexesRef.current) {
+              totalStickyHeight += estimateSize(stickyIdx)
+            }
+
+            // If item starts within the sticky area, it's covered
+            return itemVisualTop < totalStickyHeight
+          })()
+
+          const style: React.CSSProperties = {
+            ...itemContainerStyle,
+            position: isItemClamped ? 'sticky' : 'absolute',
+            top: horizontal || !isItemClamped ? 0 : stickyOffset,
+            left: horizontal && isItemClamped ? stickyOffset : 0,
+            ...(isItemClamped && { flexShrink: 0 }),
+            zIndex: isItemSticky ? 1 + maxStickyDepth - depth : 0,
+            pointerEvents: isCoveredBySticky ? 'none' : 'auto',
+            ...(isItemClamped && {
+              // --card, not --background: the latter is translucent in dark mode, so rows
+              // scrolling under a pinned header would show through it.
+              backgroundColor: 'var(--card)'
+            }),
+            ...(horizontal
+              ? {
+                  ...(isItemClamped && { marginLeft: flowGap }),
+                  transform: isItemClamped ? undefined : `translateX(${naturalOffset}px)`,
+                  height: '100%'
+                }
+              : {
+                  ...(isItemClamped && { marginTop: flowGap }),
+                  transform: isItemClamped ? undefined : `translateY(${naturalOffset}px)`,
+                  width: '100%'
+                })
+          }
+
+          return (
+            <div key={virtualItem.key} data-index={virtualItem.index} ref={measureItemElement} style={style}>
+              {children(list[virtualItem.index], virtualItem.index)}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+
+  if (usesExternalScroll) {
+    return (
+      <div {...viewportProps} style={{ ...scrollerStyle, overflow: 'visible' }}>
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <ScrollArea
+      className={scrollAreaClassName}
+      style={{
+        ...(horizontal ? { width: size ?? '100%' } : { height: size ?? '100%' }),
+        pointerEvents: scrollerStyle?.pointerEvents
+      }}
+      orientation={horizontal ? 'horizontal' : scrollerStyle?.overflowX === 'auto' ? 'both' : 'vertical'}
+      type={autoHideScrollbar ? 'scroll' : 'auto'}
+      scrollHideDelay={scrollHideDelay}
+      viewportProps={viewportProps}
+      contentProps={horizontal ? { className: 'h-full' } : undefined}>
+      {content}
+    </ScrollArea>
+  )
+}
+
+const MemoizedDynamicVirtualList = memo(DynamicVirtualList) as <T>(
+  props: DynamicVirtualListProps<T>
+) => React.ReactElement
+
+export default MemoizedDynamicVirtualList

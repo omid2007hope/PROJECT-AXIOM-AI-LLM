@@ -1,0 +1,200 @@
+import assert from 'node:assert/strict';
+import { afterEach, describe, it, mock } from 'node:test';
+
+import handler, {
+  __setNotifyDepsForTests,
+  NOTIFY_WRITE_RATE_LIMIT,
+  NOTIFY_WRITE_RATE_SCOPE,
+  NOTIFY_WRITE_RATE_WINDOW,
+} from '../api/notify.ts';
+
+const originalFetch = globalThis.fetch;
+const originalUpstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+const originalUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+const TEST_NOW = 1_700_000_000_000;
+const TEST_USER_ID = 'user_notify_rate_limit_test';
+const IDEMPOTENCY_KEY = '7ea904e0-2f7f-4bbb-86e6-1ed5af3bea83';
+
+type RateLimitResult = {
+  allowed: boolean;
+  limit: number;
+  reset: number;
+  degraded: boolean;
+};
+
+function makePost(
+  body: Record<string, unknown> = { eventType: 'market_alert', payload: { symbol: 'WTI' } },
+  extraHeaders: Record<string, string> = {},
+): Request {
+  return new Request('https://worldmonitor.app/api/notify', {
+    method: 'POST',
+    headers: {
+      Origin: 'https://worldmonitor.app',
+      Authorization: 'Bearer test-token',
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function installDeps(rateLimitResult: RateLimitResult): Array<RateLimitResult> {
+  const rateLimitCalls: RateLimitResult[] = [];
+  __setNotifyDepsForTests({
+    validateBearerToken: async () => ({ valid: true, userId: TEST_USER_ID }),
+    checkTierProEntitlement: async () => ({ allowed: true }),
+    checkScopedRateLimit: async () => {
+      rateLimitCalls.push(rateLimitResult);
+      return rateLimitResult;
+    },
+  });
+  return rateLimitCalls;
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+afterEach(() => {
+  __setNotifyDepsForTests(null);
+  mock.restoreAll();
+  globalThis.fetch = originalFetch;
+  if (originalUpstashUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+  else process.env.UPSTASH_REDIS_REST_URL = originalUpstashUrl;
+  if (originalUpstashToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  else process.env.UPSTASH_REDIS_REST_TOKEN = originalUpstashToken;
+});
+
+describe('/api/notify write rate limit', () => {
+  it('uses the shared degraded 503 contract when the limiter is unavailable', async () => {
+    const rateLimitCalls = installDeps({
+      allowed: true,
+      limit: NOTIFY_WRITE_RATE_LIMIT,
+      reset: 0,
+      degraded: true,
+    });
+
+    const res = await handler(makePost());
+
+    assert.equal(res.status, 503);
+    assert.equal(res.headers.get('X-RateLimit-Mode'), 'degraded');
+    assert.equal(res.headers.get('Retry-After'), '5');
+    assert.deepEqual(await res.json(), { error: 'Rate-limit service temporarily unavailable' });
+    assert.equal(rateLimitCalls.length, 1);
+  });
+
+  it('returns the complete shared 429 header contract for a confirmed quota denial', async () => {
+    mock.method(Date, 'now', () => TEST_NOW);
+    installDeps({
+      allowed: false,
+      limit: NOTIFY_WRITE_RATE_LIMIT,
+      reset: TEST_NOW + 30_000,
+      degraded: false,
+    });
+
+    const res = await handler(makePost());
+
+    assert.equal(res.status, 429);
+    assert.deepEqual(await res.json(), { error: 'RATE_LIMITED' });
+    assert.equal(res.headers.get('RateLimit-Policy'), '"default";q=30;w=60');
+    assert.equal(res.headers.get('RateLimit-Limit'), '30');
+    assert.equal(res.headers.get('RateLimit-Remaining'), '0');
+    assert.equal(res.headers.get('RateLimit-Reset'), '30');
+    assert.equal(res.headers.get('RateLimit'), '"default";r=0;t=30');
+    assert.equal(res.headers.get('X-RateLimit-Limit'), '30');
+    assert.equal(res.headers.get('X-RateLimit-Remaining'), '0');
+    assert.equal(res.headers.get('X-RateLimit-Reset'), String(TEST_NOW + 30_000));
+    assert.equal(res.headers.get('Retry-After'), '30');
+  });
+
+  it('replays a completed Idempotency-Key response without charging an exhausted quota', async () => {
+    const body = { eventType: 'market_alert', payload: { symbol: 'WTI' } };
+    const reqHash = await sha256Hex(JSON.stringify(body));
+    process.env.UPSTASH_REDIS_REST_URL = 'https://upstash.test';
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'upstash-token';
+    globalThis.fetch = mock.fn(async () => Response.json([{
+      result: JSON.stringify({
+        state: 'completed',
+        status: 200,
+        contentType: 'application/json',
+        reqHash,
+        body: JSON.stringify({ ok: true }),
+      }),
+    }])) as typeof fetch;
+    const rateLimitCalls = installDeps({
+      allowed: false,
+      limit: NOTIFY_WRITE_RATE_LIMIT,
+      reset: TEST_NOW + 30_000,
+      degraded: false,
+    });
+
+    const res = await handler(makePost(body, { 'Idempotency-Key': IDEMPOTENCY_KEY }));
+
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('Idempotent-Replayed'), 'true');
+    assert.deepEqual(await res.json(), { ok: true });
+    assert.deepEqual(rateLimitCalls, []);
+  });
+});
+
+it('returns a defined unknown publish outcome without replaying a timed-out write', async () => {
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'fixture';
+  installDeps({ allowed: true, limit: NOTIFY_WRITE_RATE_LIMIT, reset: 0, degraded: false });
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new DOMException('deadline', 'TimeoutError'); };
+  const response = await handler(makePost());
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('Retry-After'), '180');
+  const body = await response.json();
+  assert.equal(body.error, 'publish_outcome_unknown');
+  assert.equal(typeof body.message, 'string');
+  assert.equal(calls, 1);
+});
+
+it('keeps the Idempotency-Key marker after a timed-out push, so a retry cannot publish twice', async () => {
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'fixture';
+  installDeps({ allowed: true, limit: NOTIFY_WRITE_RATE_LIMIT, reset: 0, degraded: false });
+
+  // Minimal Upstash pipeline: the handler only needs GET, SET (NX/EX) and DEL.
+  const store = new Map<string, string>();
+  const commands: string[] = [];
+  let pushes = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('/lpush/')) {
+      pushes++;
+      // The push may have committed before the deadline fired.
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    }
+    assert.ok(url.endsWith('/pipeline'), `unexpected Redis call ${url}`);
+    const batch = JSON.parse(String(init?.body)) as string[][];
+    return Response.json(batch.map(([op, key, value, ...flags]) => {
+      commands.push(op!);
+      if (op === 'GET') return { result: store.get(key!) ?? null };
+      if (op === 'DEL') return { result: store.delete(key!) ? 1 : 0 };
+      if (op === 'SET') {
+        if (flags.includes('NX') && store.has(key!)) return { result: null };
+        store.set(key!, value!);
+        return { result: 'OK' };
+      }
+      throw new Error(`unexpected Redis op ${op}`);
+    }));
+  }) as typeof fetch;
+
+  const headers = { 'Idempotency-Key': IDEMPOTENCY_KEY };
+  const first = await handler(makePost(undefined, headers));
+  assert.equal(first.status, 503);
+  assert.equal(first.headers.get('Retry-After'), '180');
+  assert.equal((await first.json()).error, 'publish_outcome_unknown');
+  assert.equal(commands.includes('DEL'), false, 'an unknown outcome must not release the processing marker');
+
+  const retry = await handler(makePost(undefined, headers));
+  assert.equal(retry.status, 409, 'the retry must see the in-flight marker, not replay the push');
+  assert.equal((await retry.json()).error, 'idempotency_conflict');
+  assert.equal(pushes, 1);
+});

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/Mintplex-Labs/anything-llm/discussions
+    about: Ask questions, get help, and share ideas with the AnythingLLM community.
+  - name: 🧑‍🤝‍🧑 r/anythingllm
+    url: https://www.reddit.com/r/anythingllm/
+    about: Join the AnythingLLM community on Reddit.

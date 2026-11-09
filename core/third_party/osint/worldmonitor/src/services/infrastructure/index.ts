@@ -1,0 +1,261 @@
+/**
+ * Unified infrastructure service module -- replaces two legacy services:
+ *   - src/services/outages.ts (Cloudflare Radar internet outages)
+ *   - ServiceStatusPanel's direct /api/service-status fetch
+ *
+ * All data now flows through the InfrastructureServiceClient RPC.
+ */
+
+import { getRpcBaseUrl } from '@/services/rpc-client';
+import type { ListInternetDdosAttacksResponse, ListInternetOutagesResponse, ListInternetTrafficAnomaliesResponse, ListServiceStatusesResponse, InternetOutage as ProtoOutage, ServiceStatus as ProtoServiceStatus } from '@/generated/client/worldmonitor/infrastructure/v1/service_client';
+import type { InternetOutage } from '@/types';
+import { createCircuitBreaker } from '@/utils/circuit-breaker';
+import { isFeatureAvailable } from '../runtime-config';
+import { getHydratedData } from '@/services/bootstrap';
+import { dataFreshness } from '@/services/data-freshness';
+import { InfrastructureServiceClient } from '@/services/generated-rpc-clients';
+
+// ---- Client + Circuit Breakers ----
+
+const client = new InfrastructureServiceClient(getRpcBaseUrl(), { fetch: (...args) => globalThis.fetch(...args) });
+const outageBreaker = createCircuitBreaker<ListInternetOutagesResponse>({ name: 'Internet Outages', cacheTtlMs: 30 * 60 * 1000, persistCache: true });
+const statusBreaker = createCircuitBreaker<ListServiceStatusesResponse>({ name: 'Service Statuses', cacheTtlMs: 30 * 60 * 1000, persistCache: true });
+const ddosBreaker = createCircuitBreaker<ListInternetDdosAttacksResponse>({ name: 'DDoS Attacks', cacheTtlMs: 30 * 60 * 1000, persistCache: true });
+const trafficAnomaliesBreaker = createCircuitBreaker<ListInternetTrafficAnomaliesResponse>({ name: 'Traffic Anomalies', cacheTtlMs: 30 * 60 * 1000, persistCache: true });
+
+const emptyOutageFallback: ListInternetOutagesResponse = { outages: [], pagination: undefined, fetchedAt: 0 };
+const emptyStatusFallback: ListServiceStatusesResponse = { statuses: [] };
+const emptyDdosFallback: ListInternetDdosAttacksResponse = { protocol: [], vector: [], dateRangeStart: '', dateRangeEnd: '', topTargetLocations: [] };
+const emptyAnomaliesFallback: ListInternetTrafficAnomaliesResponse = { anomalies: [], totalCount: 0 };
+
+function isDdosResponse(value: unknown): value is ListInternetDdosAttacksResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const response = value as Partial<ListInternetDdosAttacksResponse>;
+  return Array.isArray(response.protocol)
+    && Array.isArray(response.vector)
+    && typeof response.dateRangeStart === 'string'
+    && typeof response.dateRangeEnd === 'string'
+    && Array.isArray(response.topTargetLocations);
+}
+
+function isTrafficAnomaliesResponse(value: unknown): value is ListInternetTrafficAnomaliesResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const response = value as Partial<ListInternetTrafficAnomaliesResponse>;
+  return Array.isArray(response.anomalies) && typeof response.totalCount === 'number';
+}
+
+// ---- Proto enum -> legacy string adapters ----
+
+const SEVERITY_REVERSE: Record<string, 'partial' | 'major' | 'total'> = {
+  OUTAGE_SEVERITY_PARTIAL: 'partial',
+  OUTAGE_SEVERITY_MAJOR: 'major',
+  OUTAGE_SEVERITY_TOTAL: 'total',
+};
+
+const STATUS_REVERSE: Record<string, 'operational' | 'degraded' | 'outage' | 'unknown'> = {
+  SERVICE_OPERATIONAL_STATUS_OPERATIONAL: 'operational',
+  SERVICE_OPERATIONAL_STATUS_DEGRADED: 'degraded',
+  SERVICE_OPERATIONAL_STATUS_PARTIAL_OUTAGE: 'degraded',
+  SERVICE_OPERATIONAL_STATUS_MAJOR_OUTAGE: 'outage',
+  SERVICE_OPERATIONAL_STATUS_MAINTENANCE: 'degraded',
+  SERVICE_OPERATIONAL_STATUS_UNSPECIFIED: 'unknown',
+};
+
+// ---- Adapter: proto InternetOutage -> legacy InternetOutage ----
+
+function toOutage(proto: ProtoOutage): InternetOutage {
+  return {
+    id: proto.id,
+    title: proto.title,
+    link: proto.link,
+    description: proto.description,
+    pubDate: proto.detectedAt ? new Date(proto.detectedAt) : new Date(),
+    country: proto.country,
+    region: proto.region || undefined,
+    lat: proto.location?.latitude ?? 0,
+    lon: proto.location?.longitude ?? 0,
+    severity: SEVERITY_REVERSE[proto.severity] || 'partial',
+    categories: proto.categories,
+    cause: proto.cause || undefined,
+    outageType: proto.outageType || undefined,
+    endDate: proto.endedAt ? new Date(proto.endedAt) : undefined,
+  };
+}
+
+// ========================================================================
+// Internet Outages -- replaces src/services/outages.ts
+// ========================================================================
+
+let outagesConfigured: boolean | null = null;
+/** Sticky proof that outage providers have returned real observations. */
+let outagesSeen = false;
+
+export function isOutagesConfigured(): boolean | null {
+  return outagesConfigured;
+}
+
+// A response can settle after the user turns the feature off; availability wins.
+function setOutagesConfigured(configured: boolean | null): void {
+  outagesConfigured = isFeatureAvailable('internetOutages') ? configured : false;
+  dataFreshness.setEnabled('outages', outagesConfigured !== false);
+}
+
+export async function fetchInternetOutages(): Promise<InternetOutage[]> {
+  if (!isFeatureAvailable('internetOutages')) {
+    setOutagesConfigured(false);
+    return [];
+  }
+
+  const hydrated = getHydratedData('outages') as ListInternetOutagesResponse | undefined;
+  let resp: ListInternetOutagesResponse;
+  if (hydrated?.outages?.length) {
+    outageBreaker.recordSuccess(hydrated);
+    resp = hydrated;
+  } else {
+    resp = await outageBreaker.execute(async () => {
+      return await client.listInternetOutages({
+        country: '',
+        start: 0,
+        end: 0,
+        pageSize: 0,
+        cursor: '',
+      });
+    }, emptyOutageFallback);
+  }
+
+  if (resp.outages.length > 0) {
+    outagesSeen = true;
+    setOutagesConfigured(true);
+    return resp.outages.map(toOutage);
+  }
+
+  // Empty snapshots must not imply missing configuration. Keep unknown until
+  // real observations arrive; once seen, retain/recover configured=true even
+  // across feature disablement so healthy empty cache can re-enable the layer.
+  setOutagesConfigured(outagesSeen ? true : null);
+  return [];
+}
+
+export function getOutagesStatus(): string {
+  return outageBreaker.getStatus();
+}
+
+// ========================================================================
+// DDoS Attacks -- L3/L4 attack summaries from Cloudflare Radar
+// ========================================================================
+
+export async function fetchDdosAttacks(): Promise<ListInternetDdosAttacksResponse> {
+  const hydrated = getHydratedData('ddosAttacks') as ListInternetDdosAttacksResponse | undefined;
+  if (isDdosResponse(hydrated)) {
+    ddosBreaker.recordSuccess(hydrated);
+    return hydrated;
+  }
+
+  return ddosBreaker.execute(async () => {
+    const response = await client.listInternetDdosAttacks({});
+    if (!isDdosResponse(response)) throw new Error('Invalid DDoS attacks response');
+    return response;
+  }, emptyDdosFallback, { shouldCache: isDdosResponse });
+}
+
+// ========================================================================
+// Traffic Anomalies -- anomalous traffic patterns from Cloudflare Radar
+// ========================================================================
+
+export async function fetchTrafficAnomalies(country?: string): Promise<ListInternetTrafficAnomaliesResponse> {
+  const hydrated = getHydratedData('trafficAnomalies') as ListInternetTrafficAnomaliesResponse | undefined;
+  if (!country && isTrafficAnomaliesResponse(hydrated)) {
+    trafficAnomaliesBreaker.recordSuccess(hydrated);
+    return hydrated;
+  }
+
+  return trafficAnomaliesBreaker.execute(async () => {
+    const response = await client.listInternetTrafficAnomalies({ country: country || '' });
+    if (!isTrafficAnomaliesResponse(response)) throw new Error('Invalid traffic anomalies response');
+    return response;
+  }, emptyAnomaliesFallback, {
+    cacheKey: country,
+    shouldCache: isTrafficAnomaliesResponse,
+  });
+}
+
+// ========================================================================
+// Service Statuses -- replaces direct /api/service-status fetch
+// ========================================================================
+
+export interface ServiceStatusResult {
+  id: string;
+  name: string;
+  category: string;
+  status: 'operational' | 'degraded' | 'outage' | 'unknown';
+  description: string;
+}
+
+export interface ServiceStatusSummary {
+  operational: number;
+  degraded: number;
+  outage: number;
+  unknown: number;
+}
+
+export interface ServiceStatusResponse {
+  success: boolean;
+  timestamp: string;
+  summary: ServiceStatusSummary;
+  services: ServiceStatusResult[];
+}
+
+// Category map for the service IDs (matches the handler's SERVICES list)
+const CATEGORY_MAP: Record<string, string> = {
+  aws: 'cloud', azure: 'cloud', gcp: 'cloud', cloudflare: 'cloud', vercel: 'cloud',
+  netlify: 'cloud', digitalocean: 'cloud', render: 'cloud', railway: 'cloud',
+  github: 'dev', gitlab: 'dev', npm: 'dev', docker: 'dev', bitbucket: 'dev',
+  circleci: 'dev', jira: 'dev', confluence: 'dev', linear: 'dev',
+  slack: 'comm', discord: 'comm', zoom: 'comm', notion: 'comm',
+  openai: 'ai', anthropic: 'ai', replicate: 'ai',
+  stripe: 'saas', twilio: 'saas', datadog: 'saas', sentry: 'saas', supabase: 'saas',
+};
+
+function toServiceResult(proto: ProtoServiceStatus): ServiceStatusResult {
+  return {
+    id: proto.id,
+    name: proto.name,
+    category: CATEGORY_MAP[proto.id] || 'saas',
+    status: STATUS_REVERSE[proto.status] || 'unknown',
+    description: proto.description,
+  };
+}
+
+function computeSummary(services: ServiceStatusResult[]): ServiceStatusSummary {
+  return {
+    operational: services.filter((s) => s.status === 'operational').length,
+    degraded: services.filter((s) => s.status === 'degraded').length,
+    outage: services.filter((s) => s.status === 'outage').length,
+    unknown: services.filter((s) => s.status === 'unknown').length,
+  };
+}
+
+export async function fetchServiceStatuses(): Promise<ServiceStatusResponse> {
+  const hydrated = getHydratedData('serviceStatuses') as ListServiceStatusesResponse | undefined;
+  if (hydrated?.statuses?.length) {
+    // Warm the breaker under the same key a later recurring call reads (#7048);
+    // a bare return drained the consume-once slot and forced a refetch.
+    statusBreaker.recordSuccess(hydrated);
+    const services = hydrated.statuses.map(toServiceResult);
+    return { success: true, timestamp: new Date().toISOString(), summary: computeSummary(services), services };
+  }
+
+  const resp = await statusBreaker.execute(async () => {
+    return client.listServiceStatuses({
+      status: 'SERVICE_OPERATIONAL_STATUS_UNSPECIFIED',
+    });
+  }, emptyStatusFallback, { shouldCache: (r) => r.statuses.length > 0 });
+
+  const services = resp.statuses.map(toServiceResult);
+  return {
+    success: statusBreaker.getDataState().mode !== 'unavailable',
+    timestamp: new Date().toISOString(),
+    summary: computeSummary(services),
+    services,
+  };
+}

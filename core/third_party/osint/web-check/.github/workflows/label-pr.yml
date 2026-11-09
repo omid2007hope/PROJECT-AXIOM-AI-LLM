@@ -1,0 +1,87 @@
+# Adds labels to PRs based on their category or the files changed
+# So that release notes can be grouped by change type
+
+name: 🏷️ Label PR
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, edited]
+
+concurrency:
+  group: label-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: 🏷️ Apply Category Label
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Determine and Apply Label
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            // [ label, matches Category field, matches changed file paths ]
+            const categories = [
+              ['New Check', /new check/i, []],
+              ['Accuracy Improvement', /accura/i, [/^api\//]],
+              ['UI', /\bui\b|styl|design|frontend/i, [/^(src|public)\//]],
+              ['Deployment', /deploy|docker|host/i, [
+                /^(Dockerfile|\.dockerignore|docker-compose\.yml|healthcheck\.js|server\.js)$/,
+                /^(netlify\.toml|vercel\.json|fly\.toml|render\.yaml)$/,
+              ]],
+              ['Dependencies', /dependenc|\bdeps\b/i, [/^(package\.json|yarn\.lock)$/]],
+              ['Build and CI', /build|\bci\b|workflow|refactor/i, [
+                /^\.github\/(workflows\/|dependabot\.yml$)/,
+                /^\.config\//,
+                /^(astro\.config\.mjs|svelte\.config\.js|tsconfig\.json|\.yarnrc|\.gitignore)$/,
+              ]],
+              ['Docs', /\bdocs?\b|documentation/i, [/\.md$/, /^\.github\/screenshots\//]],
+              ['Bug Fix', /bug ?fix|^fix|hot ?fix/i, []],
+              ['New Feature', /feature|feat\b/i, []],
+            ];
+
+            const pr = context.payload.pull_request;
+            const existing = pr.labels.map((l) => l.name);
+            if (categories.some(([label]) => existing.includes(label))) {
+              core.info('PR is already categorised, nothing to do');
+              return;
+            }
+
+            // Read the Category field, ignoring the template's comment hints
+            const body = (pr.body || '').replace(/<!--[\s\S]*?-->/g, '');
+            const stated = body.match(/^#+\s*Category\s*([^\n#]*)/m)?.[1].trim() || '';
+            let labels = categories
+              .filter(([, field]) => field.test(stated))
+              .map(([label]) => label);
+
+            // If no valid category was given, infer one from the files changed
+            if (!labels.length) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                ...context.repo, pull_number: pr.number, per_page: 100,
+              });
+              const names = files.map((f) => f.filename);
+              const counts = categories.map(([label, , paths]) =>
+                [label, names.filter((n) => paths.some((p) => p.test(n))).length]);
+              const [label, hits] = counts.reduce((a, b) => (b[1] > a[1] ? b : a));
+              const newCheck = /^api\/[^_][^/]*\.js$/;
+              if (files.some((f) => f.status === 'added' && newCheck.test(f.filename))) {
+                labels = ['New Check'];
+              } else if (hits * 2 > names.length) {
+                labels = [label];
+              }
+            }
+
+            if (!labels.length) {
+              core.info('Unable to determine a category for this PR');
+              return;
+            }
+
+            const issue_number = pr.number;
+            await github.rest.issues.addLabels({ ...context.repo, issue_number, labels });
+            core.info(`Applied label(s): ${labels.join(', ')}`);

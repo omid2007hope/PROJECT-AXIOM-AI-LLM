@@ -1,0 +1,255 @@
+import { createCircuitBreaker } from '@/utils/circuit-breaker';
+import { getRpcBaseUrl } from '@/services/rpc-client';
+import { premiumFetch } from '@/services/premium-fetch';
+import { getHydratedData } from '@/services/bootstrap';
+import { hasPremiumAccess } from '@/services/panel-gating';
+import { toApiUrl } from '@/services/runtime';
+import type { SanctionsEntry as ProtoSanctionsEntry, SanctionsEntityType as ProtoSanctionsEntityType, CountrySanctionsPressure as ProtoCountryPressure, ProgramSanctionsPressure as ProtoProgramPressure, ListSanctionsPressureResponse } from '@/generated/client/worldmonitor/sanctions/v1/service_client';
+import { SanctionsServiceClient } from '@/services/generated-rpc-clients';
+
+export type SanctionsEntityType = 'entity' | 'individual' | 'vessel' | 'aircraft';
+
+export interface SanctionsEntry {
+  id: string;
+  name: string;
+  entityType: SanctionsEntityType;
+  countryCodes: string[];
+  countryNames: string[];
+  programs: string[];
+  sourceLists: string[];
+  effectiveAt: Date | null;
+  isNew: boolean;
+  note: string;
+}
+
+export interface CountrySanctionsPressure {
+  countryCode: string;
+  countryName: string;
+  entryCount: number;
+  newEntryCount: number;
+  vesselCount: number;
+  aircraftCount: number;
+}
+
+export interface ProgramSanctionsPressure {
+  program: string;
+  entryCount: number;
+  newEntryCount: number;
+}
+
+export interface SanctionsPressureResult {
+  fetchedAt: Date;
+  datasetDate: Date | null;
+  totalCount: number;
+  sdnCount: number;
+  consolidatedCount: number;
+  semaCount: number;
+  semaError: string | null;
+  newEntryCount: number;
+  vesselCount: number;
+  aircraftCount: number;
+  countries: CountrySanctionsPressure[];
+  programs: ProgramSanctionsPressure[];
+  entries: SanctionsEntry[];
+}
+
+// premiumFetch no-ops safely without credentials, so keeping it is harmless
+// now that listSanctionsPressure is free. See src/services/supply-chain/index.ts
+// for the pattern.
+const client = new SanctionsServiceClient(getRpcBaseUrl(), { fetch: premiumFetch });
+const breaker = createCircuitBreaker<SanctionsPressureResult>({
+  name: 'Sanctions Pressure',
+  cacheTtlMs: 30 * 60 * 1000,
+  persistCache: true,
+  revivePersistedData: reviveSanctionsPressureResult,
+});
+
+let latestSanctionsPressureResult: SanctionsPressureResult | null = null;
+
+const emptyResult: SanctionsPressureResult = {
+  fetchedAt: new Date(0),
+  datasetDate: null,
+  totalCount: 0,
+  sdnCount: 0,
+  consolidatedCount: 0,
+  semaCount: 0,
+  semaError: null,
+  newEntryCount: 0,
+  vesselCount: 0,
+  aircraftCount: 0,
+  countries: [],
+  programs: [],
+  entries: [],
+};
+
+function reviveDate(value: Date): Date {
+  if (value instanceof Date) return value;
+  const revived = new Date(value as unknown as string | number);
+  return Number.isNaN(revived.getTime()) ? new Date(0) : revived;
+}
+
+function reviveNullableDate(value: Date | null): Date | null {
+  return value === null ? null : reviveDate(value);
+}
+
+function reviveSanctionsPressureResult(result: SanctionsPressureResult): SanctionsPressureResult {
+  return {
+    ...result,
+    fetchedAt: reviveDate(result.fetchedAt),
+    datasetDate: reviveNullableDate(result.datasetDate),
+    entries: result.entries.map((entry) => ({
+      ...entry,
+      effectiveAt: reviveNullableDate(entry.effectiveAt),
+    })),
+  };
+}
+
+function mapEntityType(value: ProtoSanctionsEntityType): SanctionsEntityType {
+  switch (value) {
+    case 'SANCTIONS_ENTITY_TYPE_INDIVIDUAL':
+      return 'individual';
+    case 'SANCTIONS_ENTITY_TYPE_VESSEL':
+      return 'vessel';
+    case 'SANCTIONS_ENTITY_TYPE_AIRCRAFT':
+      return 'aircraft';
+    default:
+      return 'entity';
+  }
+}
+
+function parseEpoch(value: string | number | null | undefined): Date | null {
+  if (value == null) return null;
+  const asNumber = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(asNumber) || asNumber <= 0) return null;
+  return new Date(asNumber);
+}
+
+function toEntry(raw: ProtoSanctionsEntry): SanctionsEntry {
+  return {
+    id: raw.id,
+    name: raw.name,
+    entityType: mapEntityType(raw.entityType),
+    countryCodes: raw.countryCodes ?? [],
+    countryNames: raw.countryNames ?? [],
+    programs: raw.programs ?? [],
+    sourceLists: raw.sourceLists ?? [],
+    effectiveAt: parseEpoch(raw.effectiveAt as string | number | undefined),
+    isNew: raw.isNew ?? false,
+    note: raw.note ?? '',
+  };
+}
+
+function toCountry(raw: ProtoCountryPressure): CountrySanctionsPressure {
+  return {
+    countryCode: raw.countryCode,
+    countryName: raw.countryName,
+    entryCount: raw.entryCount ?? 0,
+    newEntryCount: raw.newEntryCount ?? 0,
+    vesselCount: raw.vesselCount ?? 0,
+    aircraftCount: raw.aircraftCount ?? 0,
+  };
+}
+
+function toProgram(raw: ProtoProgramPressure): ProgramSanctionsPressure {
+  return {
+    program: raw.program,
+    entryCount: raw.entryCount ?? 0,
+    newEntryCount: raw.newEntryCount ?? 0,
+  };
+}
+
+
+function toResult(response: ListSanctionsPressureResponse): SanctionsPressureResult {
+  return {
+    fetchedAt: parseEpoch(response.fetchedAt as string | number | undefined) || new Date(),
+    datasetDate: parseEpoch(response.datasetDate as string | number | undefined),
+    totalCount: response.totalCount ?? 0,
+    sdnCount: response.sdnCount ?? 0,
+    consolidatedCount: response.consolidatedCount ?? 0,
+    semaCount: Number(response.semaCount) || 0,
+    semaError: response.semaError || null,
+    newEntryCount: response.newEntryCount ?? 0,
+    vesselCount: response.vesselCount ?? 0,
+    aircraftCount: response.aircraftCount ?? 0,
+    countries: (response.countries ?? []).map(toCountry),
+    programs: (response.programs ?? []).map(toProgram),
+    entries: (response.entries ?? []).map(toEntry),
+  };
+}
+
+function isCacheableSanctionsPressureResult(result: SanctionsPressureResult): boolean {
+  return result.totalCount > 0 && result.semaError === null;
+}
+
+export async function fetchSanctionsPressure(): Promise<SanctionsPressureResult> {
+  const hydrated = getHydratedData('sanctionsPressure') as ListSanctionsPressureResponse | undefined;
+  if (hydrated?.entries?.length || hydrated?.countries?.length || hydrated?.programs?.length) {
+    const result = toResult(hydrated);
+    latestSanctionsPressureResult = result;
+    // Warm the breaker under the same key a later recurring premium call
+    // reads (#7048). The guard mirrors execute()'s shouldCache
+    // (complete, non-degraded data); the local mirror above already covers
+    // getLatestSanctionsPressure() consumers.
+    if (isCacheableSanctionsPressureResult(result)) breaker.recordSuccess(result);
+    return result;
+  }
+
+  // Anonymous (non-premium) users read the shared bootstrap copy. The RPC
+  // is free and serves the same seed, but the per-key bootstrap URL is the
+  // cheaper read for ordinary visitors. Surface whatever it serves (or
+  // emptyResult on any failure).
+  if (!hasPremiumAccess()) {
+    const cached = breaker.getCached();
+    if (cached) {
+      latestSanctionsPressureResult = cached;
+      return cached;
+    }
+
+    const result = await breaker.execute(async () => {
+      const resp = await fetch(toApiUrl('/api/bootstrap?keys=sanctionsPressure'), {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!resp.ok) {
+        throw new Error(`Sanctions bootstrap failed: HTTP ${resp.status}`);
+      }
+      const { data } = (await resp.json()) as { data?: { sanctionsPressure?: ListSanctionsPressureResponse } };
+      const payload = data?.sanctionsPressure;
+      if (payload?.entries?.length || payload?.countries?.length || payload?.programs?.length) {
+        const liveResult = toResult(payload);
+        latestSanctionsPressureResult = liveResult;
+        return liveResult;
+      }
+      latestSanctionsPressureResult = emptyResult;
+      return emptyResult;
+    }, emptyResult, {
+      shouldCache: isCacheableSanctionsPressureResult,
+    });
+    latestSanctionsPressureResult = result;
+    return result;
+  }
+
+  const result = await breaker.execute(async () => {
+    const response = await client.listSanctionsPressure({
+      maxItems: 30,
+    }, {
+      signal: AbortSignal.timeout(25_000),
+    });
+    const liveResult = toResult(response);
+    if (liveResult.totalCount === 0) {
+      // Seed is missing or the feed is down. Evict any stale cache so the
+      // panel surfaces "unavailable" instead of serving old designations
+      // indefinitely via stale-while-revalidate.
+      breaker.clearCache();
+    }
+    latestSanctionsPressureResult = liveResult;
+    return liveResult;
+  }, emptyResult, {
+    shouldCache: isCacheableSanctionsPressureResult,
+  });
+  latestSanctionsPressureResult = result;
+  return result;
+}
+
+export function getLatestSanctionsPressure(): SanctionsPressureResult | null {
+  return latestSanctionsPressureResult;
+}

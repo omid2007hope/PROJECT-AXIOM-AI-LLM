@@ -1,0 +1,631 @@
+import type {
+  ServerContext,
+  GetChokepointStatusRequest,
+  GetChokepointStatusResponse,
+  ChokepointInfo,
+  FlowSource,
+} from '../../../../src/generated/server/worldmonitor/supply_chain/v1/service_server';
+
+import type {
+  ListNavigationalWarningsResponse,
+  GetVesselSnapshotResponse,
+  NavigationalWarning,
+  AisDisruption,
+} from '../../../../src/generated/server/worldmonitor/maritime/v1/service_server';
+
+import { cachedFetchJson, getCachedJson, setCachedJson } from '../../../_shared/redis';
+import { listNavigationalWarnings } from '../../maritime/v1/list-navigational-warnings';
+import { getVesselSnapshot } from '../../maritime/v1/get-vessel-snapshot';
+// @ts-expect-error — .mjs module, no declaration file
+import { computeDisruptionScore, scoreToStatus, SEVERITY_SCORE, THREAT_LEVEL } from './_scoring.mjs';
+import { type ThreatLevel, threatLevelToWarRiskTier } from './_insurance-tier';
+import { CHOKEPOINT_STATUS_KEY as REDIS_CACHE_KEY } from '../../../_shared/cache-keys';
+import { narrowFlowSource } from '../../../_shared/flow-source';
+const TRANSIT_SUMMARIES_KEY = 'supply_chain:transit-summaries:v1';
+const FLOWS_KEY = 'energy:chokepoint-flows:v1';
+// NOTE: historical fallback via supply_chain:portwatch:v1 / corridorrisk / chokepoint_transits
+// was removed — those keys are ~500KB each, and reading them on top of the already-large
+// transit-summaries payload was causing Vercel-edge Redis timeouts (1.5s budget) and pinning
+// a silent zero-state cache. Today the ais-relay writer is authoritative for the compact
+// summary. When every published source is missing, the handler returns null and
+// cachedFetchJson writes NEG_SENTINEL instead of caching a healthy-looking zero state.
+// See docs/plans/chokepoint-rpc-payload-split.md.
+const REDIS_CACHE_TTL = 300; // 5 min
+const REDIS_NEGATIVE_CACHE_TTL = 120;
+const CHOKEPOINT_SEED_META_KEY = 'seed-meta:supply_chain:chokepoints';
+/** 7-day retain window for last-shortfall diagnostics on seed-meta. */
+const CHOKEPOINT_SEED_META_TTL_SECONDS = 604800;
+const THREAT_CONFIG_MAX_AGE_DAYS = 120;
+const NEARBY_CHOKEPOINT_RADIUS_KM = 300;
+const THREAT_CONFIG_STALE_NOTE = `Threat baseline last reviewed > ${THREAT_CONFIG_MAX_AGE_DAYS} days ago — review recommended`;
+
+export type ChokepointSeedMeta = {
+  fetchedAt: number;
+  recordCount: number;
+  /** Last PortWatch shortfall ids — live or carried after recovery. */
+  uncoveredChokepoints?: string[];
+  /** Epoch ms when that shortfall was first recorded (not refreshed on carry). */
+  uncoveredAt?: number;
+};
+
+/**
+ * Build the chokepoint seed-meta payload.
+ *
+ * A healthy refresh produces an empty `uncoveredIds` list. Because
+ * `setCachedJson` does a full Redis SET, omitting the shortfall fields would
+ * erase the diagnostic the moment PortWatch recovers — defeating delayed
+ * investigation. Carry the previous shortfall (and its `uncoveredAt`) forward
+ * while it remains inside the seed-meta TTL window.
+ */
+export function buildChokepointSeedMeta(
+  coveredCount: number,
+  uncoveredIds: readonly string[],
+  previous: unknown,
+  nowMs: number,
+  retainMs: number = CHOKEPOINT_SEED_META_TTL_SECONDS * 1000,
+): ChokepointSeedMeta {
+  const meta: ChokepointSeedMeta = {
+    fetchedAt: nowMs,
+    recordCount: coveredCount,
+  };
+
+  if (uncoveredIds.length > 0) {
+    meta.uncoveredChokepoints = [...uncoveredIds];
+    meta.uncoveredAt = nowMs;
+    return meta;
+  }
+
+  const carried = readCarriedShortfall(previous, nowMs, retainMs);
+  if (!carried) return meta;
+
+  meta.uncoveredChokepoints = carried.uncoveredChokepoints;
+  meta.uncoveredAt = carried.uncoveredAt;
+  return meta;
+}
+
+function readCarriedShortfall(
+  previous: unknown,
+  nowMs: number,
+  retainMs: number,
+): { uncoveredChokepoints: string[]; uncoveredAt: number } | null {
+  if (!previous || typeof previous !== 'object') return null;
+  const raw = previous as Record<string, unknown>;
+  const ids = raw.uncoveredChokepoints;
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  if (!ids.every((id): id is string => typeof id === 'string' && id.length > 0)) return null;
+
+  let uncoveredAt: number | null = null;
+  if (typeof raw.uncoveredAt === 'number' && Number.isFinite(raw.uncoveredAt) && raw.uncoveredAt > 0) {
+    uncoveredAt = raw.uncoveredAt;
+  } else if (typeof raw.fetchedAt === 'number' && Number.isFinite(raw.fetchedAt) && raw.fetchedAt > 0) {
+    // Writers before uncoveredAt existed stamped fetchedAt while the shortfall
+    // was live — use that as the retain clock rather than re-dating to now.
+    uncoveredAt = raw.fetchedAt;
+  }
+  if (uncoveredAt === null) return null;
+  if (nowMs - uncoveredAt >= retainMs) return null;
+
+  // Canonical set is 13; never let a corrupt previous meta grow past that.
+  return { uncoveredChokepoints: ids.slice(0, 13), uncoveredAt };
+}
+
+type GeoCoordinates = { latitude: number; longitude: number };
+
+interface ChokepointConfig {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /**
+   * Precise chokepoint aliases used for high-confidence text matching.
+   * A single primary hit is enough to classify an event.
+   */
+  primaryKeywords: string[];
+  /**
+   * Broader contextual tokens used only as secondary signals.
+   * To reduce false positives, non-primary matching requires >=2 context hits.
+   */
+  areaKeywords: string[];
+  routes: string[];
+  /**
+   * Geopolitical threat classification — based on Lloyd's Joint War Committee
+   * Listed Areas and real-world maritime security conditions.
+   *
+   *   war_zone — Active naval conflict, blockade, or strait closure
+   *   critical — Active attacks on commercial shipping (e.g. Houthi drone/missile strikes)
+   *   high     — Military seizure risk, armed escort zones
+   *   elevated — Military tensions, disputed waters (e.g. cross-strait exercises)
+   *   normal   — No significant military threat
+   */
+  threatLevel: ThreatLevel;
+  /** Short explanation of the threat classification, shown in description. */
+  threatDescription: string;
+  directions: DirectionLabel[];
+}
+
+type DirectionLabel = 'eastbound' | 'westbound' | 'northbound' | 'southbound';
+
+// Compact summary written by ais-relay.cjs — no history array; per-id history
+// lives in `supply_chain:transit-summaries:history:v1:{id}` and is served by
+// GetChokepointHistory on card expand.
+interface PreBuiltTransitSummary {
+  // null when the relay's 24h AIS window held no crossings. That is unsupplied,
+  // not a measured zero: seedTransitSummaries only builds relayTransit when
+  // `recent.length > 0`, so the two are indistinguishable at the source and the
+  // count must not be published either way (#7457). Older writers emit 0 here.
+  todayTotal: number | null;
+  todayTanker: number | null;
+  todayCargo: number | null;
+  todayOther: number | null;
+  wowChangePct: number;
+  // IMF PortWatch official figures (shared/chokepoint-traffic-anomaly.js
+  // summarizePortwatchHistory). null when PortWatch has nothing for the
+  // chokepoint; absent entirely from writers before the fields existed.
+  officialLatestDate?: string | null;
+  officialLatestTotal?: number | null;
+  officialAvg7d?: number | null;
+  baselineAvgDaily?: number | null;
+  baselineFrom?: string | null;
+  baselineTo?: string | null;
+  riskLevel: string;
+  incidentCount7d: number;
+  disruptionPct: number;
+  riskSummary: string;
+  riskReportAction: string;
+  anomaly: { dropPct: number; signal: boolean };
+  // Optional for back-compat: writers prior to the partial-coverage fix
+  // emitted no flag. Missing = treat as available (pre-fix writers only
+  // emitted summaries they had data for).
+  dataAvailable?: boolean;
+}
+
+interface TransitSummariesPayload {
+  summaries: Record<string, PreBuiltTransitSummary>;
+  fetchedAt: number;
+}
+
+/**
+ * Date the threat-level classifications and descriptions were last reviewed.
+ * Review quarterly or whenever a major geopolitical shift occurs.
+ * Source: Lloyd's Joint War Committee Listed Areas + OSINT.
+ */
+export const THREAT_CONFIG_LAST_REVIEWED = '2026-03-04';
+
+export const CHOKEPOINTS: ChokepointConfig[] = [
+  { id: 'suez', name: 'Suez Canal', lat: 30.45, lon: 32.35, primaryKeywords: ['suez canal', 'suez'], areaKeywords: ['suez canal', 'suez', 'gulf of suez', 'red sea'], routes: ['China-Europe (Suez)', 'Gulf-Europe Oil', 'Qatar LNG-Europe'], threatLevel: 'high', threatDescription: 'JWC Listed Area — adjacent to active Red Sea conflict and Iran-Israel war spillover', directions: ['northbound', 'southbound'] },
+  { id: 'malacca_strait', name: 'Strait of Malacca', lat: 2.5, lon: 101.5, primaryKeywords: ['strait of malacca', 'malacca'], areaKeywords: ['strait of malacca', 'malacca', 'singapore strait'], routes: ['China-Middle East Oil', 'China-Europe (via Suez)', 'Japan-Middle East Oil'], threatLevel: 'normal', threatDescription: '', directions: ['northbound', 'southbound'] },
+  { id: 'hormuz_strait', name: 'Strait of Hormuz', lat: 26.56, lon: 56.25, primaryKeywords: ['strait of hormuz', 'hormuz'], areaKeywords: ['strait of hormuz', 'hormuz', 'persian gulf', 'arabian gulf', 'gulf of oman', 'iran naval', 'iran military'], routes: ['Gulf Oil Exports', 'Qatar LNG', 'Iran Exports'], threatLevel: 'war_zone', threatDescription: 'Active conflict — Iran-Israel war; Iranian naval blockade risk and mines reported in Persian Gulf', directions: ['eastbound', 'westbound'] },
+  { id: 'bab_el_mandeb', name: 'Bab el-Mandeb', lat: 12.58, lon: 43.33, primaryKeywords: ['bab el-mandeb', 'bab al-mandab'], areaKeywords: ['bab el-mandeb', 'bab al-mandab', 'mandeb', 'aden', 'houthi', 'yemen', 'gulf of aden', 'red sea'], routes: ['Suez-Indian Ocean', 'Gulf-Europe Oil', 'Red Sea Transit'], threatLevel: 'critical', threatDescription: 'JWC Listed Area — active Houthi attacks on commercial shipping', directions: ['northbound', 'southbound'] },
+  { id: 'panama', name: 'Panama Canal', lat: 9.08, lon: -79.68, primaryKeywords: ['panama canal'], areaKeywords: ['panama canal', 'panama'], routes: ['US East Coast-Asia', 'US East Coast-South America', 'Atlantic-Pacific Bulk'], threatLevel: 'normal', threatDescription: '', directions: ['northbound', 'southbound'] },
+  { id: 'taiwan_strait', name: 'Taiwan Strait', lat: 24.0, lon: 119.5, primaryKeywords: ['taiwan strait', 'formosa'], areaKeywords: ['taiwan strait', 'formosa', 'taiwan', 'south china sea'], routes: ['China-Japan Trade', 'Korea-Southeast Asia', 'Pacific Semiconductor'], threatLevel: 'elevated', threatDescription: 'Cross-strait military tensions and PLA exercises', directions: ['northbound', 'southbound'] },
+  { id: 'cape_of_good_hope', name: 'Cape of Good Hope', lat: -34.36, lon: 18.49, primaryKeywords: ['cape of good hope', 'good hope'], areaKeywords: ['cape of good hope', 'good hope', 'cape town', 'south africa', 'cape agulhas'], routes: ['Asia-Europe (Cape Route)', 'Gulf-Americas Oil', 'Suez Bypass'], threatLevel: 'normal', threatDescription: '', directions: ['eastbound', 'westbound'] },
+  { id: 'gibraltar', name: 'Strait of Gibraltar', lat: 35.96, lon: -5.35, primaryKeywords: ['strait of gibraltar', 'gibraltar'], areaKeywords: ['strait of gibraltar', 'gibraltar', 'mediterranean', 'algeciras', 'tangier'], routes: ['Atlantic-Mediterranean', 'Gulf-Europe Oil (final leg)', 'India-Europe'], threatLevel: 'normal', threatDescription: '', directions: ['eastbound', 'westbound'] },
+  { id: 'bosphorus', name: 'Bosporus Strait', lat: 41.12, lon: 29.05, primaryKeywords: ['bosphorus', 'bosporus', 'dardanelles', 'canakkale', 'turkish straits'], areaKeywords: ['bosphorus', 'bosporus', 'dardanelles', 'canakkale', 'istanbul', 'marmara', 'black sea', 'turkish straits', 'gallipoli', 'aegean'], routes: ['Russia Black Sea Exports', 'Ukraine Grain', 'Caspian Oil Transit', 'Aegean-Marmara Transit'], threatLevel: 'elevated', threatDescription: 'Montreux Convention restrictions; elevated due to Russia-Ukraine war and periodic Turkish traffic controls', directions: ['northbound', 'southbound'] },
+  { id: 'korea_strait', name: 'Korea Strait', lat: 34.0, lon: 129.0, primaryKeywords: ['korea strait', 'tsushima strait'], areaKeywords: ['korea strait', 'tsushima', 'busan', 'shimonoseki', 'sea of japan', 'east sea'], routes: ['Japan-Korea Trade', 'China-Japan (alternate)', 'Pacific-East Asia'], threatLevel: 'normal', threatDescription: '', directions: ['northbound', 'southbound'] },
+  { id: 'dover_strait', name: 'Dover Strait', lat: 51.05, lon: 1.45, primaryKeywords: ['dover strait', 'strait of dover', 'english channel'], areaKeywords: ['dover', 'calais', 'english channel', 'north sea', 'pas-de-calais'], routes: ['North Sea-Atlantic', 'Europe Intra-Trade', 'UK-Continental Europe'], threatLevel: 'normal', threatDescription: '', directions: ['northbound', 'southbound'] },
+  { id: 'kerch_strait', name: 'Kerch Strait', lat: 45.33, lon: 36.60, primaryKeywords: ['kerch strait', 'kerch bridge'], areaKeywords: ['kerch', 'crimea', 'azov', 'sea of azov', 'black sea'], routes: ['Ukraine Grain (Azov)', 'Russia Azov Ports', 'Crimea Supply'], threatLevel: 'war_zone', threatDescription: 'Active conflict zone; Russia controls Kerch Bridge; Ukraine grain exports via Azov severely restricted', directions: ['northbound', 'southbound'] },
+  { id: 'lombok_strait', name: 'Lombok Strait', lat: -8.47, lon: 115.72, primaryKeywords: ['lombok strait'], areaKeywords: ['lombok', 'bali', 'indonesia', 'nusa tenggara'], routes: ['Malacca Bypass (VLCCs)', 'Australia-Asia', 'Indian Ocean-Pacific'], threatLevel: 'normal', threatDescription: '', directions: ['northbound', 'southbound'] },
+];
+
+function normalizeText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function containsPhrase(normalizedHaystack: string, keyword: string): boolean {
+  const normalizedKeyword = normalizeText(keyword);
+  if (!normalizedKeyword) return false;
+  return ` ${normalizedHaystack} `.includes(` ${normalizedKeyword} `);
+}
+
+function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLon = toRad(bLon - aLon);
+  const x = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
+}
+
+function nearestChokepoint(location?: GeoCoordinates): { id: string; distanceKm: number } | null {
+  if (!location) return null;
+
+  let closest: { id: string; distanceKm: number } | null = null;
+  for (const cp of CHOKEPOINTS) {
+    const distanceKm = haversineKm(location.latitude, location.longitude, cp.lat, cp.lon);
+    if (!closest || distanceKm < closest.distanceKm) {
+      closest = { id: cp.id, distanceKm };
+    }
+  }
+  return closest;
+}
+
+function keywordScore(cp: ChokepointConfig, normalizedText: string): number {
+  if (!normalizedText) return 0;
+
+  const primaryMatches = cp.primaryKeywords.filter((kw) => containsPhrase(normalizedText, kw));
+  const primarySet = new Set(primaryMatches.map(normalizeText));
+  const areaMatches = cp.areaKeywords.filter((kw) => {
+    const normalizedKw = normalizeText(kw);
+    return !primarySet.has(normalizedKw) && containsPhrase(normalizedText, kw);
+  });
+
+  // A single broad area token (e.g. "Red Sea") is too weak and often ambiguous.
+  if (primaryMatches.length === 0 && areaMatches.length < 2) return 0;
+
+  return primaryMatches.length * 3 + areaMatches.length;
+}
+
+export function resolveChokepointId(input: { text: string; location?: GeoCoordinates }): string | null {
+  const normalizedText = normalizeText(input.text);
+  let best: { id: string; score: number; distanceKm: number } | null = null;
+
+  for (const cp of CHOKEPOINTS) {
+    const score = keywordScore(cp, normalizedText);
+    if (score <= 0) continue;
+
+    const distanceKm = input.location
+      ? haversineKm(input.location.latitude, input.location.longitude, cp.lat, cp.lon)
+      : Number.POSITIVE_INFINITY;
+
+    if (!best || score > best.score || (score === best.score && distanceKm < best.distanceKm)) {
+      best = { id: cp.id, score, distanceKm };
+    }
+  }
+
+  if (best) return best.id;
+
+  const nearest = nearestChokepoint(input.location);
+  if (nearest && nearest.distanceKm <= NEARBY_CHOKEPOINT_RADIUS_KM) {
+    return nearest.id;
+  }
+
+  return null;
+}
+
+function groupWarningsByChokepoint(warnings: NavigationalWarning[]): Map<string, NavigationalWarning[]> {
+  const grouped = new Map<string, NavigationalWarning[]>();
+  for (const cp of CHOKEPOINTS) grouped.set(cp.id, []);
+
+  for (const warning of warnings) {
+    const id = resolveChokepointId({
+      text: `${warning.title} ${warning.area} ${warning.text}`,
+      location: warning.location,
+    });
+    if (!id) continue;
+    grouped.get(id)!.push(warning);
+  }
+
+  return grouped;
+}
+
+function groupDisruptionsByChokepoint(disruptions: AisDisruption[]): Map<string, AisDisruption[]> {
+  const grouped = new Map<string, AisDisruption[]>();
+  for (const cp of CHOKEPOINTS) grouped.set(cp.id, []);
+
+  for (const disruption of disruptions) {
+    if (disruption.type !== 'AIS_DISRUPTION_TYPE_CHOKEPOINT_CONGESTION') continue;
+
+    const id = resolveChokepointId({
+      text: `${disruption.name} ${disruption.region} ${disruption.description}`,
+      location: disruption.location,
+    });
+    if (!id) continue;
+    grouped.get(id)!.push(disruption);
+  }
+
+  return grouped;
+}
+
+export function isThreatConfigFresh(asOfMs = Date.now()): boolean {
+  const reviewedAtMs = Date.parse(THREAT_CONFIG_LAST_REVIEWED);
+  if (!Number.isFinite(reviewedAtMs)) return false;
+  const maxAgeMs = THREAT_CONFIG_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  return asOfMs - reviewedAtMs <= maxAgeMs;
+}
+
+function makeInternalCtx(): { request: Request; pathParams: Record<string, string>; headers: Record<string, string> } {
+  return { request: new Request('http://internal'), pathParams: {}, headers: {} };
+}
+
+interface ChokepointFetchResult {
+  chokepoints: ChokepointInfo[];
+  sourceCoverageIncomplete: boolean;
+  hasAnyPublishedSource: boolean;
+}
+
+interface FlowEstimateEntry { currentMbd: number; baselineMbd: number; flowRatio: number; disrupted: boolean; source: string; hazardAlertLevel: string | null; hazardAlertName: string | null }
+
+// The taxonomy record lives in server/_shared/flow-source.ts (#6113) so this
+// handler and the MCP cache tool narrow and declare from one source of truth;
+// the exhaustive-record compile check moved with it.
+
+/**
+ * Narrow the seeder's `source` onto the FlowSource taxonomy the proto declares
+ * (#6101). `energy:chokepoint-flows:v1` is an untyped Redis blob written by a
+ * seeder that deploys independently of this handler, so the value here is not
+ * guaranteed to be one the published enum lists — and a closed taxonomy is only
+ * worth declaring if the response cannot carry a value outside it.
+ *
+ * Anything unrecognized collapses to FLOW_SOURCE_UNSPECIFIED, which is the
+ * declared way to say "not one of the known coverage bases" without inventing a
+ * value or dropping the field. The two real values pass through verbatim, so
+ * the wire is unchanged for every payload the current seeder produces.
+ *
+ * The collapse is logged because it is otherwise indistinguishable from a
+ * missing field: UNSPECIFIED is what an operator sees whether the seeder went
+ * quiet or shipped a third basis this deploy does not know about, and only the
+ * second case needs a proto change. Once per distinct value per instance — the
+ * re-narrow below runs on every warm request, so an unconditional warn would
+ * bill a log line per request for as long as the seeder kept emitting it.
+ */
+const warnedFlowSources = new Set<string>();
+
+function toFlowSource(value: unknown): FlowSource {
+  // Delegate the DECISION, not just the member set: a second copy of the
+  // predicate here would let REST and the MCP cache tool answer differently for
+  // the same Redis blob the moment either side learned to trim or case-fold.
+  // This wrapper adds only the REST-side warn (#6113).
+  const narrowed = narrowFlowSource(value);
+  if (narrowed !== 'FLOW_SOURCE_UNSPECIFIED') return narrowed;
+  if (value !== undefined && value !== null && value !== '') {
+    const seen = String(value);
+    if (!warnedFlowSources.has(seen)) {
+      warnedFlowSources.add(seen);
+      console.warn('[chokepoint-status] flow source outside the FlowSource taxonomy:', seen);
+    }
+  }
+  return 'FLOW_SOURCE_UNSPECIFIED';
+}
+
+/**
+ * Re-narrow a response that came back from the outer cache.
+ *
+ * `toFlowSource` runs inside the cold-path builder, so on its own it leaves a
+ * window where `supply_chain:chokepoints:v4` still holds a blob written by an
+ * earlier deploy — served verbatim for the rest of the TTL, and read straight
+ * from that key by route-intelligence, get-bypass-options, both cost-shock
+ * handlers, get-route-explorer-lane and the bootstrap tier. Narrowing again at
+ * the return boundary makes "never serves a value outside the enum"
+ * unconditional instead of true only after the first cold rebuild. Idempotent,
+ * so the cold path is unaffected.
+ */
+function narrowServedSources(response: GetChokepointStatusResponse): GetChokepointStatusResponse {
+  // A cached blob from an older shape may not carry the array the type promises.
+  // Pass it through untouched rather than throwing into the degraded sentinel —
+  // that failure mode belongs to whoever wrote the blob, not to this narrowing.
+  if (!Array.isArray(response?.chokepoints)) return response;
+  return {
+    ...response,
+    chokepoints: response.chokepoints.map((cp) => ({
+      ...cp,
+      ...(cp.transitSummary ? {
+        transitSummary: { ...cp.transitSummary, riskSummary: '', riskReportAction: '' },
+      } : {}),
+      navigationalWarningsAvailable: cp.navigationalWarningsAvailable === true,
+      aisSnapshotAvailable: cp.aisSnapshotAvailable === true,
+      ...(cp.flowEstimate
+        ? { flowEstimate: { ...cp.flowEstimate, source: toFlowSource(cp.flowEstimate.source) } }
+        : {}),
+    })),
+  };
+}
+
+async function fetchChokepointData(): Promise<ChokepointFetchResult> {
+  const ctx = makeInternalCtx();
+
+  const [navResult, vesselResult, transitSummariesData, flowsData] = await Promise.all([
+    listNavigationalWarnings(ctx, { area: '', pageSize: 0, cursor: '' }).catch((): ListNavigationalWarningsResponse => ({ warnings: [], pagination: undefined, dataAvailable: false })),
+    // All-zero bbox = "no filter, full snapshot" per the new bbox extractor
+    // in get-vessel-snapshot.ts. Previously this passed (-90, -180, 90, 180)
+    // because the handler ignored bbox entirely; the new 10° max-bbox guard
+    // (added for the live-tanker contract) would reject that range. This
+    // call doesn't need bbox filtering — it wants the global density +
+    // disruption surface — so pass zeros and skip both candidate and tanker
+    // payload tiers.
+    getVesselSnapshot(ctx, { neLat: 0, neLon: 0, swLat: 0, swLon: 0, includeCandidates: false, includeTankers: false }).catch((): GetVesselSnapshotResponse => ({ snapshot: undefined, fetchedAt: 0, dataAvailable: false })),
+    getCachedJson(TRANSIT_SUMMARIES_KEY, true).catch(() => null) as Promise<TransitSummariesPayload | null>,
+    getCachedJson(FLOWS_KEY, true).catch(() => null) as Promise<Record<string, FlowEstimateEntry> | null>,
+  ]);
+
+  const summaries = transitSummariesData?.summaries ?? {};
+  const transitSummariesMissing = Object.keys(summaries).length === 0;
+
+  const warnings = navResult.warnings || [];
+  const disruptions: AisDisruption[] = vesselResult.snapshot?.disruptions || [];
+  const navigationalWarningsAvailable = navResult.dataAvailable === true;
+  const aisSnapshotAvailable = vesselResult.dataAvailable === true;
+
+  const sourceCoverageIncomplete = transitSummariesMissing
+    || !navigationalWarningsAvailable
+    || !aisSnapshotAvailable;
+  const warningsByChokepoint = groupWarningsByChokepoint(warnings);
+  const disruptionsByChokepoint = groupDisruptionsByChokepoint(disruptions);
+  const threatConfigFresh = isThreatConfigFresh();
+
+  const chokepoints = CHOKEPOINTS.map((cp): ChokepointInfo => {
+    const matchedWarnings = warningsByChokepoint.get(cp.id) ?? [];
+    const matchedDisruptions = disruptionsByChokepoint.get(cp.id) ?? [];
+
+    const maxSeverity = matchedDisruptions.reduce((max, d) => {
+      const score = (SEVERITY_SCORE as Record<string, number>)[d.severity] ?? 0;
+      return Math.max(max, score);
+    }, 0);
+
+    const threatScore = (THREAT_LEVEL as Record<string, number>)[cp.threatLevel] ?? 0;
+    const ts = summaries[cp.id];
+    const transitMovementAvailable = ts ? (ts.dataAvailable ?? true) : false;
+    const anomaly = ts?.anomaly ?? { dropPct: 0, signal: false };
+    const anomalyBonus = anomaly.signal ? 10 : 0;
+    const disruptionScore = Math.min(100, computeDisruptionScore(threatScore, matchedWarnings.length, maxSeverity) + anomalyBonus);
+    const status = scoreToStatus(disruptionScore);
+
+    const congestionLevel = aisSnapshotAvailable
+      ? (maxSeverity >= 3 ? 'high' : maxSeverity >= 2 ? 'elevated' : maxSeverity >= 1 ? 'low' : 'normal')
+      : '';
+
+    const descriptions: string[] = [];
+    if (cp.threatDescription) {
+      descriptions.push(cp.threatDescription);
+    }
+    if (anomaly.signal) {
+      descriptions.push(`Traffic down ${anomaly.dropPct}% vs 30-day baseline, vessels may be transiting dark (AIS off)`);
+    }
+    if (descriptions.length === 0) {
+      descriptions.push(sourceCoverageIncomplete || !transitMovementAvailable
+        ? 'No active disruptions reported by available sources; source coverage incomplete'
+        : 'No active disruptions');
+    }
+    if (!threatConfigFresh) {
+      descriptions.push(THREAT_CONFIG_STALE_NOTE);
+    }
+
+    return {
+      id: cp.id,
+      name: cp.name,
+      lat: cp.lat,
+      lon: cp.lon,
+      disruptionScore,
+      status,
+      activeWarnings: matchedWarnings.length,
+      aisDisruptions: matchedDisruptions.length,
+      congestionLevel,
+      navigationalWarningsAvailable,
+      aisSnapshotAvailable,
+      affectedRoutes: cp.routes,
+      description: descriptions.join('; '),
+      directions: cp.directions,
+      directionalDwt: [],
+      // today_* are non-nullable int32 in the proto and integers in the
+      // published OpenAPI schema, so the relay's null (an empty AIS window,
+      // the common case) must not reach the wire. Hold the contract here and
+      // carry absence in todayCountsAvailable instead; clients withhold on
+      // that flag rather than inferring it from a 0 they cannot interpret.
+      transitSummary: ts ? {
+        todayTotal: ts.todayTotal ?? 0,
+        todayTanker: ts.todayTanker ?? 0,
+        todayCargo: ts.todayCargo ?? 0,
+        todayOther: ts.todayOther ?? 0,
+        todayCountsAvailable: ts.todayTotal != null,
+        wowChangePct: ts.wowChangePct,
+        // IMF PortWatch official figures. The proto carries absence as an
+        // empty date (latest count, 7-day mean) and an empty baseline_from
+        // (baseline), never as a bool; a null from the relay or a writer that
+        // predates the fields both land on the empty value.
+        officialLatestDate: ts.officialLatestDate ?? '',
+        officialLatestTotal: ts.officialLatestTotal ?? 0,
+        // Absent, not 0: a short history has a latest day but no 7-day mean.
+        officialAvg7d: ts.officialAvg7d ?? undefined,
+        baselineAvgDaily: ts.baselineAvgDaily ?? 0,
+        baselineFrom: ts.baselineFrom ?? '',
+        baselineTo: ts.baselineTo ?? '',
+        // History is served separately by GetChokepointHistory (lazy-loaded on
+        // card expand) — field stays declared for proto compat but is empty
+        // on the main status response.
+        history: [],
+        riskLevel: ts.riskLevel,
+        incidentCount7d: ts.incidentCount7d,
+        disruptionPct: ts.disruptionPct,
+        riskSummary: '',
+        riskReportAction: '',
+        // Default true for pre-fix writers (absence = covered). New writers
+        // explicitly emit false for canonical zero-state fills.
+        dataAvailable: transitMovementAvailable,
+      } : { todayTotal: 0, todayTanker: 0, todayCargo: 0, todayOther: 0, todayCountsAvailable: false, wowChangePct: 0, officialLatestDate: '', officialLatestTotal: 0, baselineAvgDaily: 0, baselineFrom: '', baselineTo: '', history: [], riskLevel: '', incidentCount7d: 0, disruptionPct: 0, riskSummary: '', riskReportAction: '', dataAvailable: false },
+      flowEstimate: flowsData?.[cp.id] ? {
+        currentMbd: flowsData[cp.id]!.currentMbd,
+        baselineMbd: flowsData[cp.id]!.baselineMbd,
+        flowRatio: flowsData[cp.id]!.flowRatio,
+        disrupted: flowsData[cp.id]!.disrupted,
+        source: toFlowSource(flowsData[cp.id]!.source),
+        hazardAlertLevel: flowsData[cp.id]!.hazardAlertLevel ?? '',
+        hazardAlertName: flowsData[cp.id]!.hazardAlertName ?? '',
+      } : undefined,
+      warRiskTier: threatLevelToWarRiskTier(cp.threatLevel),
+    };
+  });
+
+  const hasAnyPublishedSource = navigationalWarningsAvailable
+    || aisSnapshotAvailable
+    || chokepoints.some((cp) => (
+      cp.transitSummary?.dataAvailable === true
+      || cp.transitSummary?.todayCountsAvailable === true
+      || cp.flowEstimate !== undefined
+    ));
+
+  return { chokepoints, sourceCoverageIncomplete, hasAnyPublishedSource };
+}
+
+export async function getChokepointStatus(
+  _ctx: ServerContext,
+  _req: GetChokepointStatusRequest,
+): Promise<GetChokepointStatusResponse> {
+  try {
+    const result = await cachedFetchJson<GetChokepointStatusResponse>(
+      REDIS_CACHE_KEY,
+      REDIS_CACHE_TTL,
+      async () => {
+        const { chokepoints, sourceCoverageIncomplete, hasAnyPublishedSource } = await fetchChokepointData();
+        if (!hasAnyPublishedSource) return null;
+        // recordCount reflects the count of chokepoints with complete upstream data
+        // (not the canonical shape size — always 13). Lets api/health.js
+        // distinguish 13/13 healthy from a row-local transit shortfall or a
+        // global navigation/AIS outage through the minRecordCount threshold.
+        const coveredCount = chokepoints.filter((c) => (
+          c.transitSummary?.dataAvailable === true
+          && c.navigationalWarningsAvailable === true
+          && c.aisSnapshotAvailable === true
+        )).length;
+        // Persist WHICH ones are uncovered alongside the count. recordCount=11
+        // says two are missing and never which two, and the upstream usually
+        // recovers before anyone looks — on 2026-08-25 the partial ran ~4.5h and
+        // was already healthy by the time it was investigated. Bounded by the
+        // canonical set, so this cannot grow past 13 short ids.
+        const uncoveredIds = chokepoints
+          .filter((c) => (
+            c.transitSummary?.dataAvailable !== true
+            || c.navigationalWarningsAvailable !== true
+            || c.aisSnapshotAvailable !== true
+          ))
+          .map((c) => c.id);
+        // Response-level signal: if any canonical chokepoint lost upstream,
+        // flip upstreamUnavailable so clients can show a partial-coverage
+        // banner without breaking the cached response (data still useful).
+        const partialCoverage = coveredCount < chokepoints.length;
+        const response = {
+          chokepoints,
+          fetchedAt: new Date().toISOString(),
+          upstreamUnavailable: sourceCoverageIncomplete || partialCoverage,
+        };
+        // Operator-facing only: api/health.js classifies this probe from
+        // minRecordCount and is deliberately left alone. Routing it through
+        // projectFailedDatasets would have surfaced it in the payload but also
+        // forced seedError, turning an upstream COVERAGE_PARTIAL into a
+        // SEED_ERROR — the wrong severity for a partial that self-heals.
+        // Healthy refreshes must still preserve the last shortfall — a full
+        // Redis SET that omits uncoveredChokepoints would erase the diagnostic
+        // the moment PortWatch recovers.
+        void (async () => {
+          const previous = uncoveredIds.length === 0
+            ? await getCachedJson(CHOKEPOINT_SEED_META_KEY)
+            : null;
+          await setCachedJson(
+            CHOKEPOINT_SEED_META_KEY,
+            buildChokepointSeedMeta(coveredCount, uncoveredIds, previous, Date.now()),
+            CHOKEPOINT_SEED_META_TTL_SECONDS,
+          );
+        })().catch(() => {});
+        return response;
+      },
+      REDIS_NEGATIVE_CACHE_TTL,
+      { cacheUpstreamUnavailablePayloads: true },
+    );
+
+    return result ? narrowServedSources(result) : { chokepoints: [], fetchedAt: '', upstreamUnavailable: true };
+  } catch {
+    return { chokepoints: [], fetchedAt: '', upstreamUnavailable: true };
+  }
+}

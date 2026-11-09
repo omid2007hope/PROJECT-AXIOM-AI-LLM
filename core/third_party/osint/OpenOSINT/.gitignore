@@ -1,0 +1,180 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+pip-wheel-metadata/
+*.manifest
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# Environment variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# Config (contains API keys — never commit)
+config.yaml
+config.yml
+# Exception: GitHub metadata files named config.yml are not secrets
+!.github/**
+
+# OpenOSINT generated output — ignore contents, keep directory placeholder
+reports/*
+!reports/.gitkeep
+*.cast
+
+# Media: generated GIFs and MP4s (tapes are versioned, output is not)
+media/output/
+
+# Demo recording pipeline — raw output and frame PNGs are never committed
+# Only the final encoded docs/assets/demo-web-graph.{gif,mp4,png} are committed
+scripts/record-demo/out/
+scripts/record-demo/node_modules/
+
+# assets/demo/demo.mp4 is X-only — build.sh still produces it locally from
+# demo.tape, but the README embeds the GIF, so the MP4 stays untracked.
+assets/demo/demo.mp4
+
+# Distribution / packaging
+.installed.cfg
+lib/
+lib64/
+
+# PyInstaller
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff_cache/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Xcode
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Claude Code / AI tooling
+.claude/settings.local.json
+.claude/todos/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Vibe-coded / AI-generated test files
+# test_coverage_boost.py exists solely to pad coverage metrics to 80% — not real tests
+tests/test_coverage_boost.py
+
+# Auto-generated coverage data
+# Produced by pytest-cov / coverage.py — not source, not config
+coverage.json
+
+# OSINT tool output artifacts dumped to repo root
+# These are runtime results from manual tool runs, not source files
+researcher*.txt
+testuser*.txt
+johndoe*.txt
+*.osint.txt
+
+# Empty placeholder files
+# openosint/index.html.txt is 0 bytes — accidentally created stub
+openosint/index.html.txt
+
+# Scaffolded / early-draft web UI at project root (superseded by openosint/web/)
+/web/
+
+# Legacy root-level VHS tape
+# openosint.tape at repo root is superseded by the organized media/tapes/ collection
+openosint.tape
+
+
+# _leadmagnet/ source is tracked; only ignore the local build artifact
+_leadmagnet/openosint-free-prompts.pdf
+
+# Internal legal working notes — intentionally not published, never remove this rule
+legal/INCIDENT-NOTES.md
+legal/REVIEW-QUESTIONS.md
+
+# Apify Actors — local `apify run` output, never committed
+actors/*/storage/
+actors/*/.venv/
+
+# Apify Actors — local Docker-build wheel (see actors/build-local.sh), never committed
+actors/*/local-wheels/*.whl
+# Private business notes, never committed
+.private/

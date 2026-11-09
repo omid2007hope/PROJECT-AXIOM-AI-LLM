@@ -1,0 +1,152 @@
+import { Pencil, Settings2, Trash } from 'lucide-react'
+import { DynamicIcon } from 'lucide-react/dynamic'
+import type React from 'react'
+import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { Button } from '@cherrystudio/ui'
+import { SELECTION_AGENT_ISSUE_LABEL_KEYS } from '@renderer/utils/selectionAction'
+import { cn } from '@renderer/utils/style'
+import { SELECTION_BUILTIN_ACTION_ID, type SelectionAction } from '@shared/types/selection'
+
+import type { SelectionActionAgentInfo } from '../hooks/useSettingsActionsList'
+
+interface ActionItemProps {
+  item: SelectionAction
+  isLastEnabledItem: boolean
+  onEdit: (item: SelectionAction) => void
+  onDelete: (id: string) => void
+  getSearchEngineInfo: (engine: string) => { icon: any; name: string } | null
+  getAgentInfo: (item: SelectionAction) => SelectionActionAgentInfo | null
+}
+
+const ActionsListItem = memo(
+  ({ item, isLastEnabledItem, onEdit, onDelete, getSearchEngineInfo, getAgentInfo }: ActionItemProps) => {
+    const { t } = useTranslation()
+    const isEnabled = item.enabled
+    const agentInfo = getAgentInfo(item)
+
+    return (
+      <Item disabled={!isEnabled} className={isLastEnabledItem ? 'non-draggable' : ''}>
+        <ItemLeft>
+          <ItemIcon disabled={!isEnabled}>
+            <DynamicIcon name={item.icon as any} size={16} fallback={() => <div style={{ width: 16, height: 16 }} />} />
+          </ItemIcon>
+          <ItemName disabled={!isEnabled}>{item.isBuiltIn ? t(item.name) : item.name}</ItemName>
+          {item.isBuiltIn && item.id === SELECTION_BUILTIN_ACTION_ID.SEARCH && item.searchEngine && (
+            <ItemDescription>
+              {getSearchEngineInfo(item.searchEngine)?.icon}
+              <span>{getSearchEngineInfo(item.searchEngine)?.name}</span>
+            </ItemDescription>
+          )}
+          {agentInfo?.agent && (
+            <ItemDescription>
+              <span aria-hidden="true">{agentInfo.agent.emoji}</span>
+              <span className="truncate">{agentInfo.agent.name}</span>
+            </ItemDescription>
+          )}
+          {agentInfo?.issue && (
+            <ItemDescription className="bg-warning-subtle text-warning-subtle-foreground">
+              {t(SELECTION_AGENT_ISSUE_LABEL_KEYS[agentInfo.issue])}
+            </ItemDescription>
+          )}
+        </ItemLeft>
+
+        <ActionOperations item={item} onEdit={onEdit} onDelete={onDelete} />
+      </Item>
+    )
+  }
+)
+
+interface ActionOperationsProps {
+  item: SelectionAction
+  onEdit: (item: SelectionAction) => void
+  onDelete: (id: string) => void
+}
+
+const ActionOperations = memo(({ item, onEdit, onDelete }: ActionOperationsProps) => {
+  if (!item.isBuiltIn) {
+    return (
+      <UserActionOpSection>
+        <Button variant="ghost" size="icon-sm" onClick={() => onEdit(item)}>
+          <Pencil size={16} className="btn-icon-edit" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" onClick={() => onDelete(item.id)}>
+          <Trash size={16} className="btn-icon-delete" />
+        </Button>
+      </UserActionOpSection>
+    )
+  }
+
+  if (item.id === SELECTION_BUILTIN_ACTION_ID.SEARCH || item.id === SELECTION_BUILTIN_ACTION_ID.ASK_AGENT) {
+    return (
+      <UserActionOpSection>
+        <Button variant="ghost" size="icon-sm" onClick={() => onEdit(item)}>
+          <Settings2 size={16} className="btn-icon-edit" />
+        </Button>
+      </UserActionOpSection>
+    )
+  }
+
+  return null
+})
+
+const Item = ({ className, disabled, ...props }: React.ComponentPropsWithoutRef<'div'> & { disabled: boolean }) => (
+  <div
+    className={cn(
+      'group/action-item flex min-h-11 cursor-move items-center justify-between rounded-md border border-border-subtle bg-transparent px-4 py-2 transition-colors hover:border-border hover:bg-muted/50',
+      disabled && 'opacity-70 hover:bg-muted/30',
+      className === 'non-draggable' && 'relative cursor-default border-border bg-muted/50 hover:bg-muted/50',
+      className
+    )}
+    {...props}
+  />
+)
+
+const ItemLeft = ({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) => (
+  <div className={cn('flex min-w-0 flex-1 items-center', className)} {...props} />
+)
+
+const ItemName = ({
+  className,
+  disabled,
+  ...props
+}: React.ComponentPropsWithoutRef<'span'> & { disabled: boolean }) => (
+  <span
+    className={cn('ml-2 truncate', disabled ? 'text-foreground-disabled' : 'text-foreground', className)}
+    {...props}
+  />
+)
+
+const ItemIcon = ({ className, disabled, ...props }: React.ComponentPropsWithoutRef<'div'> & { disabled: boolean }) => (
+  <div
+    className={cn(
+      'mx-2 flex items-center justify-center',
+      disabled ? 'text-foreground-disabled' : 'text-muted-foreground group-hover/action-item:text-foreground',
+      className
+    )}
+    {...props}
+  />
+)
+
+const ItemDescription = ({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) => (
+  <div
+    className={cn(
+      'ml-4 flex h-5 shrink-0 items-center gap-1 rounded-sm bg-muted/50 px-1.5 text-xs leading-none text-muted-foreground',
+      className
+    )}
+    {...props}
+  />
+)
+
+const UserActionOpSection = ({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) => (
+  <div
+    className={cn(
+      'flex flex-row items-center gap-2 [&_.btn-icon-delete]:text-muted-foreground [&_.btn-icon-delete:hover]:text-destructive [&_.btn-icon-edit]:text-muted-foreground [&_.btn-icon-edit:hover]:text-foreground',
+      className
+    )}
+    {...props}
+  />
+)
+
+export default ActionsListItem

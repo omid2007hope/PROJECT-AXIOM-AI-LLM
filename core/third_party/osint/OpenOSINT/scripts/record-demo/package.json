@@ -1,0 +1,14 @@
+{
+  "name": "openosint-demo-recorder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Playwright demo recorder for OpenOSINT web graph",
+  "scripts": {
+    "record": "node record.mjs",
+    "check": "node record.mjs --check"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

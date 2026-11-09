@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package worldmonitor.infrastructure.v1;
+
+import "sebuf/http/annotations.proto";
+import "worldmonitor/infrastructure/v1/get_bootstrap_data.proto";
+import "worldmonitor/infrastructure/v1/get_cable_health.proto";
+import "worldmonitor/infrastructure/v1/get_ip_geo.proto";
+import "worldmonitor/infrastructure/v1/get_temporal_baseline.proto";
+import "worldmonitor/infrastructure/v1/list_internet_ddos_attacks.proto";
+import "worldmonitor/infrastructure/v1/list_internet_outages.proto";
+import "worldmonitor/infrastructure/v1/list_internet_traffic_anomalies.proto";
+import "worldmonitor/infrastructure/v1/list_service_statuses.proto";
+import "worldmonitor/infrastructure/v1/list_temporal_anomalies.proto";
+import "worldmonitor/infrastructure/v1/record_baseline_snapshot.proto";
+import "worldmonitor/infrastructure/v1/reverse_geocode.proto";
+
+// InfrastructureService provides APIs for internet outage monitoring from Cloudflare Radar,
+// external service status tracking, and temporal baseline anomaly detection.
+service InfrastructureService {
+  option (sebuf.http.service_config) = {base_path: "/api/infrastructure/v1"};
+
+  // ListInternetOutages returns Cloudflare Radar outage annotations from the last 28 days, filterable by country and detection time, with severity and cause.
+  rpc ListInternetOutages(ListInternetOutagesRequest) returns (ListInternetOutagesResponse) {
+    option (sebuf.http.config) = {
+      path: "/list-internet-outages"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // ListServiceStatuses checks the public status pages of 30 cloud, developer, communication, AI and SaaS services, sorted worst first and filterable by status.
+  rpc ListServiceStatuses(ListServiceStatusesRequest) returns (ListServiceStatusesResponse) {
+    option (sebuf.http.config) = {
+      path: "/list-service-statuses"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // GetTemporalBaseline compares a count for signals like military flights, vessels or protests to its weekday and month baseline and flags z-score anomalies.
+  rpc GetTemporalBaseline(GetTemporalBaselineRequest) returns (GetTemporalBaselineResponse) {
+    option (sebuf.http.config) = {
+      path: "/get-temporal-baseline"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // GetIpGeo returns the caller's ISO country code, region and city from Cloudflare and Vercel edge headers, with XX when unknown. Responses are never cached.
+  rpc GetIpGeo(GetIpGeoRequest) returns (GetIpGeoResponse) {
+    option (sebuf.http.config) = {
+      path: "/get-ip-geo"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // ReverseGeocode resolves latitude and longitude to a country name, ISO code and display name via OpenStreetMap Nominatim, with results cached for 7 days.
+  rpc ReverseGeocode(ReverseGeocodeRequest) returns (ReverseGeocodeResponse) {
+    option (sebuf.http.config) = {
+      path: "/reverse-geocode"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // GetBootstrapData returns cached dashboard datasets as JSON strings in one call, for a fast or slow tier or named keys, and lists any keys missing from cache.
+  rpc GetBootstrapData(GetBootstrapDataRequest) returns (GetBootstrapDataResponse) {
+    option (sebuf.http.config) = {
+      path: "/get-bootstrap-data"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // RecordBaselineSnapshot is deprecated and DISABLED. Every call is rejected with HTTP 403 because client-supplied counts cannot safely update shared baselines.
+  rpc RecordBaselineSnapshot(RecordBaselineSnapshotRequest) returns (RecordBaselineSnapshotResponse) {
+    option deprecated = true;
+    option (sebuf.http.config) = {path: "/record-baseline-snapshot"};
+  }
+
+  // GetCableHealth rates submarine cables as ok, degraded or fault by matching fault and repair-ship keywords in NGA navigational warnings, refreshed each 30 min.
+  rpc GetCableHealth(GetCableHealthRequest) returns (GetCableHealthResponse) {
+    option (sebuf.http.config) = {
+      path: "/get-cable-health"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // ListTemporalAnomalies returns computed news and satellite-fire anomalies with scores, observed values, baselines, tracked signal types, and computation time.
+  rpc ListTemporalAnomalies(ListTemporalAnomaliesRequest) returns (ListTemporalAnomaliesResponse) {
+    option (sebuf.http.config) = {
+      path: "/list-temporal-anomalies"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // ListInternetDdosAttacks returns Cloudflare Radar layer 3 DDoS summaries for the last 7 days by protocol and attack vector, with the top target locations.
+  rpc ListInternetDdosAttacks(ListInternetDdosAttacksRequest) returns (ListInternetDdosAttacksResponse) {
+    option (sebuf.http.config) = {
+      path: "/list-internet-ddos-attacks"
+      method: HTTP_METHOD_GET
+    };
+  }
+
+  // ListInternetTrafficAnomalies returns up to 100 Cloudflare Radar traffic anomalies from the last 7 days with ASN and location, filterable by country code.
+  rpc ListInternetTrafficAnomalies(ListInternetTrafficAnomaliesRequest) returns (ListInternetTrafficAnomaliesResponse) {
+    option (sebuf.http.config) = {
+      path: "/list-internet-traffic-anomalies"
+      method: HTTP_METHOD_GET
+    };
+  }
+}

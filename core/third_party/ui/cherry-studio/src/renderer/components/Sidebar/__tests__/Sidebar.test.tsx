@@ -1,0 +1,826 @@
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import type { LucideIcon } from 'lucide-react'
+import { Search } from 'lucide-react'
+import { type ReactElement, type ReactNode, useState } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { Popover, PopoverContent, PopoverTrigger } from '@cherrystudio/ui'
+import type * as MenuListModule from '@cherrystudio/ui/components/composites/menu-list'
+import type * as ButtonModule from '@cherrystudio/ui/components/primitives/button'
+import type * as PopoverModule from '@cherrystudio/ui/components/primitives/popover'
+import type * as TooltipModule from '@cherrystudio/ui/components/primitives/tooltip'
+
+import {
+  getSidebarDisplayWidth,
+  normalizeSidebarWidth,
+  SIDEBAR_FULL_THRESHOLD,
+  SIDEBAR_HIDDEN_THRESHOLD,
+  SIDEBAR_ICON_WIDTH,
+  SIDEBAR_MAX_WIDTH
+} from '../constants'
+import { Sidebar } from '../Sidebar'
+import type { ResolvedSidebarEntry } from '../types'
+
+type AppItem = {
+  id: string
+  label: string
+  icon: LucideIcon
+  contextMenuItems?: ResolvedSidebarEntry['contextMenuItems']
+}
+
+const uiMocks = vi.hoisted(() => ({
+  isMac: false,
+  sortableCalls: [] as any[],
+  contextMenuOpenChange: undefined as ((open: boolean) => void) | undefined
+}))
+
+vi.mock(import('@renderer/utils/platform'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  get isMac() {
+    return uiMocks.isMac
+  }
+}))
+
+vi.mock('@cherrystudio/ui', async () => {
+  const menuList = await vi.importActual<typeof MenuListModule>('@cherrystudio/ui/components/composites/menu-list')
+  const popover = await vi.importActual<typeof PopoverModule>('@cherrystudio/ui/components/primitives/popover')
+
+  const { Button } = await vi.importActual<typeof ButtonModule>('@cherrystudio/ui/components/primitives/button')
+  return {
+    Button,
+    ...(await vi.importActual('@cherrystudio/ui/components/primitives/separator')),
+    Tooltip: (await vi.importActual<typeof TooltipModule>('@cherrystudio/ui/components/primitives/tooltip')).Tooltip,
+    ...menuList,
+    ...popover,
+    Sortable: ({ items, itemKey, renderItem, ...props }: any) => {
+      uiMocks.sortableCalls.push({ items, itemKey, renderItem, ...props })
+      const getKey = typeof itemKey === 'function' ? itemKey : (item: any) => item[itemKey]
+
+      return (
+        <div>
+          {items.map((item: any) => (
+            <div key={getKey(item)}>{renderItem(item)}</div>
+          ))}
+        </div>
+      )
+    }
+  }
+})
+
+vi.mock('../Tooltip', () => ({
+  SidebarTooltip: ({ children }: { children: ReactNode }) => children
+}))
+
+vi.mock('@renderer/hooks/useMacTransparentWindow', () => ({
+  default: () => false
+}))
+
+vi.mock('@renderer/components/command', () => ({
+  CommandContextMenu: ({
+    children,
+    extraItems,
+    onOpenChange
+  }: {
+    children: ReactNode
+    extraItems: ReadonlyArray<{ id: string; label: string; enabled?: boolean; onSelect?: () => void }>
+    onOpenChange?: (open: boolean) => void
+  }) => {
+    uiMocks.contextMenuOpenChange = onOpenChange
+
+    return (
+      <div data-testid="command-context-menu">
+        {children}
+        {extraItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            data-testid={`context-menu-${item.id}`}
+            disabled={item.enabled === false}
+            onClick={item.onSelect}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+}))
+
+// Build the type-agnostic resolved entries the real registry would produce, so the
+// presentation tests exercise the same shape without depending on app wiring.
+const appEntry = (item: AppItem): ResolvedSidebarEntry => ({
+  key: `app:${item.id}`,
+  label: item.label,
+  renderIcon: ({ glyphSize }) => {
+    const Icon = item.icon
+    return <Icon size={glyphSize} strokeWidth={1.6} />
+  },
+  isActive: item.id === 'chat',
+  onOpen: () => {},
+  contextMenuItems: item.contextMenuItems
+})
+const items: AppItem[] = [
+  {
+    id: 'chat',
+    label: 'Chat',
+    icon: Search
+  }
+]
+const entries: ResolvedSidebarEntry[] = items.map(appEntry)
+
+const INTERMEDIATE_WIDTH = SIDEBAR_ICON_WIDTH + 30
+
+afterEach(() => {
+  uiMocks.isMac = false
+  vi.useRealTimers()
+  uiMocks.sortableCalls.length = 0
+  uiMocks.contextMenuOpenChange = undefined
+})
+
+function dragResizeFrom(width: number, moves: number | number[]) {
+  const setWidth = vi.fn()
+  const onResizePreview = vi.fn()
+  const onHoverChange = vi.fn()
+  const { container, unmount } = render(
+    <Sidebar
+      width={width}
+      setWidth={setWidth}
+
+      entries={entries}
+      onHoverChange={onHoverChange}
+      onResizePreview={onResizePreview}
+    />
+  )
+  const resizeHandle = container.querySelector('.cursor-col-resize') as HTMLElement
+
+  fireEvent.mouseDown(resizeHandle, { clientX: width })
+  for (const clientX of [moves].flat()) {
+    fireEvent.mouseMove(document, { clientX })
+  }
+  fireEvent.mouseUp(document)
+
+  return { setWidth, onResizePreview, onHoverChange, unmount }
+}
+
+describe('Sidebar resize handle', () => {
+  it('opts the resize handle out of window drag regions', () => {
+    const { container } = render(<Sidebar width={SIDEBAR_ICON_WIDTH} setWidth={vi.fn()} entries={entries} />)
+
+    const resizeHandle = container.querySelector('.cursor-col-resize')
+
+    expect(resizeHandle).toBeInTheDocument()
+    // Electron drag-region opt-out keeps the resize handle interactive.
+    expect(resizeHandle).toHaveClass('[-webkit-app-region:no-drag]')
+  })
+
+  it('previews intermediate widths and snaps release by drag direction', () => {
+    const cases: Array<[number, number, number]> = [
+      [SIDEBAR_ICON_WIDTH, INTERMEDIATE_WIDTH, SIDEBAR_FULL_THRESHOLD],
+      [SIDEBAR_FULL_THRESHOLD, INTERMEDIATE_WIDTH, SIDEBAR_ICON_WIDTH],
+      [SIDEBAR_FULL_THRESHOLD + 50, SIDEBAR_FULL_THRESHOLD - 10, SIDEBAR_ICON_WIDTH]
+    ]
+
+    for (const [start, moveTo, released] of cases) {
+      const { setWidth, onResizePreview, unmount } = dragResizeFrom(start, moveTo)
+
+      expect(onResizePreview).toHaveBeenNthCalledWith(1, moveTo)
+      expect(onResizePreview).toHaveBeenLastCalledWith(null)
+      expect(setWidth).toHaveBeenCalledTimes(1)
+      expect(setWidth).toHaveBeenLastCalledWith(released)
+      unmount()
+    }
+  })
+
+  it('keeps non-intermediate drag behavior', () => {
+    const cases: Array<[number, number]> = [
+      [SIDEBAR_HIDDEN_THRESHOLD - 10, 0],
+      [SIDEBAR_HIDDEN_THRESHOLD + 10, SIDEBAR_ICON_WIDTH],
+      [SIDEBAR_FULL_THRESHOLD + 10, SIDEBAR_FULL_THRESHOLD + 10],
+      [SIDEBAR_MAX_WIDTH + 20, SIDEBAR_MAX_WIDTH]
+    ]
+
+    for (const [moveTo, expected] of cases) {
+      const { setWidth, unmount } = dragResizeFrom(SIDEBAR_FULL_THRESHOLD, moveTo)
+
+      expect(setWidth).toHaveBeenCalledTimes(1)
+      expect(setWidth).toHaveBeenLastCalledWith(expected)
+      unmount()
+    }
+  })
+
+  it('clears the preview when a multi-step drag leaves the intermediate band', () => {
+    const { setWidth, onResizePreview } = dragResizeFrom(SIDEBAR_ICON_WIDTH, [
+      INTERMEDIATE_WIDTH,
+      SIDEBAR_FULL_THRESHOLD + 10
+    ])
+
+    expect(onResizePreview).toHaveBeenNthCalledWith(1, INTERMEDIATE_WIDTH)
+    expect(onResizePreview).toHaveBeenNthCalledWith(2, null)
+    expect(setWidth).toHaveBeenCalledTimes(1)
+    expect(setWidth).toHaveBeenLastCalledWith(SIDEBAR_FULL_THRESHOLD + 10)
+  })
+
+  it('stops tracking the mouse and restores the cursor after release', () => {
+    const { setWidth, onResizePreview } = dragResizeFrom(SIDEBAR_FULL_THRESHOLD, SIDEBAR_FULL_THRESHOLD + 10)
+
+    expect(document.body.style.cursor).toBe('')
+    expect(document.body.style.userSelect).toBe('')
+
+    const setWidthCalls = setWidth.mock.calls.length
+    const previewCalls = onResizePreview.mock.calls.length
+
+    fireEvent.mouseMove(document, { clientX: SIDEBAR_FULL_THRESHOLD + 40 })
+
+    expect(setWidth).toHaveBeenCalledTimes(setWidthCalls)
+    expect(onResizePreview).toHaveBeenCalledTimes(previewCalls)
+  })
+
+  it('renders intermediate widths with icon layout without menu text', () => {
+    const { container, queryByText } = render(
+      <Sidebar width={INTERMEDIATE_WIDTH} setWidth={vi.fn()} entries={entries} />
+    )
+
+    expect(container.firstElementChild).toHaveStyle({ width: `${INTERMEDIATE_WIDTH}px` })
+    expect(queryByText('Chat')).not.toBeInTheDocument()
+  })
+
+  it('resolves display widths for CSS variable consumers', () => {
+    expect(getSidebarDisplayWidth(SIDEBAR_HIDDEN_THRESHOLD + 10)).toBe(SIDEBAR_ICON_WIDTH)
+    expect(getSidebarDisplayWidth(INTERMEDIATE_WIDTH)).toBe(INTERMEDIATE_WIDTH)
+    expect(getSidebarDisplayWidth(SIDEBAR_FULL_THRESHOLD)).toBe(SIDEBAR_FULL_THRESHOLD)
+  })
+
+  it('normalizes persisted intermediate widths to icon width', () => {
+    expect(normalizeSidebarWidth(SIDEBAR_ICON_WIDTH)).toBe(SIDEBAR_ICON_WIDTH)
+    expect(normalizeSidebarWidth(INTERMEDIATE_WIDTH)).toBe(SIDEBAR_ICON_WIDTH)
+    expect(normalizeSidebarWidth(SIDEBAR_FULL_THRESHOLD)).toBe(SIDEBAR_FULL_THRESHOLD)
+  })
+
+  it('keeps the hidden-state hot zone full height without moving the resize binding', () => {
+    const { container } = render(
+      <Sidebar
+        width={SIDEBAR_HIDDEN_THRESHOLD - 10}
+        setWidth={vi.fn()}
+
+        entries={entries}
+      />
+    )
+
+    const resizeHandle = container.querySelector('.cursor-col-resize') as HTMLElement
+    const hotZone = resizeHandle.parentElement
+
+    // The hidden sidebar still needs a full-height interactive resize target outside the window drag region.
+    expect(resizeHandle).toHaveClass('h-full', 'w-full', 'cursor-col-resize')
+    expect(hotZone).toHaveClass('absolute', 'inset-y-0', 'left-0', 'z-50', 'w-4')
+    expect(hotZone).toHaveClass('[-webkit-app-region:no-drag]')
+  })
+
+  it('restores a hidden sidebar by dragging wider from the hot zone', () => {
+    const { setWidth, onResizePreview, onHoverChange } = dragResizeFrom(
+      SIDEBAR_HIDDEN_THRESHOLD - 10,
+      INTERMEDIATE_WIDTH
+    )
+
+    expect(onHoverChange).toHaveBeenCalledWith(false)
+    expect(onResizePreview).toHaveBeenNthCalledWith(1, INTERMEDIATE_WIDTH)
+    expect(setWidth).toHaveBeenCalledTimes(1)
+    expect(setWidth).toHaveBeenLastCalledWith(SIDEBAR_FULL_THRESHOLD)
+  })
+
+  it('renders the full layout at the full threshold', () => {
+    const { container, getByText } = render(
+      <Sidebar width={SIDEBAR_FULL_THRESHOLD} setWidth={vi.fn()} entries={entries} />
+    )
+
+    expect(container.firstElementChild).toHaveStyle({ width: `${SIDEBAR_FULL_THRESHOLD}px` })
+    expect(getByText('Chat')).toBeInTheDocument()
+  })
+
+  it.each([
+    { name: 'icon', width: SIDEBAR_ICON_WIDTH, isFloating: false },
+    { name: 'full', width: SIDEBAR_FULL_THRESHOLD, isFloating: false },
+    { name: 'floating', width: 0, isFloating: true }
+  ])('renders the $name account entry as an accessible header button', async ({ width, isFloating }) => {
+    const user = userEvent.setup()
+    const onAccountClick = vi.fn()
+    render(
+      <Sidebar
+        width={width}
+        setWidth={vi.fn()}
+        entries={entries}
+        user={{ name: 'User', onClick: onAccountClick }}
+        isFloating={isFloating}
+        renderUserTrigger={(trigger: ReactElement) => <div data-testid="header-account-trigger">{trigger}</div>}
+      />
+    )
+
+    const accountButton = screen.getByRole('button', { name: 'User' })
+
+    expect(screen.getByTestId('header-account-trigger')).toContainElement(accountButton)
+    expect(
+      accountButton.compareDocumentPosition(screen.getByRole('button', { name: 'Chat' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    await user.click(accountButton)
+    expect(onAccountClick).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    { name: 'icon', width: SIDEBAR_ICON_WIDTH, isFloating: false },
+    { name: 'full', width: SIDEBAR_FULL_THRESHOLD, isFloating: false },
+    { name: 'floating', width: 0, isFloating: true }
+  ])('moves the macOS $name account entry between footer and fullscreen header', ({ width, isFloating }) => {
+    uiMocks.isMac = true
+    const props = {
+      width,
+      setWidth: vi.fn(),
+      entries,
+      user: { name: 'User' },
+      isFloating,
+      actions: <button type="button">Settings</button>
+    }
+    const { rerender } = render(<Sidebar {...props} />)
+
+    const accountButton = screen.getByRole('button', { name: 'User' })
+    for (const name of ['Chat', 'Settings']) {
+      expect(
+        screen.getByRole('button', { name }).compareDocumentPosition(accountButton) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+    }
+
+    rerender(<Sidebar {...props} isFullscreen />)
+    expect(screen.getAllByRole('button', { name: 'User' })).toHaveLength(1)
+    expect(
+      screen
+        .getByRole('button', { name: 'User' })
+        .compareDocumentPosition(screen.getByRole('button', { name: 'Chat' })) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+
+    rerender(<Sidebar {...props} />)
+    expect(
+      screen
+        .getByRole('button', { name: 'Settings' })
+        .compareDocumentPosition(screen.getByRole('button', { name: 'User' })) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it('exposes account menu state and restores focus to its macOS footer trigger', async () => {
+    uiMocks.isMac = true
+    const user = userEvent.setup()
+
+    function AccountSidebar() {
+      const [open, setOpen] = useState(false)
+
+      return (
+        <Popover open={open} onOpenChange={setOpen}>
+          <Sidebar
+            width={SIDEBAR_FULL_THRESHOLD}
+            setWidth={vi.fn()}
+            entries={entries}
+            user={{ name: 'User' }}
+            renderUserTrigger={(trigger: ReactElement) => <PopoverTrigger asChild>{trigger}</PopoverTrigger>}
+          />
+          {open ? (
+            <PopoverContent align="start" side="top" sideOffset={8}>
+              Account settings
+            </PopoverContent>
+          ) : null}
+        </Popover>
+      )
+    }
+
+    render(<AccountSidebar />)
+
+    const trigger = screen.getByRole('button', { name: /User$/ })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(trigger)
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Account settings')).toBeVisible()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByText('Account settings')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('keeps the full footer update action independent from the account trigger', async () => {
+    uiMocks.isMac = true
+    const user = userEvent.setup()
+    const onAccountClick = vi.fn()
+    const onUpdateClick = vi.fn()
+
+    render(
+      <Sidebar
+        width={SIDEBAR_FULL_THRESHOLD}
+        setWidth={vi.fn()}
+        entries={entries}
+        user={{ name: 'User', onClick: onAccountClick }}
+        actions={(layout) => (
+          <>
+            <button type="button">Settings {layout}</button>
+            <button type="button">Help {layout}</button>
+          </>
+        )}
+        userAction={(layout) => (
+          <button type="button" aria-label={`Install update ${layout}`} onClick={onUpdateClick}>
+            update
+          </button>
+        )}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Install update full' }))
+
+    expect(onUpdateClick).toHaveBeenCalledOnce()
+    expect(onAccountClick).not.toHaveBeenCalled()
+    const accountButton = screen.getByRole('button', { name: 'User' })
+    const updateButton = screen.getByRole('button', { name: 'Install update full' })
+    const settingsButton = screen.getByRole('button', { name: 'Settings full' })
+    const helpButton = screen.getByRole('button', { name: 'Help full' })
+    expect(accountButton).not.toHaveTextContent('›')
+    expect(accountButton.compareDocumentPosition(updateButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(settingsButton.parentElement).not.toBe(accountButton.parentElement)
+    expect(helpButton.parentElement).not.toBe(accountButton.parentElement)
+  })
+
+  it('renders the full footer user action without a user identity', () => {
+    render(
+      <Sidebar
+        width={SIDEBAR_FULL_THRESHOLD}
+        setWidth={vi.fn()}
+        entries={entries}
+        userAction={<button type="button">Open settings</button>}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Open settings' })).toBeVisible()
+  })
+
+  it('wires context menu actions and keeps blank sidebar space clickable while the menu is open', async () => {
+    const user = userEvent.setup()
+    const onRemove = vi.fn()
+
+    const { container } = render(
+      <Sidebar
+        width={SIDEBAR_FULL_THRESHOLD}
+        setWidth={vi.fn()}
+
+        entries={[
+          appEntry({
+            ...items[0],
+            contextMenuItems: [{ type: 'item', id: 'remove-chat', label: 'Remove from Sidebar', onSelect: onRemove }]
+          })
+        ]}
+      />
+    )
+
+    const sidebar = container.firstElementChild
+
+    // Electron drag-region markers are the contract that determines whether blank space receives the dismiss click.
+    expect(sidebar).toHaveClass('[-webkit-app-region:drag]')
+
+    act(() => uiMocks.contextMenuOpenChange?.(true))
+
+    expect(sidebar).toHaveClass('[-webkit-app-region:no-drag]')
+    expect(sidebar).not.toHaveClass('[-webkit-app-region:drag]')
+
+    act(() => uiMocks.contextMenuOpenChange?.(false))
+
+    expect(sidebar).toHaveClass('[-webkit-app-region:drag]')
+    expect(sidebar).not.toHaveClass('[-webkit-app-region:no-drag]')
+
+    await user.click(screen.getByRole('button', { name: 'Remove from Sidebar' }))
+
+    expect(onRemove).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the floating sidebar open while a context menu is open', () => {
+    vi.useFakeTimers()
+    const onDismiss = vi.fn()
+
+    try {
+      const { container } = render(
+        <Sidebar
+          width={SIDEBAR_FULL_THRESHOLD}
+          setWidth={vi.fn()}
+
+          entries={[
+            appEntry({
+              ...items[0],
+              contextMenuItems: [{ type: 'item', id: 'remove-chat', label: 'Remove from Sidebar', onSelect: vi.fn() }]
+            })
+          ]}
+          isFloating
+          onDismiss={onDismiss}
+        />
+      )
+
+      const panel = container.querySelector('.slide-in-from-left-2') as HTMLElement
+
+      // Floating blank space must leave pointer input available for the edge resize gesture.
+      expect(panel).toHaveClass('[-webkit-app-region:no-drag]')
+      expect(panel).not.toHaveClass('[-webkit-app-region:drag]')
+      fireEvent.mouseEnter(panel)
+      act(() => uiMocks.contextMenuOpenChange?.(true))
+      expect(panel).toHaveClass('[-webkit-app-region:no-drag]')
+      fireEvent.mouseLeave(panel)
+      vi.advanceTimersByTime(350)
+
+      expect(onDismiss).not.toHaveBeenCalled()
+
+      act(() => uiMocks.contextMenuOpenChange?.(false))
+      expect(panel).toHaveClass('[-webkit-app-region:no-drag]')
+      expect(panel).not.toHaveClass('[-webkit-app-region:drag]')
+      vi.advanceTimersByTime(350)
+
+      expect(onDismiss).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the floating sidebar open while a footer overlay is open', () => {
+    vi.useFakeTimers()
+    const onDismiss = vi.fn()
+    let onOverlayOpenChange: ((open: boolean) => void) | undefined
+
+    try {
+      const { container } = render(
+        <Sidebar
+          width={SIDEBAR_FULL_THRESHOLD}
+          setWidth={vi.fn()}
+
+          entries={entries}
+          actions={(_layout, handleOverlayOpenChange) => {
+            onOverlayOpenChange = handleOverlayOpenChange
+            return <button type="button">Help</button>
+          }}
+          isFloating
+          onDismiss={onDismiss}
+        />
+      )
+
+      const panel = container.querySelector('.slide-in-from-left-2') as HTMLElement
+
+      fireEvent.mouseEnter(panel)
+      act(() => onOverlayOpenChange?.(true))
+      fireEvent.mouseLeave(panel)
+      vi.advanceTimersByTime(350)
+
+      expect(onDismiss).not.toHaveBeenCalled()
+
+      act(() => onOverlayOpenChange?.(false))
+      vi.advanceTimersByTime(350)
+
+      expect(onDismiss).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('names icon-only resource buttons from their full label', () => {
+    render(
+      <Sidebar
+        width={SIDEBAR_ICON_WIDTH}
+        setWidth={vi.fn()}
+
+        entries={[...entries, appEntry({ id: 'custom', label: 'Custom Tool', icon: Search })]}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Custom Tool' })).toBeInTheDocument()
+  })
+
+  it('suppresses only the dragged sidebar entry immediate post-drag click', () => {
+    vi.useFakeTimers()
+    const onChatOpen = vi.fn()
+    const onAgentOpen = vi.fn()
+    const sortableEntries: ResolvedSidebarEntry[] = [
+      {
+        key: 'app:chat',
+        label: 'Chat',
+        renderIcon: () => null,
+        isActive: true,
+        onOpen: onChatOpen
+      },
+      {
+        key: 'app:agent',
+        label: 'Agent',
+        renderIcon: () => null,
+        isActive: false,
+        onOpen: onAgentOpen
+      }
+    ]
+
+    render(
+      <Sidebar
+        width={SIDEBAR_FULL_THRESHOLD}
+        setWidth={vi.fn()}
+
+        entries={sortableEntries}
+        onEntriesReorder={vi.fn()}
+      />
+    )
+
+    const sortableCall = uiMocks.sortableCalls.at(-1)
+    sortableCall.onDragStart({ activeId: 'app:chat' })
+    sortableCall.onDragEnd()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Agent' }))
+
+    expect(onChatOpen).not.toHaveBeenCalled()
+    expect(onAgentOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('suppresses only the dragged sidebar entry middle-click after sorting settles', () => {
+    const onChatOpenNewTab = vi.fn()
+    const onAgentOpenNewTab = vi.fn()
+    const sortableEntries: ResolvedSidebarEntry[] = [
+      {
+        key: 'app:chat',
+        label: 'Chat',
+        renderIcon: () => null,
+        isActive: true,
+        onOpen: vi.fn(),
+        onOpenNewTab: onChatOpenNewTab
+      },
+      {
+        key: 'app:agent',
+        label: 'Agent',
+        renderIcon: () => null,
+        isActive: false,
+        onOpen: vi.fn(),
+        onOpenNewTab: onAgentOpenNewTab
+      }
+    ]
+
+    render(
+      <Sidebar
+        width={SIDEBAR_FULL_THRESHOLD}
+        setWidth={vi.fn()}
+
+        entries={sortableEntries}
+        onEntriesReorder={vi.fn()}
+      />
+    )
+
+    const sortableCall = uiMocks.sortableCalls.at(-1)
+    sortableCall.onDragStart({ activeId: 'app:chat' })
+    sortableCall.onDragEnd()
+
+    const chatButton = screen.getByRole('button', { name: 'Chat' })
+    const agentButton = screen.getByRole('button', { name: 'Agent' })
+
+    const mouseDown = new MouseEvent('mousedown', { button: 1, bubbles: true, cancelable: true })
+    fireEvent(chatButton, mouseDown)
+    fireEvent(chatButton, new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }))
+    fireEvent(agentButton, new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }))
+
+    expect(mouseDown.defaultPrevented).toBe(true)
+    expect(onChatOpenNewTab).not.toHaveBeenCalled()
+    expect(onAgentOpenNewTab).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders footer actions with the current sidebar layout', () => {
+    const renderActions = (layout: 'icon' | 'full') => <button type="button">theme-{layout}</button>
+
+    const { rerender } = render(
+      <Sidebar
+        width={SIDEBAR_ICON_WIDTH}
+        setWidth={vi.fn()}
+
+        entries={entries}
+        actions={renderActions}
+      />
+    )
+
+    expect(document.body).toHaveTextContent('theme-icon')
+
+    rerender(
+      <Sidebar
+        width={SIDEBAR_FULL_THRESHOLD}
+        setWidth={vi.fn()}
+
+        entries={entries}
+        actions={renderActions}
+      />
+    )
+
+    expect(document.body).toHaveTextContent('theme-full')
+    expect(document.body).not.toHaveTextContent('theme-icon')
+  })
+
+  it('triggers onOpenNewTab on middle-click (auxclick with button 1) in icon layout', () => {
+    const onChatOpen = vi.fn()
+    const onChatOpenNewTab = vi.fn()
+    const testEntries: ResolvedSidebarEntry[] = [
+      {
+        key: 'app:chat',
+        label: 'Chat',
+        renderIcon: () => <span>chat-icon</span>,
+        isActive: false,
+        onOpen: onChatOpen,
+        onOpenNewTab: onChatOpenNewTab
+      }
+    ]
+
+    render(<Sidebar width={SIDEBAR_ICON_WIDTH} setWidth={vi.fn()} entries={testEntries} />)
+
+    const button = screen.getByRole('button', { name: 'Chat' })
+    const mouseDown = new MouseEvent('mousedown', { button: 1, bubbles: true, cancelable: true })
+    fireEvent(button, mouseDown)
+    fireEvent(button, new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }))
+
+    expect(mouseDown.defaultPrevented).toBe(true)
+    expect(onChatOpenNewTab).toHaveBeenCalledTimes(1)
+    expect(onChatOpen).not.toHaveBeenCalled()
+  })
+
+  it('triggers onOpenNewTab on middle-click (auxclick with button 1) in full layout', () => {
+    const onChatOpen = vi.fn()
+    const onChatOpenNewTab = vi.fn()
+    const testEntries: ResolvedSidebarEntry[] = [
+      {
+        key: 'app:chat',
+        label: 'Chat',
+        renderIcon: () => <span>chat-icon</span>,
+        isActive: false,
+        onOpen: onChatOpen,
+        onOpenNewTab: onChatOpenNewTab
+      }
+    ]
+
+    render(
+      <Sidebar
+        width={SIDEBAR_FULL_THRESHOLD}
+        setWidth={vi.fn()}
+
+        entries={testEntries}
+      />
+    )
+
+    const button = screen.getByRole('button', { name: /Chat/ })
+    const mouseDown = new MouseEvent('mousedown', { button: 1, bubbles: true, cancelable: true })
+    fireEvent(button, mouseDown)
+    fireEvent(button, new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }))
+
+    expect(mouseDown.defaultPrevented).toBe(true)
+    expect(onChatOpenNewTab).toHaveBeenCalledTimes(1)
+    expect(onChatOpen).not.toHaveBeenCalled()
+  })
+
+  it('does not trigger onOpenNewTab on auxclick with non-middle button', () => {
+    const onChatOpen = vi.fn()
+    const onChatOpenNewTab = vi.fn()
+    const testEntries: ResolvedSidebarEntry[] = [
+      {
+        key: 'app:chat',
+        label: 'Chat',
+        renderIcon: () => <span>chat-icon</span>,
+        isActive: false,
+        onOpen: onChatOpen,
+        onOpenNewTab: onChatOpenNewTab
+      }
+    ]
+
+    render(<Sidebar width={SIDEBAR_ICON_WIDTH} setWidth={vi.fn()} entries={testEntries} />)
+
+    const button = screen.getByRole('button', { name: 'Chat' })
+    const mouseDown = new MouseEvent('mousedown', { button: 2, bubbles: true, cancelable: true })
+    fireEvent(button, mouseDown)
+    fireEvent(button, new MouseEvent('auxclick', { button: 2, bubbles: true, cancelable: true }))
+
+    expect(mouseDown.defaultPrevented).toBe(false)
+    expect(onChatOpenNewTab).not.toHaveBeenCalled()
+    expect(onChatOpen).not.toHaveBeenCalled()
+  })
+})
+
+describe('Sidebar icon presentation', () => {
+  it.each([
+    [SIDEBAR_FULL_THRESHOLD, { slotSize: 18, glyphSize: 16 }],
+    [SIDEBAR_ICON_WIDTH, { slotSize: 24, glyphSize: 18 }]
+  ])('uses one fixed icon slot at width %s', (width, expectedPresentation) => {
+    const mixedEntries: ResolvedSidebarEntry[] = ['glyph', 'avatar'].map((kind) => ({
+      key: kind,
+      label: kind,
+      renderIcon: () => <span>{kind}</span>,
+      isActive: false,
+      onOpen: vi.fn()
+    }))
+
+    const { container } = render(<Sidebar width={width} setWidth={vi.fn()} entries={mixedEntries} />)
+
+    const slots = [...container.querySelectorAll('[data-slot="sidebar-entry-icon"]')]
+    expect(slots).toHaveLength(2)
+    for (const slot of slots) {
+      expect(slot).toHaveStyle({
+        width: `${expectedPresentation.slotSize}px`,
+        height: `${expectedPresentation.slotSize}px`
+      })
+    }
+  })
+})

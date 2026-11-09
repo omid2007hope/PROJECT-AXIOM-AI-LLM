@@ -1,0 +1,16 @@
+name: person
+label: "Person / Username Investigation"
+target_type: username
+steps:
+  - id: dorks
+    tool: generate_dorks
+    section: "Google Dork URLs"
+  - id: pastes
+    tool: search_paste
+    section: "Paste Site Mentions"
+  - id: username
+    tool: search_username
+    section: "Username Enumeration"
+  - id: email
+    tool: search_email
+    section: "Email Account Enumeration"

@@ -1,0 +1,252 @@
+import type {
+  AnalyzeStockResponse,
+  BacktestStockResponse,
+} from '../../../../src/generated/server/worldmonitor/market/v1/service_server';
+import { getCachedJsonBatch, runRedisPipeline, setCachedJson } from '../../../_shared/redis';
+import { sanitizeSymbol } from './_shared';
+import { SeedUnavailableError } from '../../../_shared/required-seed';
+
+const ANALYSIS_HISTORY_LIMIT = 32;
+const ANALYSIS_HISTORY_TTL_SECONDS = 90 * 24 * 60 * 60;
+const BACKTEST_LEDGER_LIMIT = 192;
+const BACKTEST_LEDGER_TTL_SECONDS = 90 * 24 * 60 * 60;
+const BACKTEST_STORE_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+type AnalysisHistoryRecord = Record<string, AnalyzeStockResponse[]>;
+
+function compareAnalysisDesc<T extends { analysisAt: number; generatedAt: string }>(a: T, b: T): number {
+  const aTime = Date.parse(a.generatedAt || '') || a.analysisAt || 0;
+  const bTime = Date.parse(b.generatedAt || '') || b.analysisAt || 0;
+  return bTime - aTime;
+}
+
+function analysisHistoryIndexKey(symbol: string, includeNews: boolean): string {
+  // v6 excludes snapshots whose narratives could contain caller labels (#9287).
+  return `market:stock-analysis-history:index:v6:${sanitizeSymbol(symbol)}:${includeNews ? 'news' : 'core'}`;
+}
+
+function analysisItemKey(analysisId: string): string {
+  return `market:stock-analysis-history:item:v6:${analysisId}`;
+}
+
+function backtestSnapshotKey(symbol: string, evalWindowDays: number): string {
+  // v3: stored responses explicitly identify the technical-only rating basis.
+  return `market:stock-backtest-store:v3:${sanitizeSymbol(symbol)}:${evalWindowDays}`;
+}
+
+function backtestLedgerIndexKey(symbol: string): string {
+  return `market:stock-analysis-ledger:index:v2:${sanitizeSymbol(symbol)}`;
+}
+
+function backtestLedgerItemKey(analysisId: string): string {
+  return `market:stock-analysis-ledger:item:v2:${analysisId}`;
+}
+
+function normalizeSymbolList(symbols: string[]): string[] {
+  return [...new Set(symbols.map(sanitizeSymbol).filter(Boolean))];
+}
+
+function normalizeAnalysisRecord(
+  snapshot: AnalyzeStockResponse,
+  includeNews: boolean,
+): AnalyzeStockResponse | null {
+  if (!snapshot.available || !snapshot.symbol) return null;
+
+  const symbol = sanitizeSymbol(snapshot.symbol);
+  const analysisAt = snapshot.analysisAt || Date.parse(snapshot.generatedAt || '') || 0;
+  if (!analysisAt) return null;
+
+  const engineVersion = snapshot.engineVersion || 'v1';
+  const analysisId = snapshot.analysisId || `stock:${engineVersion}:${symbol}:${analysisAt}:${includeNews ? 'news' : 'core'}`;
+
+  return {
+    ...snapshot,
+    symbol,
+    name: symbol,
+    analysisId,
+    analysisAt,
+    engineVersion,
+  };
+}
+
+function normalizeLedgerRecord(snapshot: AnalyzeStockResponse): AnalyzeStockResponse | null {
+  if (!snapshot.available || !snapshot.symbol) return null;
+
+  const symbol = sanitizeSymbol(snapshot.symbol);
+  const analysisAt = snapshot.analysisAt || Date.parse(snapshot.generatedAt || '') || 0;
+  if (!analysisAt) return null;
+
+  const engineVersion = snapshot.engineVersion || 'v1';
+  const analysisId = snapshot.analysisId || `ledger:${engineVersion}:${symbol}:${analysisAt}`;
+
+  return {
+    ...snapshot,
+    symbol,
+    analysisId,
+    analysisAt,
+    engineVersion,
+  };
+}
+
+async function zrevrange(key: string, limit?: number): Promise<string[]> {
+  if (limit !== undefined && limit <= 0) return [];
+  const data = await runRedisPipeline([
+    ['ZREVRANGE', key, 0, limit === undefined ? -1 : Math.max(0, limit - 1)],
+  ]);
+  return Array.isArray(data[0]?.result)
+    ? data[0]!.result!.map((item) => String(item))
+    : [];
+}
+
+async function loadAnalysisRecords(ids: string[], itemKeyFor: (analysisId: string) => string): Promise<AnalyzeStockResponse[]> {
+  if (ids.length === 0) return [];
+  const itemKeys = ids.map(itemKeyFor);
+  const cached = await getCachedJsonBatch(itemKeys);
+
+  return ids
+    .map((_, index) => cached.get(itemKeys[index]!) as AnalyzeStockResponse | undefined)
+    .filter((item): item is AnalyzeStockResponse => !!item?.available)
+    .sort(compareAnalysisDesc);
+}
+
+async function trimIndexTail(
+  indexKey: string,
+  ids: string[],
+  keepLimit: number,
+  itemKeyFor?: (analysisId: string) => string,
+): Promise<void> {
+  if (ids.length <= keepLimit) return;
+  const overflow = ids.slice(keepLimit);
+  const commands: Array<Array<string | number>> = [['ZREM', indexKey, ...overflow]];
+  if (itemKeyFor) commands.push(['DEL', ...overflow.map(itemKeyFor)]);
+  await runRedisPipeline(commands);
+}
+
+export async function storeStockAnalysisSnapshot(
+  snapshot: AnalyzeStockResponse,
+  includeNews: boolean,
+): Promise<void> {
+  const record = normalizeAnalysisRecord(snapshot, includeNews);
+  if (!record) return;
+
+  const indexKey = analysisHistoryIndexKey(record.symbol, includeNews);
+  const itemKey = analysisItemKey(record.analysisId);
+
+  await runRedisPipeline([
+    ['SET', itemKey, JSON.stringify(record), 'EX', ANALYSIS_HISTORY_TTL_SECONDS],
+    ['ZADD', indexKey, Date.parse(record.generatedAt) || record.analysisAt, record.analysisId],
+    ['EXPIRE', indexKey, ANALYSIS_HISTORY_TTL_SECONDS],
+  ]);
+
+  const ids = await zrevrange(indexKey);
+  await trimIndexTail(indexKey, ids, ANALYSIS_HISTORY_LIMIT, analysisItemKey);
+}
+
+export async function getStoredStockAnalysisHistory(
+  symbols: string[],
+  includeNews: boolean,
+  limitPerSymbol = ANALYSIS_HISTORY_LIMIT,
+): Promise<AnalysisHistoryRecord> {
+  const normalized = normalizeSymbolList(symbols);
+  const clampedLimit = Math.max(1, Math.min(ANALYSIS_HISTORY_LIMIT, limitPerSymbol));
+  const out: AnalysisHistoryRecord = {};
+
+  await Promise.all(normalized.map(async (symbol) => {
+    const indexKey = analysisHistoryIndexKey(symbol, includeNews);
+    const index = await runRedisPipeline([['ZREVRANGE', indexKey, 0, clampedLimit - 1]]);
+    const ids = index[0]?.result;
+    if (index.length !== 1 || index[0]?.error || !Array.isArray(ids)
+      || !ids.every(id => typeof id === 'string')) throw new SeedUnavailableError(indexKey);
+    if (ids.length === 0) {
+      out[symbol] = [];
+      return;
+    }
+    const records = await runRedisPipeline(ids.map(id => ['GET', analysisItemKey(String(id))]));
+    if (records.length !== ids.length) throw new SeedUnavailableError(indexKey);
+    out[symbol] = records.flatMap(record => {
+      if (record.error) throw new SeedUnavailableError(indexKey);
+      if (record.result === null) return [];
+      if (typeof record.result !== 'string') throw new SeedUnavailableError(indexKey);
+      let snapshot: AnalyzeStockResponse;
+      try {
+        snapshot = JSON.parse(record.result);
+      } catch {
+        throw new SeedUnavailableError(indexKey);
+      }
+      if (!snapshot || typeof snapshot !== 'object') throw new SeedUnavailableError(indexKey);
+      return snapshot.available ? [snapshot] : [];
+    }).sort(compareAnalysisDesc);
+  }));
+
+  return out;
+}
+
+export async function storeHistoricalBacktestAnalysisRecords(
+  snapshots: AnalyzeStockResponse[],
+): Promise<void> {
+  const commands: Array<Array<string | number>> = [];
+  const touchedSymbols = new Set<string>();
+
+  for (const snapshot of snapshots) {
+    const record = normalizeLedgerRecord(snapshot);
+    if (!record) continue;
+
+    const indexKey = backtestLedgerIndexKey(record.symbol);
+    commands.push(
+      ['SET', backtestLedgerItemKey(record.analysisId), JSON.stringify(record), 'EX', BACKTEST_LEDGER_TTL_SECONDS],
+      ['ZADD', indexKey, record.analysisAt, record.analysisId],
+      ['EXPIRE', indexKey, BACKTEST_LEDGER_TTL_SECONDS],
+    );
+    touchedSymbols.add(record.symbol);
+  }
+
+  if (commands.length === 0) return;
+  const PIPELINE_CHUNK = 200;
+  for (let i = 0; i < commands.length; i += PIPELINE_CHUNK) {
+    await runRedisPipeline(commands.slice(i, i + PIPELINE_CHUNK));
+  }
+
+  await Promise.all([...touchedSymbols].map(async (symbol) => {
+    const ids = await zrevrange(backtestLedgerIndexKey(symbol), BACKTEST_LEDGER_LIMIT + 8);
+    await trimIndexTail(backtestLedgerIndexKey(symbol), ids, BACKTEST_LEDGER_LIMIT);
+  }));
+}
+
+export async function getStoredHistoricalBacktestAnalyses(
+  symbol: string,
+  limit = BACKTEST_LEDGER_LIMIT,
+): Promise<AnalyzeStockResponse[]> {
+  const normalized = sanitizeSymbol(symbol);
+  if (!normalized) return [];
+  const ids = await zrevrange(backtestLedgerIndexKey(normalized), Math.max(1, limit));
+  return loadAnalysisRecords(ids, backtestLedgerItemKey);
+}
+
+export async function storeStockBacktestSnapshot(
+  snapshot: BacktestStockResponse,
+): Promise<void> {
+  if (!snapshot.available || !snapshot.symbol) return;
+  const key = backtestSnapshotKey(snapshot.symbol, snapshot.evalWindowDays || 10);
+  await setCachedJson(key, {
+    ...snapshot,
+    symbol: sanitizeSymbol(snapshot.symbol),
+    name: sanitizeSymbol(snapshot.symbol),
+  }, BACKTEST_STORE_TTL_SECONDS);
+}
+
+export async function getStoredStockBacktestSnapshots(
+  symbols: string[],
+  evalWindowDays: number,
+): Promise<BacktestStockResponse[]> {
+  const normalized = normalizeSymbolList(symbols);
+  const keys = normalized.map((symbol) => backtestSnapshotKey(symbol, evalWindowDays));
+  const cached = await getCachedJsonBatch(keys);
+
+  return normalized
+    .map((symbol, index) => {
+      const item = cached.get(keys[index]!) as BacktestStockResponse | undefined;
+      return item ? { ...item, symbol, name: symbol } : undefined;
+    })
+    .filter((item): item is BacktestStockResponse => !!item?.available)
+    .sort((a, b) => (Date.parse(b.generatedAt || '') || 0) - (Date.parse(a.generatedAt || '') || 0));
+}

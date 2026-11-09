@@ -1,0 +1,58 @@
+---
+import { ClientRouter } from 'astro:transitions';
+import MetaTags from '@layouts/MetaTags.astro';
+import themeScript from '@layouts/scripts/theme.js?raw';
+import settingsScript from '@layouts/scripts/settings.js?raw';
+
+import '@styles/typography.scss';
+import '@styles/global.scss';
+import '@styles/colors.scss';
+import '@styles/media-queries.scss';
+
+interface Props {
+  title?: string;
+  description?: string;
+  keywords?: string;
+  customSchemaJson?: any;
+  preloadBodyFont?: boolean;
+  breadcrumbs?: Array<{
+    name: string;
+    item: string;
+  }>;
+}
+
+const { preloadBodyFont = true } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <script is:inline set:html={themeScript} />
+    <script is:inline set:html={settingsScript} />
+    <ClientRouter />
+    <MetaTags {...Astro.props} />
+    <slot name="head" />
+    {preloadBodyFont && (
+      <link
+        href="/fonts/Hubot-Sans/WOFF2/HubotSans-Regular.woff2"
+        as="font"
+        rel="preload"
+        type="font/woff2"
+        crossorigin="anonymous"
+      />
+    )}
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
+
+<script>
+  // Hack to keep Emotion's injected styles in the head when client-router swaps pages
+  document.addEventListener('astro:before-swap', ({ newDocument }) => {
+    document.head.querySelectorAll('style[data-emotion]').forEach((style, i) => {
+      style.setAttribute('data-astro-transition-persist', `emotion-${i}`);
+      newDocument.head.append(style.cloneNode());
+    });
+  });
+</script>

@@ -1,0 +1,288 @@
+/**
+ * Maps a file path to a material-icon-theme icon name.
+ * Used with @iconify/react: <Icon icon={`material-icon-theme:${getFileIconName(path)}`} />
+ */
+
+/** Exact filename → icon name */
+const filenameMap: Record<string, string> = {
+  dockerfile: 'docker',
+  'docker-compose.yml': 'docker',
+  'docker-compose.yaml': 'docker',
+  '.dockerignore': 'docker',
+  '.gitignore': 'git',
+  '.gitattributes': 'git',
+  '.gitmodules': 'git',
+  'package.json': 'nodejs',
+  'package-lock.json': 'nodejs',
+  'tsconfig.json': 'tsconfig',
+  'jsconfig.json': 'jsconfig',
+  '.eslintrc': 'eslint',
+  '.eslintrc.js': 'eslint',
+  '.eslintrc.json': 'eslint',
+  'eslint.config.js': 'eslint',
+  'eslint.config.mjs': 'eslint',
+  'eslint.config.ts': 'eslint',
+  '.prettierrc': 'prettier',
+  '.prettierrc.json': 'prettier',
+  'prettier.config.js': 'prettier',
+  'biome.json': 'biome',
+  'biome.jsonc': 'biome',
+  'vite.config.ts': 'vite',
+  'vite.config.js': 'vite',
+  'vite.config.mts': 'vite',
+  'vitest.config.ts': 'vitest',
+  'vitest.config.js': 'vitest',
+  'webpack.config.js': 'webpack',
+  'webpack.config.ts': 'webpack',
+  'rollup.config.js': 'rollup',
+  'rollup.config.ts': 'rollup',
+  'next.config.js': 'next',
+  'next.config.mjs': 'next',
+  'next.config.ts': 'next',
+  'nuxt.config.ts': 'nuxt',
+  'svelte.config.js': 'svelte',
+  'tailwind.config.js': 'tailwindcss',
+  'tailwind.config.ts': 'tailwindcss',
+  'postcss.config.js': 'postcss',
+  'postcss.config.cjs': 'postcss',
+  'yarn.lock': 'yarn',
+  'pnpm-lock.yaml': 'pnpm',
+  'pnpm-workspace.yaml': 'pnpm',
+  'bun.lock': 'bun',
+  'bun.lockb': 'bun',
+  'deno.json': 'deno',
+  'deno.jsonc': 'deno',
+  makefile: 'makefile',
+  Makefile: 'makefile',
+  'CMakeLists.txt': 'cmake',
+  'Cargo.toml': 'rust',
+  'Cargo.lock': 'rust',
+  'go.mod': 'go-mod',
+  'go.sum': 'go-mod',
+  Gemfile: 'gemfile',
+  Rakefile: 'ruby',
+  LICENSE: 'license',
+  'LICENSE.md': 'license',
+  'CHANGELOG.md': 'changelog',
+  'README.md': 'readme',
+  'CLAUDE.md': 'claude',
+  '.env': 'tune',
+  '.env.local': 'tune',
+  '.env.development': 'tune',
+  '.env.production': 'tune'
+}
+
+/** File extension → icon name */
+const extensionMap: Record<string, string> = {
+  // JavaScript / TypeScript
+  ts: 'typescript',
+  tsx: 'react-ts',
+  js: 'javascript',
+  jsx: 'react',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  mts: 'typescript',
+  cts: 'typescript',
+  'd.ts': 'typescript-def',
+
+  // Web
+  html: 'html',
+  htm: 'html',
+  css: 'css',
+  scss: 'sass',
+  sass: 'sass',
+  less: 'less',
+  styl: 'stylus',
+  vue: 'vue',
+  svelte: 'svelte',
+  astro: 'astro',
+
+  // Data / Config
+  json: 'json',
+  jsonc: 'json',
+  json5: 'json',
+  jsonl: 'json',
+  yaml: 'yaml',
+  yml: 'yaml',
+  toml: 'toml',
+  xml: 'xml',
+  csv: 'table',
+  tsv: 'table',
+  ini: 'settings',
+  cfg: 'settings',
+  conf: 'settings',
+  env: 'tune',
+
+  // Markup / Docs
+  md: 'markdown',
+  mdx: 'mdx',
+  markdown: 'markdown',
+  mmd: 'mermaid',
+  mermaid: 'mermaid',
+  rst: 'readme',
+  txt: 'document',
+  text: 'document',
+  pdf: 'pdf',
+  epub: 'epub',
+  tex: 'tex',
+  latex: 'tex',
+
+  // Office documents (material-icon-theme names the suites `word` / `powerpoint`; the spreadsheet
+  // glyph is `table` — there is no `excel` icon in the collection)
+  doc: 'word',
+  docx: 'word',
+  odt: 'word',
+  rtf: 'word',
+  xls: 'table',
+  xlsx: 'table',
+  ods: 'table',
+  ppt: 'powerpoint',
+  pptx: 'powerpoint',
+  odp: 'powerpoint',
+
+  // Systems languages
+  c: 'c',
+  h: 'c',
+  cpp: 'cpp',
+  cc: 'cpp',
+  cxx: 'cpp',
+  hpp: 'cpp',
+  hh: 'cpp',
+  rs: 'rust',
+  go: 'go',
+  zig: 'zig',
+  asm: 'assembly',
+  s: 'assembly',
+  wasm: 'webassembly',
+
+  // JVM
+  java: 'java',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  scala: 'scala',
+  groovy: 'groovy',
+  gradle: 'gradle',
+  clj: 'clojure',
+
+  // Scripting
+  py: 'python',
+  rb: 'ruby',
+  php: 'php',
+  pl: 'perl',
+  pm: 'perl',
+  lua: 'lua',
+  r: 'r',
+  R: 'r',
+  jl: 'julia',
+  ex: 'elixir',
+  exs: 'elixir',
+  erl: 'erlang',
+  hs: 'haskell',
+  lhs: 'haskell',
+  ml: 'ocaml',
+  mli: 'ocaml',
+  fs: 'fsharp',
+  fsx: 'fsharp',
+  dart: 'dart',
+  swift: 'swift',
+  m: 'objective-c',
+  mm: 'objective-cpp',
+  cs: 'csharp',
+  vb: 'visualstudio',
+
+  // Shell
+  sh: 'console',
+  bash: 'console',
+  zsh: 'console',
+  fish: 'console',
+  ps1: 'powershell',
+  bat: 'console',
+  cmd: 'console',
+
+  // Database
+  sql: 'database',
+  sqlite: 'database',
+  prisma: 'prisma',
+
+  // DevOps / Infra
+  tf: 'terraform',
+  hcl: 'hcl',
+  proto: 'proto',
+  graphql: 'graphql',
+  gql: 'graphql',
+
+  // Images
+  svg: 'svg',
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  avif: 'image',
+  heic: 'image',
+  heif: 'image',
+  ico: 'image',
+  bmp: 'image',
+
+  // Media
+  mp3: 'audio',
+  wav: 'audio',
+  ogg: 'audio',
+  flac: 'audio',
+  mp4: 'video',
+  avi: 'video',
+  mkv: 'video',
+  mov: 'video',
+  webm: 'video',
+
+  // Archives
+  zip: 'zip',
+  tar: 'zip',
+  gz: 'zip',
+  tgz: 'zip',
+  bz2: 'zip',
+  xz: 'zip',
+  '7z': 'zip',
+  rar: 'zip',
+
+  // Misc
+  lock: 'lock',
+  log: 'log',
+  diff: 'diff',
+  patch: 'diff',
+  woff: 'font',
+  woff2: 'font',
+  ttf: 'font',
+  otf: 'font',
+  eot: 'font',
+  ipynb: 'jupyter'
+}
+
+const DEFAULT_ICON = 'document'
+
+export function getFileIconName(filePath: string): string {
+  if (!filePath) return DEFAULT_ICON
+
+  // Split on both separators: Windows paths (`C:\dir\file.ts`) reach this helper
+  // through tool-provided absolute paths, and a POSIX-only split left the whole
+  // path as the "file name", so every icon lookup fell back to `document`.
+  const filename = filePath.split(/[\\/]/).pop() ?? ''
+  const lowerFilename = filename.toLowerCase()
+
+  // Check exact filename match first
+  if (filenameMap[filename]) return filenameMap[filename]
+  if (filenameMap[lowerFilename]) return filenameMap[lowerFilename]
+
+  // Check compound extensions (e.g. .d.ts, .spec.ts)
+  const parts = filename.split('.')
+  if (parts.length > 2) {
+    const compoundExt = parts.slice(-2).join('.').toLowerCase()
+    if (extensionMap[compoundExt]) return extensionMap[compoundExt]
+  }
+
+  // Check simple extension
+  const ext = parts.pop()?.toLowerCase()
+  if (ext && extensionMap[ext]) return extensionMap[ext]
+
+  return DEFAULT_ICON
+}

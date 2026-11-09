@@ -1,0 +1,131 @@
+import type { HighlightStyle } from '@codemirror/language'
+import type { EditorState } from '@codemirror/state'
+import type { BasicSetupOptions, Extension } from '@uiw/react-codemirror'
+
+export type CodeMirrorTheme = 'light' | 'dark' | 'none' | Extension
+
+import type { LanguageConfig } from '../../../code-block'
+
+export type { LanguageConfig, LanguageData } from '../../../code-block'
+
+export interface CodeEditorHandles {
+  save?: () => void
+  scrollToLine?: (lineNumber: number, options?: { highlight?: boolean }) => void
+  getContent?: () => string
+  getSelection?: () => { from: number; to: number; text: string } | null
+  /** Replace a document range with literal text; return false when editing is unavailable or the range is invalid. */
+  replaceRange?: (range: { from: number; to: number }, text: string) => boolean
+  insertText?: (text: string) => boolean
+  focus?: () => void
+}
+
+export interface CodeEditorProps {
+  /** Retain document, selection, undo history and folds across compatible mounts. */
+  stateRef?: React.RefObject<EditorState | null>
+  /** Syntax classes shared with a caller's read-only viewer. */
+  syntaxHighlightStyle?: HighlightStyle
+  /** Content shown while the editor implementation loads. */
+  fallback?: React.ReactNode
+  ref?: React.Ref<CodeEditorHandles>
+  /** Value used in controlled mode, e.g., code blocks. */
+  value: string
+  /** Placeholder when the editor content is empty. */
+  placeholder?: string | HTMLElement
+  /** Whether the editor should focus after its EditorView is created. */
+  autoFocus?: boolean
+  /**
+   * Code language string.
+   * - Case-insensitive.
+   * - Supports common names: javascript, json, python, etc.
+   * - Supports aliases: c#/csharp, objective-c++/obj-c++/objc++, etc.
+   * - Supports file extensions: .cpp/cpp, .js/js, .py/py, etc.
+   */
+  language: string
+  /**
+   * Language configuration for extension mapping.
+   * If not provided, will use a default minimal configuration.
+   * @optional
+   */
+  languageConfig?: LanguageConfig
+  /** Fired when ref.save() is called or the save shortcut is triggered. */
+  onSave?: (newContent: string) => void
+  /** Fired when the editor content changes. */
+  onChange?: (newContent: string) => void
+  /** Fired when the editor loses focus. */
+  onBlur?: (newContent: string) => void
+  /** Fired when the editor height changes. */
+  onHeightChange?: (scrollHeight: number) => void
+  /**
+   * Fixed editor height, not exceeding maxHeight.
+   * Only works when expanded is false.
+   */
+  height?: string
+  /**
+   * Maximum editor height.
+   * Only works when expanded is false.
+   */
+  maxHeight?: string
+  /** Minimum editor height. */
+  minHeight?: string
+  /** Editor options that extend BasicSetupOptions. */
+  options?: {
+    /**
+     * Whether to enable special treatment for stream response.
+     * @default false
+     */
+    stream?: boolean
+    /**
+     * Whether to enable linting.
+     * @default false
+     */
+    lint?: boolean
+    /**
+     * Whether to enable keymap.
+     * @default false
+     */
+    keymap?: boolean
+  } & BasicSetupOptions
+  /** Additional extensions for CodeMirror. */
+  extensions?: Extension[]
+  /**
+   * CodeMirror theme name: 'light', 'dark', 'none', Extension.
+   * @default 'light'
+   */
+  theme?: CodeMirrorTheme
+  /**
+   * Font size that overrides the app setting.
+   * @default 16
+   */
+  fontSize?: number
+  /** Style overrides for the editor, passed directly to CodeMirror's style property. */
+  style?: React.CSSProperties
+  /** CSS class name appended to the default `code-editor` class. */
+  className?: string
+  /**
+   * Whether the editor view is editable.
+   * @default true
+   */
+  editable?: boolean
+  /**
+   * Set the editor state to read only but keep some user interactions, e.g., keymaps.
+   * @default false
+   */
+  readOnly?: boolean
+  /**
+   * Whether the editor is expanded.
+   * If true, the height and maxHeight props are ignored.
+   * @default true
+   */
+  expanded?: boolean
+  /**
+   * Whether the code lines are wrapped.
+   * @default true
+   */
+  wrapped?: boolean
+  /**
+   * Keep the internal editor scroller pinned to the document bottom while content grows.
+   * Intended for streaming, collapsed code blocks.
+   * @default false
+   */
+  autoScrollToBottom?: boolean
+}

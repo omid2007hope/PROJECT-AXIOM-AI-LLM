@@ -1,0 +1,186 @@
+---
+interface Props {
+  id?: string;
+}
+
+const { id = 'url-input' } = Astro.props;
+
+const placeholders = [
+  'duck.com',
+  'github.com',
+  'google.com',
+  'x.com',
+  'bbc.co.uk',
+  'wikipedia.org',
+  'openai.com',
+];
+---
+
+<div class="input-container">
+  <input
+    required
+    id={id}
+    type="text"
+    name="url"
+    inputmode="url"
+    autocapitalize="off"
+    autocomplete="off"
+    autocorrect="off"
+    spellcheck="false"
+    placeholder="E.g. duck.com"
+  />
+  <div class="placeholder-container">
+    <span class="starter" aria-hidden="true">
+      E.g.
+    </span>
+    {placeholders.map((placeholder, index) => (
+      <span class={`placeholder ${index === 0 ? 'active' : ''}`} aria-hidden="true">
+        {placeholder}
+      </span>
+    ))}
+  </div>
+</div>
+
+<script>
+  import { reducedMotion } from '../../client/utils/settings';
+
+  const cycleTime = 3000;
+
+  // Cycle the example URLs behind one input, pausing while it holds a value
+  const animatePlaceholders = (container: HTMLElement) => {
+    const input = container.querySelector('input');
+    const reel = container.querySelector<HTMLElement>('.placeholder-container');
+    const starter = container.querySelector<HTMLElement>('.starter');
+    const placeholders = [...container.querySelectorAll<HTMLElement>('.placeholder')];
+    if (!input || !reel || !starter || !placeholders.length) return;
+
+    let index = 0;
+    let interval: ReturnType<typeof setInterval>;
+
+    const showNext = () => {
+      if (reducedMotion()) return;
+      starter.classList.remove('hide');
+      placeholders.forEach((el, position) => {
+        el.classList.toggle('active', position === index);
+        el.classList.toggle('inactive', position !== index);
+        if (position === index) el.classList.remove('still-inactive');
+        else setTimeout(() => el.classList.add('still-inactive'), cycleTime / 5);
+      });
+      index = (index + 1) % placeholders.length;
+    };
+
+    const start = () => {
+      clearInterval(interval);
+      interval = setInterval(showNext, cycleTime);
+    };
+
+    const stop = () => {
+      clearInterval(interval);
+      starter.classList.add('hide');
+      placeholders.forEach((el) => {
+        el.classList.remove('active');
+        el.classList.add('inactive');
+      });
+    };
+
+    input.addEventListener('focus', stop);
+    input.addEventListener('blur', () => !input.value && start());
+    input.addEventListener('input', () => input.value && stop());
+
+    input.setAttribute('placeholder', '');
+    reel.style.display = 'flex';
+    start();
+  };
+
+  // Leaving the animation unstarted keeps the input's own static placeholder
+  document.addEventListener('astro:page-load', () => {
+    if (reducedMotion()) return;
+    document.querySelectorAll<HTMLElement>('.input-container').forEach((container) => {
+      if (container.dataset.animated) return;
+      container.dataset.animated = 'true';
+      animatePlaceholders(container);
+    });
+  });
+</script>
+
+<style lang="scss">
+  @use '@styles/typography.scss';
+  @use '@styles/global.scss' as *;
+
+  .input-container {
+    position: relative;
+    overflow: hidden;
+    input {
+      width: 100%;
+      padding: 1rem;
+      background: color-mix(in srgb, var(--background) 50%, transparent);
+      font-size: 2rem;
+      color: var(--text-color-secondary);
+      border: 2px solid var(--text-color);
+      border-radius: 3px;
+      transition: all 0.3s ease-in-out;
+      &:focus {
+        border-color: var(--primary);
+      }
+    }
+  }
+
+  .input-container .placeholder-container {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    padding-left: 16px;
+    pointer-events: none;
+  }
+
+  .starter,
+  .placeholder {
+    position: absolute;
+    width: 100%;
+    font-size: 2rem;
+    color: var(--text-color-tertiary);
+    padding: 0.1rem 0;
+    user-select: none;
+  }
+
+  .starter {
+    transition:
+      opacity 0.6s,
+      transform 0.5s;
+    &.hide {
+      opacity: 0;
+      transform: translateX(-50%);
+    }
+  }
+
+  .placeholder {
+    padding-left: 4rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition:
+      transform 0.5s ease-in-out,
+      opacity 0.6s;
+    opacity: 0;
+    transform: translateY(-150%);
+  }
+
+  .placeholder.active {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .placeholder.inactive {
+    transform: translateY(150%);
+    opacity: 0;
+  }
+
+  .placeholder.still-inactive {
+    transform: translateY(-150%);
+    opacity: 0;
+  }
+</style>

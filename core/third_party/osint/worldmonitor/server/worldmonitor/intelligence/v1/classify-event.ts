@@ -1,0 +1,197 @@
+import type {
+  ServerContext,
+  ClassifyEventRequest,
+  ClassifyEventResponse,
+  SeverityLevel,
+} from '../../../../src/generated/server/worldmonitor/intelligence/v1/service_server';
+
+import { cachedFetchJson } from '../../../_shared/redis';
+import { markNoCacheResponse, markUnservedLlmResponse } from '../../../_shared/response-headers';
+import { CLASSIFY_VALID_CATEGORIES, CLASSIFY_VALID_LEVELS, UPSTREAM_TIMEOUT_MS, buildClassifyCacheKey, isValidClassifyHit } from './_shared';
+import { callLlm } from '../../../_shared/llm';
+import { aiRoutingCacheSuffix, resolveAiRouting, toLlmRoutingPolicy } from '../../../_shared/ai-routing-policy';
+
+// ========================================================================
+// Constants
+// ========================================================================
+
+const CLASSIFY_CACHE_TTL = 86400;
+const VALID_LEVELS: readonly string[] = CLASSIFY_VALID_LEVELS;
+const VALID_CATEGORIES: readonly string[] = CLASSIFY_VALID_CATEGORIES;
+
+// Same model as the relay's classify seed (scripts/ais-relay.cjs), which writes the
+// same `classify:sebuf:v6` rows. Against 413 blind-judged headlines, this prompt on
+// the shared Flash default raised 93 false critical/high labels for 43 real ones;
+// v4.1 with the "Do not under-rate high" block below raised 20 for 43. Pinned by
+// tests/classify-alert-label-precision.test.mjs.
+const CLASSIFY_OPENROUTER_MODEL = 'deepseek/deepseek-v4.1-flash';
+const CLASSIFY_MODEL_OVERRIDES = { openrouter: CLASSIFY_OPENROUTER_MODEL } as const;
+
+// ========================================================================
+// Helpers
+// ========================================================================
+
+function mapLevelToSeverity(level: string): SeverityLevel {
+  if (level === 'critical' || level === 'high') return 'SEVERITY_LEVEL_HIGH';
+  if (level === 'medium') return 'SEVERITY_LEVEL_MEDIUM';
+  return 'SEVERITY_LEVEL_LOW';
+}
+
+// ========================================================================
+// RPC handler
+// ========================================================================
+
+export async function classifyEvent(
+  ctx: ServerContext,
+  req: ClassifyEventRequest,
+): Promise<ClassifyEventResponse> {
+  // Input sanitization (M-14 fix): limit title length
+  const MAX_TITLE_LEN = 500;
+  const title = typeof req.title === 'string' ? req.title.slice(0, MAX_TITLE_LEN) : '';
+  if (!title) {
+    markNoCacheResponse(ctx.request);
+    markUnservedLlmResponse(ctx.request);
+    return { classification: undefined };
+  }
+
+  // The relay's background classifier writes the shared keys from its own
+  // chain; a restricted caller gets a separate namespace (ai-routing-policy.ts).
+  // The title digest does not depend on the routing lookup, so run both together.
+  const [aiRouting, baseCacheKey] = await Promise.all([
+    resolveAiRouting(ctx.request),
+    buildClassifyCacheKey(title),
+  ]);
+  const cacheKey = `${baseCacheKey}${aiRoutingCacheSuffix(aiRouting)}`;
+
+  const systemPrompt = `You classify news headlines into threat level and category. Return ONLY valid JSON, no other text.
+
+Levels: critical, high, medium, low, info
+Categories: conflict, protest, disaster, diplomatic, economic, terrorism, cyber, health, environmental, military, crime, infrastructure, tech, general
+
+Guidelines for LEVEL assignment (geopolitical scope required for critical):
+- critical: Active military strikes with international implications, geopolitical mass-casualty events (10+ killed in conflict/terrorism/state action), ceasefire agreements/collapses, nuclear incidents, pandemic declarations, coups, strait/waterway closures
+- high: Armed conflict updates, major diplomatic actions, sanctions packages, significant natural disasters, blockades, terrorist attacks, domestic mass-casualty events (mass shootings, industrial disasters)
+- medium: Ongoing conflict analysis, economic impact reports, protest movements, regional policy changes, military exercises
+- low: Diplomatic meetings, trade discussions, humanitarian aid, election updates, peacekeeping deployments
+- info: Opinion/editorial pieces, analysis/explainer articles, historical retrospectives, lifestyle, entertainment, routine local news, tutorials
+
+Key distinction: "critical" requires GEOPOLITICAL scope — events that destabilize international order, threaten cross-border security, or disrupt global systems. Domestic tragedies are "high" unless they trigger international diplomatic responses.
+- "8 children killed in mass shooting in Louisiana" → domestic mass-casualty → high
+- "23 killed in fireworks factory explosion" → industrial accident → high
+- "700 killed in Sudan drone strikes" → geopolitical mass-casualty → critical
+- "Iran closes Strait of Hormuz" → global trade disruption → critical
+- "Man killed his estranged wife" → domestic crime → info
+- "How to Crack the SAM Database" → tutorial → info
+
+Do not under-rate "high". The EVENT itself is high even when nobody is hurt and even when the headline reports a vote, an approval or an announcement:
+- a sanctions package or sanctions bill passed, signed or imposed
+- a major arms sale or weapons transfer approved between states
+- a military deployment or force movement ahead of an operation
+- an armed attack, raid or clash with deaths, including one that was repelled
+- many deaths in state custody or by state action
+- a natural disaster that floods, destroys or displaces on a regional scale
+Use medium for analysis of or reaction to such an event, not for the event itself.
+
+Focus: geopolitical events, conflicts, disasters, diplomacy.
+Classify by real-world event severity, not headline sentiment.
+
+Return: {"level":"...","category":"..."}`;
+
+  let cached: { level: string; category: string; timestamp: number } | null = null;
+  try {
+    cached = await cachedFetchJson<{ level: string; category: string; timestamp: number }>(
+      cacheKey,
+      CLASSIFY_CACHE_TTL,
+      async () => {
+        let validatedResult: { level: string; category: string } | null = null;
+
+        const result = await callLlm({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: title },
+          ],
+          temperature: 0,
+          modelOverrides: CLASSIFY_MODEL_OVERRIDES,
+          routingPolicy: toLlmRoutingPolicy(aiRouting),
+          // Sized for the REASONING fallback, not the primary. DeepSeek answers
+          // this two-field JSON in ~10 tokens (4,264 successful calls over the
+          // 7 days to 2026-08-29: p50=10, p95=11, max=12), so the old ceiling of
+          // 50 was never close to binding for it — and a ceiling costs nothing
+          // when it is not reached.
+          //
+          // A reasoning fallback spends part of the budget on hidden reasoning
+          // before emitting content. The former Groq `openai/gpt-oss-*` fallback
+          // (removed in #8885), even at `reasoning_effort: 'low'` (#7289), cut
+          // the JSON mid-key at 50 — the literal returned content was
+          // `{"level":"` — and the validator below rejected it. Measured against
+          // that model on eight headlines, driven through THIS file's own
+          // systemPrompt and VALID_LEVELS/VALID_CATEGORIES rather than a
+          // paraphrase of them:
+          //
+          //   max_tokens=50   no effort   0/8 valid   8 truncated  (pre-#7289)
+          //   max_tokens=50   low         5/8 valid   3 truncated  (#7289 alone)
+          //   max_tokens=120  low         7/8 valid   1 truncated
+          //   max_tokens=200  low         8/8 valid   0 truncated
+          //
+          // 120 was not enough: an "Analysis: why ..." explainer headline — the
+          // ambiguous `info` case the prompt spends its examples on — reasoned
+          // past it and returned the literal fragment `{"`.
+          //
+          // Do not "tidy" this back down to the primary's p95: that reintroduces
+          // a silent `classification: undefined` in exactly the primary-is-down
+          // scenario the fallback exists to cover.
+          maxTokens: 200,
+          timeoutMs: UPSTREAM_TIMEOUT_MS,
+          stage: 'classify-event',
+          validate: (content) => {
+            try {
+              let parsed: { level?: string; category?: string };
+              try {
+                parsed = JSON.parse(content);
+              } catch {
+                const jsonMatch = content.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) return false;
+                parsed = JSON.parse(jsonMatch[0]);
+              }
+              const level = VALID_LEVELS.includes(parsed.level ?? '') ? parsed.level! : null;
+              const category = VALID_CATEGORIES.includes(parsed.category ?? '') ? parsed.category! : null;
+              if (!level || !category) return false;
+              validatedResult = { level, category };
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        });
+
+        if (!result || !validatedResult) return null;
+        const vr = validatedResult as { level: string; category: string };
+        return { level: vr.level, category: vr.category, timestamp: Date.now() };
+      },
+    );
+  } catch {
+    markNoCacheResponse(ctx.request);
+    markUnservedLlmResponse(ctx.request);
+    return { classification: undefined };
+  }
+
+  // A hit is validated like a fresh answer. The fetcher above only ever
+  // stores enum values, but the row is shared Redis JSON that any writer could
+  // replace, and the category is rendered by the dashboard.
+  if (!cached?.level || !cached?.category || !isValidClassifyHit(cached)) {
+    markNoCacheResponse(ctx.request);
+    markUnservedLlmResponse(ctx.request);
+    return { classification: undefined };
+  }
+
+  return {
+    classification: {
+      category: cached.category,
+      subcategory: cached.level,
+      severity: mapLevelToSeverity(cached.level),
+      confidence: 0.9,
+      analysis: '',
+      entities: [],
+    },
+  };
+}

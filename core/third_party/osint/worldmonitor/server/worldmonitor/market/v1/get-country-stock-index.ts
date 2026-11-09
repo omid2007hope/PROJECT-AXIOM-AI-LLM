@@ -1,0 +1,171 @@
+/**
+ * RPC: GetCountryStockIndex
+ * Fetches national stock market index data from Yahoo Finance.
+ */
+
+import type {
+  ServerContext,
+  GetCountryStockIndexRequest,
+  GetCountryStockIndexResponse,
+} from '../../../../src/generated/server/worldmonitor/market/v1/service_server';
+import { ValidationError } from '../../../../src/generated/server/worldmonitor/market/v1/service_server';
+import { isAssignedCountryCode } from '../../../../shared/country-code-resolve';
+import filterParamContracts from '../../../../shared/openapi-filter-param-contracts.json';
+import { UPSTREAM_TIMEOUT_MS, type YahooChartResponse } from './_shared';
+import { CHROME_UA, yahooGate } from '../../../_shared/constants';
+import { cachedFetchJson, getCachedJson } from '../../../_shared/redis';
+
+// ========================================================================
+// Country-to-index mapping
+// ========================================================================
+
+interface CountryIndexDefinition {
+  symbol: string;
+  name: string;
+  /**
+   * Set when the declared symbol is one Yahoo cannot serve (#6240). The
+   * country stays in the public enum so existing callers keep a stable
+   * contract, but the handler answers `available: false` without spending a
+   * Yahoo request, and the seeder skips it. `checked` dates the evidence.
+   */
+  unavailable?: { checked: string; reason: string };
+  /**
+   * Set when a provider other than Yahoo serves the index (#6153: `moex-iss`
+   * for RU). Railway seeds it from that provider; the Yahoo live fallback
+   * below cannot help, so a missing seed row answers `available: false`.
+   */
+  source?: string;
+}
+
+const COUNTRY_INDEX = filterParamContracts.marketCountryStockIndexes as Record<string, CountryIndexDefinition>;
+
+// ========================================================================
+// Cache
+// ========================================================================
+
+// Railway owns `market:stock-index:v1:<country>` for audit-backed snapshots.
+// Keep request-driven cachedFetchJson writes separate: a slow request that
+// ends in a negative sentinel must never overwrite the seed's last-good data.
+const REDIS_CACHE_KEY = 'market:stock-index:rpc:v1';
+const RAILWAY_SEEDED_COUNTRY_INDEX_KEY_PREFIX = 'market:stock-index:v1:';
+const REDIS_CACHE_TTL = 1800; // 30 min — weekly data, slow-moving
+
+const stockIndexCache: Record<string, { data: GetCountryStockIndexResponse; ts: number }> = {};
+const STOCK_INDEX_CACHE_TTL = 3_600_000; // 1 hour (in-memory fallback)
+
+function railwaySeededKey(code: string): string {
+  return `${RAILWAY_SEEDED_COUNTRY_INDEX_KEY_PREFIX}${code}`;
+}
+
+// The seed row must agree with the key it was read from. A payload whose
+// `code` differs is a mis-keyed write, not usable data — serving it would
+// answer one country's request with another country's index.
+function isAvailableCountryStockIndex(value: unknown, code: string): value is GetCountryStockIndexResponse {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && (value as GetCountryStockIndexResponse).available
+    && (value as GetCountryStockIndexResponse).code === code,
+  );
+}
+
+// ========================================================================
+// Handler
+// ========================================================================
+
+export async function getCountryStockIndex(
+  _ctx: ServerContext,
+  req: GetCountryStockIndexRequest,
+): Promise<GetCountryStockIndexResponse> {
+  const code = (req.countryCode || '').toUpperCase();
+  const notAvailable: GetCountryStockIndexResponse = {
+    available: false, code, symbol: '', indexName: '', price: 0, weekChangePercent: 0, currency: '', fetchedAt: '',
+  };
+
+  // The proto checks shape only. `available: false` for ZZ would read as a
+  // real country without a tracked index.
+  if (!isAssignedCountryCode(code)) {
+    throw new ValidationError([{
+      field: 'country_code',
+      description: 'country_code must be an assigned ISO 3166-1 alpha-2 code, e.g. "JP".',
+    }]);
+  }
+
+  const index = COUNTRY_INDEX[code];
+  if (!index) return notAvailable;
+  // A known-dead symbol: no seed row can exist and the live fetch below would
+  // return the same `null` it has for months, so answer honestly and cheaply.
+  if (index.unavailable) return notAvailable;
+
+  // Railway seeds every serviceable country in the enum and writes without the Vercel
+  // environment prefix. Prefer that raw last-good payload before serving the
+  // RPC cache. The fallback cache below intentionally uses a separate key so a
+  // failed request cannot replace a seed-owned record with a negative sentinel.
+  // The live fetch below remains as a gap-filler for any country whose seed
+  // leg failed on the last run.
+  const railwaySnapshot = await getCachedJson(railwaySeededKey(code), true);
+  if (isAvailableCountryStockIndex(railwaySnapshot, code)) {
+    stockIndexCache[code] = { data: railwaySnapshot, ts: Date.now() };
+    return railwaySnapshot;
+  }
+  // A non-Yahoo index has no live fallback here: the seeder is its only
+  // writer, so a missed seed answers honestly instead of spending a Yahoo
+  // request that returns nothing for this symbol.
+  if (index.source && index.source !== 'yahoo') {
+    const cachedNonYahoo = stockIndexCache[code];
+    return cachedNonYahoo && Date.now() - cachedNonYahoo.ts < STOCK_INDEX_CACHE_TTL
+      ? cachedNonYahoo.data : notAvailable;
+  }
+
+  const cached = stockIndexCache[code];
+  if (cached && Date.now() - cached.ts < STOCK_INDEX_CACHE_TTL) return cached.data;
+
+  const redisKey = `${REDIS_CACHE_KEY}:${code}`;
+
+  try {
+  const result = await cachedFetchJson<GetCountryStockIndexResponse>(redisKey, REDIS_CACHE_TTL, async () => {
+    const encodedSymbol = encodeURIComponent(index.symbol);
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodedSymbol}?range=1mo&interval=1d`;
+
+    await yahooGate();
+    const res = await fetch(yahooUrl, {
+      headers: { 'User-Agent': CHROME_UA },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+
+    if (!res.ok) return null;
+
+    const data: YahooChartResponse = await res.json();
+    const chartResult = data?.chart?.result?.[0];
+    if (!chartResult) return null;
+
+    const allCloses = chartResult.indicators?.quote?.[0]?.close?.filter((v): v is number => v != null);
+    if (!allCloses || allCloses.length < 2) return null;
+
+    const closes = allCloses.slice(-6);
+    const latest = closes[closes.length - 1]!;
+    const oldest = closes[0]!;
+    const weekChange = ((latest - oldest) / oldest) * 100;
+    const meta = chartResult.meta || {};
+
+    return {
+      available: true,
+      code,
+      symbol: index.symbol,
+      indexName: index.name,
+      price: +latest.toFixed(2),
+      weekChangePercent: +weekChange.toFixed(2),
+      currency: (meta as { currency?: string }).currency || 'USD',
+      fetchedAt: new Date().toISOString(),
+    };
+  });
+
+  if (result?.available) {
+    stockIndexCache[code] = { data: result, ts: Date.now() };
+  }
+
+  return result || stockIndexCache[code]?.data || notAvailable;
+  } catch {
+    return stockIndexCache[code]?.data || notAvailable;
+  }
+}

@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sponsorship and partnership inquiries
+    url: mailto:commercial@openosint.tech?subject=OpenOSINT%20Sponsorship%20Inquiry
+    about: >
+      Featured Integration sponsorships, partnership arrangements, and commercial inquiries.
+  - name: General questions and discussion
+    url: https://github.com/OpenOSINT/OpenOSINT/discussions
+    about: >
+      Questions, ideas, and community discussion that do not require a formal bug
+      report or feature request.
+  - name: Support the project on Open Collective
+    url: https://opencollective.com/openosint_oss
+    about: >
+      Financially support OpenOSINT via Open Collective — one-time or recurring contributions welcome.

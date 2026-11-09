@@ -1,0 +1,312 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import OptionCards from '@components/molecules/OptionCards.astro';
+import SponsorCard from '@components/molecules/SponsorCard.astro';
+
+const cardData = [
+  {
+    title: 'Deploy with Docker',
+    description:
+      "Just one command, and you'll have your own Web Check instance running on your server in minutes.",
+    command: 'docker run -p 3000:3000 lissy93/web-check',
+  },
+  {
+    title: '1-Click Deploy',
+    description:
+      "Don't have a server? Not a problem! Deploy Web Check with one click on Vercel, Netlify, Render or Hostinger.",
+    buttons: [
+      {
+        name: 'Vercel',
+        image: '/assets/images/vercel.svg',
+        link:
+          'https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.' +
+          'com%2Flissy93%2Fweb-check&project-name=web-check&repository' +
+          '-name=web-check&demo-title=Web%20Check&demo-description=Try%20ou' +
+          't%20the%20live%20demo&demo-url=https%3A%2F%2Fweb-check.xyz%2F&demo-ima' +
+          'ge=https%3A%2F%2Fi.ibb.co%2Fr0jXN6s%2Fweb-check.png',
+      },
+      {
+        name: 'Netlify',
+        image: '/assets/images/netlify.svg',
+        link:
+          'https://app.netlify.com/start/deploy?repository=' +
+          'https://github.com/lissy93/web-check',
+      },
+      {
+        name: 'Render',
+        image: '/assets/images/render.svg',
+        link: 'https://render.com/deploy?repo=https://github.com/Lissy93/web-check',
+      },
+      {
+        name: 'Hostinger',
+        image: '/assets/images/hostinger.svg',
+        link: 'https://www.hostg.xyz/aff_c?offer_id=48&aff_id=243972&url_id=6826',
+      },
+    ],
+  },
+  {
+    title: 'Build from Source',
+    description: 'Want to customize Web Check? Clone the repository and deploy it on your server.',
+    buttons: [
+      {
+        name: 'GitHub',
+        image: '/assets/images/github.svg',
+        link: 'https://github.com/Lissy93/web-check',
+        newTab: true,
+      },
+    ],
+  },
+];
+
+type ConfigOption = { key: string; info: string; example?: string; link?: string };
+
+const configGroups: { title: string; description: string; options: ConfigOption[] }[] = [
+  {
+    title: 'API keys',
+    description: 'Unlock extra checks, or raise rate limits on the external APIs some checks use.',
+    options: [
+      {
+        key: 'GOOGLE_CLOUD_API_KEY',
+        info: 'Runs the quality and Safe Browsing checks. Enable the PageSpeed Insights and Safe Browsing APIs for it',
+        link: 'https://developers.google.com/speed/docs/insights/v5/get-started',
+      },
+      {
+        key: 'SHODAN_API_KEY',
+        info: 'Runs the host names, server info and vulnerabilities checks',
+        link: 'https://account.shodan.io/',
+      },
+      {
+        key: 'CLOUDMERSIVE_API_KEY',
+        info: 'Adds the Cloudmersive website scan to the threats check',
+        link: 'https://account.cloudmersive.com/',
+      },
+      {
+        key: 'TRANCO_API_KEY',
+        info: 'Raises the Tranco rate limit for the rank check',
+        link: 'https://tranco-list.eu/',
+      },
+      { key: 'TRANCO_USERNAME', info: 'Your Tranco account email, used with the key above' },
+      {
+        key: 'GITHUB_TOKEN',
+        info: 'Raises the GitHub rate limit for the social presence check',
+        link: 'https://github.com/settings/tokens',
+      },
+      {
+        key: 'CERTSPOTTER_TOKEN',
+        info: 'Raises the CertSpotter rate limit for the subdomains check',
+        link: 'https://sslmate.com/certspotter/api/',
+      },
+    ],
+  },
+  {
+    title: 'Settings',
+    description:
+      'Change how the server and API behave. The frontend reads PUBLIC_ values at build time, so rebuild after changing them.',
+    options: [
+      { key: 'PORT', info: 'Port the server listens on', example: '3000' },
+      {
+        key: 'DISABLE_GUI',
+        info: 'Serve only the API, without the web interface',
+        example: 'true',
+      },
+      {
+        key: 'PUBLIC_API_ENDPOINT',
+        info: 'Where the frontend sends API requests',
+        example: '/api',
+      },
+      {
+        key: 'PUBLIC_API_TIMEOUT_LIMIT',
+        info: 'Timeout for each check, in milliseconds',
+        example: '25000',
+      },
+      { key: 'API_ENABLE_RATE_LIMIT', info: 'Rate-limit requests to the API', example: 'true' },
+      {
+        key: 'API_CORS_ORIGIN',
+        info: 'Origin allowed to call the API. Defaults to any',
+        example: 'https://example.com',
+      },
+      {
+        key: 'API_ENABLED_CHECKS',
+        info: 'If set, only these checks run',
+        example: 'get-ip,ssl,dns,headers',
+      },
+      { key: 'API_DISABLED_CHECKS', info: 'Checks to turn off', example: 'trace-route,ports' },
+      {
+        key: 'API_BLOCKED_HOSTS',
+        info: 'Hosts, IPs or CIDR ranges that must never be scanned',
+        example: 'lan.example.com,192.168.0.0/16',
+      },
+      { key: 'PORTS_TO_CHECK', info: 'Ports the open ports check scans', example: '22,80,443' },
+      {
+        key: 'CHROME_PATH',
+        info: 'Path to Chromium, for screenshots, tech stack and trackers',
+        example: '/usr/bin/chromium',
+      },
+      {
+        key: 'TRUST_PROXY',
+        info: 'Set behind a reverse proxy, as a hop count, true, or CIDR list',
+        example: '1',
+      },
+      { key: 'LOG_LEVEL', info: 'One of debug, info, warn, error or silent', example: 'warn' },
+    ],
+  },
+];
+---
+
+<PageLayout
+  title="Self-Hosted Setup | Web Check"
+  description="Get started with running Web Check locally or on your own server."
+>
+  <h1>Self-Hosted Setup</h1>
+  <p>Get your own free instance of Web Check, running locally or on your server.</p>
+
+  <OptionCards cards={cardData} numbered />
+
+  <section class="config">
+    <h2>Configuration</h2>
+    <p>
+      Web Check runs without any configuration, so everything below is optional.
+      <br />
+      Set values as environment variables, in <code>.env</code>, your host's dashboard, or with{' '}
+      <code>docker run -e</code>.
+    </p>
+    {configGroups.map((group) => (
+      <details>
+        <summary>
+          <h3>{group.title}</h3>
+          <span>{group.description}</span>
+        </summary>
+        <dl>
+          {group.options.map((option) => (
+            <div>
+              <dt>{option.key}</dt>
+              <dd>
+                {option.info}
+                {option.example && (
+                  <>
+                    {' '}
+                    (e.g.<code>{option.example}</code>)
+                  </>
+                )}
+                {option.link && (
+                  <a href={option.link} target="_blank" rel="noreferrer">
+                    Get a key
+                  </a>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+    ))}
+  </section>
+
+  <SponsorCard />
+</PageLayout>
+
+<style lang="scss">
+  @use '@styles/global.scss' as *;
+  .config {
+    margin-top: 4rem;
+    > p {
+      max-width: 80ch;
+      margin-bottom: 2rem;
+      line-height: 1.6;
+      color: var(--text-color-secondary);
+    }
+    details {
+      interpolate-size: allow-keywords;
+      border-top: 1px solid var(--primary-transparent);
+      &:last-of-type {
+        border-bottom: 1px solid var(--primary-transparent);
+      }
+      &::details-content {
+        block-size: 0;
+        overflow: hidden;
+        transition:
+          block-size 0.3s ease,
+          content-visibility 0.3s allow-discrete;
+      }
+      &[open]::details-content {
+        block-size: auto;
+      }
+      &[open] summary::after {
+        rotate: 225deg;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        &::details-content {
+          transition: none;
+        }
+      }
+    }
+    summary {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.25rem 1rem;
+      padding: 1.25rem 0;
+      cursor: pointer;
+      list-style: none;
+      &::-webkit-details-marker {
+        display: none;
+      }
+      &::after {
+        content: '';
+        grid-area: 1 / 2 / 3;
+        align-self: center;
+        margin-right: 0.25rem;
+        width: 0.5rem;
+        height: 0.5rem;
+        border: solid var(--primary);
+        border-width: 0 2px 2px 0;
+        rotate: 45deg;
+        transition: rotate 0.3s ease;
+      }
+      &:hover h3 {
+        color: var(--primary-increased-contrast);
+      }
+      h3 {
+        margin: 0;
+        font-size: 1.2rem;
+        transition: color 0.25s ease;
+      }
+      span {
+        line-height: 1.5;
+        color: var(--text-color-secondary);
+      }
+    }
+    code {
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      background: var(--primary-transparent);
+      color: var(--text-color);
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+    }
+    dl > div {
+      display: grid;
+      grid-template-columns: 16rem 1fr;
+      align-items: baseline;
+      gap: 0.25rem 2rem;
+      padding: 0.75rem 0;
+      border-top: 1px solid var(--primary-transparent);
+      @include mobile-down {
+        grid-template-columns: 1fr;
+      }
+    }
+    dt {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--primary-increased-contrast);
+      overflow-wrap: anywhere;
+    }
+    dd {
+      line-height: 1.5;
+      color: var(--text-color-secondary);
+      code,
+      a {
+        margin-left: 0.5rem;
+        white-space: nowrap;
+      }
+    }
+  }
+</style>

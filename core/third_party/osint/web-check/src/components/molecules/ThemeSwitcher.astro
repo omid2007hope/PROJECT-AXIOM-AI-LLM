@@ -1,0 +1,17 @@
+---
+import Segmented from '@components/molecules/Segmented.astro';
+
+const themes = [
+  { value: 'dark', label: 'Dark', icon: 'moon' },
+  { value: 'light', label: 'Light', icon: 'sun' },
+  { value: 'system', label: 'System', icon: 'desktop' },
+];
+
+const defaultTheme = 'dark';
+const name = `theme-${crypto.randomUUID()}`;
+---
+
+<Segmented class="theme-switcher" label="Theme" name={name} options={themes} value={defaultTheme} />
+<script is:inline>
+  window.webCheckTheme?.apply();
+</script>

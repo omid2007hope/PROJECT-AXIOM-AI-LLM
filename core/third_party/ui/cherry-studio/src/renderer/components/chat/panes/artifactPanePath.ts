@@ -1,0 +1,179 @@
+import { normalizeFilePreviewPath } from '@renderer/utils/filePreview'
+import { joinPath } from '@renderer/utils/path'
+import { isWin } from '@renderer/utils/platform'
+import { type AbsoluteFilePath, AbsoluteFilePathSchema } from '@shared/types/file'
+
+/**
+ * Pure path / selection helpers shared by `ArtifactPane` and the
+ * `useArtifactFileTreeModel` hook. Keeping them separate lets the model and
+ * presentational component share path semantics without an import cycle.
+ */
+
+/** Synthetic id/path for the workspace root node in the projected file tree. */
+export const WORKSPACE_ROOT_ID = '__workspace_root__'
+
+interface ArtifactPaneFileSelectionBase {
+  workspacePath: string
+  filePath: string
+}
+
+interface ArtifactPaneArtifactSelection extends ArtifactPaneFileSelectionBase {
+  previewType?: 'artifact'
+  displayName?: never
+  displayPath?: never
+  readOnly?: false
+}
+
+interface ArtifactPaneInputFileSelection extends ArtifactPaneFileSelectionBase {
+  displayName?: string
+  displayPath?: AbsoluteFilePath
+  previewType: 'file'
+  readOnly: true
+}
+
+export type ArtifactPaneFileSelection = ArtifactPaneArtifactSelection | ArtifactPaneInputFileSelection
+
+/** The normalized absolute path a selection edits — the `useFileEditSession` key. */
+export const getArtifactPaneSelectionPath = (selection: ArtifactPaneFileSelection): AbsoluteFilePath => {
+  const { workspacePath, filePath } = selection
+  // A POSIX root already ends in `/`. Another slash makes `//a\b.txt`, which file preview reads as UNC.
+  const joined = workspacePath.endsWith('/') ? `${workspacePath}${filePath}` : `${workspacePath}/${filePath}`
+  return normalizeFilePreviewPath(joined)
+}
+
+/**
+ * Clipboard form of an absolute path: on Windows fold `/` to the native `\`
+ * (covers drive paths and both UNC spellings); on POSIX return verbatim, where
+ * `\` is an ordinary filename character. Separator swap only — never resolves
+ * `.`/`..` (lexical collapse can change the target across symlinks) and never
+ * alters roots, unlike `canonicalizeFilePath`, whose persistence-key contract
+ * collapses a `//server/share` root and rejects `\\server\share`.
+ */
+export const getCopyableAbsolutePath = (path: string, isWindows: boolean): string =>
+  isWindows ? path.replace(/\//g, '\\') : path
+
+export const getArtifactPaneSelectionDisplayPath = (selection: ArtifactPaneFileSelection): AbsoluteFilePath =>
+  selection.displayPath ?? getArtifactPaneSelectionPath(selection)
+
+export const isUncPath = (path: string): boolean => /^(?:\\\\|\/\/)[^\\/]+[\\/]+[^\\/]+/.test(path.trim())
+
+// `\` separates Windows drive, UNC, and relative paths on Windows (`isWin`;
+// the main window has no Node `process`). A POSIX path keeps `\` literal.
+const backslashIsSeparator = (path: string): boolean => {
+  const trimmed = path.trim()
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return false
+  if (/^[A-Za-z]:[/\\]/.test(trimmed) || isUncPath(trimmed)) return true
+  return isWin
+}
+
+const pathSegmentPattern = (path: string): RegExp => (backslashIsSeparator(path) ? /[/\\]+/ : /\/+/)
+
+export const getPathBasename = (path: string): string => {
+  const withoutTrailing = path.replace(backslashIsSeparator(path) ? /[\\/]+$/ : /\/+$/, '')
+  if (!withoutTrailing) return path
+  const segments = withoutTrailing.split(pathSegmentPattern(withoutTrailing)).filter(Boolean)
+  return segments.at(-1) ?? withoutTrailing
+}
+
+export const normalizeTreePath = (path: string): string => {
+  const normalized = backslashIsSeparator(path) ? path.replace(/\\/g, '/') : path
+  const withoutTrailingSlash = normalized.replace(/\/+$/, '')
+  if (/^[A-Za-z]:$/.test(withoutTrailingSlash)) return `${withoutTrailingSlash}/`
+  if (!withoutTrailingSlash && normalized.startsWith('/')) return '/'
+  return withoutTrailingSlash
+}
+
+export const isAbsoluteTreePath = (path: string): boolean => path.startsWith('/') || /^[A-Za-z]:\//.test(path)
+
+export const hasParentTraversal = (path: string): boolean =>
+  path.split(pathSegmentPattern(path)).some((segment) => segment === '..')
+
+export const getPathDirname = (path: string): string => {
+  const normalized = normalizeTreePath(path)
+  const basename = getPathBasename(normalized)
+  if (!basename || normalized === basename) return ''
+
+  const dirname = normalized.slice(0, normalized.length - basename.length).replace(/\/+$/, '')
+  if (!dirname && normalized.startsWith('/')) return '/'
+  if (/^[A-Za-z]:$/.test(dirname)) return `${dirname}/`
+  return dirname
+}
+
+export const normalizeArtifactPaneFilePath = (workspacePath: string, rawPath: string): string | null => {
+  const workspace = normalizeTreePath(workspacePath)
+  const normalized = normalizeTreePath(rawPath)
+  if (!normalized) return null
+
+  if (normalized === workspace) return null
+  if (workspace === '/' && normalized.startsWith('/')) return normalized.slice(1)
+  if (normalized.startsWith(`${workspace}/`)) return normalized.slice(workspace.length + 1)
+  if (isAbsoluteTreePath(normalized)) return null
+
+  return normalized.replace(/^\/+/, '')
+}
+
+/** Workspace-relative path of the selection's file, or null when the file lies outside `workspacePath`. */
+export const getArtifactPaneSelectionRelativePath = (
+  workspacePath: string | undefined,
+  selection: ArtifactPaneFileSelection
+): string | null =>
+  workspacePath ? normalizeArtifactPaneFilePath(workspacePath, getArtifactPaneSelectionPath(selection)) : null
+
+export const resolveArtifactPaneFileSelection = (
+  workspacePath: string | undefined,
+  rawPath: string
+): ArtifactPaneFileSelection | null => {
+  const normalizedRawPath = normalizeTreePath(rawPath)
+  if (!normalizedRawPath) return null
+
+  const parsedWorkspacePath = workspacePath ? AbsoluteFilePathSchema.safeParse(workspacePath) : null
+  const normalizedWorkspacePath = parsedWorkspacePath?.success ? normalizeTreePath(parsedWorkspacePath.data) : null
+  const windowsWorkspaceMatch = normalizedWorkspacePath?.match(/^([A-Za-z]):\/(.+)$/)
+  const malformedWorkspacePrefix = windowsWorkspaceMatch
+    ? `${windowsWorkspaceMatch[1]}:${windowsWorkspaceMatch[2]}`.toLowerCase()
+    : null
+  const normalizedRawPathKey = normalizedRawPath.toLowerCase()
+  const isMalformedWorkspacePath =
+    malformedWorkspacePrefix !== null &&
+    (normalizedRawPathKey === malformedWorkspacePrefix ||
+      normalizedRawPathKey.startsWith(`${malformedWorkspacePrefix}/`))
+  if (
+    normalizedWorkspacePath &&
+    /^[A-Za-z]:\//.test(normalizedWorkspacePath) &&
+    /^[A-Za-z]:(?=[^/])/.test(normalizedRawPath) &&
+    !isMalformedWorkspacePath
+  ) {
+    return null
+  }
+  const normalized = isMalformedWorkspacePath
+    ? normalizedRawPath.replace(/^([A-Za-z]:)(?=[^/])/, '$1/')
+    : normalizedRawPath
+  if (parsedWorkspacePath?.success) {
+    const validWorkspacePath = parsedWorkspacePath.data
+    const workspaceFilePath = normalizeArtifactPaneFilePath(validWorkspacePath, normalized)
+    if (workspaceFilePath) {
+      if (!hasParentTraversal(workspaceFilePath)) {
+        return { workspacePath: validWorkspacePath, filePath: workspaceFilePath }
+      }
+      // Deliberate: a workspace-relative artifact path that climbs out via `..` is allowed — the
+      // agent legitimately creates files outside the workspace — but re-root it to the resolved
+      // file's directory (like the absolute-path branch below) so the displayed tree root and the
+      // previewed file stay consistent, instead of showing the workspace while reading outside it.
+      // Sandboxing, if ever needed, is the consumer's responsibility at the trust boundary.
+      const resolvedAbsolute = joinPath(normalizeTreePath(validWorkspacePath), workspaceFilePath)
+      const escapedWorkspacePath = getPathDirname(resolvedAbsolute)
+      const escapedFilePath = getPathBasename(resolvedAbsolute)
+      return escapedWorkspacePath && escapedFilePath && escapedFilePath !== escapedWorkspacePath
+        ? { workspacePath: escapedWorkspacePath, filePath: escapedFilePath }
+        : null
+    }
+  }
+
+  if (!isAbsoluteTreePath(normalized)) return null
+
+  const externalWorkspacePath = getPathDirname(normalized)
+  const filePath = getPathBasename(normalized)
+  if (!externalWorkspacePath || !filePath || filePath === externalWorkspacePath) return null
+
+  return { workspacePath: externalWorkspacePath, filePath }
+}

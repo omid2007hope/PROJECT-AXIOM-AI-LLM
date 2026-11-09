@@ -1,0 +1,57 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - 'Dependencies'
+    assignees:
+      - lissy93
+    versioning-strategy: increase
+    groups:
+      browser:
+        patterns:
+          - 'puppeteer'
+          - 'puppeteer-core'
+          - '@sparticuz/chromium'
+      astro:
+        patterns:
+          - 'astro'
+          - '@astrojs/*'
+        update-types:
+          - minor
+          - patch
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'wappalyzer'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'puppeteer'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'puppeteer-core'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@sparticuz/chromium'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'chromium'
+      - dependency-name: '@ghostery/adblocker'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - 'Dependencies'
+    assignees:
+      - lissy93
+    groups:
+      github-actions:
+        patterns:
+          - '*'

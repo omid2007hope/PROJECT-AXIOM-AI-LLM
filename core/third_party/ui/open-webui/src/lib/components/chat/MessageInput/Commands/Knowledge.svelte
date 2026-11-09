@@ -1,0 +1,306 @@
+<script lang="ts">
+	import { toast } from 'svelte-sonner';
+	import dayjs from 'dayjs';
+	import relativeTime from 'dayjs/plugin/relativeTime';
+	dayjs.extend(relativeTime);
+
+	import { tick, getContext, onMount, onDestroy } from 'svelte';
+
+	import { folders, user } from '$lib/stores';
+	import { getFolders } from '$lib/apis/folders';
+	import { searchKnowledgeBases, searchKnowledgeFiles } from '$lib/apis/knowledge';
+	import { removeLastWordFromString, isValidHttpUrl, isYoutubeUrl, decodeString } from '$lib/utils';
+
+	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import DocumentPage from '$lib/components/icons/DocumentPage.svelte';
+	import Database from '$lib/components/icons/Database.svelte';
+	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte';
+	import Youtube from '$lib/components/icons/Youtube.svelte';
+	import Folder from '$lib/components/icons/Folder.svelte';
+
+	const i18n = getContext<typeof import('$lib/i18n').default>('i18n');
+
+	export let query = '';
+	export let onSelect = (e) => {};
+	export let fileUploadEnabled: boolean = true;
+
+	let selectedIdx = 0;
+	let items = [];
+	let searchDebounceTimer: ReturnType<typeof setTimeout>;
+	let searchController: AbortController;
+
+	export let filteredItems = [];
+	let webUploadEnabled: boolean = true;
+	$: webUploadEnabled = $user?.role === 'admin' || ($user?.permissions?.chat?.web_upload ?? true);
+	$: filteredItems = [
+		...(query.startsWith('http')
+			? isYoutubeUrl(query)
+				? [{ type: 'youtube', name: query, description: query }]
+				: [
+						{
+							type: 'web',
+							name: query,
+							description: query
+						}
+					]
+			: []),
+		...items
+	].filter((item) =>
+		['youtube', 'web'].includes(item.type) ? webUploadEnabled : fileUploadEnabled
+	);
+
+	$: if (query) {
+		selectedIdx = 0;
+	}
+
+	export const selectUp = () => {
+		selectedIdx = Math.max(0, selectedIdx - 1);
+	};
+
+	export const selectDown = () => {
+		selectedIdx = Math.min(selectedIdx + 1, filteredItems.length - 1);
+	};
+
+	export const select = async () => {
+		// find item with data-selected=true
+		const item = document.querySelector(`[data-selected="true"]`);
+		if (item) {
+			// click the item
+			item.click();
+		}
+	};
+
+	let knowledgeItems = [];
+	let fileItems = [];
+
+	$: items = [...folderItems, ...knowledgeItems, ...fileItems];
+
+	const handleSearchInput = () => {
+		searchController?.abort();
+		knowledgeItems = [];
+		fileItems = [];
+		clearTimeout(searchDebounceTimer);
+		searchDebounceTimer = setTimeout(() => {
+			getItems();
+		}, 200);
+	};
+
+	$: if (query !== undefined) {
+		handleSearchInput();
+	}
+
+	onDestroy(() => {
+		searchController?.abort();
+		clearTimeout(searchDebounceTimer);
+	});
+
+	const getItems = () => {
+		searchController?.abort();
+		searchController = new AbortController();
+		const { signal } = searchController;
+		getKnowledgeItems(signal);
+		getKnowledgeFileItems(signal);
+	};
+
+	$: folderItems = $folders
+		.map((folder) => ({
+			...folder,
+			type: 'folder',
+			description: $i18n.t('Folder'),
+			title: folder.name
+		}))
+		.filter((folder) => folder.name.toLowerCase().includes(query.toLowerCase()));
+
+	const getKnowledgeItems = async (signal: AbortSignal) => {
+		const res = await searchKnowledgeBases(
+			localStorage.token,
+			query,
+			null,
+			null,
+			null,
+			null,
+			null,
+			signal
+		).catch(() => {
+			return null;
+		});
+
+		if (res && !signal.aborted) {
+			knowledgeItems = res.items.map((item) => {
+				return {
+					...item,
+					type: 'collection'
+				};
+			});
+		}
+	};
+
+	const getKnowledgeFileItems = async (signal: AbortSignal) => {
+		const res = await searchKnowledgeFiles(
+			localStorage.token,
+			query,
+			null,
+			null,
+			null,
+			1,
+			false,
+			signal
+		).catch(() => {
+			return null;
+		});
+
+		if (res && !signal.aborted) {
+			fileItems = res.items.map((item) => {
+				return {
+					...item,
+					type: 'file',
+					name: item.filename,
+					description: item.collection ? item.collection.name : ''
+				};
+			});
+		}
+	};
+
+	onMount(async () => {
+		if ($folders === null) {
+			await folders.set(await getFolders(localStorage.token));
+		}
+
+		await tick();
+	});
+</script>
+
+{#if filteredItems.length > 0 || query.startsWith('http')}
+	{#each filteredItems as item, idx}
+		{#if idx === 0 || item?.type !== items[idx - 1]?.type}
+			<div class="app-muted mb-0.5 px-2 pt-1 pb-0.5 text-[0.625rem] leading-none">
+				{#if item?.type === 'folder'}
+					{$i18n.t('Folders')}
+				{:else if item?.type === 'collection'}
+					{$i18n.t('Collections')}
+				{:else if item?.type === 'file'}
+					{$i18n.t('Files')}
+				{/if}
+			</div>
+		{/if}
+
+		{#if !['youtube', 'web'].includes(item.type)}
+			<button
+				class="flex h-6 w-full items-center justify-between rounded-xl px-2 text-left text-[0.8125rem] transition-colors duration-75 hover:bg-gray-50/40 dark:hover:bg-gray-800/40 {idx ===
+				selectedIdx
+					? 'app-interactive-active selected-command-option-button'
+					: ''}"
+				type="button"
+				on:click={() => {
+					console.log(item);
+					onSelect({
+						type: 'knowledge',
+						data: item
+					});
+				}}
+				on:mousemove={() => {
+					selectedIdx = idx;
+				}}
+				data-selected={idx === selectedIdx}
+			>
+				<div class="flex w-full min-w-0 items-center gap-2">
+					<Tooltip
+						className="app-icon-muted flex w-4 shrink-0 items-center justify-center"
+						content={item?.legacy
+							? $i18n.t('Legacy')
+							: item?.type === 'file'
+								? `${item?.collection?.name} > ${$i18n.t('File')}`
+								: item?.type === 'collection'
+									? $i18n.t('Collection')
+									: ''}
+						placement="top"
+					>
+						{#if item?.type === 'collection'}
+							<Database className="size-3.5" />
+						{:else if item?.type === 'folder'}
+							<Folder className="size-3.5" />
+						{:else}
+							<DocumentPage className="size-3.5" />
+						{/if}
+					</Tooltip>
+
+					<Tooltip
+						className="min-w-0 flex-1"
+						content={`${decodeString(item?.name)}`}
+						placement="top-start"
+					>
+						<div class="min-w-0 flex-1 truncate">
+							{decodeString(item?.name)}
+						</div>
+					</Tooltip>
+				</div>
+			</button>
+		{/if}
+	{/each}
+
+	{#if webUploadEnabled && isYoutubeUrl(query)}
+		<button
+			class="flex h-6 w-full items-center rounded-xl app-interactive-active px-2 text-left text-[0.8125rem] transition-colors duration-75 selected-command-option-button"
+			type="button"
+			data-selected={selectedIdx === filteredItems.findIndex((i) => i.type === 'youtube')}
+			on:click={() => {
+				if (isValidHttpUrl(query)) {
+					onSelect({
+						type: 'web',
+						data: query
+					});
+				} else {
+					toast.error(
+						$i18n.t('Oops! Looks like the URL is invalid. Please double-check and try again.')
+					);
+				}
+			}}
+		>
+			<div class="flex w-full min-w-0 items-center gap-2">
+				<Tooltip
+					className="app-icon-muted flex w-4 shrink-0 items-center justify-center"
+					content={$i18n.t('YouTube')}
+					placement="top"
+				>
+					<Youtube className="size-3.5" />
+				</Tooltip>
+
+				<div class="min-w-0 flex-1 truncate">
+					{query}
+				</div>
+			</div>
+		</button>
+	{:else if webUploadEnabled && query.startsWith('http')}
+		<button
+			class="flex h-6 w-full items-center rounded-xl app-interactive-active px-2 text-left text-[0.8125rem] transition-colors duration-75 selected-command-option-button"
+			type="button"
+			data-selected={selectedIdx === filteredItems.findIndex((i) => i.type === 'web')}
+			on:click={() => {
+				if (isValidHttpUrl(query)) {
+					onSelect({
+						type: 'web',
+						data: query
+					});
+				} else {
+					toast.error(
+						$i18n.t('Oops! Looks like the URL is invalid. Please double-check and try again.')
+					);
+				}
+			}}
+		>
+			<div class="flex w-full min-w-0 items-center gap-2">
+				<Tooltip
+					className="app-icon-muted flex w-4 shrink-0 items-center justify-center"
+					content={$i18n.t('Web')}
+					placement="top"
+				>
+					<GlobeAlt className="size-3.5" />
+				</Tooltip>
+
+				<div class="min-w-0 flex-1 truncate">
+					{query}
+				</div>
+			</div>
+		</button>
+	{/if}
+{/if}

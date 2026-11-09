@@ -1,0 +1,45 @@
+---
+interface Props {
+  links: { label: string; href: string }[];
+}
+
+const { links } = Astro.props;
+---
+
+<ul>
+  {links.map((link) => (
+    <li>
+      <a href={link.href}>{link.label}</a>
+    </li>
+  ))}
+</ul>
+
+<style lang="scss">
+  ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  a {
+    display: block;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    color: var(--text-color-secondary);
+    transition:
+      border-color 0.25s ease,
+      color 0.25s ease;
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--primary);
+      color: var(--primary-increased-contrast);
+      text-decoration: none;
+    }
+  }
+</style>

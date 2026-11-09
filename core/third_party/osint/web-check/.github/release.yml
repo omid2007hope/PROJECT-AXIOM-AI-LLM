@@ -1,0 +1,14 @@
+# Sections for the auto-generated release notes, by the labels from workflows/label-pr.yml
+
+changelog:
+  categories:
+    - title: New Checks and Features
+      labels: ['New Check', 'New Feature']
+    - title: Fixes and Improvements
+      labels: ['Bug Fix', 'Accuracy Improvement', 'UI']
+    - title: Docs, Deployment and CI
+      labels: ['Docs', 'Deployment', 'Build and CI']
+    - title: Dependencies
+      labels: ['Dependencies']
+    - title: Other Changes
+      labels: ['*']

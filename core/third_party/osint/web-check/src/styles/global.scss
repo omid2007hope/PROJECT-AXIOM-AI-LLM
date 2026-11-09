@@ -1,0 +1,218 @@
+/* Global Stylesheet */
+@forward './colors';
+@forward './media-queries';
+@forward './typography';
+
+/* Width of the main content column */
+:root {
+  --page-width: min(80vw, 1200px);
+  @media (max-width: 599px) {
+    --page-width: 90vw;
+  }
+}
+
+/* CSS Reset - Normalize dimensions and spacing across browsers */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--primary-increased-contrast);
+  color: var(--background);
+}
+
+/* HTML and body basic setup */
+html {
+  --text-scale: 1;
+  font-size: calc(16px * var(--text-scale));
+  scroll-behavior: smooth;
+  scrollbar-color: color-mix(in srgb, var(--primary) 25%, transparent) transparent;
+
+  // Text size, from the settings menu
+  &[data-text-size='small'] {
+    --text-scale: 0.875;
+  }
+  &[data-text-size='large'] {
+    --text-scale: 1.125;
+  }
+  &[data-text-size='larger'] {
+    --text-scale: 1.25;
+  }
+}
+
+/* Less motion, when the OS or the settings menu asks for it */
+html[data-motion='reduce'] {
+  &,
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  // Kept apart, so browsers without view transitions don't drop the rule above
+  &::view-transition-group(*),
+  &::view-transition-old(*),
+  &::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* Bolder focus rings, for high contrast */
+html[data-contrast='more'] :focus-visible {
+  outline: 3px solid var(--primary) !important;
+}
+
+body {
+  font-family: var(--font-sans);
+  line-height: 1;
+  color: var(--text-color);
+  background: var(--background);
+  overflow-x: hidden;
+  font-weight: 400;
+  margin: 0;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Links */
+a {
+  color: inherit;
+  text-decoration: none;
+  &:hover,
+  &:focus {
+    text-decoration: underline;
+  }
+}
+
+/* Images */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: inherit;
+  margin-top: 0;
+  margin-bottom: 0.5em;
+  font-weight: normal;
+}
+
+p {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+ul,
+ol {
+  margin-top: 0;
+  margin-bottom: 1em;
+  padding-left: 20px;
+}
+
+/* Forms */
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  &:focus {
+    outline: 1px solid var(--primary);
+  }
+}
+
+/* Utility Classes */
+.text-center {
+  text-align: center;
+}
+.hidden {
+  display: none;
+}
+.bold {
+  font-weight: 600;
+}
+.italic {
+  font-style: italic;
+}
+.underline {
+  text-decoration: underline;
+}
+.uppercase {
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: calc(14px * var(--text-scale));
+  }
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-top: 0;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+h1 {
+  font-size: 2.25rem;
+}
+h2 {
+  font-size: 1.8rem;
+}
+h3 {
+  font-size: 1.5rem;
+}
+h4 {
+  font-size: 1.2rem;
+}
+h5 {
+  font-size: 1rem;
+}
+h6 {
+  font-size: 0.85rem;
+}
+
+// Responsive font sizes
+@media (max-width: 768px) {
+  h1 {
+    font-size: 2rem;
+  }
+  h2 {
+    font-size: 1.6rem;
+  }
+  h3 {
+    font-size: 1.4rem;
+  }
+}
+
+p {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+a {
+  color: var(--primary-increased-contrast);
+  text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
+}

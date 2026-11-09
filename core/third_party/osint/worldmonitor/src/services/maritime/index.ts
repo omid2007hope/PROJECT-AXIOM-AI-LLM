@@ -1,0 +1,421 @@
+import type { BreakerDataState } from '@/utils/circuit-breaker';
+import { getRpcBaseUrl } from '@/services/rpc-client';
+import type { AisDensityZone as ProtoDensityZone, AisDisruption as ProtoDisruption, GetVesselSnapshotResponse, SnapshotCandidateReport as ProtoCandidateReport } from '@/generated/client/worldmonitor/maritime/v1/service_client';
+import { createCircuitBreaker } from '@/utils';
+import type { AisDisruptionEvent, AisDensityZone, AisDisruptionType } from '@/types';
+import { dataFreshness } from '../data-freshness';
+import { isFeatureAvailable } from '../runtime-config';
+import { startSmartPollLoop, type SmartPollLoopHandle } from '../runtime';
+import { MaritimeServiceClient } from '@/services/generated-rpc-clients';
+
+const client = new MaritimeServiceClient(getRpcBaseUrl(), { fetch: (...args) => globalThis.fetch(...args) });
+const snapshotBreaker = createCircuitBreaker<GetVesselSnapshotResponse>({ name: 'Maritime Snapshot', cacheTtlMs: 10 * 60 * 1000, persistCache: true });
+const emptySnapshotFallback: GetVesselSnapshotResponse = { snapshot: undefined, fetchedAt: 0, dataAvailable: false };
+
+const DISRUPTION_TYPE_REVERSE: Record<string, AisDisruptionType> = {
+  AIS_DISRUPTION_TYPE_GAP_SPIKE: 'gap_spike',
+  AIS_DISRUPTION_TYPE_CHOKEPOINT_CONGESTION: 'chokepoint_congestion',
+};
+
+const SEVERITY_REVERSE: Record<string, 'low' | 'elevated' | 'high'> = {
+  AIS_DISRUPTION_SEVERITY_LOW: 'low',
+  AIS_DISRUPTION_SEVERITY_ELEVATED: 'elevated',
+  AIS_DISRUPTION_SEVERITY_HIGH: 'high',
+};
+
+/**
+ * Convert a proto disruption to the app shape. Returns null when either enum
+ * is UNSPECIFIED / unknown — the legacy silent fallbacks mislabeled unknown
+ * values as `gap_spike` / `low`, which would have polluted the dashboard the
+ * first time the proto adds a new enum value the client doesn't know about.
+ * Filtering at the mapping boundary is safer than shipping wrong data.
+ */
+function toDisruptionEvent(proto: ProtoDisruption): AisDisruptionEvent | null {
+  const type = DISRUPTION_TYPE_REVERSE[proto.type];
+  const severity = SEVERITY_REVERSE[proto.severity];
+  if (!type || !severity) return null;
+  return {
+    id: proto.id,
+    name: proto.name,
+    type,
+    lat: proto.location?.latitude ?? 0,
+    lon: proto.location?.longitude ?? 0,
+    severity,
+    changePct: proto.changePct,
+    windowHours: proto.windowHours,
+    darkShips: proto.darkShips,
+    vesselCount: proto.vesselCount,
+    region: proto.region,
+    description: proto.description,
+  };
+}
+
+function toDensityZone(proto: ProtoDensityZone): AisDensityZone {
+  return {
+    id: proto.id,
+    name: proto.name,
+    lat: proto.location?.latitude ?? 0,
+    lon: proto.location?.longitude ?? 0,
+    intensity: proto.intensity,
+    deltaPct: proto.deltaPct,
+    shipsPerDay: proto.shipsPerDay,
+    note: proto.note,
+  };
+}
+
+function toLegacyCandidateReport(proto: ProtoCandidateReport): SnapshotCandidateReport {
+  return {
+    mmsi: proto.mmsi,
+    name: proto.name,
+    lat: proto.lat,
+    lon: proto.lon,
+    shipType: proto.shipType || undefined,
+    heading: proto.heading || undefined,
+    speed: proto.speed || undefined,
+    course: proto.course || undefined,
+    timestamp: proto.timestamp,
+  };
+}
+
+// ---- Feature Gating ----
+
+const isClientRuntime = typeof window !== 'undefined';
+const aisConfigured = isClientRuntime && import.meta.env.VITE_ENABLE_AIS !== 'false';
+
+export function isAisConfigured(): boolean {
+  return aisConfigured && isFeatureAvailable('aisRelay');
+}
+
+// ---- AisPositionData (exported for military-vessels.ts) ----
+
+export interface AisPositionData {
+  mmsi: string;
+  name: string;
+  lat: number;
+  lon: number;
+  shipType?: number;
+  heading?: number;
+  speed?: number;
+  course?: number;
+}
+
+// ---- Internal Interfaces ----
+
+interface SnapshotStatus {
+  connected: boolean;
+  vessels: number;
+  messages: number;
+}
+
+interface SnapshotCandidateReport extends AisPositionData {
+  timestamp: number;
+}
+
+// ---- Callback System ----
+
+type AisCallback = (data: AisPositionData) => void;
+const positionCallbacks = new Set<AisCallback>();
+const lastCallbackTimestampByMmsi = new Map<string, number>();
+
+// ---- Polling State ----
+
+let pollLoop: SmartPollLoopHandle | null = null;
+let inFlight = false;
+let isPolling = false;
+let lastPollAt = 0;
+let lastCandidateSequence = 0;
+let firstCandidatePoll: Promise<void> | null = null;
+let lastStartedPollId = 0;
+let lastAppliedPollId = 0;
+
+let latestDisruptions: AisDisruptionEvent[] = [];
+let latestDensity: AisDensityZone[] = [];
+let latestStatus: SnapshotStatus = {
+  connected: false,
+  vessels: 0,
+  messages: 0,
+};
+
+// ---- Constants ----
+
+const SNAPSHOT_POLL_INTERVAL_MS = 5 * 60 * 1000;
+const SNAPSHOT_STALE_MS = 6 * 60 * 1000;
+const CALLBACK_RETENTION_MS = 2 * 60 * 60 * 1000; // 2 hours
+const MAX_CALLBACK_TRACKED_VESSELS = 20000;
+
+// ---- Internal Helpers ----
+
+function shouldIncludeCandidates(): boolean {
+  return positionCallbacks.size > 0;
+}
+
+let candidateDataState: BreakerDataState = { mode: 'unavailable', timestamp: null, offline: false };
+let latestCandidateOutcomePollId = 0;
+
+interface ParsedSnapshot {
+  dataState: BreakerDataState;
+  sequence: number;
+  status: SnapshotStatus;
+  disruptions: AisDisruptionEvent[];
+  density: AisDensityZone[];
+  candidateReports: SnapshotCandidateReport[];
+}
+
+async function fetchSnapshotPayload(includeCandidates: boolean, signal?: AbortSignal): Promise<ParsedSnapshot | null> {
+  let completed: GetVesselSnapshotResponse | undefined;
+  let completedAt: number | null = null;
+  const response = await snapshotBreaker.execute(
+    async () => {
+      const value = await client.getVesselSnapshot(
+        { neLat: 0, neLon: 0, swLat: 0, swLon: 0, includeCandidates, includeTankers: false },
+        { signal },
+      );
+      completed = value;
+      completedAt = Date.now();
+      return value;
+    },
+    emptySnapshotFallback,
+    {
+      cacheKey: includeCandidates ? 'candidates' : 'density',
+      shouldCache: (result) => result.dataAvailable && result.snapshot !== undefined,
+      evictOnRefreshFailure: includeCandidates,
+    },
+  );
+
+  const snapshot = response.snapshot;
+  if (!snapshot) return null;
+
+  return {
+    dataState: !response.dataAvailable || !snapshot.status?.connected
+      ? { mode: 'unavailable', timestamp: null, offline: snapshotBreaker.getDataState().offline }
+      : response === completed
+        ? { mode: 'live', timestamp: completedAt, offline: false }
+        : { mode: 'cached', timestamp: null, offline: snapshotBreaker.getDataState().offline },
+    sequence: snapshot.sequence,
+    status: {
+      connected: snapshot.status?.connected ?? false,
+      vessels: snapshot.status?.vessels ?? 0,
+      messages: snapshot.status?.messages ?? 0,
+    },
+    disruptions: snapshot.disruptions
+      .map(toDisruptionEvent)
+      .filter((e): e is AisDisruptionEvent => e !== null),
+    density: snapshot.densityZones.map(toDensityZone),
+    candidateReports: snapshot.candidateReports.map(toLegacyCandidateReport),
+  };
+}
+
+// ---- Callback Emission ----
+
+function pruneCallbackTimestampIndex(now: number): void {
+  if (lastCallbackTimestampByMmsi.size <= MAX_CALLBACK_TRACKED_VESSELS) {
+    return;
+  }
+
+  const threshold = now - CALLBACK_RETENTION_MS;
+  for (const [mmsi, ts] of lastCallbackTimestampByMmsi) {
+    if (ts < threshold) {
+      lastCallbackTimestampByMmsi.delete(mmsi);
+    }
+  }
+
+  if (lastCallbackTimestampByMmsi.size <= MAX_CALLBACK_TRACKED_VESSELS) {
+    return;
+  }
+
+  const oldest = Array.from(lastCallbackTimestampByMmsi.entries())
+    .sort((a, b) => a[1] - b[1]);
+  const toDelete = lastCallbackTimestampByMmsi.size - MAX_CALLBACK_TRACKED_VESSELS;
+  for (let i = 0; i < toDelete; i++) {
+    const entry = oldest[i];
+    if (!entry) break;
+    lastCallbackTimestampByMmsi.delete(entry[0]);
+  }
+}
+
+function emitCandidateReports(reports: SnapshotCandidateReport[]): void {
+  if (positionCallbacks.size === 0 || reports.length === 0) return;
+  const now = Date.now();
+
+  for (const report of reports) {
+    if (!report?.mmsi || !Number.isFinite(report.lat) || !Number.isFinite(report.lon)) continue;
+
+    const reportTs = Number.isFinite(report.timestamp) ? Number(report.timestamp) : now;
+    const lastTs = lastCallbackTimestampByMmsi.get(report.mmsi) || 0;
+    if (reportTs <= lastTs) continue;
+
+    lastCallbackTimestampByMmsi.set(report.mmsi, reportTs);
+    const callbackData: AisPositionData = {
+      mmsi: report.mmsi,
+      name: report.name || '',
+      lat: report.lat,
+      lon: report.lon,
+      shipType: report.shipType,
+      heading: report.heading,
+      speed: report.speed,
+      course: report.course,
+    };
+
+    for (const callback of positionCallbacks) {
+      try {
+        callback(callbackData);
+      } catch {
+        // Ignore callback errors
+      }
+    }
+  }
+
+  pruneCallbackTimestampIndex(now);
+}
+
+// ---- Polling ----
+
+async function pollSnapshot(force = false, signal?: AbortSignal): Promise<void> {
+  if (!isAisConfigured()) return;
+  if (inFlight && !force) return;
+  if (signal?.aborted) return;
+
+  inFlight = true;
+  // A forced candidate poll can overlap a density poll. Only the most recently
+  // started poll that has finished may replace the shared state.
+  const pollId = ++lastStartedPollId;
+  const includeCandidates = shouldIncludeCandidates();
+  try {
+    const snapshot = await fetchSnapshotPayload(includeCandidates, signal);
+    if (!snapshot) throw new Error('Invalid snapshot payload');
+
+    if (pollId > lastAppliedPollId) {
+      lastAppliedPollId = pollId;
+      latestDisruptions = snapshot.disruptions;
+      latestDensity = snapshot.density;
+      latestStatus = snapshot.status;
+      lastPollAt = Date.now();
+    }
+
+    if (includeCandidates && pollId > latestCandidateOutcomePollId) {
+      latestCandidateOutcomePollId = pollId;
+      candidateDataState = positionCallbacks.size > 0
+        && Number.isFinite(snapshot.sequence)
+        && snapshot.sequence > 0
+        && (lastCandidateSequence === 0 || snapshot.sequence > lastCandidateSequence)
+        ? snapshot.dataState
+        : { mode: 'unavailable', timestamp: null, offline: false };
+    }
+
+    if (
+      includeCandidates
+      && positionCallbacks.size > 0
+      && (lastCandidateSequence === 0 || snapshot.sequence > lastCandidateSequence)
+    ) {
+      lastCandidateSequence = snapshot.sequence;
+      emitCandidateReports(snapshot.candidateReports);
+    }
+
+    const itemCount = latestDisruptions.length + latestDensity.length;
+    if (itemCount > 0 || latestStatus.vessels > 0) {
+      dataFreshness.recordUpdate('ais', itemCount > 0 ? itemCount : latestStatus.vessels);
+    }
+  } catch {
+    if (includeCandidates && pollId > latestCandidateOutcomePollId) {
+      latestCandidateOutcomePollId = pollId;
+      candidateDataState = { mode: 'unavailable', timestamp: null, offline: snapshotBreaker.getDataState().offline };
+    }
+    if (pollId > lastAppliedPollId) latestStatus.connected = false;
+  } finally {
+    inFlight = false;
+  }
+}
+
+function startPolling(): Promise<void> | null {
+  if (isPolling || !isAisConfigured()) return null;
+  isPolling = true;
+  const firstPoll = pollSnapshot(true);
+  pollLoop?.stop();
+  pollLoop = startSmartPollLoop(({ signal }) => pollSnapshot(false, signal), {
+    intervalMs: SNAPSHOT_POLL_INTERVAL_MS,
+    // AIS relay traffic is high-cost; pause entirely in hidden tabs.
+    pauseWhenHidden: true,
+    refreshOnVisible: true,
+    runImmediately: false,
+  });
+  return firstPoll;
+}
+
+// ---- Exported Functions ----
+
+/**
+ * Resolves when the first candidate poll finishes (delivered or failed), so a
+ * consumer can build its first view from AIS contacts instead of an empty set.
+ */
+export function registerAisCallback(callback: AisCallback): Promise<void> {
+  const firstCallback = positionCallbacks.size === 0;
+  positionCallbacks.add(callback);
+  const started = startPolling();
+  if (started) {
+    firstCandidatePoll = started;
+  } else if (firstCallback && isAisConfigured()) {
+    // Polling that began with no callbacks requested density only. Waiting for
+    // the next tick left the vessel layer USNI-only for minutes (#8634).
+    firstCandidatePoll = pollSnapshot(true);
+  }
+  return firstCandidatePoll ?? Promise.resolve();
+}
+
+export function unregisterAisCallback(callback: AisCallback): void {
+  positionCallbacks.delete(callback);
+  if (positionCallbacks.size === 0) {
+    lastCallbackTimestampByMmsi.clear();
+    lastCandidateSequence = 0;
+    firstCandidatePoll = null;
+    latestCandidateOutcomePollId = lastStartedPollId;
+    candidateDataState = { mode: 'unavailable', timestamp: null, offline: false };
+  }
+}
+
+export function initAisStream(): void {
+  startPolling();
+}
+
+export function disconnectAisStream(): void {
+  pollLoop?.stop();
+  pollLoop = null;
+  isPolling = false;
+  inFlight = false;
+  latestStatus.connected = false;
+  latestCandidateOutcomePollId = lastStartedPollId;
+  candidateDataState = { mode: 'unavailable', timestamp: null, offline: false };
+}
+
+export function getAisCandidateDataState(): BreakerDataState {
+  if (!isPolling || positionCallbacks.size === 0 || !isAisConfigured()
+    || (candidateDataState.mode === 'live' && (candidateDataState.timestamp === null || Date.now() - candidateDataState.timestamp > SNAPSHOT_STALE_MS))) {
+    return { mode: 'unavailable', timestamp: null, offline: candidateDataState.offline };
+  }
+  return { ...candidateDataState };
+}
+
+export function getAisStatus(): { connected: boolean; vessels: number; messages: number } {
+  const isFresh = Date.now() - lastPollAt <= SNAPSHOT_STALE_MS;
+  return {
+    connected: latestStatus.connected && isFresh,
+    vessels: latestStatus.vessels,
+    messages: latestStatus.messages,
+  };
+}
+
+export async function fetchAisSignals(): Promise<{ disruptions: AisDisruptionEvent[]; density: AisDensityZone[] }> {
+  if (!aisConfigured) {
+    return { disruptions: [], density: [] };
+  }
+
+  startPolling();
+  const shouldRefresh = Date.now() - lastPollAt > SNAPSHOT_STALE_MS;
+  if (shouldRefresh) {
+    await pollSnapshot(true);
+  }
+
+  return {
+    disruptions: latestDisruptions,
+    density: latestDensity,
+  };
+}

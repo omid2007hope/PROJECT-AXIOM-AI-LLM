@@ -1,0 +1,100 @@
+---
+import { checks, type CheckId } from '@/data/checks';
+import { categories } from '@/data/categories';
+
+interface Props {
+  ids: CheckId[];
+  heading?: string;
+  showCategories?: boolean;
+}
+
+const { ids, heading = 'What gets checked', showCategories = false } = Astro.props;
+---
+
+<section class="checks">
+  <h2>{heading}</h2>
+  <ul>
+    {ids.map((id) => (
+      <li id={id}>
+        <a href={`/${id}`}>
+          <h3>{checks[id].title}</h3>
+          <p>{checks[id].summary}</p>
+        </a>
+        {showCategories && (
+          <p class="tags">
+            {checks[id].categories.map((category) => (
+              <a href={`/${category}`}>{categories[category].label}</a>
+            ))}
+          </p>
+        )}
+      </li>
+    ))}
+  </ul>
+</section>
+
+<style lang="scss">
+  .checks > h2 {
+    font-size: 1.6rem;
+    margin-bottom: 1.5rem;
+  }
+
+  ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    column-gap: 2rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+
+    li {
+      padding: 1rem 0;
+      border-top: 1px solid var(--primary-transparent);
+    }
+
+    > li > a {
+      display: block;
+      color: var(--text-color);
+
+      &:hover,
+      &:focus-visible {
+        text-decoration: none;
+
+        h3 {
+          color: var(--primary-increased-contrast);
+        }
+      }
+    }
+
+    h3 {
+      margin: 0 0 0.25rem;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: color 0.25s ease;
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: var(--text-color-secondary);
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+
+      a {
+        color: var(--text-color-tertiary);
+
+        &:hover,
+        &:focus-visible {
+          color: var(--primary-increased-contrast);
+          text-decoration: none;
+        }
+      }
+    }
+  }
+</style>

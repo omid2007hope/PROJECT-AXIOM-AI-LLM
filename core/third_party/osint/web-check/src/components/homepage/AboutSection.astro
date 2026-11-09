@@ -1,0 +1,75 @@
+---
+import ButtonGroup from '@components/homepage/ButtonGroup.astro';
+import CheckList from '@components/category/CheckList.astro';
+import { checkIds } from '@/data/checks';
+
+const links = [
+  {
+    title: 'View on GitHub',
+    url: 'https://github.com/lissy93/web-check',
+    icon: 'github',
+    isCta: true,
+  },
+  {
+    title: 'Deploy your Own',
+    url: '/self-hosted-setup',
+    icon: 'rocket',
+    isCta: false,
+  },
+  {
+    title: 'Use the API',
+    url: '/web-check-api',
+    icon: 'code',
+    isCta: false,
+  },
+];
+---
+
+<div class="about-section">
+  <div class="features-wrap">
+    <h4>Ready to get started?</h4>
+    <p class="what">
+      With <a href="/checks">{checkIds.length} supported checks</a> you can view and analyse key
+      website information in an instant
+    </p>
+  </div>
+  <ButtonGroup links={links} />
+  <hr />
+  <CheckList ids={checkIds} heading="What gets checked" />
+</div>
+
+<style lang="scss">
+  .about-section {
+    width: 80vw;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .features-wrap {
+    width: 80vw;
+    max-width: 650px;
+    margin: 0 auto;
+  }
+  h4 {
+    text-transform: capitalize;
+    font-size: 1.8rem;
+    text-align: center;
+    background: linear-gradient(90deg, var(--text-color), var(--primary));
+    background-clip: text;
+    text-fill-color: transparent;
+    color: transparent;
+  }
+  .what {
+    text-align: center;
+    font-size: 1.2rem;
+    line-height: 1.5;
+    a {
+      color: var(--primary-increased-contrast);
+      font-style: italic;
+    }
+  }
+  hr {
+    width: 3rem;
+    margin: 3rem auto;
+    color: var(--primary);
+  }
+</style>

@@ -1,0 +1,247 @@
+/**
+ * Tests for renderer-side CacheService value-equality semantics.
+ *
+ * This is the first unit test for the renderer CacheService itself (prior
+ * coverage was limited to useCache hook type tests). It locks down the
+ * Object.is → isEqual upgrade for setInternal / setSharedInternal,
+ * and the deepEqual → isEqual refactor for setPersist, focusing on the
+ * scenarios the upgrade actually changes: object/array/record values that
+ * are reconstructed as new references on every write.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Undo the global mock from renderer.setup.ts — we want the REAL CacheService
+vi.unmock('@data/CacheService')
+
+const broadcastSync = vi.fn()
+const onSync = vi.fn()
+const getAllShared = vi.fn(async () => ({}))
+
+beforeEach(() => {
+  broadcastSync.mockClear()
+  onSync.mockClear()
+  getAllShared.mockClear()
+
+  Object.defineProperty(window, 'api', {
+    configurable: true,
+    value: {
+      cache: {
+        broadcastSync,
+        onSync,
+        getAllShared
+      }
+    }
+  })
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
+
+async function createService() {
+  const { CacheService } = await import('../CacheService')
+  return new CacheService()
+}
+
+describe('renderer CacheService equality semantics', () => {
+  describe('setInternal (memory cache)', () => {
+    it('skips subscriber notification when object value has same content (new reference)', async () => {
+      const service = await createService()
+      const sub = vi.fn()
+      const key = 'agent.session.waiting_id_map'
+
+      service.set(key, { a: true, b: false })
+      service.subscribe(key, sub)
+      sub.mockClear()
+
+      service.set(key, { a: true, b: false }) // new reference, same content
+      expect(sub).not.toHaveBeenCalled()
+    })
+
+    it('notifies subscribers when content actually changes', async () => {
+      const service = await createService()
+      const sub = vi.fn()
+      const key = 'agent.session.waiting_id_map'
+
+      service.set(key, { a: true })
+      service.subscribe(key, sub)
+      sub.mockClear()
+
+      service.set(key, { a: true, b: false })
+      expect(sub).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('setSharedInternal (shared cache)', () => {
+    it('skips cross-window broadcast when Record value has same content (new reference)', async () => {
+      const service = await createService()
+      const key = 'chat.web_search.active_searches'
+      // `chat.web_search.active_searches` is `Record<string, ...>` — exactly the
+      // case the Object.is → isEqual upgrade is meant to fix.
+      service.setShared(key, { topic1: { status: 'running' } } as any)
+      broadcastSync.mockClear()
+
+      service.setShared(key, { topic1: { status: 'running' } } as any) // new ref, same content
+      expect(broadcastSync).not.toHaveBeenCalled()
+    })
+
+    it('broadcasts when Record value content actually changes', async () => {
+      const service = await createService()
+      const key = 'chat.web_search.active_searches'
+      service.setShared(key, { topic1: { status: 'running' } } as any)
+      broadcastSync.mockClear()
+
+      service.setShared(key, { topic1: { status: 'done' } } as any)
+      expect(broadcastSync).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('setPersist', () => {
+    it('retains identity and skips notifications for equal persist ingress', async () => {
+      const persisted = localStorage.getItem('cs_cache_persist')
+      const service = await createService()
+      const key = 'ui.tab.pinned_tabs'
+      try {
+        service.setPersist(key, [])
+        const original = service.getPersist(key)
+        const subscriber = vi.fn()
+        service.subscribe(key, subscriber)
+        const receive = onSync.mock.calls.at(-1)![0]
+        broadcastSync.mockClear()
+        receive({ type: 'persist', key, value: [] })
+        expect(service.getPersist(key)).toBe(original)
+        expect(subscriber).not.toHaveBeenCalled()
+        expect(broadcastSync).not.toHaveBeenCalled()
+        receive({ type: 'persist', key, value: [{ id: 'remote' }] })
+        expect(service.getPersist(key)).toEqual([{ id: 'remote' }])
+        expect(subscriber).toHaveBeenCalledTimes(1)
+      } finally {
+        service.cleanup()
+        if (persisted === null) localStorage.removeItem('cs_cache_persist')
+        else localStorage.setItem('cs_cache_persist', persisted)
+      }
+    })
+
+    it('does not broadcast a stale outer value after a convergent subscriber write', async () => {
+      const persisted = localStorage.getItem('cs_cache_persist')
+      const service = await createService()
+      const key = 'ui.sidebar.width'
+      const unsubscribe = service.subscribe(key, () => {
+        if (service.getPersist(key) === 101) service.setPersist(key, 202)
+      })
+      try {
+        broadcastSync.mockClear()
+        service.setPersist(key, 101)
+        expect(service.getPersist(key)).toBe(202)
+        expect(broadcastSync.mock.calls.map(([message]) => message.value)).toEqual([202])
+      } finally {
+        unsubscribe()
+        service.cleanup()
+        if (persisted === null) localStorage.removeItem('cs_cache_persist')
+        else localStorage.setItem('cs_cache_persist', persisted)
+      }
+    })
+
+    it('skips persist save when array value has same content (new reference)', async () => {
+      const service = await createService()
+      const key = 'ui.tab.pinned_tabs'
+
+      service.setPersist(key, [{ id: 't1' }] as any)
+      broadcastSync.mockClear()
+
+      service.setPersist(key, [{ id: 't1' }] as any) // new ref, same content
+      expect(broadcastSync).not.toHaveBeenCalled()
+    })
+
+    it('broadcasts when array content actually changes', async () => {
+      const service = await createService()
+      const key = 'ui.tab.pinned_tabs'
+
+      service.setPersist(key, [{ id: 't1' }] as any)
+      broadcastSync.mockClear()
+
+      service.setPersist(key, [{ id: 't1' }, { id: 't2' }] as any)
+      expect(broadcastSync).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // hasPersist answers "has this key been overridden" (effective value differs
+  // from the schema default), NOT "is the key in the backing store" — mirrors the
+  // main-process tier. loadPersistCache seeds every key, so membership is always
+  // true and would carry no information.
+  describe('hasPersist (differs-from-default)', () => {
+    it('is false when the value equals the schema default (never set)', async () => {
+      const service = await createService()
+      expect(service.hasPersist('ui.sidebar.width')).toBe(false)
+    })
+
+    it('is true once an overriding (non-default) value is set', async () => {
+      const service = await createService()
+      service.setPersist('ui.sidebar.width', 999)
+      expect(service.hasPersist('ui.sidebar.width')).toBe(true)
+    })
+
+    it('is false when the set value happens to equal the default', async () => {
+      const service = await createService()
+      service.setPersist('ui.sidebar.width', 50) // 50 is the schema default
+      expect(service.hasPersist('ui.sidebar.width')).toBe(false)
+    })
+  })
+
+  describe('deletePersist (reset-to-default)', () => {
+    it('resets an overridden value back to the schema default', async () => {
+      const service = await createService()
+      service.setPersist('ui.sidebar.width', 999)
+      service.deletePersist('ui.sidebar.width')
+      expect(service.getPersist('ui.sidebar.width')).toBe(50)
+      expect(service.hasPersist('ui.sidebar.width')).toBe(false)
+    })
+
+    it('broadcasts the reset to other windows', async () => {
+      const service = await createService()
+      service.setPersist('ui.sidebar.width', 999)
+      broadcastSync.mockClear()
+
+      service.deletePersist('ui.sidebar.width')
+      expect(broadcastSync).toHaveBeenCalledTimes(1)
+    })
+
+    it('is a no-op when the value is already the default', async () => {
+      const service = await createService()
+      broadcastSync.mockClear()
+      service.deletePersist('ui.sidebar.width') // already default
+      expect(broadcastSync).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe('memory cache expiry', () => {
+  it('releases unread image drafts and notifies their consumers when TTL elapses', async () => {
+    vi.useFakeTimers()
+    const service = await createService()
+    const changed = vi.fn()
+    service.setCasual('image-draft', new Blob(['image']), 100)
+    service.subscribe('image-draft', changed)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(changed).toHaveBeenCalledOnce()
+    expect(service.getCasual('image-draft')).toBeUndefined()
+    service.cleanup()
+  })
+
+  it('retains refreshed drafts until their new deadline and preserves entries without TTL', async () => {
+    vi.useFakeTimers()
+    const service = await createService()
+    const image = new Blob(['image'])
+    service.setCasual('image-draft', image, 100)
+    service.setCasual('permanent', image)
+    await vi.advanceTimersByTimeAsync(75)
+    service.setCasual('image-draft', image, 100)
+    await vi.advanceTimersByTimeAsync(25)
+    expect(service.getCasual('image-draft')).toBe(image)
+    await vi.advanceTimersByTimeAsync(75)
+    expect(service.getCasual('image-draft')).toBeUndefined()
+    expect(service.getCasual('permanent')).toBe(image)
+    service.cleanup()
+  })
+})

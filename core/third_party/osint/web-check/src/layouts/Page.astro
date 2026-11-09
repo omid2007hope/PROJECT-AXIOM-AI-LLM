@@ -1,0 +1,67 @@
+---
+import BaseLayout from '@layouts/Base.astro';
+import NavBar from '@components/scafold/Nav.astro';
+import Footer from '@components/scafold/Footer.astro';
+import DotGrid from '@components/scafold/DotGrid.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+  keywords?: string;
+  customSchemaJson?: any;
+  breadcrumbs?: Array<{ name: string; item: string }>;
+}
+---
+
+<BaseLayout {...Astro.props}>
+  <slot name="head" slot="head" />
+  <div class="web-check-page">
+    <slot name="background">
+      <DotGrid />
+    </slot>
+    <slot name="nav">
+      <NavBar />
+    </slot>
+    <main>
+      <slot />
+    </main>
+    <slot name="footer">
+      <Footer />
+    </slot>
+  </div>
+</BaseLayout>
+
+<style lang="scss">
+  @use '@styles/media-queries.scss' as *;
+
+  .web-check-page {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding-top: 2rem;
+
+    @include mobile-down {
+      padding-top: 0.5rem;
+    }
+  }
+
+  main {
+    flex-grow: 1;
+    min-height: 60vh;
+    width: var(--page-width);
+    margin: 0 auto 2rem auto;
+    padding: var(--main-padding, 1rem 0);
+
+    > :global(section),
+    > :global(nav) {
+      margin-bottom: 4rem;
+    }
+
+    :global(h2) {
+      font-size: 1.6rem;
+      margin-bottom: 1.5rem;
+    }
+  }
+</style>

@@ -1,0 +1,81 @@
+import type {
+  ServerContext,
+  ListNavigationalWarningsRequest,
+  ListNavigationalWarningsResponse,
+  NavigationalWarning,
+} from '../../../../src/generated/server/worldmonitor/maritime/v1/service_server';
+
+import { CHROME_UA } from '../../../_shared/constants';
+import { fetchNgaBroadcastWarnings } from '../../../_shared/nga-broadcast-warnings';
+import { cachedFetchJson } from '../../../_shared/redis';
+
+const REDIS_CACHE_KEY = 'maritime:navwarnings:v3';
+const REDIS_CACHE_TTL = 3600; // 1 hr — NGA broadcasts update daily
+
+// ========================================================================
+// Helpers
+// ========================================================================
+
+function parseNgaDate(dateStr: unknown): number {
+  if (!dateStr || typeof dateStr !== 'string') return 0;
+  // Format: "081653Z MAY 2024"
+  const match = dateStr.match(/(\d{2})(\d{4})Z\s+([A-Z]{3})\s+(\d{4})/i);
+  if (!match) return Date.parse(dateStr) || 0;
+  const months: Record<string, number> = {
+    JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+    JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+  };
+  const day = parseInt(match[1]!, 10);
+  const hours = parseInt(match[2]!.slice(0, 2), 10);
+  const minutes = parseInt(match[2]!.slice(2, 4), 10);
+  const month = months[match[3]!.toUpperCase()] ?? 0;
+  const year = parseInt(match[4]!, 10);
+  return Date.UTC(year, month, day, hours, minutes);
+}
+
+async function fetchNgaWarnings(): Promise<NavigationalWarning[] | null> {
+  try {
+    const rawWarnings = await fetchNgaBroadcastWarnings({ userAgent: CHROME_UA, timeoutMs: 15000 });
+    if (rawWarnings === null) return null;
+
+    return rawWarnings.map((w): NavigationalWarning => ({
+      id: `${w.navArea || ''}-${w.msgYear || ''}-${w.msgNumber || ''}`,
+      title: `NAVAREA ${w.navArea || ''} ${w.msgNumber || ''}/${w.msgYear || ''}`,
+      text: w.text || '',
+      area: `${w.navArea || ''}${w.subregion ? ' ' + w.subregion : ''}`,
+      location: undefined,
+      issuedAt: parseNgaDate(w.issueDate),
+      expiresAt: 0,
+      authority: w.authority || '',
+    }));
+
+  } catch {
+    return null;
+  }
+}
+
+// ========================================================================
+// RPC handler
+// ========================================================================
+
+export async function listNavigationalWarnings(
+  _ctx: ServerContext,
+  req: ListNavigationalWarningsRequest,
+): Promise<ListNavigationalWarningsResponse> {
+  try {
+    const result = await cachedFetchJson<ListNavigationalWarningsResponse>(REDIS_CACHE_KEY, REDIS_CACHE_TTL, async () => {
+      const warnings = await fetchNgaWarnings();
+      return warnings === null
+        ? null
+        : { warnings, pagination: undefined, dataAvailable: true };
+    });
+    if (!result) return { warnings: [], pagination: undefined, dataAvailable: false };
+    const area = (req.area || '').toLowerCase();
+    const warnings = area
+      ? result.warnings.filter(w => w.area.toLowerCase().includes(area) || w.text.toLowerCase().includes(area))
+      : result.warnings;
+    return { ...result, warnings, dataAvailable: result.dataAvailable === true };
+  } catch {
+    return { warnings: [], pagination: undefined, dataAvailable: false };
+  }
+}

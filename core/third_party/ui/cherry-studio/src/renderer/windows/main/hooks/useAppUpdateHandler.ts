@@ -1,0 +1,135 @@
+import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { loggerService } from '@logger'
+import { useAppUpdateState } from '@renderer/hooks/useAppUpdateState'
+import { ipcApi, useIpcOn } from '@renderer/ipc'
+import { popup } from '@renderer/services/popup'
+import { toast } from '@renderer/services/toast'
+import type { CacheAppUpdateState } from '@shared/data/cache/cacheValueTypes'
+
+const logger = loggerService.withContext('useAppUpdateHandler')
+
+// Canonical manual download offered when the managed feed withholds the
+// install's version. Mirrors the Releases link on the About settings page.
+const GITHUB_RELEASES_URL = 'https://github.com/CherryHQ/cherry-studio/releases'
+
+/** Map updater failures to i18n keys. Never surface the raw HTTP body. */
+export function getManualUpdateErrorMessageKey(
+  error: { message?: string } | null | undefined
+): NonNullable<CacheAppUpdateState['lastErrorKey']> {
+  const message = error?.message ?? ''
+  if (isUnpublishedReleaseError(message)) {
+    return 'settings.about.updateNotPublished'
+  }
+  return 'settings.about.updateError'
+}
+
+function isUnpublishedReleaseError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('not_published') || (/\b503\b/.test(message) && /latest\.yml|httperror|http error/i.test(message))
+  )
+}
+
+// Main-only IPC->notification subscriber (twin of useStorageMonitorNotification):
+// maps updater IPC events onto toasts, notifications, and the update dialog.
+//
+// Intentionally a React hook, not a service: service-ification was considered and
+// rejected — it depends on React-visible state (useAppUpdateState cache, toast/popup)
+// and manages its own effect cleanup, and the renderer has no service lifecycle
+// container, so a service would only add manual start/stop wiring for no gain.
+export function useAppUpdateHandler() {
+  const { t } = useTranslation()
+  const { appUpdateState, updateAppUpdateState } = useAppUpdateState()
+  const manualCheckRef = useRef(appUpdateState.manualCheck)
+
+  // Keep ref in sync with current state
+  useEffect(() => {
+    manualCheckRef.current = appUpdateState.manualCheck
+  }, [appUpdateState.manualCheck])
+
+  useIpcOn('app.updater.not_available', (payload) => {
+    updateAppUpdateState({ checking: false, manualCheck: false, lastErrorKey: null })
+    // Only surface the result for a user-initiated check.
+    if (!manualCheckRef.current) return
+    // A withheld feed (withdrawn, staged, or stale target) is not "up to date":
+    // explain and offer the canonical manual download instead of the latest-version toast.
+    if (!(payload?.isCurrent ?? true)) {
+      void popup
+        .confirm({
+          title: t('settings.about.updateError'),
+          content: t('settings.about.updateNotPublished'),
+          okText: t('settings.about.releases.button'),
+          cancelText: t('common.cancel'),
+          icon: null
+        })
+        .then((openReleases) => {
+          if (openReleases) {
+            void ipcApi.request('system.shell.open_website', GITHUB_RELEASES_URL).catch((error: unknown) => {
+              logger.error('Failed to open releases page', error as Error)
+            })
+          }
+        })
+      return
+    }
+    toast.success(t('settings.about.updateNotAvailable'))
+  })
+
+  useIpcOn('app.updater.available', (releaseInfo) => {
+    updateAppUpdateState({
+      checking: false,
+      downloading: true,
+      info: releaseInfo,
+      available: true,
+      lastErrorKey: null
+    })
+  })
+
+  useIpcOn('app.updater.download_progress', (progress) => {
+    updateAppUpdateState({
+      downloading: progress.percent < 100,
+      downloadProgress: progress.percent
+    })
+  })
+
+  useIpcOn('app.updater.downloaded', (releaseInfo) => {
+    updateAppUpdateState({
+      downloading: false,
+      info: releaseInfo,
+      downloaded: true,
+      lastErrorKey: null
+    })
+    // Auto show update dialog when download completes (only if user manually triggered the check).
+    // Dynamic import (S6c): the dialog drags the streamdown/remark markdown stack
+    // (~0.84 MB) along — imperative, rarely shown, so it must not sit in main's first paint.
+    if (manualCheckRef.current) {
+      import('@renderer/components/UpdateDialogPopup')
+        .then(({ default: UpdateDialogPopup }) => UpdateDialogPopup.show({ releaseInfo }))
+        .catch((error) => {
+          // Update state stays `downloaded` — AboutSettings' static entry
+          // still lets the user open the dialog and install.
+          logger.error('Failed to load UpdateDialogPopup chunk:', error as Error)
+        })
+    }
+  })
+
+  useIpcOn('app.updater.error', (error) => {
+    updateAppUpdateState({
+      checking: false,
+      downloading: false,
+      downloadProgress: 0,
+      manualCheck: false,
+      lastErrorKey: getManualUpdateErrorMessageKey(error)
+    })
+    // AppUpdaterService swallows updater failures after broadcasting UpdateError, so
+    // AboutSettings.onCheckUpdate never sees them — surface it here for manual checks.
+    if (manualCheckRef.current) {
+      void popup.info({
+        title: t('settings.about.updateError'),
+        content: t(getManualUpdateErrorMessageKey(error)),
+        icon: null
+      })
+    }
+  })
+}

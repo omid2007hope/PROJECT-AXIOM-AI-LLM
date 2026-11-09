@@ -1,0 +1,19 @@
+---
+import CategoryPage from '@components/category/CategoryPage.astro';
+import CheckPage from '@components/check/CheckPage.astro';
+import { categoryIds, isCategory, type CategoryId } from '@/data/categories';
+import { checkIds, type CheckId } from '@/data/checks';
+
+export const prerender = true;
+
+export const getStaticPaths = () =>
+  [...categoryIds, ...checkIds].map((tool) => ({ params: { tool }, props: { tool } }));
+
+interface Props {
+  tool: CategoryId | CheckId;
+}
+
+const { tool } = Astro.props;
+---
+
+{isCategory(tool) ? <CategoryPage category={tool} /> : <CheckPage check={tool} />}

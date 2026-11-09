@@ -1,0 +1,2835 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod cache_bounds;
+mod clerk_relay;
+mod desktop_sign_in;
+
+use std::collections::HashMap;
+use std::env;
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use keyring::Entry;
+use reqwest::Url;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Manager, RunEvent, Webview, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+
+use cache_bounds::validate_cache_write_sizes;
+use clerk_relay::{ClerkClientToken, ClerkFapiRequest, ClerkFapiResponse};
+
+const DEFAULT_LOCAL_API_PORT: u16 = 46123;
+const SIDECAR_PORT_RECOVERY_TIMEOUT_MS: u64 = 30_000;
+const MAX_LOCAL_API_PROXY_BYTES: usize = 16 * 1024 * 1024;
+const KEYRING_SERVICE: &str = "world-monitor";
+const SECRETS_VAULT_KEYRING_ACCOUNT: &str = "secrets-vault";
+const CLERK_CLIENT_KEYRING_ACCOUNT: &str = "clerk-client";
+const CLERK_RELAY_WINDOWS: [&str; 1] = ["main"];
+const LOCAL_API_LOG_FILE: &str = "local-api.log";
+const DESKTOP_LOG_FILE: &str = "desktop.log";
+const MENU_FILE_SETTINGS_ID: &str = "file.settings";
+const MENU_HELP_GITHUB_ID: &str = "help.github";
+#[cfg(feature = "devtools")]
+const MENU_HELP_DEVTOOLS_ID: &str = "help.devtools";
+const TRUSTED_WINDOWS: [&str; 3] = ["main", "settings", "live-channels"];
+const SECRET_MANAGEMENT_WINDOWS: [&str; 2] = ["main", "settings"];
+const BUILD_TIME_SIDECAR_ENV_KEYS: [&str; 1] = ["CONVEX_URL"];
+const SUPPORTED_SECRET_KEYS: [&str; 28] = [
+    "OPENROUTER_API_KEY",
+    "EXA_API_KEYS",
+    "BRAVE_API_KEYS",
+    "SERPAPI_API_KEYS",
+    "FRED_API_KEY",
+    "EIA_API_KEY",
+    "CLOUDFLARE_API_TOKEN",
+    "ACLED_ACCESS_TOKEN",
+    "URLHAUS_AUTH_KEY",
+    "OTX_API_KEY",
+    "ABUSEIPDB_API_KEY",
+    "WINGBITS_API_KEY",
+    "WS_RELAY_URL",
+    "VITE_OPENSKY_RELAY_URL",
+    "OPENSKY_CLIENT_ID",
+    "OPENSKY_CLIENT_SECRET",
+    "AISSTREAM_API_KEY",
+    "VITE_WS_RELAY_URL",
+    "FINNHUB_API_KEY",
+    "ALPHA_VANTAGE_API_KEY",
+    "NASA_FIRMS_API_KEY",
+    "UCDP_ACCESS_TOKEN",
+    "OLLAMA_API_URL",
+    "OLLAMA_MODEL",
+    "WORLDMONITOR_API_KEY",
+    "WTO_API_KEY",
+    "AVIATIONSTACK_API",
+    "ICAO_API_KEY",
+];
+
+struct LocalApiState {
+    child: Arc<Mutex<Option<Child>>>,
+    token: Mutex<Option<String>>,
+    port: Arc<Mutex<Option<u16>>>,
+    http_client: reqwest::Client,
+}
+
+impl Default for LocalApiState {
+    fn default() -> Self {
+        Self {
+            child: Arc::new(Mutex::new(None)),
+            token: Mutex::new(None),
+            port: Arc::new(Mutex::new(None)),
+            http_client: reqwest::Client::builder()
+                .use_native_tls()
+                .pool_max_idle_per_host(2)
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(120))
+                .build()
+                .unwrap_or_default(),
+        }
+    }
+}
+
+impl LocalApiState {
+    fn live_port(&self) -> Result<u16, String> {
+        let mut child_slot = self
+            .child
+            .lock()
+            .map_err(|_| "Failed to lock local API state".to_string())?;
+        match child_slot.as_mut() {
+            None => self.clear_recorded_port(),
+            Some(child) => match child.try_wait() {
+                Ok(None) => self
+                    .port
+                    .lock()
+                    .map_err(|_| "Failed to lock local API port".to_string())?
+                    .ok_or_else(|| "Local API sidecar is not ready".to_string()),
+                Ok(Some(_)) => {
+                    *child_slot = None;
+                    self.clear_recorded_port()
+                }
+                Err(_) => Self::refuse_unverified_child(),
+            },
+        }
+    }
+
+    fn clear_recorded_port(&self) -> Result<u16, String> {
+        if let Ok(mut port_slot) = self.port.lock() {
+            *port_slot = None;
+        }
+        Err("Local API sidecar is not ready".to_string())
+    }
+
+    fn refuse_unverified_child() -> Result<u16, String> {
+        Err("Local API sidecar is not ready".to_string())
+    }
+}
+
+/// In-memory cache for keychain secrets. Populated once at startup to avoid
+/// repeated macOS Keychain prompts (each `Entry::get_password()` triggers one).
+struct SecretsCache {
+    secrets: Mutex<HashMap<String, String>>,
+    /// Logged to desktop.log once the app handle exists.
+    load_warning: Option<String>,
+}
+
+/// In-memory mirror of persistent-cache.json. The file can grow to 10+ MB,
+/// so reading/parsing/writing it on every IPC call blocks the main thread.
+/// Instead, load once into RAM and serialize writes to preserve ordering.
+struct PersistentCache {
+    data: Mutex<Map<String, Value>>,
+    dirty: Mutex<bool>,
+    write_lock: Mutex<()>,
+    generation: Mutex<u64>,
+    flush_scheduled: Mutex<bool>,
+}
+
+/// Where the secrets vault currently lives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VaultStorage {
+    /// The platform store: macOS Keychain, Windows Credential Manager, or the
+    /// Linux Secret Service.
+    SecretStore,
+    /// The Linux kernel session keyring, used only when the Secret Service is
+    /// unreachable. It does not survive a reboot.
+    SessionKeyring,
+}
+
+struct VaultRead {
+    json: Option<String>,
+    storage: VaultStorage,
+    /// Never contains secret values, only keyring error text.
+    warning: Option<String>,
+}
+
+/// True when the keyring error means no Secret Service provider is reachable
+/// over D-Bus (for example no gnome-keyring or KWallet on a minimal desktop).
+fn is_secret_service_unavailable(err: &keyring::Error) -> bool {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(error) = current {
+        let message = error.to_string().to_ascii_lowercase();
+        if message.contains("no dbus session or secret service provider found")
+            || (message.contains("dbus")
+                && (message.contains("not activatable")
+                    || message.contains("not provided by any .service files")
+                    || message.contains("serviceunknown")
+                    || message.contains("has no owner")
+                    || message.contains("unable to autolaunch a dbus-daemon")
+                    || message.contains("failed to connect to socket")))
+        {
+            return true;
+        }
+        current = error.source();
+    }
+    false
+}
+
+/// The kernel keyring entry that stands in for the Secret Service. It links
+/// into the session and per-user persistent keyrings, so it lasts for the
+/// login session (and briefly after logout) but never survives a reboot.
+#[cfg(target_os = "linux")]
+fn session_keyring_entry(account: &str) -> Option<Entry> {
+    keyring::keyutils::KeyutilsCredential::new_with_target(None, KEYRING_SERVICE, account)
+        .map(|credential| Entry::new_with_credential(Box::new(credential)))
+        .map_err(|err| eprintln!("[tauri] Linux kernel keyring unavailable: {err}"))
+        .ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn session_keyring_entry(_account: &str) -> Option<Entry> {
+    None
+}
+
+const SESSION_KEYRING_SAVE_WARNING: &str = "Secret Service is unavailable, so API keys were saved \
+to the Linux kernel session keyring. They will be lost on reboot. Install and unlock a Secret \
+Service provider (GNOME Keyring or KWallet) to keep them.";
+
+/// Called when the Secret Service is reachable. A kernel keyring vault only
+/// exists if a save failed over to it (every successful platform save deletes
+/// it), so it is always newer than the platform vault: move it back into the
+/// Secret Service so changes made during an outage, deletions included, win.
+fn reconcile_vault_json(
+    primary_json: Option<String>,
+    primary: &Entry,
+    fallback: Option<&Entry>,
+) -> VaultRead {
+    let Some((entry, json)) =
+        fallback.and_then(|entry| entry.get_password().ok().map(|json| (entry, json)))
+    else {
+        return VaultRead {
+            json: primary_json,
+            storage: VaultStorage::SecretStore,
+            warning: None,
+        };
+    };
+    let warning = match primary.set_password(&json) {
+        Ok(()) => {
+            // Both copies now match, so a failed delete is harmless.
+            let _ = entry.delete_credential();
+            None
+        }
+        Err(err) => Some(format!(
+            "Could not move API keys from the Linux kernel session keyring back to the \
+             Secret Service: {err}"
+        )),
+    };
+    VaultRead {
+        json: Some(json),
+        storage: VaultStorage::SecretStore,
+        warning,
+    }
+}
+
+fn read_vault_json(primary: &Entry, fallback: Option<&Entry>) -> VaultRead {
+    match primary.get_password() {
+        Ok(json) => reconcile_vault_json(Some(json), primary, fallback),
+        Err(keyring::Error::NoEntry) => reconcile_vault_json(None, primary, fallback),
+        Err(err) if fallback.is_some() && is_secret_service_unavailable(&err) => VaultRead {
+            json: fallback.and_then(|entry| entry.get_password().ok()),
+            storage: VaultStorage::SessionKeyring,
+            warning: Some(format!(
+                "Secret Service is unavailable ({err}); reading API keys from the Linux kernel \
+                 session keyring, which does not survive a reboot."
+            )),
+        },
+        Err(err) => VaultRead {
+            json: None,
+            storage: VaultStorage::SecretStore,
+            warning: Some(format!("Could not read API keys from the system keychain: {err}")),
+        },
+    }
+}
+
+fn write_vault_json(
+    json: &str,
+    primary: &Entry,
+    fallback: Option<&Entry>,
+) -> Result<VaultStorage, String> {
+    match primary.set_password(json) {
+        Ok(()) => {
+            if let Some(entry) = fallback {
+                // NoEntry is the normal case. A session copy that cannot be
+                // deleted would be promoted over this save on the next load
+                // (see reconcile_vault_json), so make it match instead.
+                match entry.delete_credential() {
+                    Ok(()) | Err(keyring::Error::NoEntry) => {}
+                    Err(delete_err) => {
+                        if let Err(set_err) = entry.set_password(json) {
+                            eprintln!(
+                                "[tauri] WARN: could not delete ({delete_err}) or update \
+                                 ({set_err}) the Linux kernel session keyring copy of the API \
+                                 key vault; the next launch may restore older API keys."
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(VaultStorage::SecretStore)
+        }
+        Err(err) => match fallback {
+            Some(entry) if is_secret_service_unavailable(&err) => {
+                entry.set_password(json).map_err(|fallback_err| {
+                    format!(
+                        "Failed to write vault: {err}; kernel keyring fallback also failed: \
+                         {fallback_err}"
+                    )
+                })?;
+                Ok(VaultStorage::SessionKeyring)
+            }
+            _ => Err(format!("Failed to write vault: {err}")),
+        },
+    }
+}
+
+impl SecretsCache {
+    fn load_from_keychain() -> Self {
+        // Try consolidated vault first — single keychain prompt
+        let mut load_warning = None;
+        if let Ok(entry) = Entry::new(KEYRING_SERVICE, SECRETS_VAULT_KEYRING_ACCOUNT) {
+            let fallback = session_keyring_entry(SECRETS_VAULT_KEYRING_ACCOUNT);
+            let read = read_vault_json(&entry, fallback.as_ref());
+            if let Some(warning) = &read.warning {
+                eprintln!("[tauri] {warning}");
+            }
+            load_warning = read.warning;
+            if let Some(json) = read.json {
+                if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&json) {
+                    let secrets: HashMap<String, String> = map
+                        .into_iter()
+                        .filter(|(k, v)| {
+                            SUPPORTED_SECRET_KEYS.contains(&k.as_str()) && !v.trim().is_empty()
+                        })
+                        .map(|(k, v)| (k, v.trim().to_string()))
+                        .collect();
+                    return SecretsCache {
+                        secrets: Mutex::new(secrets),
+                        load_warning,
+                    };
+                }
+            }
+            if read.storage == VaultStorage::SessionKeyring {
+                // Legacy per-key entries live in the same unreachable Secret
+                // Service, so skip the migration below.
+                return SecretsCache {
+                    secrets: Mutex::new(HashMap::new()),
+                    load_warning,
+                };
+            }
+        }
+
+        // Migration: read individual keys (old format), consolidate into vault.
+        // This triggers one keychain prompt per key — happens only once.
+        let mut secrets = HashMap::new();
+        for key in SUPPORTED_SECRET_KEYS.iter() {
+            if let Ok(entry) = Entry::new(KEYRING_SERVICE, key) {
+                if let Ok(value) = entry.get_password() {
+                    let trimmed = value.trim().to_string();
+                    if !trimmed.is_empty() {
+                        secrets.insert((*key).to_string(), trimmed);
+                    }
+                }
+            }
+        }
+
+        // Write consolidated vault and clean up individual entries
+        if !secrets.is_empty() {
+            if let Ok(json) = serde_json::to_string(&secrets) {
+                if let Ok(vault_entry) = Entry::new(KEYRING_SERVICE, SECRETS_VAULT_KEYRING_ACCOUNT) {
+                    if vault_entry.set_password(&json).is_ok() {
+                        for key in SUPPORTED_SECRET_KEYS.iter() {
+                            if let Ok(entry) = Entry::new(KEYRING_SERVICE, key) {
+                                let _ = entry.delete_credential();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        SecretsCache {
+            secrets: Mutex::new(secrets),
+            load_warning,
+        }
+    }
+}
+
+impl PersistentCache {
+    fn load(path: &Path) -> Self {
+        let data = if path.exists() {
+            std::fs::read_to_string(path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                .and_then(|v| v.as_object().cloned())
+                .unwrap_or_default()
+        } else {
+            Map::new()
+        };
+        PersistentCache {
+            data: Mutex::new(data),
+            dirty: Mutex::new(false),
+            write_lock: Mutex::new(()),
+            generation: Mutex::new(0),
+            flush_scheduled: Mutex::new(false),
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<Value> {
+        let data = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.get(key).cloned()
+    }
+
+    /// Flush to disk only if dirty. Returns Ok(true) if written.
+    /// Uses atomic write (temp file + rename) to prevent corruption on crash.
+    fn flush(&self, path: &Path) -> Result<bool, String> {
+        let _write_guard = self.write_lock.lock().unwrap_or_else(|e| e.into_inner());
+
+        let is_dirty = {
+            let dirty = self.dirty.lock().unwrap_or_else(|e| e.into_inner());
+            *dirty
+        };
+        if !is_dirty {
+            return Ok(false);
+        }
+
+        let data = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        let serialized = serde_json::to_string(&Value::Object(data.clone()))
+            .map_err(|e| format!("Failed to serialize cache: {e}"))?;
+        drop(data);
+
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, &serialized)
+            .map_err(|e| format!("Failed to write cache tmp {}: {e}", tmp.display()))?;
+        std::fs::rename(&tmp, path)
+            .map_err(|e| format!("Failed to rename cache {}: {e}", path.display()))?;
+
+        let mut dirty = self.dirty.lock().unwrap_or_else(|e| e.into_inner());
+        *dirty = false;
+        Ok(true)
+    }
+}
+
+#[derive(Serialize)]
+struct DesktopRuntimeInfo {
+    os: String,
+    arch: String,
+    local_api_port: Option<u16>,
+}
+
+#[derive(Deserialize)]
+struct LocalApiProxyRequest {
+    method: String,
+    path: String,
+    headers: HashMap<String, String>,
+    body: Option<Vec<u8>>,
+}
+
+#[derive(Serialize)]
+struct LocalApiProxyResponse {
+    status: u16,
+    headers: HashMap<String, String>,
+    body: Vec<u8>,
+}
+
+#[derive(Serialize)]
+struct SecretValidationResponse {
+    status: u16,
+    payload: Value,
+}
+
+fn save_vault(cache: &HashMap<String, String>) -> Result<VaultStorage, String> {
+    let json =
+        serde_json::to_string(cache).map_err(|e| format!("Failed to serialize vault: {e}"))?;
+    let entry = Entry::new(KEYRING_SERVICE, SECRETS_VAULT_KEYRING_ACCOUNT)
+        .map_err(|e| format!("Keyring init failed: {e}"))?;
+    let fallback = session_keyring_entry(SECRETS_VAULT_KEYRING_ACCOUNT);
+    write_vault_json(&json, &entry, fallback.as_ref())
+}
+
+fn generate_local_token() -> String {
+    let mut buf = [0u8; 32];
+    getrandom::getrandom(&mut buf).expect("OS CSPRNG unavailable");
+    buf.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn require_trusted_window(label: &str) -> Result<(), String> {
+    if TRUSTED_WINDOWS.contains(&label) {
+        Ok(())
+    } else {
+        Err(format!("Command not allowed from window '{label}'"))
+    }
+}
+
+fn can_manage_renderer_secrets(label: &str) -> bool {
+    SECRET_MANAGEMENT_WINDOWS.contains(&label)
+}
+
+// Every supported vault key may be configured by the first-party
+// main/settings renderers.
+fn is_renderer_managed_secret_key(key: &str) -> bool {
+    SUPPORTED_SECRET_KEYS.contains(&key)
+}
+
+fn require_secret_management_window(label: &str) -> Result<(), String> {
+    if can_manage_renderer_secrets(label) {
+        Ok(())
+    } else {
+        Err(format!("Secret management not allowed from window '{label}'"))
+    }
+}
+
+fn configured_renderer_secret_keys(secrets: &HashMap<String, String>) -> Vec<String> {
+    secrets
+        .keys()
+        .filter(|key| is_renderer_managed_secret_key(key))
+        .cloned()
+        .collect()
+}
+
+fn normalized_local_api_proxy_path(path: &str) -> Result<String, String> {
+    let url = Url::parse(&format!("http://127.0.0.1{path}"))
+        .map_err(|_| "Invalid local API path".to_string())?;
+    if url.host_str() != Some("127.0.0.1") || url.fragment().is_some() {
+        return Err("Invalid local API path".to_string());
+    }
+    Ok(match url.query() {
+        Some(query) => format!("{}?{query}", url.path()),
+        None => url.path().to_string(),
+    })
+}
+
+fn normalized_local_api_proxy_path_is_allowed(normalized_path: &str) -> bool {
+    let route = normalized_path.split('?').next().unwrap_or(normalized_path);
+    route.starts_with("/api/")
+        && !route.starts_with("//")
+        && (!route.starts_with("/api/local-")
+            || matches!(route, "/api/local-debug-toggle" | "/api/local-traffic-log"))
+        // Keep the denylist explicit as a guard against accidentally widening
+        // the local-* exception above during future maintenance.
+        && route != "/api/local-env-update"
+        && route != "/api/local-env-update-batch"
+        && route != "/api/local-validate-secret"
+}
+
+#[cfg(test)]
+fn local_api_proxy_path_is_allowed(path: &str) -> bool {
+    normalized_local_api_proxy_path(path)
+        .is_ok_and(|normalized| normalized_local_api_proxy_path_is_allowed(&normalized))
+}
+
+async fn send_local_api_request(
+    state: &LocalApiState,
+    method: &str,
+    path: &str,
+    headers: &HashMap<String, String>,
+    body: Option<Vec<u8>>,
+) -> Result<LocalApiProxyResponse, String> {
+    if body.as_ref().is_some_and(|body| body.len() > MAX_LOCAL_API_PROXY_BYTES) {
+        return Err("Local API request body exceeds the proxy limit".to_string());
+    }
+    let port = state.live_port()?;
+    let token = state
+        .token
+        .lock()
+        .map_err(|_| "Failed to lock local API token".to_string())?
+        .clone()
+        .ok_or_else(|| "Local API token is unavailable".to_string())?;
+    let method = reqwest::Method::from_bytes(method.as_bytes())
+        .map_err(|_| "Unsupported local API method".to_string())?;
+    let url = Url::parse(&format!("http://127.0.0.1:{port}{path}"))
+        .map_err(|_| "Invalid local API path".to_string())?;
+    let mut request = state.http_client.request(method, url).bearer_auth(token);
+    for (name, value) in headers {
+        if !name.eq_ignore_ascii_case("authorization")
+            && !name.eq_ignore_ascii_case("host")
+            && !name.eq_ignore_ascii_case("content-length")
+        {
+            request = request.header(name, value);
+        }
+    }
+    if let Some(body) = body {
+        request = request.body(body);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("Local API request failed: {error}"))?;
+    let status = response.status().as_u16();
+    let headers = response
+        .headers()
+        .iter()
+        .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.to_string(), value.to_string())))
+        .collect();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Failed to read local API response: {error}"))?
+        .to_vec();
+    if body.len() > MAX_LOCAL_API_PROXY_BYTES {
+        return Err("Local API response exceeds the proxy limit".to_string());
+    }
+    Ok(LocalApiProxyResponse { status, headers, body })
+}
+
+#[tauri::command]
+async fn proxy_local_api_request(
+    webview: Webview,
+    request: LocalApiProxyRequest,
+    state: tauri::State<'_, LocalApiState>,
+) -> Result<LocalApiProxyResponse, String> {
+    require_secret_management_window(webview.label())?;
+    let normalized_path = normalized_local_api_proxy_path(&request.path)?;
+    let route = normalized_path.split('?').next().unwrap_or(&normalized_path);
+    if !normalized_local_api_proxy_path_is_allowed(&normalized_path) {
+        return Err(format!("Local API route is not proxyable: {route}"));
+    }
+    send_local_api_request(&state, &request.method, &normalized_path, &request.headers, request.body).await
+}
+
+/// Holds the Clerk native-mode client token. Loaded from the keychain on first
+/// use so a signed-in user stays signed in across launches.
+struct ClerkRelayState {
+    token: tauri::async_runtime::Mutex<Option<Option<ClerkClientToken>>>,
+    http_client: reqwest::Client,
+}
+
+impl Default for ClerkRelayState {
+    fn default() -> Self {
+        Self {
+            token: tauri::async_runtime::Mutex::new(None),
+            http_client: reqwest::Client::builder()
+                .use_native_tls()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_default(),
+        }
+    }
+}
+
+fn load_clerk_client_token() -> Option<ClerkClientToken> {
+    let entry = Entry::new(KEYRING_SERVICE, CLERK_CLIENT_KEYRING_ACCOUNT).ok()?;
+    let json = match entry.get_password() {
+        Ok(json) => json,
+        Err(keyring::Error::NoEntry) => return None,
+        Err(err) => {
+            eprintln!("[tauri] Could not read the saved sign-in from the system keychain: {err}");
+            return None;
+        }
+    };
+    serde_json::from_str(&json).ok()
+}
+
+fn save_clerk_client_token(token: &ClerkClientToken) -> Result<(), String> {
+    let json = serde_json::to_string(token).map_err(|e| format!("Failed to serialize Clerk client: {e}"))?;
+    Entry::new(KEYRING_SERVICE, CLERK_CLIENT_KEYRING_ACCOUNT)
+        .map_err(|e| format!("Keyring init failed: {e}"))?
+        .set_password(&json)
+        .map_err(|e| format!("Failed to store Clerk client: {e}"))
+}
+
+/// Sends one validated Frontend API request with the given client token (or
+/// none) and returns the response plus the client token Clerk sent back. It
+/// touches no stored state.
+async fn send_fapi_with_token(
+    state: &ClerkRelayState,
+    validated: clerk_relay::ValidatedRequest,
+    token: Option<&str>,
+) -> Result<(ClerkFapiResponse, Option<String>), String> {
+    let mut outbound = state.http_client.request(validated.method, validated.url);
+    if let Some(token) = token {
+        outbound = outbound.header(reqwest::header::AUTHORIZATION, token);
+    }
+    if let Some(content_type) = validated.content_type {
+        outbound = outbound.header(reqwest::header::CONTENT_TYPE, content_type);
+    }
+    if let Some(body) = validated.body {
+        outbound = outbound.body(body);
+    }
+
+    let mut response = outbound
+        .send()
+        .await
+        .map_err(|error| format!("Clerk request failed: {error}"))?;
+    let status = response.status().as_u16();
+    let header_text = |name: reqwest::header::HeaderName| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string)
+    };
+    let content_type = header_text(reqwest::header::CONTENT_TYPE);
+    let authorization = header_text(reqwest::header::AUTHORIZATION);
+
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| format!("Failed to read Clerk response: {error}"))?
+    {
+        clerk_relay::append_capped(&mut bytes, &chunk, clerk_relay::MAX_RESPONSE_BODY_BYTES)?;
+    }
+    Ok((
+        ClerkFapiResponse {
+            status,
+            content_type,
+            body: String::from_utf8_lossy(&bytes).into_owned(),
+        },
+        authorization,
+    ))
+}
+
+fn store_clerk_client_token(app: &AppHandle, slot: &mut Option<ClerkClientToken>, next: ClerkClientToken) {
+    if let Err(err) = save_clerk_client_token(&next) {
+        // The session still works for this launch; only persistence failed.
+        append_desktop_log(app, "WARN", &err);
+    }
+    *slot = Some(next);
+}
+
+/// Sends one validated Frontend API request with the stored client token and
+/// stores the token Clerk rotates in. Shared by the renderer relay command.
+async fn send_clerk_fapi_request(
+    app: &AppHandle,
+    state: &ClerkRelayState,
+    request: ClerkFapiRequest,
+) -> Result<ClerkFapiResponse, String> {
+    let validated = clerk_relay::validate_request(request)?;
+    let host = validated.url.host_str().unwrap_or_default().to_string();
+
+    // Held across the request so a rotated token from one response is never
+    // overwritten by a concurrent response that carried the older one.
+    let mut slot = state.token.lock().await;
+    let stored = slot.get_or_insert_with(load_clerk_client_token);
+    let token = clerk_relay::token_for_host(stored.as_ref(), &host).map(str::to_string);
+
+    let (response, authorization) = send_fapi_with_token(state, validated, token.as_deref()).await?;
+    if let Some(next) = clerk_relay::next_stored_token(stored.as_ref(), &host, authorization.as_deref()) {
+        store_clerk_client_token(app, stored, next);
+    }
+    Ok(response)
+}
+
+#[tauri::command]
+async fn clerk_fapi_request(
+    webview: Webview,
+    app: AppHandle,
+    request: ClerkFapiRequest,
+    state: tauri::State<'_, ClerkRelayState>,
+) -> Result<ClerkFapiResponse, String> {
+    if !CLERK_RELAY_WINDOWS.contains(&webview.label()) {
+        return Err(format!("Clerk relay not allowed from window '{}'", webview.label()));
+    }
+    send_clerk_fapi_request(&app, &state, request).await
+}
+
+#[derive(Default)]
+struct BrowserSignInState {
+    flows: Mutex<desktop_sign_in::FlowRegistry>,
+}
+
+impl BrowserSignInState {
+    fn with<T>(&self, f: impl FnOnce(&mut desktop_sign_in::FlowRegistry) -> T) -> Result<T, String> {
+        let mut flows = self.flows.lock().map_err(|_| "Sign-in state unavailable".to_string())?;
+        Ok(f(&mut flows))
+    }
+}
+
+#[derive(Deserialize)]
+struct DesktopTokenResponse {
+    ticket: Option<String>,
+    error: Option<String>,
+}
+
+fn require_relay_window(webview: &Webview) -> Result<(), String> {
+    if CLERK_RELAY_WINDOWS.contains(&webview.label()) {
+        Ok(())
+    } else {
+        Err(format!("Browser sign-in not allowed from window '{}'", webview.label()))
+    }
+}
+
+/// Step one of the browser sign-in: open www.worldmonitor.app, wait for the
+/// loopback callback, and exchange the code for a Clerk ticket. The ticket
+/// stays in Rust; `finish_desktop_browser_sign_in` redeems it. Splitting the
+/// two lets the renderer sign out an existing session only once this
+/// succeeded.
+#[tauri::command]
+async fn start_desktop_browser_sign_in(
+    webview: Webview,
+    fapi_host: String,
+    relay: tauri::State<'_, ClerkRelayState>,
+    sign_in: tauri::State<'_, BrowserSignInState>,
+) -> Result<(), String> {
+    require_relay_window(&webview)?;
+    if !desktop_sign_in::is_ticket_host(&fapi_host) {
+        return Err("unsupported_host".to_string());
+    }
+    let flag = sign_in.with(|flows| flows.begin(std::time::Instant::now()))?.map_err(str::to_string)?;
+    let result = run_browser_sign_in(&fapi_host, &flag, &relay, &sign_in).await;
+    if result.is_err() {
+        sign_in.with(|flows| flows.fail(&flag))?;
+    }
+    result
+}
+
+async fn run_browser_sign_in(
+    fapi_host: &str,
+    flag: &Arc<std::sync::atomic::AtomicBool>,
+    relay: &ClerkRelayState,
+    sign_in: &BrowserSignInState,
+) -> Result<(), String> {
+    let secrets = desktop_sign_in::FlowSecrets::generate();
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .map_err(|_| "listener_failed".to_string())?;
+    let port = listener.local_addr().map_err(|_| "listener_failed".to_string())?.port();
+
+    // open_in_shell keeps the Linux LD_* scrubbing. Its error text includes
+    // the URL, which carries the flow's state, so it is discarded.
+    open_in_shell(&desktop_sign_in::sign_in_url(port, &secrets.state, &secrets.challenge))
+        .map_err(|_| "browser_failed".to_string())?;
+    sign_in.with(|flows| flows.opened(std::time::Instant::now()))?;
+
+    let state_for_wait = secrets.state.clone();
+    let deadline = std::time::Instant::now() + desktop_sign_in::FLOW_TIMEOUT;
+    let flag_for_wait = flag.clone();
+    let code = tauri::async_runtime::spawn_blocking(move || {
+        desktop_sign_in::wait_for_code(&listener, &state_for_wait, deadline, &flag_for_wait)
+    })
+    .await
+    .map_err(|_| "listener_failed".to_string())?
+    .map_err(|error| match error {
+        desktop_sign_in::WaitError::Cancelled => "cancelled".to_string(),
+        desktop_sign_in::WaitError::TimedOut => "timed_out".to_string(),
+        desktop_sign_in::WaitError::Io(_) => "listener_failed".to_string(),
+    })?;
+    sign_in.with(|flows| flows.check(flag))?.map_err(str::to_string)?;
+
+    let user_agent = format!("WorldMonitor-Desktop/{} (desktop-auth)", env!("CARGO_PKG_VERSION"));
+    let exchange = relay
+        .http_client
+        .post(desktop_sign_in::TOKEN_ENDPOINT)
+        .header(reqwest::header::USER_AGENT, user_agent)
+        .json(&serde_json::json!({ "code": code, "code_verifier": secrets.verifier }))
+        .send()
+        .await
+        .map_err(|_| "network_failed".to_string())?;
+    let exchange_ok = exchange.status().is_success();
+    let token: DesktopTokenResponse = exchange.json().await.map_err(|_| "exchange_failed".to_string())?;
+    let ticket = match (exchange_ok, token.ticket, token.error) {
+        (true, Some(ticket), _) => ticket,
+        (_, _, Some(error)) => return Err(error),
+        _ => return Err("exchange_failed".to_string()),
+    };
+
+    sign_in
+        .with(|flows| flows.store_ticket(flag, fapi_host.to_string(), ticket, std::time::Instant::now()))?
+        .map_err(str::to_string)
+}
+
+/// Step two: redeem the pending ticket through the relay. Returns only the
+/// sign-in status, the new session id and the identifier.
+#[tauri::command]
+async fn finish_desktop_browser_sign_in(
+    webview: Webview,
+    app: AppHandle,
+    relay: tauri::State<'_, ClerkRelayState>,
+    sign_in: tauri::State<'_, BrowserSignInState>,
+) -> Result<desktop_sign_in::SignInOutcome, String> {
+    require_relay_window(&webview)?;
+    let (fapi_host, ticket) = sign_in
+        .with(|flows| flows.take_ticket(std::time::Instant::now()))?
+        .ok_or_else(|| "invalid_grant".to_string())?;
+    if !desktop_sign_in::is_ticket_host(&fapi_host) {
+        return Err("sign_in_refused".to_string());
+    }
+    let body = reqwest::Url::parse_with_params("http://x/", [("strategy", "ticket"), ("ticket", ticket.as_str())])
+        .map_err(|_| "exchange_failed".to_string())?
+        .query()
+        .unwrap_or_default()
+        .to_string();
+    let validated = clerk_relay::validate_request(ClerkFapiRequest {
+        host: fapi_host.clone(),
+        method: "POST".to_string(),
+        path: "/v1/client/sign_ins".to_string(),
+        content_type: Some("application/x-www-form-urlencoded".to_string()),
+        body: Some(body),
+    })?;
+
+    // Redeem on a fresh client (no token): the user's current session is
+    // never signed out, and a failure below leaves it untouched.
+    let (redeemed, new_token) = send_fapi_with_token(&relay, validated, None)
+        .await
+        .map_err(|_| "network_failed".to_string())?;
+    let outcome = desktop_sign_in::parse_sign_in_response(&redeemed.body).ok();
+    if !desktop_sign_in::adopt_redeemed_client(redeemed.status, outcome.as_ref(), new_token.as_deref()) {
+        return Err(if redeemed.status >= 400 { "sign_in_refused" } else { "exchange_failed" }.to_string());
+    }
+    let (Some(outcome), Some(new_token)) = (outcome, new_token) else {
+        return Err("exchange_failed".to_string());
+    };
+
+    let mut slot = relay.token.lock().await;
+    let stored = slot.get_or_insert_with(load_clerk_client_token);
+    let previous = clerk_relay::token_for_host(stored.as_ref(), &fapi_host).map(str::to_string);
+    store_clerk_client_token(
+        &app,
+        stored,
+        ClerkClientToken { host: fapi_host.clone(), token: new_token.trim().to_string() },
+    );
+    drop(slot);
+
+    // Best effort: end the replaced client and its sessions, as a sign-out
+    // would have. A failure only leaves that session to expire on its own.
+    if let Some(previous) = previous {
+        if let Ok(destroy) = clerk_relay::validate_request(ClerkFapiRequest {
+            host: fapi_host,
+            method: "POST".to_string(),
+            path: "/v1/client?_method=DELETE".to_string(),
+            content_type: None,
+            body: None,
+        }) {
+            let _ = send_fapi_with_token(&relay, destroy, Some(&previous)).await;
+        }
+    }
+    Ok(outcome)
+}
+
+#[tauri::command]
+fn cancel_desktop_browser_sign_in(webview: Webview, sign_in: tauri::State<'_, BrowserSignInState>) -> Result<(), String> {
+    require_relay_window(&webview)?;
+    sign_in.with(|flows| flows.cancel())
+}
+
+#[tauri::command]
+fn get_desktop_runtime_info(webview: Webview, state: tauri::State<'_, LocalApiState>) -> Result<DesktopRuntimeInfo, String> {
+    require_trusted_window(webview.label())?;
+    let port = state.live_port().ok();
+    Ok(DesktopRuntimeInfo {
+        os: env::consts::OS.to_string(),
+        arch: env::consts::ARCH.to_string(),
+        local_api_port: port,
+    })
+}
+
+#[tauri::command]
+fn get_local_api_port(webview: Webview, state: tauri::State<'_, LocalApiState>) -> Result<u16, String> {
+    require_trusted_window(webview.label())?;
+    state.live_port()
+}
+
+#[tauri::command]
+fn list_configured_secret_keys(
+    webview: Webview,
+    cache: tauri::State<'_, SecretsCache>,
+) -> Result<Vec<String>, String> {
+    require_secret_management_window(webview.label())?;
+    let secrets = cache
+        .secrets
+        .lock()
+        .map_err(|_| "Lock poisoned".to_string())?;
+    Ok(configured_renderer_secret_keys(&secrets))
+}
+
+fn update_renderer_secret_cache(
+    cache: &SecretsCache,
+    key: &str,
+    value: Option<&str>,
+) -> Result<VaultStorage, String> {
+    let mut secrets = cache
+        .secrets
+        .lock()
+        .map_err(|_| "Lock poisoned".to_string())?;
+    // Build proposed state, persist first, then commit to cache.
+    let mut proposed = secrets.clone();
+    match value {
+        Some(value) => {
+            proposed.insert(key.to_string(), value.to_string());
+        }
+        None => {
+            proposed.remove(key);
+        }
+    }
+    let storage = save_vault(&proposed)?;
+    *secrets = proposed;
+    Ok(storage)
+}
+
+fn log_session_keyring_save(webview: &Webview, storage: VaultStorage) {
+    if storage == VaultStorage::SessionKeyring {
+        eprintln!("[tauri] {SESSION_KEYRING_SAVE_WARNING}");
+        append_desktop_log(&webview.app_handle(), "WARN", SESSION_KEYRING_SAVE_WARNING);
+    }
+}
+
+async fn sync_renderer_secret_to_sidecar(
+    state: &LocalApiState,
+    key: &str,
+    value: Option<&str>,
+) {
+    let body = match serde_json::to_vec(&serde_json::json!({ "key": key, "value": value })) {
+        Ok(body) => body,
+        Err(error) => {
+            eprintln!("[tauri] failed to serialize local secret sync for {key}: {error}");
+            return;
+        }
+    };
+    let headers = HashMap::from([(String::from("Content-Type"), String::from("application/json"))]);
+    match send_local_api_request(state, "POST", "/api/local-env-update", &headers, Some(body)).await {
+        Ok(response) if (200..300).contains(&response.status) => {}
+        Ok(response) => eprintln!(
+            "[tauri] local secret sync for {key} returned HTTP {}",
+            response.status
+        ),
+        Err(error) => eprintln!("[tauri] local secret sync failed for {key}: {error}"),
+    }
+}
+
+#[tauri::command]
+async fn set_secret(
+    webview: Webview,
+    key: String,
+    value: String,
+    cache: tauri::State<'_, SecretsCache>,
+    state: tauri::State<'_, LocalApiState>,
+) -> Result<(), String> {
+    require_secret_management_window(webview.label())?;
+    if !is_renderer_managed_secret_key(&key) {
+        return Err(format!("Unsupported secret key: {key}"));
+    }
+    let value = (!value.trim().is_empty()).then(|| value.trim().to_string());
+    let storage = update_renderer_secret_cache(&cache, &key, value.as_deref())?;
+    log_session_keyring_save(&webview, storage);
+    sync_renderer_secret_to_sidecar(&state, &key, value.as_deref()).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_secret(
+    webview: Webview,
+    key: String,
+    cache: tauri::State<'_, SecretsCache>,
+    state: tauri::State<'_, LocalApiState>,
+) -> Result<(), String> {
+    require_secret_management_window(webview.label())?;
+    if !is_renderer_managed_secret_key(&key) {
+        return Err(format!("Unsupported secret key: {key}"));
+    }
+    let storage = update_renderer_secret_cache(&cache, &key, None)?;
+    log_session_keyring_save(&webview, storage);
+    sync_renderer_secret_to_sidecar(&state, &key, None).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn validate_secret_with_sidecar(
+    webview: Webview,
+    key: String,
+    value: String,
+    context: HashMap<String, String>,
+    state: tauri::State<'_, LocalApiState>,
+) -> Result<SecretValidationResponse, String> {
+    require_secret_management_window(webview.label())?;
+    if !is_renderer_managed_secret_key(&key) {
+        return Err(format!("Unsupported secret key: {key}"));
+    }
+    let body = serde_json::to_vec(&serde_json::json!({ "key": key, "value": value, "context": context }))
+        .map_err(|error| format!("Failed to serialize secret validation: {error}"))?;
+    let headers = HashMap::from([(String::from("Content-Type"), String::from("application/json"))]);
+    let response = send_local_api_request(&state, "POST", "/api/local-validate-secret", &headers, Some(body)).await?;
+    let payload = serde_json::from_slice(&response.body).unwrap_or_else(|_| {
+        serde_json::json!({
+            "valid": false,
+            "message": format!("Secret validation returned HTTP {} with an invalid response", response.status),
+        })
+    });
+    Ok(SecretValidationResponse {
+        status: response.status,
+        payload,
+    })
+}
+
+fn cache_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {e}"))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create app data directory {}: {e}", dir.display()))?;
+    Ok(dir.join("persistent-cache.json"))
+}
+
+#[tauri::command]
+fn read_cache_entry(webview: Webview, cache: tauri::State<'_, PersistentCache>, key: String) -> Result<Option<Value>, String> {
+    require_trusted_window(webview.label())?;
+    Ok(cache.get(&key))
+}
+
+const MAX_FLUSH_RETRIES: u32 = 5;
+
+fn schedule_debounced_flush(cache: &PersistentCache, app: &AppHandle) {
+    {
+        let mut gen = cache.generation.lock().unwrap_or_else(|e| e.into_inner());
+        *gen += 1;
+    }
+    let should_spawn = {
+        let mut sched = cache.flush_scheduled.lock().unwrap_or_else(|e| e.into_inner());
+        if *sched {
+            false
+        } else {
+            *sched = true;
+            true
+        }
+    };
+    if should_spawn {
+        let handle = app.app_handle().clone();
+        std::thread::spawn(move || {
+            let mut retries = 0u32;
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let Some(c) = handle.try_state::<PersistentCache>() else { break };
+                let Ok(path) = cache_file_path(&handle) else { break };
+                let gen_before = *c.generation.lock().unwrap_or_else(|e| e.into_inner());
+                match c.flush(&path) {
+                    Ok(_) => {
+                        retries = 0;
+                        let gen_after = *c.generation.lock().unwrap_or_else(|e| e.into_inner());
+                        if gen_after > gen_before {
+                            continue;
+                        }
+                        *c.flush_scheduled.lock().unwrap_or_else(|e| e.into_inner()) = false;
+                        break;
+                    }
+                    Err(e) => {
+                        retries += 1;
+                        eprintln!("[cache] flush error ({retries}/{MAX_FLUSH_RETRIES}): {e}");
+                        if retries >= MAX_FLUSH_RETRIES {
+                            eprintln!("[cache] giving up after {MAX_FLUSH_RETRIES} failures");
+                            *c.flush_scheduled.lock().unwrap_or_else(|e| e.into_inner()) = false;
+                            break;
+                        }
+                        continue;
+                    }
+                }
+            }
+        });
+    }
+}
+
+#[tauri::command]
+fn delete_cache_entry(webview: Webview, app: AppHandle, cache: tauri::State<'_, PersistentCache>, key: String) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    {
+        let mut data = cache.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.remove(&key);
+    }
+    {
+        let mut dirty = cache.dirty.lock().unwrap_or_else(|e| e.into_inner());
+        *dirty = true;
+    }
+    schedule_debounced_flush(&cache, &app);
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_cache_entries_by_prefix(webview: Webview, app: AppHandle, cache: tauri::State<'_, PersistentCache>, prefix: String) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    let suffix = prefix
+        .strip_prefix("breaker:")
+        .ok_or_else(|| "delete_cache_entries_by_prefix only accepts breaker: prefixes".to_string())?;
+    if suffix.is_empty() || suffix.chars().all(|ch| ch == ':') {
+        return Err("delete_cache_entries_by_prefix requires a specific breaker: prefix".to_string());
+    }
+    let removed_any = {
+        let mut data = cache.data.lock().unwrap_or_else(|e| e.into_inner());
+        let before = data.len();
+        data.retain(|key, _| !key.starts_with(&prefix));
+        data.len() != before
+    };
+    if removed_any {
+        {
+            let mut dirty = cache.dirty.lock().unwrap_or_else(|e| e.into_inner());
+            *dirty = true;
+        }
+        schedule_debounced_flush(&cache, &app);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn write_cache_entry(webview: Webview, app: AppHandle, cache: tauri::State<'_, PersistentCache>, key: String, value: String) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    validate_cache_write_sizes(&key, &value)?;
+    let parsed_value: Value = serde_json::from_str(&value)
+        .map_err(|e| format!("Invalid cache payload JSON: {e}"))?;
+    {
+        let mut data = cache.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.insert(key, parsed_value);
+    }
+    {
+        let mut dirty = cache.dirty.lock().unwrap_or_else(|e| e.into_inner());
+        *dirty = true;
+    }
+    schedule_debounced_flush(&cache, &app);
+    Ok(())
+}
+
+fn logs_dir_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| format!("Failed to resolve app log dir: {e}"))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create app log dir {}: {e}", dir.display()))?;
+    Ok(dir)
+}
+
+fn sidecar_log_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(logs_dir_path(app)?.join(LOCAL_API_LOG_FILE))
+}
+
+fn desktop_log_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(logs_dir_path(app)?.join(DESKTOP_LOG_FILE))
+}
+
+fn append_desktop_log(app: &AppHandle, level: &str, message: &str) {
+    let Ok(path) = desktop_log_path(app) else {
+        return;
+    };
+
+    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let _ = writeln!(file, "[{timestamp}][{level}] {message}");
+}
+
+fn open_in_shell(arg: &str) -> Result<(), String> {
+    // Linux keeps its own path: spawn xdg-open directly with LD_* scrubbed
+    // (library-injection hardening that a generic opener would drop).
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let mut cmd = Command::new("xdg-open");
+        cmd.arg(arg);
+        cmd.env_remove("LD_LIBRARY_PATH");
+        cmd.env_remove("LD_PRELOAD");
+        cmd.spawn()
+            .map(|_| ())
+            .map_err(|e| format!("Failed to open {}: {e}", arg))
+    }
+
+    // macOS + Windows: `opener` opens the target with the OS default handler
+    // via `/usr/bin/open` (macOS) and `ShellExecuteW` (Windows). It NEVER routes
+    // through `cmd.exe`, so a URL containing shell metacharacters (`&`, `|`, …)
+    // is passed as a single argument and cannot inject commands. This is the fix
+    // for GHSA-2x6r-qq54-mmhr: the old Windows branch ran `cmd /c start "" <url>`
+    // with the URL unquoted, so `https://x/?a=1&calc` executed `calc` on click.
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    {
+        opener::open(arg).map_err(|e| format!("Failed to open {}: {e}", arg))
+    }
+}
+
+fn open_path_in_shell(path: &Path) -> Result<(), String> {
+    open_in_shell(&path.to_string_lossy())
+}
+
+#[tauri::command]
+fn open_url(webview: Webview, url: String) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    let parsed = Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
+
+    match parsed.scheme() {
+        "https" => open_in_shell(parsed.as_str()),
+        "http" => match parsed.host_str() {
+            Some("localhost") | Some("127.0.0.1") => open_in_shell(parsed.as_str()),
+            _ => Err("Only https:// URLs are allowed (http:// only for localhost)".to_string()),
+        },
+        _ => Err("Only https:// URLs are allowed (http:// only for localhost)".to_string()),
+    }
+}
+
+fn open_logs_folder_impl(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = logs_dir_path(app)?;
+    open_path_in_shell(&dir)?;
+    Ok(dir)
+}
+
+fn open_sidecar_log_impl(app: &AppHandle) -> Result<PathBuf, String> {
+    let log_path = sidecar_log_path(app)?;
+    if !log_path.exists() {
+        File::create(&log_path)
+            .map_err(|e| format!("Failed to create sidecar log {}: {e}", log_path.display()))?;
+    }
+    open_path_in_shell(&log_path)?;
+    Ok(log_path)
+}
+
+#[tauri::command]
+fn open_logs_folder(webview: Webview, app: AppHandle) -> Result<String, String> {
+    require_trusted_window(webview.label())?;
+    open_logs_folder_impl(&app).map(|path| path.display().to_string())
+}
+
+#[tauri::command]
+fn open_sidecar_log_file(webview: Webview, app: AppHandle) -> Result<String, String> {
+    require_trusted_window(webview.label())?;
+    open_sidecar_log_impl(&app).map(|path| path.display().to_string())
+}
+
+#[tauri::command]
+async fn open_settings_window_command(webview: Webview, app: AppHandle) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    open_settings_window(&app)
+}
+
+#[tauri::command]
+fn close_settings_window(webview: Webview, app: AppHandle) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    if let Some(window) = app.get_webview_window("settings") {
+        window
+            .close()
+            .map_err(|e| format!("Failed to close settings window: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_live_channels_window_command(
+    webview: Webview,
+    app: AppHandle,
+    base_url: Option<String>,
+) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    if let Some(ref url) = base_url {
+        if !url.is_empty() {
+            let parsed = Url::parse(url).map_err(|_| "Invalid base URL".to_string())?;
+            // The live-channels webview holds trusted-window IPC privileges
+            // (persistent-cache read/write, port discovery, open_url), so its
+            // origin must be first-party — "any https" would hand those to a
+            // remote page if the main window is ever compromised.
+            let allowed = match parsed.scheme() {
+                "http" => matches!(parsed.host_str(), Some("localhost") | Some("127.0.0.1")),
+                "https" => match parsed.host_str() {
+                    Some(host) => {
+                        host == "worldmonitor.app" || host.ends_with(".worldmonitor.app")
+                    }
+                    None => false,
+                },
+                _ => false,
+            };
+            if !allowed {
+                return Err(
+                    "base_url must be worldmonitor.app (or localhost over http)".to_string(),
+                );
+            }
+        }
+    }
+    open_live_channels_window(&app, base_url)
+}
+
+#[tauri::command]
+fn close_live_channels_window(webview: Webview, app: AppHandle) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    if let Some(window) = app.get_webview_window("live-channels") {
+        window
+            .close()
+            .map_err(|e| format!("Failed to close live channels window: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Fetch JSON from Polymarket Gamma API using native TLS (bypasses Cloudflare JA3 blocking).
+/// Called from frontend when browser CORS and sidecar Node.js TLS both fail.
+#[tauri::command]
+async fn fetch_polymarket(webview: Webview, state: tauri::State<'_, LocalApiState>, path: String, params: String) -> Result<String, String> {
+    require_trusted_window(webview.label())?;
+    let allowed = ["events", "markets", "tags"];
+    let segment = path.trim_start_matches('/');
+    if !allowed.iter().any(|a| segment.starts_with(a)) {
+        return Err("Invalid Polymarket path".into());
+    }
+    let url = format!("https://gamma-api.polymarket.com/{}?{}", segment, params);
+    let resp = state.http_client
+        .get(&url)
+        .header("Accept", "application/json")
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("Polymarket fetch failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Polymarket HTTP {}", resp.status()));
+    }
+    resp.text()
+        .await
+        .map_err(|e| format!("Read body failed: {e}"))
+}
+
+fn open_settings_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.show();
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus settings window: {e}"))?;
+        return Ok(());
+    }
+
+    #[allow(unused_mut)]
+    let mut settings_builder = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
+        .title("World Monitor Settings")
+        .inner_size(980.0, 600.0)
+        .min_inner_size(820.0, 480.0)
+        .resizable(true)
+        .background_color(tauri::webview::Color(26, 28, 30, 255));
+    #[cfg(target_os = "macos")]
+    { settings_builder = settings_builder.title_bar_style(tauri::TitleBarStyle::Overlay); }
+    let _settings_window = settings_builder.build()
+        .map_err(|e| format!("Failed to create settings window: {e}"))?;
+
+    // On Windows/Linux, menus are per-window. Remove the inherited app menu
+    // from the settings window (macOS uses a shared app-wide menu bar instead).
+    #[cfg(not(target_os = "macos"))]
+    let _ = _settings_window.remove_menu();
+
+    Ok(())
+}
+
+fn open_live_channels_window(app: &AppHandle, base_url: Option<String>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("live-channels") {
+        let _ = window.show();
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus live channels window: {e}"))?;
+        return Ok(());
+    }
+
+    // In dev, use the same origin as the main window (e.g. http://localhost:3001) so we don't
+    // get "connection refused" when Vite runs on a different port than devUrl.
+    let url = match base_url {
+        Some(ref origin) if !origin.is_empty() => {
+            let path = origin.trim_end_matches('/');
+            let full_url = format!("{}/live-channels.html", path);
+            WebviewUrl::External(Url::parse(&full_url).map_err(|_| "Invalid base URL".to_string())?)
+        }
+        _ => WebviewUrl::App("live-channels.html".into()),
+    };
+
+    #[allow(unused_mut)]
+    let mut channels_builder = WebviewWindowBuilder::new(app, "live-channels", url)
+        .title("Channel management - World Monitor")
+        .inner_size(680.0, 760.0)
+        .min_inner_size(520.0, 600.0)
+        .resizable(true)
+        .background_color(tauri::webview::Color(26, 28, 30, 255));
+    #[cfg(target_os = "macos")]
+    { channels_builder = channels_builder.title_bar_style(tauri::TitleBarStyle::Overlay); }
+    let _live_channels_window = channels_builder.build()
+        .map_err(|e| format!("Failed to create live channels window: {e}"))?;
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = _live_channels_window.remove_menu();
+
+    Ok(())
+}
+
+fn open_youtube_login_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("youtube-login") {
+        let _ = window.show();
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus YouTube login window: {e}"))?;
+        return Ok(());
+    }
+
+    let url = WebviewUrl::External(
+        Url::parse("https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/")
+            .map_err(|e| format!("Invalid URL: {e}"))?
+    );
+
+    let _yt_window = WebviewWindowBuilder::new(app, "youtube-login", url)
+        .title("Sign in to YouTube")
+        .inner_size(500.0, 700.0)
+        .resizable(true)
+        .build()
+        .map_err(|e| format!("Failed to create YouTube login window: {e}"))?;
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = _yt_window.remove_menu();
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_youtube_login(webview: Webview, app: AppHandle) -> Result<(), String> {
+    require_trusted_window(webview.label())?;
+    open_youtube_login_window(&app)
+}
+
+fn build_app_menu(handle: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let settings_item = MenuItem::with_id(
+        handle,
+        MENU_FILE_SETTINGS_ID,
+        "Settings...",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+    let separator = PredefinedMenuItem::separator(handle)?;
+    let quit_item = PredefinedMenuItem::quit(handle, Some("Quit"))?;
+    let file_menu = Submenu::with_items(
+        handle,
+        "File",
+        true,
+        &[&settings_item, &separator, &quit_item],
+    )?;
+
+    // The About box is the only place a packaged build states its licence
+    // (#6977). Both fields are set because the platforms disagree about which
+    // one they render: muda ignores `license` on macOS and `credits` on
+    // Windows and Linux, so each has to carry the licence itself for the
+    // platform that shows it. `credits` also points at the notices file the
+    // build generates into resources/, which carries the verbatim MIT/BSD/
+    // Apache texts a binary distribution has to travel with.
+    let about_metadata = AboutMetadata {
+        name: Some("World Monitor".into()),
+        version: Some(env!("CARGO_PKG_VERSION").into()),
+        copyright: Some("\u{00a9} 2024-2026 Elie Habib".into()),
+        license: Some("AGPL-3.0-only".into()),
+        credits: Some(
+            "Licensed under AGPL-3.0-only.\nThird-party notices: resources/notices/THIRD-PARTY-NOTICES.md\nSource: https://github.com/koala73/worldmonitor"
+                .into(),
+        ),
+        website: Some("https://worldmonitor.app".into()),
+        website_label: Some("worldmonitor.app".into()),
+        ..Default::default()
+    };
+    let about_item =
+        PredefinedMenuItem::about(handle, Some("About World Monitor"), Some(about_metadata))?;
+    let github_item = MenuItem::with_id(
+        handle,
+        MENU_HELP_GITHUB_ID,
+        "GitHub Repository",
+        true,
+        None::<&str>,
+    )?;
+    let help_separator = PredefinedMenuItem::separator(handle)?;
+
+    #[cfg(feature = "devtools")]
+    let help_menu = {
+        let devtools_item = MenuItem::with_id(
+            handle,
+            MENU_HELP_DEVTOOLS_ID,
+            "Toggle Developer Tools",
+            true,
+            Some("CmdOrCtrl+Alt+I"),
+        )?;
+        Submenu::with_items(
+            handle,
+            "Help",
+            true,
+            &[&about_item, &help_separator, &github_item, &devtools_item],
+        )?
+    };
+
+    #[cfg(not(feature = "devtools"))]
+    let help_menu = Submenu::with_items(
+        handle,
+        "Help",
+        true,
+        &[&about_item, &help_separator, &github_item],
+    )?;
+
+    let edit_menu = {
+        let undo = PredefinedMenuItem::undo(handle, None)?;
+        let redo = PredefinedMenuItem::redo(handle, None)?;
+        let sep1 = PredefinedMenuItem::separator(handle)?;
+        let cut = PredefinedMenuItem::cut(handle, None)?;
+        let copy = PredefinedMenuItem::copy(handle, None)?;
+        let paste = PredefinedMenuItem::paste(handle, None)?;
+        let select_all = PredefinedMenuItem::select_all(handle, None)?;
+        Submenu::with_items(
+            handle,
+            "Edit",
+            true,
+            &[&undo, &redo, &sep1, &cut, &copy, &paste, &select_all],
+        )?
+    };
+
+    Menu::with_items(handle, &[&file_menu, &edit_menu, &help_menu])
+}
+
+fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    match event.id().as_ref() {
+        MENU_FILE_SETTINGS_ID => {
+            if let Err(err) = open_settings_window(app) {
+                append_desktop_log(app, "ERROR", &format!("settings menu failed: {err}"));
+                eprintln!("[tauri] settings menu failed: {err}");
+            }
+        }
+        MENU_HELP_GITHUB_ID => {
+            let _ = open_in_shell("https://github.com/koala73/worldmonitor");
+        }
+        #[cfg(feature = "devtools")]
+        MENU_HELP_DEVTOOLS_ID => {
+            if let Some(window) = app.get_webview_window("main") {
+                if window.is_devtools_open() {
+                    window.close_devtools();
+                } else {
+                    window.open_devtools();
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Strip Windows extended-length path prefixes that `canonicalize()` adds.
+/// Preserve UNC semantics: `\\?\UNC\server\share\...` must become
+/// `\\server\share\...` (not `UNC\server\share\...`).
+fn sanitize_path_for_node(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    if let Some(stripped_unc) = s.strip_prefix("\\\\?\\UNC\\") {
+        format!("\\\\{stripped_unc}")
+    } else if let Some(stripped) = s.strip_prefix("\\\\?\\") {
+        stripped.to_string()
+    } else {
+        s.into_owned()
+    }
+}
+
+fn build_time_sidecar_env_value(key: &str) -> Option<&'static str> {
+    match key {
+        "CONVEX_URL" => option_env!("CONVEX_URL"),
+        _ => None,
+    }
+    .filter(|value| !value.trim().is_empty())
+}
+
+fn sidecar_env_value(key: &str) -> Option<String> {
+    build_time_sidecar_env_value(key)
+        .map(ToString::to_string)
+        .or_else(|| std::env::var(key).ok().filter(|value| !value.trim().is_empty()))
+}
+
+#[cfg(test)]
+mod secret_vault_tests {
+    use super::{
+        is_secret_service_unavailable, read_vault_json, write_vault_json, VaultStorage,
+    };
+    use keyring::mock::MockCredential;
+    use keyring::{Entry, Error};
+
+    fn mock_entry() -> Entry {
+        Entry::new_with_credential(Box::new(MockCredential::default()))
+    }
+
+    fn mock_entry_with(secret: &str) -> Entry {
+        let entry = mock_entry();
+        entry.set_password(secret).expect("seed mock entry");
+        entry
+    }
+
+    /// Mock errors are returned once, by the next call on the entry.
+    fn fail_next_call(entry: &Entry, err: Error) {
+        entry
+            .get_credential()
+            .downcast_ref::<MockCredential>()
+            .expect("mock credential")
+            .set_error(err);
+    }
+
+    fn platform_failure(message: &str) -> Error {
+        Error::PlatformFailure(message.to_string().into())
+    }
+
+    fn service_unavailable() -> Error {
+        platform_failure("DBus error: The name is not activatable")
+    }
+
+    #[test]
+    fn classifies_missing_secret_service_as_unavailable() {
+        for message in [
+            // dbus-broker (Fedora, Arch) with no provider installed
+            "DBus error: The name is not activatable",
+            // dbus-daemon (Debian, Ubuntu) with no provider installed
+            "DBus error: The name org.freedesktop.secrets was not provided by any .service files",
+            "DBus error: The name org.freedesktop.secrets has no owner",
+            // dbus-secret-service's own Unavailable variant
+            "No DBus session or Secret Service provider found",
+            // no session bus at all (headless, some Wayland sessions)
+            "DBus error: Unable to autolaunch a dbus-daemon without a $DISPLAY for X11",
+            "DBus error: Failed to connect to socket /run/user/1000/bus: No such file or directory",
+        ] {
+            assert!(
+                is_secret_service_unavailable(&platform_failure(message)),
+                "should be unavailable: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn other_keyring_errors_are_not_unavailable() {
+        assert!(!is_secret_service_unavailable(&Error::NoEntry));
+        assert!(!is_secret_service_unavailable(&platform_failure(
+            "Platform secure storage failure: permission denied"
+        )));
+        assert!(!is_secret_service_unavailable(&Error::NoStorageAccess(
+            "Secret Service: object locked".to_string().into()
+        )));
+    }
+
+    #[test]
+    fn read_uses_platform_store_when_available() {
+        let primary = mock_entry_with("{\"A\":\"1\"}");
+        let read = read_vault_json(&primary, Some(&mock_entry()));
+        assert_eq!(read.json.as_deref(), Some("{\"A\":\"1\"}"));
+        assert_eq!(read.storage, VaultStorage::SecretStore);
+        assert!(read.warning.is_none());
+    }
+
+    #[test]
+    fn read_falls_back_to_session_keyring_when_secret_service_is_unavailable() {
+        let primary = mock_entry();
+        fail_next_call(&primary, service_unavailable());
+        let fallback = mock_entry_with("{\"B\":\"2\"}");
+        let read = read_vault_json(&primary, Some(&fallback));
+        assert_eq!(read.json.as_deref(), Some("{\"B\":\"2\"}"));
+        assert_eq!(read.storage, VaultStorage::SessionKeyring);
+        assert!(read.warning.as_deref().unwrap_or("").contains("Secret Service"));
+    }
+
+    #[test]
+    fn read_with_unavailable_secret_service_and_empty_session_keyring_is_empty() {
+        let primary = mock_entry();
+        fail_next_call(&primary, service_unavailable());
+        let read = read_vault_json(&primary, Some(&mock_entry()));
+        assert!(read.json.is_none());
+        assert_eq!(read.storage, VaultStorage::SessionKeyring);
+    }
+
+    #[test]
+    fn read_recovers_session_keyring_vault_when_platform_store_has_no_entry() {
+        // Keys saved while the Secret Service was down are moved into it once
+        // it comes back.
+        let primary = mock_entry();
+        let fallback = mock_entry_with("{\"B\":\"2\"}");
+        let read = read_vault_json(&primary, Some(&fallback));
+        assert_eq!(read.json.as_deref(), Some("{\"B\":\"2\"}"));
+        assert_eq!(read.storage, VaultStorage::SecretStore);
+        assert_eq!(primary.get_password().unwrap(), "{\"B\":\"2\"}");
+        assert!(matches!(fallback.get_password(), Err(Error::NoEntry)));
+    }
+
+    #[test]
+    fn read_prefers_newer_session_keyring_vault_over_stale_platform_vault() {
+        // The Secret Service dropped mid-session, a key was deleted (saved to
+        // the kernel keyring only), and the Secret Service is back on restart.
+        // The deleted key must not come back from the stale platform vault.
+        let primary = mock_entry_with("{\"A\":\"1\",\"B\":\"2\"}");
+        let fallback = mock_entry_with("{\"B\":\"2\"}");
+        let read = read_vault_json(&primary, Some(&fallback));
+        assert_eq!(read.json.as_deref(), Some("{\"B\":\"2\"}"));
+        assert_eq!(read.storage, VaultStorage::SecretStore);
+        assert_eq!(primary.get_password().unwrap(), "{\"B\":\"2\"}");
+        assert!(matches!(fallback.get_password(), Err(Error::NoEntry)));
+    }
+
+    #[test]
+    fn read_keeps_session_keyring_vault_when_promotion_fails() {
+        let primary = mock_entry_with("{\"A\":\"1\",\"B\":\"2\"}");
+        let fallback = mock_entry_with("{\"B\":\"2\"}");
+        // get succeeds, then the promoting set fails.
+        let read = {
+            let json = primary.get_password().unwrap();
+            assert_eq!(json, "{\"A\":\"1\",\"B\":\"2\"}");
+            fail_next_call(&primary, platform_failure("permission denied"));
+            super::reconcile_vault_json(Some(json), &primary, Some(&fallback))
+        };
+        assert_eq!(read.json.as_deref(), Some("{\"B\":\"2\"}"));
+        assert_eq!(fallback.get_password().unwrap(), "{\"B\":\"2\"}");
+        assert!(read.warning.is_some());
+    }
+
+    #[test]
+    fn read_warns_without_fallback_on_other_errors() {
+        let primary = mock_entry();
+        fail_next_call(
+            &primary,
+            Error::NoStorageAccess("Secret Service: object locked".to_string().into()),
+        );
+        let fallback = mock_entry_with("{\"B\":\"2\"}");
+        let read = read_vault_json(&primary, Some(&fallback));
+        assert!(read.json.is_none());
+        assert_eq!(read.storage, VaultStorage::SecretStore);
+        assert!(read.warning.as_deref().unwrap_or("").contains("object locked"));
+    }
+
+    #[test]
+    fn write_uses_platform_store_and_clears_session_keyring_copy() {
+        let primary = mock_entry();
+        let fallback = mock_entry_with("{\"old\":\"x\"}");
+        let storage = write_vault_json("{\"A\":\"1\"}", &primary, Some(&fallback)).unwrap();
+        assert_eq!(storage, VaultStorage::SecretStore);
+        assert_eq!(primary.get_password().unwrap(), "{\"A\":\"1\"}");
+        assert!(matches!(fallback.get_password(), Err(Error::NoEntry)));
+    }
+
+    #[test]
+    fn write_overwrites_session_keyring_copy_when_its_delete_fails() {
+        // A stale session copy would be promoted over the newer platform save
+        // on the next launch, so a failed delete must leave matching data.
+        let primary = mock_entry_with("{\"A\":\"1\",\"B\":\"2\"}");
+        let fallback = mock_entry_with("{\"A\":\"1\",\"B\":\"2\"}");
+        fail_next_call(&fallback, platform_failure("permission denied"));
+        let storage = write_vault_json("{\"B\":\"2\"}", &primary, Some(&fallback)).unwrap();
+        assert_eq!(storage, VaultStorage::SecretStore);
+        let read = read_vault_json(&primary, Some(&fallback));
+        assert_eq!(read.json.as_deref(), Some("{\"B\":\"2\"}"));
+        assert_eq!(primary.get_password().unwrap(), "{\"B\":\"2\"}");
+    }
+
+    #[test]
+    fn write_falls_back_to_session_keyring_when_secret_service_is_unavailable() {
+        let primary = mock_entry();
+        fail_next_call(&primary, service_unavailable());
+        let fallback = mock_entry();
+        let storage = write_vault_json("{\"A\":\"1\"}", &primary, Some(&fallback)).unwrap();
+        assert_eq!(storage, VaultStorage::SessionKeyring);
+        assert_eq!(fallback.get_password().unwrap(), "{\"A\":\"1\"}");
+        assert!(matches!(primary.get_password(), Err(Error::NoEntry)));
+    }
+
+    #[test]
+    fn write_fails_on_other_errors_without_touching_session_keyring() {
+        let primary = mock_entry();
+        fail_next_call(&primary, platform_failure("permission denied"));
+        let fallback = mock_entry();
+        let err = write_vault_json("{\"A\":\"1\"}", &primary, Some(&fallback)).unwrap_err();
+        assert!(err.contains("Failed to write vault"), "{err}");
+        assert!(matches!(fallback.get_password(), Err(Error::NoEntry)));
+    }
+
+    #[test]
+    fn write_fails_when_secret_service_is_unavailable_and_no_fallback_exists() {
+        let primary = mock_entry();
+        fail_next_call(&primary, service_unavailable());
+        assert!(write_vault_json("{\"A\":\"1\"}", &primary, None).is_err());
+    }
+
+    /// Exercises the real kernel keyring on Linux CI runners.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn session_keyring_entry_round_trips_on_linux() {
+        let account = format!("secrets-vault-test-{}", std::process::id());
+        let entry = super::session_keyring_entry(&account).expect("kernel keyring available");
+        entry.set_password("{\"A\":\"1\"}").expect("write session keyring");
+        assert_eq!(entry.get_password().unwrap(), "{\"A\":\"1\"}");
+        entry.delete_credential().expect("delete session keyring entry");
+    }
+
+    /// On a Linux box without a Secret Service provider (such as a CI runner),
+    /// the real keyring error must be classified as unavailable.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn real_secret_service_failure_is_classified_on_linux() {
+        let account = format!("secrets-vault-probe-{}", std::process::id());
+        let entry = Entry::new(super::KEYRING_SERVICE, &account).expect("entry");
+        match entry.set_password("probe") {
+            Ok(()) => {
+                // A Secret Service is running here; nothing to classify.
+                let _ = entry.delete_credential();
+            }
+            Err(err) => assert!(
+                is_secret_service_unavailable(&err),
+                "unclassified Secret Service error: {err}"
+            ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod sanitize_path_tests {
+    use super::{
+        build_time_sidecar_env_value, can_manage_renderer_secrets, configured_renderer_secret_keys,
+        is_renderer_managed_secret_key, local_api_proxy_path_is_allowed, sanitize_path_for_node,
+        read_port_file, watch_for_late_sidecar_port, LocalApiState, SidecarReadinessOutcome,
+        BUILD_TIME_SIDECAR_ENV_KEYS, DEFAULT_LOCAL_API_PORT, SUPPORTED_SECRET_KEYS,
+    };
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::process::{Child, Command};
+    use std::sync::{Arc, Mutex};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn delayed_sidecar_test_child() -> Child {
+        Command::new(std::env::current_exe().expect("resolve test executable"))
+            .args([
+                "--exact",
+                "sanitize_path_tests::sidecar_readiness_child_waits",
+                "--ignored",
+            ])
+            .spawn()
+            .expect("spawn test child")
+    }
+
+    fn unique_test_dir() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "worldmonitor-sidecar-readiness-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time after epoch")
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    #[ignore = "spawned as a long-lived child by the sidecar readiness test"]
+    fn sidecar_readiness_child_waits() {
+        std::thread::sleep(std::time::Duration::from_secs(30));
+    }
+
+    #[test]
+    fn strips_extended_drive_prefix() {
+        let raw = Path::new(r"\\?\C:\Program Files\nodejs\node.exe");
+        assert_eq!(
+            sanitize_path_for_node(raw),
+            r"C:\Program Files\nodejs\node.exe".to_string()
+        );
+    }
+
+    #[test]
+    fn strips_extended_unc_prefix_and_preserves_unc_root() {
+        let raw = Path::new(r"\\?\UNC\server\share\sidecar\local-api-server.mjs");
+        assert_eq!(
+            sanitize_path_for_node(raw),
+            r"\\server\share\sidecar\local-api-server.mjs".to_string()
+        );
+    }
+
+    #[test]
+    fn leaves_standard_paths_unchanged() {
+        let raw = Path::new(r"C:\Users\alice\sidecar\local-api-server.mjs");
+        assert_eq!(
+            sanitize_path_for_node(raw),
+            r"C:\Users\alice\sidecar\local-api-server.mjs".to_string()
+        );
+    }
+
+    #[test]
+    fn packaged_sidecar_env_only_carries_convex_url() {
+        assert_eq!(BUILD_TIME_SIDECAR_ENV_KEYS, ["CONVEX_URL"]);
+        assert!(!SUPPORTED_SECRET_KEYS.iter().any(|key| key.starts_with("WM_DESKTOP_")));
+    }
+
+    #[test]
+    fn supports_alpha_vantage_for_keychain_injection() {
+        assert!(SUPPORTED_SECRET_KEYS.contains(&"ALPHA_VANTAGE_API_KEY"));
+    }
+
+    #[test]
+    fn renderer_secret_commands_cover_every_supported_key() {
+        assert!(SUPPORTED_SECRET_KEYS.iter().all(|key| is_renderer_managed_secret_key(key)));
+        assert!(!is_renderer_managed_secret_key("GROQ_API_KEY"));
+    }
+
+    #[test]
+    fn only_main_and_settings_can_manage_renderer_secrets() {
+        assert!(can_manage_renderer_secrets("main"));
+        assert!(can_manage_renderer_secrets("settings"));
+        assert!(!can_manage_renderer_secrets("live-channels"));
+        assert!(!can_manage_renderer_secrets("youtube-login"));
+    }
+
+    #[test]
+    fn configured_secret_metadata_filters_unknown_keys() {
+        let secrets = HashMap::from([
+            ("OPENROUTER_API_KEY".to_string(), "secret-value".to_string()),
+            ("GROQ_API_KEY".to_string(), "retired-value".to_string()),
+        ]);
+        assert_eq!(configured_renderer_secret_keys(&secrets), vec!["OPENROUTER_API_KEY"]);
+    }
+
+    #[test]
+    fn ignores_unknown_build_time_sidecar_env_keys() {
+        assert_eq!(build_time_sidecar_env_value("NOT_A_SUPPORTED_SIDECAR_KEY"), None);
+    }
+
+    #[test]
+    fn local_api_proxy_allows_normal_api_routes_and_settings_diagnostics() {
+        assert!(local_api_proxy_path_is_allowed("/api/fred-data?series_id=CPI"));
+        assert!(local_api_proxy_path_is_allowed("/api/local-debug-toggle"));
+        assert!(local_api_proxy_path_is_allowed("/api/local-traffic-log"));
+    }
+
+    #[test]
+    fn local_api_proxy_rejects_secret_control_routes_and_non_api_paths() {
+        for path in [
+            "/api/local-env-update",
+            "/api/local-env-update-batch",
+            "/api/local-validate-secret",
+            "/api/../api/local-env-update",
+            "/api/%2e%2e/api/local-env-update",
+            "/api/local-unexpected",
+            "/settings",
+            "//api/fred-data",
+        ] {
+            assert!(!local_api_proxy_path_is_allowed(path), "{path} must be rejected");
+        }
+    }
+
+    #[test]
+    fn late_port_file_is_promoted_without_default_port_fallback() {
+        let test_dir = unique_test_dir();
+        fs::create_dir_all(&test_dir).expect("create test directory");
+        let port_file = test_dir.join("sidecar.port");
+        let child = delayed_sidecar_test_child();
+        let expected_pid = child.id();
+        let child = Arc::new(Mutex::new(Some(child)));
+        let port = Arc::new(Mutex::new(None));
+
+        // This models the initial readiness miss. The port stays absent, so no
+        // bearer request can be made to DEFAULT_LOCAL_API_PORT.
+        assert_eq!(read_port_file(&port_file, 10), None);
+        assert_eq!(*port.lock().expect("lock port"), None);
+
+        let delayed_port_file = port_file.clone();
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            fs::write(delayed_port_file, "47555\n").expect("write delayed port file");
+        });
+
+        let outcome = watch_for_late_sidecar_port(
+            port_file,
+            Arc::clone(&child),
+            Arc::clone(&port),
+            expected_pid,
+            2_000,
+        );
+        writer.join().expect("join delayed port writer");
+
+        assert_eq!(outcome, SidecarReadinessOutcome::Confirmed(47555));
+        assert_eq!(*port.lock().expect("lock port"), Some(47555));
+        assert_ne!(*port.lock().expect("lock port"), Some(DEFAULT_LOCAL_API_PORT));
+
+        if let Some(mut child) = child.lock().expect("lock child").take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        let _ = fs::remove_dir_all(test_dir);
+    }
+
+    fn state_with_sidecar(child: Option<Child>, port: Option<u16>) -> LocalApiState {
+        let state = LocalApiState::default();
+        *state.child.lock().expect("lock child") = child;
+        *state.port.lock().expect("lock port") = port;
+        state
+    }
+
+    #[test]
+    fn live_port_rejects_exited_sidecar_and_clears_recorded_port() {
+        let mut child = delayed_sidecar_test_child();
+        child.kill().expect("kill sidecar test child");
+        child.wait().expect("reap sidecar test child");
+        let state = state_with_sidecar(Some(child), Some(46123));
+
+        assert_eq!(
+            state.live_port(),
+            Err("Local API sidecar is not ready".to_string())
+        );
+        assert_eq!(*state.port.lock().expect("lock port"), None);
+    }
+
+    #[test]
+    fn live_port_rejects_missing_sidecar_and_clears_recorded_port() {
+        let state = state_with_sidecar(None, Some(46123));
+
+        assert_eq!(
+            state.live_port(),
+            Err("Local API sidecar is not ready".to_string())
+        );
+        assert_eq!(*state.port.lock().expect("lock port"), None);
+    }
+
+    #[test]
+    fn live_port_returns_recorded_port_while_sidecar_is_alive() {
+        let child = delayed_sidecar_test_child();
+        let state = state_with_sidecar(Some(child), Some(47555));
+
+        assert_eq!(state.live_port(), Ok(47555));
+        assert_eq!(*state.port.lock().expect("lock port"), Some(47555));
+
+        let mut slot = state.child.lock().expect("lock child");
+        if let Some(mut child) = slot.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+fn local_api_paths(app: &AppHandle) -> (PathBuf, PathBuf) {
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .unwrap_or_else(|_| PathBuf::from("."));
+
+    let sidecar_script = if cfg!(debug_assertions) {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sidecar/local-api-server.mjs")
+    } else {
+        resource_dir.join("sidecar/local-api-server.mjs")
+    };
+
+    let api_dir_root = if cfg!(debug_assertions) {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."))
+    } else {
+        let direct_api = resource_dir.join("api");
+        let lifted_root = resource_dir.join("_up_");
+        let lifted_api = lifted_root.join("api");
+        if direct_api.exists() {
+            resource_dir
+        } else if lifted_api.exists() {
+            lifted_root
+        } else {
+            resource_dir
+        }
+    };
+
+    (sidecar_script, api_dir_root)
+}
+
+fn resolve_node_binary(app: &AppHandle) -> Option<PathBuf> {
+    if let Ok(explicit) = env::var("LOCAL_API_NODE_BIN") {
+        let explicit_path = PathBuf::from(explicit);
+        if explicit_path.is_file() {
+            return Some(explicit_path);
+        }
+        append_desktop_log(
+            app,
+            "WARN",
+            &format!(
+                "LOCAL_API_NODE_BIN is set but not a valid file: {}",
+                explicit_path.display()
+            ),
+        );
+    }
+
+    if !cfg!(debug_assertions) {
+        let node_name = if cfg!(windows) { "node.exe" } else { "node" };
+        if let Ok(resource_dir) = app.path().resource_dir() {
+            let mut candidates = vec![resource_dir.join("sidecar").join("node").join(node_name)];
+            if cfg!(windows) {
+                // NSIS resource paths can flatten nested names in some upgrade scenarios.
+                // Keep this fallback so sidecar startup still succeeds if the runtime is
+                // materialized as sidecar\node.node.exe instead of sidecar\node\node.exe.
+                candidates.push(resource_dir.join("sidecar").join("node.node.exe"));
+            }
+            for bundled in candidates {
+                if bundled.is_file() {
+                    return Some(bundled);
+                }
+            }
+        }
+    }
+
+    let node_name = if cfg!(windows) { "node.exe" } else { "node" };
+    if let Some(path_var) = env::var_os("PATH") {
+        for dir in env::split_paths(&path_var) {
+            let candidate = dir.join(node_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    let common_locations = if cfg!(windows) {
+        vec![
+            PathBuf::from(r"C:\Program Files\nodejs\node.exe"),
+            PathBuf::from(r"C:\Program Files (x86)\nodejs\node.exe"),
+        ]
+    } else {
+        vec![
+            PathBuf::from("/opt/homebrew/bin/node"),
+            PathBuf::from("/usr/local/bin/node"),
+            PathBuf::from("/usr/bin/node"),
+            PathBuf::from("/opt/local/bin/node"),
+        ]
+    };
+
+    common_locations.into_iter().find(|path| path.is_file())
+}
+
+fn read_confirmed_port_file(path: &Path) -> Option<u16> {
+    fs::read_to_string(path)
+        .ok()?
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|port| *port > 0)
+}
+
+fn read_port_file(path: &Path, timeout_ms: u64) -> Option<u16> {
+    let start = std::time::Instant::now();
+    let interval = std::time::Duration::from_millis(100);
+    let timeout = std::time::Duration::from_millis(timeout_ms);
+    while start.elapsed() < timeout {
+        if let Some(port) = read_confirmed_port_file(path) {
+            return Some(port);
+        }
+        std::thread::sleep(interval);
+    }
+    None
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SidecarReadinessOutcome {
+    Confirmed(u16),
+    Exited,
+    Replaced,
+    TimedOut,
+}
+
+/// Promotes a port only while the child that created the port file is still
+/// alive. Holding the child lock until after the port assignment prevents a
+/// concurrent stop from leaving a stale port behind.
+fn promote_verified_sidecar_port(
+    child: &Arc<Mutex<Option<Child>>>,
+    port: &Arc<Mutex<Option<u16>>>,
+    expected_pid: u32,
+    confirmed_port: u16,
+) -> SidecarReadinessOutcome {
+    let mut child_slot = match child.lock() {
+        Ok(slot) => slot,
+        Err(_) => return SidecarReadinessOutcome::TimedOut,
+    };
+    let Some(active_child) = child_slot.as_mut() else {
+        return SidecarReadinessOutcome::Exited;
+    };
+    if active_child.id() != expected_pid {
+        return SidecarReadinessOutcome::Replaced;
+    }
+    match active_child.try_wait() {
+        Ok(None) => match port.lock() {
+            Ok(mut port_slot) => {
+                *port_slot = Some(confirmed_port);
+                SidecarReadinessOutcome::Confirmed(confirmed_port)
+            }
+            Err(_) => SidecarReadinessOutcome::TimedOut,
+        },
+        Ok(Some(_)) => {
+            *child_slot = None;
+            drop(child_slot);
+            if let Ok(mut port_slot) = port.lock() {
+                *port_slot = None;
+            }
+            SidecarReadinessOutcome::Exited
+        }
+        // Do not send the token to a port if we cannot verify the child state.
+        Err(_) => SidecarReadinessOutcome::TimedOut,
+    }
+}
+
+fn sidecar_child_outcome(
+    child: &Arc<Mutex<Option<Child>>>,
+    port: &Arc<Mutex<Option<u16>>>,
+    expected_pid: u32,
+) -> Option<SidecarReadinessOutcome> {
+    let mut child_slot = match child.lock() {
+        Ok(slot) => slot,
+        Err(_) => return Some(SidecarReadinessOutcome::TimedOut),
+    };
+    let Some(active_child) = child_slot.as_mut() else {
+        return Some(SidecarReadinessOutcome::Exited);
+    };
+    if active_child.id() != expected_pid {
+        return Some(SidecarReadinessOutcome::Replaced);
+    }
+    match active_child.try_wait() {
+        Ok(None) | Err(_) => None,
+        Ok(Some(_)) => {
+            *child_slot = None;
+            drop(child_slot);
+            if let Ok(mut port_slot) = port.lock() {
+                *port_slot = None;
+            }
+            Some(SidecarReadinessOutcome::Exited)
+        }
+    }
+}
+
+/// Waits for a late port-file write without ever selecting the configured
+/// default port. The watcher is bound to the launched child PID so an old
+/// watcher cannot promote a port after the sidecar has been stopped or replaced.
+fn watch_for_late_sidecar_port(
+    port_file: PathBuf,
+    child: Arc<Mutex<Option<Child>>>,
+    port: Arc<Mutex<Option<u16>>>,
+    expected_pid: u32,
+    timeout_ms: u64,
+) -> SidecarReadinessOutcome {
+    let start = std::time::Instant::now();
+    let interval = std::time::Duration::from_millis(100);
+    let timeout = std::time::Duration::from_millis(timeout_ms);
+
+    while start.elapsed() < timeout {
+        if let Some(outcome) = sidecar_child_outcome(&child, &port, expected_pid) {
+            return outcome;
+        }
+        if let Some(confirmed_port) = read_confirmed_port_file(&port_file) {
+            return promote_verified_sidecar_port(&child, &port, expected_pid, confirmed_port);
+        }
+        std::thread::sleep(interval);
+    }
+
+    sidecar_child_outcome(&child, &port, expected_pid)
+        .unwrap_or(SidecarReadinessOutcome::TimedOut)
+}
+
+fn start_late_sidecar_port_watcher(
+    app: AppHandle,
+    port_file: PathBuf,
+    child: Arc<Mutex<Option<Child>>>,
+    port: Arc<Mutex<Option<u16>>>,
+    expected_pid: u32,
+) {
+    std::thread::spawn(move || {
+        match watch_for_late_sidecar_port(
+            port_file,
+            child,
+            port,
+            expected_pid,
+            SIDECAR_PORT_RECOVERY_TIMEOUT_MS,
+        ) {
+            SidecarReadinessOutcome::Confirmed(confirmed_port) => append_desktop_log(
+                &app,
+                "INFO",
+                &format!("sidecar confirmed port={confirmed_port} after initial readiness timeout"),
+            ),
+            SidecarReadinessOutcome::Exited => append_desktop_log(
+                &app,
+                "WARN",
+                "sidecar exited before reporting a verified port; a later start can retry",
+            ),
+            SidecarReadinessOutcome::Replaced => (),
+            SidecarReadinessOutcome::TimedOut => append_desktop_log(
+                &app,
+                "WARN",
+                "sidecar did not report a verified port during bounded recovery; refusing to target the default port",
+            ),
+        }
+    });
+}
+
+fn start_local_api(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<LocalApiState>();
+    let mut slot = state
+        .child
+        .lock()
+        .map_err(|_| "Failed to lock local API state".to_string())?;
+    if let Some(child) = slot.as_mut() {
+        match child.try_wait() {
+            Ok(None) | Err(_) => return Ok(()),
+            Ok(Some(_)) => {
+                *slot = None;
+                if let Ok(mut port_slot) = state.port.lock() {
+                    *port_slot = None;
+                }
+            }
+        }
+    }
+
+    // Clear port state for fresh start
+    if let Ok(mut port_slot) = state.port.lock() {
+        *port_slot = None;
+    }
+
+    let (script, resource_root) = local_api_paths(app);
+    if !script.exists() {
+        return Err(format!(
+            "Local API sidecar script missing at {}",
+            script.display()
+        ));
+    }
+    let node_binary = resolve_node_binary(app).ok_or_else(|| {
+        "Node.js executable not found. Install Node 18+ or set LOCAL_API_NODE_BIN".to_string()
+    })?;
+
+    let port_file = logs_dir_path(app)?.join("sidecar.port");
+    let _ = fs::remove_file(&port_file);
+
+    let log_path = sidecar_log_path(app)?;
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|e| format!("Failed to open local API log {}: {e}", log_path.display()))?;
+    let log_file_err = log_file
+        .try_clone()
+        .map_err(|e| format!("Failed to clone local API log handle: {e}"))?;
+
+    append_desktop_log(
+        app,
+        "INFO",
+        &format!(
+            "starting local API sidecar script={} resource_root={} log={}",
+            script.display(),
+            resource_root.display(),
+            log_path.display()
+        ),
+    );
+    append_desktop_log(
+        app,
+        "INFO",
+        &format!("resolved node binary={}", node_binary.display()),
+    );
+    append_desktop_log(
+        app,
+        "INFO",
+        &format!(
+            "local API sidecar preferred port={} port_file={}",
+            DEFAULT_LOCAL_API_PORT,
+            port_file.display()
+        ),
+    );
+
+    // Generate a unique token for local API auth (prevents other local processes from accessing sidecar)
+    let mut token_slot = state
+        .token
+        .lock()
+        .map_err(|_| "Failed to lock token slot")?;
+    if token_slot.is_none() {
+        *token_slot = Some(generate_local_token());
+    }
+    let local_api_token = token_slot.clone().unwrap();
+    drop(token_slot);
+
+    let mut cmd = Command::new(&node_binary);
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW — hide the node.exe console
+                                    // Sanitize paths for Node.js on Windows: strip \\?\ UNC prefix and set
+                                    // explicit working directory to avoid bare drive-letter CWD issues that
+                                    // cause EISDIR errors in Node.js module resolution.
+    let script_for_node = sanitize_path_for_node(&script);
+    let resource_for_node = sanitize_path_for_node(&resource_root);
+    append_desktop_log(
+        app,
+        "INFO",
+        &format!("node args: script={script_for_node} resource_dir={resource_for_node}"),
+    );
+    let data_dir = logs_dir_path(app)
+        .map(|p| sanitize_path_for_node(&p))
+        .unwrap_or_else(|_| resource_for_node.clone());
+    cmd.arg(&script_for_node)
+        .env("LOCAL_API_PORT", DEFAULT_LOCAL_API_PORT.to_string())
+        .env("LOCAL_API_PORT_FILE", &port_file)
+        .env("LOCAL_API_RESOURCE_DIR", &resource_for_node)
+        .env("LOCAL_API_DATA_DIR", &data_dir)
+        .env("LOCAL_API_MODE", "tauri-sidecar")
+        .env("LOCAL_API_CLOUD_FALLBACK", "true")
+        .env("LOCAL_API_APP_VERSION", env!("CARGO_PKG_VERSION"))
+        .env("LOCAL_API_TOKEN", &local_api_token)
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(log_file_err));
+    if let Some(parent) = script.parent() {
+        cmd.current_dir(parent);
+    }
+
+    // Pass cached keychain secrets to sidecar as env vars (no keychain re-read)
+    let mut secret_count = 0u32;
+    let secrets_cache = app.state::<SecretsCache>();
+    if let Ok(secrets) = secrets_cache.secrets.lock() {
+        for (key, value) in secrets.iter() {
+            cmd.env(key, value);
+            secret_count += 1;
+        }
+    }
+    append_desktop_log(
+        app,
+        "INFO",
+        &format!("injected {secret_count} keychain secrets into sidecar env"),
+    );
+
+    // Inject packaged secrets (CI) with runtime env fallback (dev).
+    for key in BUILD_TIME_SIDECAR_ENV_KEYS {
+        if let Some(value) = sidecar_env_value(key) {
+            cmd.env(key, value);
+        }
+    }
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to launch local API: {e}"))?;
+    let child_pid = child.id();
+    append_desktop_log(
+        app,
+        "INFO",
+        &format!("local API sidecar started pid={}", child.id()),
+    );
+    *slot = Some(child);
+    drop(slot);
+
+    // Wait for sidecar to write confirmed port (up to 5s)
+    if let Some(confirmed_port) = read_port_file(&port_file, 5000) {
+        append_desktop_log(
+            app,
+            "INFO",
+            &format!("sidecar confirmed port={confirmed_port}"),
+        );
+        if let Ok(mut port_slot) = state.port.lock() {
+            *port_slot = Some(confirmed_port);
+        }
+    } else {
+        // Fail CLOSED. The default port is only a guess: the sidecar moves to
+        // an ephemeral port on EADDRINUSE, and an unrelated local process may
+        // be squatting 46123. Sending LOCAL_API_TOKEN bearer traffic to an
+        // unverified listener would hand the token to whoever owns the port.
+        // Commands surface "sidecar is not ready" until the sidecar actually
+        // reports its port via the port file.
+        append_desktop_log(
+            app,
+            "WARN",
+            "sidecar port file not found within timeout; refusing to target the default port unverified",
+        );
+        start_late_sidecar_port_watcher(
+            app.clone(),
+            port_file,
+            Arc::clone(&state.child),
+            Arc::clone(&state.port),
+            child_pid,
+        );
+    }
+
+    Ok(())
+}
+
+fn stop_local_api(app: &AppHandle) {
+    if let Ok(state) = app.try_state::<LocalApiState>().ok_or(()) {
+        if let Ok(mut slot) = state.child.lock() {
+            if let Some(mut child) = slot.take() {
+                let _ = child.kill();
+                append_desktop_log(app, "INFO", "local API sidecar stopped");
+            }
+        }
+        if let Ok(mut port_slot) = state.port.lock() {
+            *port_slot = None;
+        }
+        if let Ok(log_dir) = logs_dir_path(app) {
+            let _ = fs::remove_file(log_dir.join("sidecar.port"));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_appimage_gio_module_dir() -> Option<PathBuf> {
+    let appdir = env::var_os("APPDIR")?;
+    let appdir = PathBuf::from(appdir);
+
+    // Common layouts produced by AppImage/linuxdeploy on Debian and RPM families.
+    let preferred = [
+        "usr/lib/gio/modules",
+        "usr/lib64/gio/modules",
+        "usr/lib/x86_64-linux-gnu/gio/modules",
+        "usr/lib/aarch64-linux-gnu/gio/modules",
+        "usr/lib/arm-linux-gnueabihf/gio/modules",
+        "lib/gio/modules",
+        "lib64/gio/modules",
+    ];
+
+    for relative in preferred {
+        let candidate = appdir.join(relative);
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+    }
+
+    // Fallback: probe one level of arch-specific directories, e.g. usr/lib/<triplet>/gio/modules.
+    for lib_root in ["usr/lib", "usr/lib64", "lib", "lib64"] {
+        let root = appdir.join(lib_root);
+        if !root.is_dir() {
+            continue;
+        }
+        let entries = match fs::read_dir(&root) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let candidate = entry.path().join("gio/modules");
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+fn main() {
+    // Work around WebKitGTK rendering issues on Linux that can cause blank white
+    // screens. DMA-BUF renderer failures are common with NVIDIA drivers and on
+    // immutable distros (e.g. Bazzite/Fedora Atomic).  Setting the env var before
+    // WebKit initialises forces a software fallback path.  Only set when the user
+    // hasn't explicitly configured the variable.
+    #[cfg(target_os = "linux")]
+    {
+        if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            // SAFETY: called before any threads are spawned (Tauri hasn't started yet).
+            unsafe { env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+        }
+
+        // WebKitGTK promotes iframes, <video>, and canvas to GPU-textured
+        // compositing layers.  In VMs (Apple Virtualization.framework,
+        // QEMU/KVM, VMware, etc.) the virtio-gpu driver often only supports
+        // 2D or limited GL — GBM buffer allocation for compositing layers
+        // fails silently, rendering iframe/video content as black while the
+        // main page (software-tiled) works fine.
+        //
+        // Detect VM environments via /proc/cpuinfo "hypervisor" flag or
+        // sys_vendor strings and disable accelerated compositing + force
+        // software GL so all content renders through the CPU path.
+        let in_vm = std::fs::read_to_string("/proc/cpuinfo")
+            .map(|c| c.contains("hypervisor"))
+            .unwrap_or(false)
+            || std::fs::read_to_string("/sys/class/dmi/id/sys_vendor")
+                .map(|v| {
+                    let v = v.trim().to_lowercase();
+                    v.contains("qemu") || v.contains("vmware") || v.contains("virtualbox")
+                        || v.contains("apple") || v.contains("parallels") || v.contains("xen")
+                        || v.contains("microsoft") || v.contains("innotek")
+                })
+                .unwrap_or(false);
+
+        if in_vm {
+            if env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+                unsafe { env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1") };
+            }
+            if env::var_os("LIBGL_ALWAYS_SOFTWARE").is_none() {
+                unsafe { env::set_var("LIBGL_ALWAYS_SOFTWARE", "1") };
+            }
+            eprintln!("[tauri] VM detected; disabled WebKitGTK accelerated compositing for iframe/video compatibility");
+        }
+
+        // NVIDIA proprietary drivers often fail to create a surfaceless EGL
+        // display (EGL_BAD_ALLOC) in WebKitGTK's web process, especially on
+        // Wayland where explicit sync can also cause flickering/crashes.
+        // Detect NVIDIA by checking for /proc/driver/nvidia (created by
+        // nvidia.ko) and apply Wayland-specific workarounds.
+        let has_nvidia = std::path::Path::new("/proc/driver/nvidia").exists();
+        if has_nvidia {
+            if env::var_os("__NV_DISABLE_EXPLICIT_SYNC").is_none() {
+                unsafe { env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1") };
+            }
+            // Force X11 backend on NVIDIA + Wayland to avoid surfaceless EGL
+            // failures.  Users who prefer native Wayland can override with
+            // GDK_BACKEND=wayland.
+            if env::var_os("WAYLAND_DISPLAY").is_some() && env::var_os("GDK_BACKEND").is_none() {
+                unsafe { env::set_var("GDK_BACKEND", "x11") };
+                eprintln!(
+                    "[tauri] NVIDIA GPU + Wayland detected; forcing GDK_BACKEND=x11 to avoid EGL_BAD_ALLOC. \
+                     Set GDK_BACKEND=wayland to override."
+                );
+            }
+        }
+
+        // On Wayland-only compositors (e.g. niri, river, sway without XWayland),
+        // GTK3 may fail to initialise if it defaults to X11 backend first and no
+        // DISPLAY is set.  Explicitly prefer the Wayland backend when a Wayland
+        // display is available.  Falls back to X11 if Wayland init fails.
+        if env::var_os("WAYLAND_DISPLAY").is_some() && env::var_os("GDK_BACKEND").is_none() {
+            unsafe { env::set_var("GDK_BACKEND", "wayland,x11") };
+        }
+
+        // Work around GLib version mismatch when running as an AppImage on newer
+        // distros.  The AppImage bundles GLib from the CI build system (Ubuntu
+        // 24.04, GLib 2.80).  Host GIO modules (e.g. GVFS's libgvfsdbus.so) may
+        // link against newer GLib symbols absent in the bundled copy, producing:
+        //   "undefined symbol: g_task_set_static_name"
+        // Point GIO_MODULE_DIR at the AppImage's bundled modules to isolate from
+        // host libraries.  Also disable the WebKit bubblewrap sandbox which fails
+        // inside AppImage's FUSE mount (causes blank screen on many distros).
+        if env::var_os("APPIMAGE").is_some() && env::var_os("GIO_MODULE_DIR").is_none() {
+            if let Some(module_dir) = resolve_appimage_gio_module_dir() {
+                unsafe { env::set_var("GIO_MODULE_DIR", &module_dir) };
+            } else if env::var_os("GIO_USE_VFS").is_none() {
+                // Last-resort fallback: prefer local VFS backend if module path
+                // discovery fails, which reduces GVFS dependency surface.
+                unsafe { env::set_var("GIO_USE_VFS", "local") };
+                eprintln!(
+                    "[tauri] APPIMAGE detected but bundled gio/modules not found; using GIO_USE_VFS=local fallback"
+                );
+            }
+        }
+
+        // WebKit2GTK's bubblewrap sandbox can fail inside an AppImage FUSE
+        // mount, causing blank white screens (#411). Disabling it removes the
+        // renderer sandbox for AppImage users. The AppImage format is only a
+        // packaging container and isolates nothing, so this trades defence
+        // in depth for a window that opens.
+        if env::var_os("APPIMAGE").is_some() {
+            // WebKitGTK 2.39.3+ deprecated WEBKIT_FORCE_SANDBOX and now expects
+            // WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 instead.  Setting the
+            // old variable on newer WebKitGTK triggers a noisy deprecation
+            // warning in the system journal, so only set the new one.
+            if env::var_os("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS").is_none() {
+                unsafe { env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1") };
+            }
+            // Prevent GTK from loading host input-method modules that may
+            // link against incompatible library versions.
+            if env::var_os("GTK_IM_MODULE").is_none() {
+                unsafe { env::set_var("GTK_IM_MODULE", "gtk-im-context-simple") };
+            }
+
+            // The linuxdeploy GStreamer hook sets GST_PLUGIN_PATH_1_0 and
+            // GST_PLUGIN_SYSTEM_PATH_1_0 to only contain bundled plugins.
+            // CI installs the full GStreamer codec suite (base, good, bad,
+            // ugly, libav, gl) so bundleMediaFramework=true bundles everything.
+            //
+            // IMPORTANT: Do NOT append host plugin directories — mixing plugins
+            // compiled against a different GStreamer version causes ABI mismatches
+            // (undefined symbol errors like gst_util_floor_log2, mpg123_open_handle64)
+            // and leaves WebKit without usable codecs.  The AppImage must be fully
+            // self-contained for GStreamer.
+            //
+            // If the linuxdeploy hook didn't set the paths (shouldn't happen),
+            // explicitly block host plugin scanning to prevent ABI conflicts.
+            if env::var_os("GST_PLUGIN_SYSTEM_PATH_1_0").is_none() {
+                // Empty string prevents GStreamer from scanning /usr/lib/gstreamer-1.0
+                unsafe { env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "") };
+            }
+        }
+    }
+
+    tauri::Builder::default()
+        .menu(build_app_menu)
+        .on_menu_event(handle_menu_event)
+        .manage(LocalApiState::default())
+        .manage(SecretsCache::load_from_keychain())
+        .manage(ClerkRelayState::default())
+        .manage(BrowserSignInState::default())
+        .invoke_handler(tauri::generate_handler![
+            list_configured_secret_keys,
+            set_secret,
+            delete_secret,
+            validate_secret_with_sidecar,
+            proxy_local_api_request,
+            get_local_api_port,
+            get_desktop_runtime_info,
+            read_cache_entry,
+            write_cache_entry,
+            delete_cache_entry,
+            delete_cache_entries_by_prefix,
+            open_logs_folder,
+            open_sidecar_log_file,
+            open_settings_window_command,
+            close_settings_window,
+            open_live_channels_window_command,
+            close_live_channels_window,
+            open_url,
+            open_youtube_login,
+            fetch_polymarket,
+            clerk_fapi_request,
+            start_desktop_browser_sign_in,
+            finish_desktop_browser_sign_in,
+            cancel_desktop_browser_sign_in
+        ])
+        .setup(|app| {
+            if let Some(warning) = app.state::<SecretsCache>().load_warning.as_deref() {
+                append_desktop_log(&app.handle(), "WARN", warning);
+            }
+
+            // Load persistent cache into memory (avoids 14MB file I/O on every IPC call)
+            let cache_path = cache_file_path(&app.handle()).unwrap_or_default();
+            app.manage(PersistentCache::load(&cache_path));
+
+            if let Err(err) = start_local_api(&app.handle()) {
+                append_desktop_log(
+                    &app.handle(),
+                    "ERROR",
+                    &format!("local API sidecar failed to start: {err}"),
+                );
+                eprintln!("[tauri] local API sidecar failed to start: {err}");
+            }
+
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while running world-monitor tauri application")
+        .run(|app, event| {
+            match &event {
+                // macOS: hide window on close instead of quitting (standard behavior)
+                #[cfg(target_os = "macos")]
+                RunEvent::WindowEvent {
+                    label,
+                    event: WindowEvent::CloseRequested { api, .. },
+                    ..
+                } if label == "main" => {
+                    api.prevent_close();
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.hide();
+                    }
+                }
+                // macOS: reshow window when dock icon is clicked
+                #[cfg(target_os = "macos")]
+                RunEvent::Reopen { .. } => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
+                // Only macOS needs explicit re-raising to keep settings above the main window.
+                // On Windows, focusing the settings window here can trigger rapid focus churn
+                // between windows and present as a UI hang.
+                #[cfg(target_os = "macos")]
+                RunEvent::WindowEvent {
+                    label,
+                    event: WindowEvent::Focused(true),
+                    ..
+                } if label == "main" => {
+                    if let Some(sw) = app.get_webview_window("settings") {
+                        let _ = sw.show();
+                        let _ = sw.set_focus();
+                    }
+                }
+                RunEvent::ExitRequested { .. } | RunEvent::Exit => {
+                    // Flush in-memory cache to disk before quitting
+                    if let Ok(path) = cache_file_path(app) {
+                        if let Some(cache) = app.try_state::<PersistentCache>() {
+                            let _ = cache.flush(&path);
+                        }
+                    }
+                    stop_local_api(app);
+                }
+                _ => {}
+            }
+        });
+}

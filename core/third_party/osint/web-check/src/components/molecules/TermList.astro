@@ -1,0 +1,86 @@
+---
+import { checks } from '@/data/checks';
+import type { Term } from '@/data/glossary';
+
+interface Props {
+  terms: [string, Term][];
+  linkToGlossary?: boolean;
+}
+
+const { terms, linkToGlossary = false } = Astro.props;
+---
+
+<dl>
+  {terms.map(([id, term]) => (
+    <div id={linkToGlossary ? undefined : id}>
+      <dt>{linkToGlossary ? <a href={`/glossary#${id}`}>{term.title}</a> : term.title}</dt>
+      <dd>
+        {term.definition}
+        {!linkToGlossary && term.check && (
+          <a href={`/${term.check}`}>See the {checks[term.check].title} check</a>
+        )}
+      </dd>
+    </div>
+  ))}
+</dl>
+
+<style lang="scss">
+  @use '@styles/media-queries.scss' as *;
+
+  dl {
+    margin: 0;
+  }
+
+  div {
+    display: grid;
+    grid-template-columns: 16rem 1fr;
+    align-items: baseline;
+    gap: 0.25rem 2rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--primary-transparent);
+    scroll-margin-top: 2rem;
+
+    @include mobile-down {
+      grid-template-columns: 1fr;
+    }
+
+    &:target dt {
+      color: var(--primary-increased-contrast);
+    }
+  }
+
+  dt {
+    font-weight: 600;
+
+    a {
+      color: var(--text-color);
+      text-decoration: underline var(--primary);
+      text-underline-offset: 0.2em;
+
+      &:hover,
+      &:focus-visible {
+        color: var(--primary-increased-contrast);
+      }
+    }
+  }
+
+  dd {
+    margin: 0;
+    max-width: 75ch;
+    line-height: 1.5;
+    color: var(--text-color-secondary);
+
+    a {
+      display: block;
+      width: fit-content;
+      margin-top: 0.25rem;
+      font-size: 0.85rem;
+      color: var(--text-color-tertiary);
+
+      &:hover,
+      &:focus-visible {
+        color: var(--primary-increased-contrast);
+      }
+    }
+  }
+</style>

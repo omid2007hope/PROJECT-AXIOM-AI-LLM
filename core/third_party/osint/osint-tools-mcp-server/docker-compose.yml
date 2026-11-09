@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  osint-mcp:
+    build: .
+    image: osint-tools-mcp-server:latest
+    container_name: osint-tools-mcp
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./reports:/app/reports
+    stdin_open: true
+    tty: true
+    restart: unless-stopped

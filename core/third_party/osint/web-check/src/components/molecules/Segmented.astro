@@ -1,0 +1,115 @@
+---
+import Icon from '@components/molecules/Icon.svelte';
+
+interface Props {
+  label: string;
+  name: string;
+  options: { value: string; label: string; icon?: string; size?: number }[];
+  value?: string;
+  class?: string;
+}
+
+const { label, name, options, value, class: className } = Astro.props;
+---
+
+<div class:list={['segmented', className]} role="radiogroup" aria-label={label}>
+  {options.map((option) => (
+    <label title={option.label}>
+      <input
+        type="radio"
+        name={name}
+        value={option.value}
+        aria-label={option.label}
+        checked={option.value === value}
+      />
+      {option.icon && <Icon name={option.icon} size={option.size} />}
+    </label>
+  ))}
+</div>
+
+<style lang="scss">
+  .segmented {
+    --size: 2rem;
+    --pad: 0.25rem;
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    padding: var(--pad);
+    border: 1px solid var(--line);
+    border-radius: 2rem;
+    background: var(--background-raised);
+
+    // Thumb that glides under whichever option is checked
+    &::before {
+      content: '';
+      position: absolute;
+      inset-block: var(--pad);
+      left: var(--pad);
+      width: var(--size);
+      border-radius: inherit;
+      background: var(--primary-tint);
+      box-shadow: inset 0 0 0 1px var(--primary-line);
+      translate: calc(var(--index, 0) * 100%);
+      transition: translate 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @for $i from 2 through 5 {
+      &:has(label:nth-child(#{$i}) :checked) {
+        --index: #{$i - 1};
+      }
+    }
+
+    // Bigger targets for touch
+    @media (pointer: coarse) {
+      --size: 2.5rem;
+    }
+  }
+
+  label {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: var(--size);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease;
+
+    :global(svg) {
+      transition: scale 0.2s ease;
+    }
+
+    &:hover {
+      color: var(--text-color);
+      background: var(--hover);
+    }
+    &:active :global(svg) {
+      scale: 0.85;
+    }
+    &:has(:checked) {
+      color: var(--primary-increased-contrast);
+      background: none;
+    }
+  }
+
+  // The real radio stays focusable and clickable, it just has no look of its own
+  input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    border-radius: inherit;
+    appearance: none;
+    cursor: inherit;
+
+    &:focus {
+      outline: none;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+  }
+</style>

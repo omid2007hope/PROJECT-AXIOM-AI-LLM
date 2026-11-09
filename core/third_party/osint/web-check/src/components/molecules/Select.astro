@@ -1,0 +1,59 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+import Icon from '@components/molecules/Icon.svelte';
+
+interface Props extends HTMLAttributes<'select'> {
+  options: { value: string; label: string }[];
+}
+
+const { options, ...attrs } = Astro.props;
+---
+
+<span class="select">
+  <select {...attrs}>
+    {options.map(({ value, label }) => (
+      <option value={value}>{label}</option>
+    ))}
+  </select>
+  <Icon name="chevron" size={0.7} />
+</span>
+
+<style lang="scss">
+  .select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    color: var(--text-color-secondary);
+
+    // Our own arrow, so it looks the same in every browser
+    :global(svg) {
+      position: absolute;
+      right: 0.85rem;
+      pointer-events: none;
+    }
+  }
+
+  select {
+    min-width: 11rem;
+    padding: 0.5rem 2.25rem 0.5rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--background);
+    color: var(--text-color);
+    appearance: none;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+
+    &:hover {
+      border-color: var(--line-strong);
+    }
+    &:focus {
+      outline: none;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+  }
+</style>

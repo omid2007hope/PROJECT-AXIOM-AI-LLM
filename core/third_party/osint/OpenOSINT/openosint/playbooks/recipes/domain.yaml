@@ -1,0 +1,19 @@
+name: domain
+label: "Domain Investigation"
+target_type: domain
+steps:
+  - id: whois
+    tool: search_whois
+    section: "WHOIS Registration"
+  - id: dns
+    tool: search_dns
+    section: "DNS Records"
+  - id: dorks
+    tool: generate_dorks
+    section: "Google Dork URLs"
+  - id: subdomains
+    tool: search_domain
+    section: "Subdomain Enumeration"
+  - id: footprint
+    tool: search_footprint
+    section: "Search Engine Footprint"

@@ -1,0 +1,11 @@
+[*] Email scan: target@example.com
+
+[+] Spotify        email registered
+[+] WordPress      email registered
+[+] Gravatar       email registered
+[+] Office365      email registered
+[-] Twitter        not found
+[-] GitHub         not found
+[-] LinkedIn       not found
+
+[*] 4 services registered · 7 platforms checked

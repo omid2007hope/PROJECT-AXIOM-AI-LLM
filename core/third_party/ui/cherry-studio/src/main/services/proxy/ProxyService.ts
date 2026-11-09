@@ -1,0 +1,358 @@
+import type { ProxyConfig } from 'electron'
+import { app, session } from 'electron'
+import { getSystemProxy } from 'os-proxy-config'
+
+import { application } from '@application'
+import { loggerService } from '@logger'
+import { createLatestReconciler } from '@main/core/concurrency/latestReconciler'
+import { BaseService, type Disposable, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
+import type { ProxyMode, UnifiedPreferenceKeyType } from '@shared/data/preference/preferenceTypes'
+import { WEBVIEW_SECURITY_PARTITIONS } from '@shared/utils/webviewSecurity'
+
+import { NodeProxyController } from './NodeProxyController'
+import { normalizeProxyEndpoint } from './proxyRouting'
+
+const logger = loggerService.withContext('ProxyService')
+
+const PROXY_TEST_PARTITION = 'proxy-connection-test'
+export const PROXY_TEST_TARGET = 'https://www.gstatic.com/generate_204'
+const PROXY_TEST_TIMEOUT_MS = 10_000
+
+export type ProxyConnectionTestResult = {
+  target: string
+  route: 'proxy' | 'bypassed' | 'direct' | 'fallback'
+  success: boolean
+  error?: 'invalid_config' | 'authentication_required' | 'timeout' | 'unreachable' | 'http_error' | 'connection_failed'
+}
+
+function classifyProxyTestError(error: unknown): NonNullable<ProxyConnectionTestResult['error']> {
+  const message = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : ''
+  if (message.includes('proxy_auth') || message.includes('proxy authentication') || message.includes('407')) {
+    return 'authentication_required'
+  }
+  if (message.includes('abort') || message.includes('timeout')) return 'timeout'
+  if (
+    message.includes('econnrefused') ||
+    message.includes('enotfound') ||
+    message.includes('err_name_not_resolved') ||
+    message.includes('err_proxy_connection_failed') ||
+    message.includes('err_tunnel_connection_failed')
+  ) {
+    return 'unreachable'
+  }
+  return 'connection_failed'
+}
+
+/** Proxy preferences that drive the global proxy. Changing any of them re-applies it. */
+const PROXY_PREFERENCE_KEYS = [
+  'app.proxy.mode',
+  'app.proxy.url',
+  'app.proxy.bypass_rules'
+] as const satisfies readonly UnifiedPreferenceKeyType[]
+
+/** Identity of an applied proxy config, for latest-wins settle detection. */
+const proxyConfigKey = (c: Pick<ProxyConfig, 'mode' | 'proxyRules' | 'proxyBypassRules'>): string =>
+  `${c.mode}|${c.proxyRules ?? ''}|${c.proxyBypassRules ?? ''}`
+
+/**
+ * Loopback and link-local targets that must never travel through the configured proxy: a proxy
+ * is an egress route, and routing same-host services (local MCP servers, dev gateways) through
+ * it breaks them — with a user proxy set, WSL-facing `127.0.0.1` MCP endpoints were unreachable
+ * (#20920). Chromium enforces this scope implicitly (net/docs/proxy.md, "Implicit bypass
+ * rules"); restating it explicitly keeps the guarantee even where the implicit pass doesn't.
+ * The list covers the documented hostname forms (the Windows-only `loopback` and the legacy
+ * `localhost6` aliases included) and full-form CIDRs — `169.254/16` shorthand parses to a
+ * different range in ipaddr.js, which the Node stack uses. The IPv4-mapped entry restates
+ * net::IsIPv4MappedLoopback (`::ffff:127.0.0.0/104`) and is stored unbracketed because the
+ * string is shared with Chromium, whose bypass syntax has no brackets around IPv6 CIDRs; the
+ * Node matcher strips brackets from user-typed rules on its own. It also strips a trailing dot
+ * from URL hosts like net::IsLocalHostname does, so `localhost.` resolves to the same entries.
+ */
+const LOOPBACK_BYPASS_RULES = [
+  'localhost',
+  '*.localhost',
+  'localhost6',
+  'localhost6.localdomain6',
+  'loopback',
+  '127.0.0.0/8',
+  '0.0.0.0',
+  '[::1]',
+  '::ffff:127.0.0.0/104',
+  '169.254.0.0/16',
+  'fe80::/10'
+]
+
+/**
+ * Merge the loopback bypass rules into the user's `app.proxy.bypass_rules`, keeping their
+ * entries verbatim and deduping case-insensitively. A bare `*` already covers loopback, and
+ * `<-loopback>` is the explicit Chromium opt-in to proxy loopback — both are honored as-is.
+ */
+function withLoopbackBypass(bypassRules: string): string {
+  const entries = bypassRules
+    .split(/[,;]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+  if (entries.length === 0) return LOOPBACK_BYPASS_RULES.join(',')
+  if (entries.some((entry) => entry === '*' || entry.toLowerCase() === '<-loopback>')) return entries.join(',')
+  const seen = new Set(entries.map((entry) => entry.toLowerCase()))
+  for (const rule of LOOPBACK_BYPASS_RULES) {
+    if (!seen.has(rule)) {
+      seen.add(rule)
+      entries.push(rule)
+    }
+  }
+  return entries.join(',')
+}
+
+/**
+ * Map the user-facing proxy mode to an Electron {@link ProxyConfig}. `system` returns the bare
+ * `system` mode; the concrete system proxy URL is resolved from the OS later. A `custom` mode
+ * without a URL can't form a fixed-servers config, so it falls back to direct.
+ */
+export function resolveProxyConfig({
+  mode,
+  url,
+  bypassRules
+}: {
+  mode: ProxyMode
+  url: string
+  bypassRules: string
+}): ProxyConfig {
+  switch (mode) {
+    case 'none':
+      return { mode: 'direct' }
+    case 'custom':
+      return url
+        ? { mode: 'fixed_servers', proxyRules: url, proxyBypassRules: withLoopbackBypass(bypassRules) }
+        : { mode: 'direct' }
+    case 'system':
+    default:
+      return { mode: 'system' }
+  }
+}
+
+export interface ProxyAppliedSnapshot {
+  readonly mode: ProxyMode
+  readonly hasConfiguredUrl: boolean
+  /** `system` mode only: the OS proxy read failed and bare system mode was applied instead. */
+  readonly systemProxyReadFailed: boolean
+  /** The config in effect is the one the preferences ask for; when false `lastError` says why not. */
+  readonly converged: boolean
+  readonly lastError?: string
+}
+
+@Injectable('ProxyService')
+@ServicePhase(Phase.WhenReady)
+export class ProxyService extends BaseService {
+  private systemProxyInterval: Disposable | null = null
+  private appliedKey: string | null = null
+  private desiredKey: string | null = null
+  private systemProxyReadFailed = false
+  private nodeProxyController: NodeProxyController | null = null
+  private proxyTestQueue: Promise<void> = Promise.resolve()
+
+  // Latest-wins reconciler: rapid proxy-preference toggles (or system-proxy changes) collapse
+  // into a single re-read + re-apply — single-flight and level-triggered, so a change landing
+  // mid-apply re-converges instead of being dropped. See #16233.
+  private readonly proxyReconciler = createLatestReconciler<ProxyConfig>({
+    name: 'proxy',
+    getSnapshot: () => this.snapshotProxyConfig(),
+    isSettled: (config) => proxyConfigKey(config) === this.appliedKey,
+    apply: (config) => this.applyProxyConfig(config)
+  })
+
+  /**
+   * Key of the fully applied proxy config (null before or after an incomplete apply).
+   * Exposed so RegionService can invalidate its cached egress country the
+   * moment the proxy — and thus the egress IP — changes.
+   */
+  get appliedProxyKey(): string | null {
+    return this.appliedKey
+  }
+
+  /** Read-only view of intent vs. what is in effect, for diagnostics. */
+  async getAppliedSnapshot(): Promise<ProxyAppliedSnapshot> {
+    await this.proxyReconciler.flush()
+    const preferenceService = application.get('PreferenceService')
+    const converged = this.desiredKey === this.appliedKey
+    // `getLastError()` only clears on a successful apply, so it is meaningful solely while unconverged.
+    const error = converged ? null : this.proxyReconciler.getLastError()
+    return {
+      mode: preferenceService.get('app.proxy.mode'),
+      hasConfiguredUrl: preferenceService.get('app.proxy.url') !== '',
+      systemProxyReadFailed: this.systemProxyReadFailed,
+      converged,
+      ...(error != null && { lastError: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  async testConnection({
+    mode,
+    url,
+    bypassRules
+  }: {
+    mode: ProxyMode
+    url: string
+    bypassRules: string
+  }): Promise<ProxyConnectionTestResult> {
+    const run = this.proxyTestQueue.then(() => this.runConnectionTest({ mode, url, bypassRules }))
+    this.proxyTestQueue = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  private async runConnectionTest({
+    mode,
+    url,
+    bypassRules
+  }: {
+    mode: ProxyMode
+    url: string
+    bypassRules: string
+  }): Promise<ProxyConnectionTestResult> {
+    if (mode === 'custom') {
+      try {
+        if (!url.trim()) throw new Error('Missing proxy URL')
+        normalizeProxyEndpoint(url.trim())
+      } catch {
+        return { target: PROXY_TEST_TARGET, route: 'proxy', success: false, error: 'invalid_config' }
+      }
+    }
+
+    const config = resolveProxyConfig({ mode, url: url.trim(), bypassRules })
+    const testSession = session.fromPartition(PROXY_TEST_PARTITION, { cache: false })
+    let route: ProxyConnectionTestResult['route'] = mode === 'none' ? 'direct' : 'proxy'
+
+    try {
+      await testSession.setProxy(config)
+      await testSession.closeAllConnections()
+      const resolvedRoute = await testSession.resolveProxy(PROXY_TEST_TARGET)
+      const candidates = resolvedRoute
+        .split(';')
+        .map((candidate) => candidate.trim().toUpperCase())
+        .filter(Boolean)
+      if (candidates.includes('DIRECT') && candidates.some((candidate) => candidate !== 'DIRECT')) {
+        // PAC candidates do not identify the transport that fetch ultimately uses.
+        route = 'fallback'
+      } else if (candidates[0] === 'DIRECT') {
+        route = mode === 'custom' ? 'bypassed' : 'direct'
+      }
+
+      const response = await testSession.fetch(PROXY_TEST_TARGET, {
+        method: 'GET',
+        signal: AbortSignal.timeout(PROXY_TEST_TIMEOUT_MS)
+      })
+      if (response.status === 407) {
+        return { target: PROXY_TEST_TARGET, route, success: false, error: 'authentication_required' }
+      }
+      if (!response.ok) return { target: PROXY_TEST_TARGET, route, success: false, error: 'http_error' }
+      return { target: PROXY_TEST_TARGET, route, success: true }
+    } catch (error) {
+      return { target: PROXY_TEST_TARGET, route, success: false, error: classifyProxyTestError(error) }
+    }
+  }
+
+  /**
+   * Apply the proxy from user preferences on startup, then re-apply whenever the proxy
+   * preferences change. Without this the global proxy mechanism is never wired to settings —
+   * changing the proxy in the UI would have no effect on the network stack.
+   */
+  protected async onReady(): Promise<void> {
+    this.registerDisposable(
+      application
+        .get('PreferenceService')
+        .subscribeMultipleChanges([...PROXY_PREFERENCE_KEYS], () => this.proxyReconciler.request())
+    )
+    // Don't gate startup on the initial apply. The OS-proxy read (a `scutil` spawn in system
+    // mode) only feeds the Node-side controller, which no startup request hits; Electron sessions
+    // already follow the system proxy by Chromium default. Converge in the background instead.
+    this.proxyReconciler.request()
+    void this.proxyReconciler.flush().then(() => {
+      const error = this.proxyReconciler.getLastError()
+      if (error) {
+        logger.error('Initial proxy apply failed; traffic uses the default route until the next change', error)
+      }
+    })
+  }
+
+  /** Latest intent from preferences, resolving the concrete OS proxy for `system` mode. */
+  private async snapshotProxyConfig(): Promise<ProxyConfig> {
+    const preferenceService = application.get('PreferenceService')
+    const config = resolveProxyConfig({
+      mode: preferenceService.get('app.proxy.mode'),
+      url: preferenceService.get('app.proxy.url'),
+      bypassRules: preferenceService.get('app.proxy.bypass_rules')
+    })
+    this.systemProxyReadFailed = false
+    if (config.mode === 'system') {
+      // A failed OS read must not abort the apply — fall back to bare system mode so Electron
+      // still applies something instead of leaving the proxy unconfigured.
+      try {
+        const currentProxy = await getSystemProxy()
+        if (currentProxy) {
+          config.proxyRules = currentProxy.proxyUrl.toLowerCase()
+          config.proxyBypassRules = currentProxy.noProxy.join(',')
+        }
+      } catch (error) {
+        this.systemProxyReadFailed = true
+        logger.warn('Failed to read OS system proxy; applying bare system mode', error as Error)
+      }
+    }
+    this.desiredKey = proxyConfigKey(config)
+    return config
+  }
+
+  private async applyProxyConfig(config: ProxyConfig): Promise<void> {
+    logger.info(`apply proxy: ${config.mode} ${config.proxyRules ?? ''} ${config.proxyBypassRules ?? ''}`)
+    // In system mode, poll the OS proxy so external changes re-converge through the reconciler.
+    if (config.mode === 'system') this.ensureSystemProxyMonitor()
+    else this.clearSystemProxyMonitor()
+
+    this.appliedKey = null
+    await this.setGlobalProxy(config)
+    this.appliedKey = proxyConfigKey(config)
+  }
+
+  private ensureSystemProxyMonitor(): void {
+    if (this.systemProxyInterval) return
+    this.systemProxyInterval = this.registerInterval(() => this.proxyReconciler.request(), 1000 * 60)
+  }
+
+  private clearSystemProxyMonitor(): void {
+    if (this.systemProxyInterval) {
+      this.systemProxyInterval.dispose()
+      this.systemProxyInterval = null
+    }
+  }
+
+  private async setGlobalProxy(config: ProxyConfig): Promise<void> {
+    await this.getNodeProxyController().configure({
+      proxyRules: config.mode === 'direct' ? undefined : config.proxyRules,
+      // Verbatim: the Node matcher consumes `<-loopback>` with Chromium's later-rules-override
+      // ordering, so the session and Node stacks derive their loopback policy from this one
+      // rule string.
+      proxyBypassRules: config.proxyBypassRules
+    })
+    await this.setSessionsProxy(config)
+  }
+
+  private getNodeProxyController(): NodeProxyController {
+    this.nodeProxyController ??= new NodeProxyController(logger)
+    return this.nodeProxyController
+  }
+
+  private async setSessionsProxy(config: ProxyConfig): Promise<void> {
+    // `persist:miniapp:*` is deliberately absent: those partitions run a constant deny-all PAC
+    // (features/miniApp/runtime/network.ts) that a user proxy change must never overwrite.
+    const sessions = [
+      session.defaultSession,
+      ...Object.values(WEBVIEW_SECURITY_PARTITIONS).map((partition) => session.fromPartition(partition))
+    ]
+    // Drain every write even on failure so the next apply cannot race stale session writes.
+    const outcomes = await Promise.allSettled([...sessions.map((s) => s.setProxy(config)), app.setProxy(config)])
+    const failed = outcomes.find((outcome) => outcome.status === 'rejected')
+    if (failed) throw failed.reason
+  }
+}

@@ -1,0 +1,8 @@
+# Config for zizmor, the security audit of our GitHub Actions workflows (run in ci.yml)
+# Docs: https://docs.zizmor.sh
+
+rules:
+  unpinned-uses:
+    disable: true
+  artipacked:
+    disable: true

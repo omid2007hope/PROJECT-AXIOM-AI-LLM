@@ -1,0 +1,127 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import Footer from '@components/scafold/Footer.astro';
+import HomeBackground from '@components/homepage/HomeBackground';
+import ScanForm from '@components/form/ScanForm.astro';
+import SponsorCard from '@components/molecules/SponsorCard.astro';
+import Settings from '@components/settings/Settings.astro';
+import Logo from '@components/molecules/Logo.astro';
+import { normalizeAddress } from '../../client/utils/address-type-checker';
+import { isCategory } from '@/data/categories';
+import { checks, checkIds, isCheck } from '@/data/checks';
+
+export const prerender = false;
+
+const { searchParams } = new URL(Astro.request.url);
+
+// Forward ?url= links, and their optional ?tool=, to the matching results page
+const searchUrl = normalizeAddress(searchParams.get('url') || '');
+const searchTool = searchParams.get('tool') || '';
+const toolPath = isCategory(searchTool) || isCheck(searchTool) ? searchTool : 'check';
+const redirectPath = searchUrl && `/${toolPath}/${searchUrl}`;
+
+if (redirectPath) return Astro.redirect(redirectPath);
+---
+
+<PageLayout>
+  <Fragment slot="nav" />
+  <div slot="background" class="background">
+    <HomeBackground client:only="react" opacity={0.25} />
+  </div>
+  <div class="home">
+    <header>
+      <h1>
+        <Logo />
+        Web <em>Check</em>
+      </h1>
+      <Settings />
+    </header>
+    <ScanForm label="Enter a URL" showCategories />
+    <div>
+      <h2>Checks</h2>
+      <ul>
+        {checkIds.map((id) => (
+          <li>
+            <a href={`/${id}`}>{checks[id].title}</a>
+          </li>
+        ))}
+      </ul>
+    </div>
+    <SponsorCard />
+  </div>
+  <Footer slot="footer" miniView />
+</PageLayout>
+
+<style lang="scss">
+  .background {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 100vh;
+    overflow: hidden;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .home {
+    display: flex;
+    flex-direction: column;
+    gap: 4rem;
+
+    header {
+      display: flex;
+      flex-wrap: wrap-reverse;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 1rem;
+    }
+
+    h1 {
+      flex-grow: 1;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0;
+      font-size: clamp(2.25rem, 6vw, 3.5rem);
+      color: var(--primary);
+
+      :global(.logo) {
+        color: var(--text-color);
+      }
+
+      em {
+        color: var(--text-color);
+      }
+    }
+
+    h2 {
+      margin: 0 0 1rem;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--primary-increased-contrast);
+    }
+
+    ul {
+      columns: 11rem;
+      column-gap: 2rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      line-height: 1.8;
+
+      li {
+        break-inside: avoid;
+      }
+
+      a {
+        color: var(--text-color-secondary);
+        transition: color 0.25s ease;
+
+        &:hover,
+        &:focus-visible {
+          color: var(--primary-increased-contrast);
+        }
+      }
+    }
+  }
+</style>

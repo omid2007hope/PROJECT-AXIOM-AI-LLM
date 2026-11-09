@@ -1,0 +1,16 @@
+[*] Username scan: johndoe99
+
+[+] GitHub         https://github.com/johndoe99
+[+] GitLab         https://gitlab.com/johndoe99
+[+] Twitter/X      https://twitter.com/johndoe99
+[+] Reddit         https://reddit.com/user/johndoe99
+[+] HackerRank     https://hackerrank.com/johndoe99
+[+] Medium         https://medium.com/@johndoe99
+[+] YouTube        https://youtube.com/@johndoe99
+[+] TikTok         https://tiktok.com/@johndoe99
+[+] Telegram       https://t.me/johndoe99
+[+] Docker Hub     https://hub.docker.com/u/johndoe99
+[+] SoundCloud     https://soundcloud.com/johndoe99
+[+] Behance        https://behance.net/johndoe99
+
+[*] 12 platforms found in 4.2s

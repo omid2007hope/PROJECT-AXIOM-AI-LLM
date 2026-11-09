@@ -1,0 +1,147 @@
+// Package fofa logic
+package fofa
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	jsoniter "github.com/json-iterator/go"
+
+	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
+)
+
+type fofaResponse struct {
+	Error   bool     `json:"error"`
+	ErrMsg  string   `json:"errmsg"`
+	Size    int      `json:"size"`
+	Results []string `json:"results"`
+}
+
+// Source is the passive scraping agent
+type Source struct {
+	mu      sync.Mutex
+	stats   subscraping.Statistics
+	apiKeys []apiKey
+}
+
+type apiKey struct {
+	username string
+	secret   string
+}
+
+// Run function returns all subdomains found with the service
+func (s *Source) Run(ctx context.Context, domain string, session *subscraping.Session) <-chan subscraping.Result {
+	results := make(chan subscraping.Result)
+	s.mu.Lock()
+	apiKeys := s.apiKeys
+	s.mu.Unlock()
+
+	go func() {
+		var stats subscraping.Statistics
+		defer func(startTime time.Time) {
+			stats.TimeTaken = time.Since(startTime)
+			s.mu.Lock()
+			s.stats = stats
+			s.mu.Unlock()
+			close(results)
+		}(time.Now())
+
+		randomApiKey := subscraping.PickRandom(apiKeys, s.Name())
+		if randomApiKey.username == "" || randomApiKey.secret == "" {
+			stats.Skipped = true
+			return
+		}
+
+		// fofa api doc https://fofa.info/static_pages/api_help
+		qbase64 := base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "domain=\"%s\"", domain))
+		stats.Requests++
+		resp, err := session.SimpleGet(ctx, fmt.Sprintf("https://fofa.info/api/v1/search/all?full=true&fields=host&page=1&size=10000&email=%s&key=%s&qbase64=%s", randomApiKey.username, randomApiKey.secret, qbase64))
+		if err != nil && resp == nil {
+			results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+			stats.Errors++
+			session.DiscardHTTPResponse(resp)
+			return
+		}
+
+		var response fofaResponse
+		err = jsoniter.NewDecoder(resp.Body).Decode(&response)
+		if err != nil {
+			results <- subscraping.Result{Source: s.Name(), Type: subscraping.Error, Error: err}
+			stats.Errors++
+			session.DiscardHTTPResponse(resp)
+			return
+		}
+		session.DiscardHTTPResponse(resp)
+
+		if response.Error {
+			results <- subscraping.Result{
+				Source: s.Name(), Type: subscraping.Error, Error: fmt.Errorf("%s", response.ErrMsg),
+			}
+			stats.Errors++
+			return
+		}
+
+		if response.Size > 0 {
+			for _, subdomain := range response.Results {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				if strings.HasPrefix(strings.ToLower(subdomain), "http://") || strings.HasPrefix(strings.ToLower(subdomain), "https://") {
+					subdomain = subdomain[strings.Index(subdomain, "//")+2:]
+				}
+				re := regexp.MustCompile(`:\d+$`)
+				if re.MatchString(subdomain) {
+					subdomain = re.ReplaceAllString(subdomain, "")
+				}
+				results <- subscraping.Result{Source: s.Name(), Type: subscraping.Subdomain, Value: subdomain}
+				stats.Results++
+			}
+		}
+	}()
+
+	return results
+}
+
+// Name returns the name of the source
+func (s *Source) Name() string {
+	return "fofa"
+}
+
+func (s *Source) IsDefault() bool {
+	return true
+}
+
+func (s *Source) HasRecursiveSupport() bool {
+	return false
+}
+
+func (s *Source) KeyRequirement() subscraping.KeyRequirement {
+	return subscraping.RequiredKey
+}
+
+func (s *Source) NeedsKey() bool {
+	return s.KeyRequirement() == subscraping.RequiredKey
+}
+
+func (s *Source) AddApiKeys(keys []string) {
+	apiKeys := subscraping.CreateApiKeys(keys, func(k, v string) apiKey {
+		return apiKey{k, v}
+	})
+	s.mu.Lock()
+	s.apiKeys = apiKeys
+	s.mu.Unlock()
+}
+
+// Statistics returns a snapshot of the most recently completed run.
+func (s *Source) Statistics() subscraping.Statistics {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stats
+}

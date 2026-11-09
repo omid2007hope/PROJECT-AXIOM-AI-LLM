@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pastebin OSINT: finding leaked data in pastes</title>
+<meta name="description" content="Paste sites collect breach dumps and leaked configs within hours. Search psbdmp, recognise useful pastes, and correlate them with other findings.">
+<link rel="canonical" href="https://openosint.tech/blog/pastebin-osint.html">
+<meta name="theme-color" content="#16181b">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/assets/fonts/HankenGrotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+<meta property="og:site_name" content="OpenOSINT">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Pastebin OSINT: finding leaked data in pastes">
+<meta property="og:description" content="Paste sites collect breach dumps and leaked configs within hours. Search psbdmp, recognise useful pastes, and correlate them with other findings.">
+<meta property="og:url" content="https://openosint.tech/blog/pastebin-osint.html">
+<meta property="og:image" content="https://openosint.tech/assets/social-card.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="OpenOSINT: the OSINT toolkit for AI agents. Agent Skill, MCP server and CLI.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pastebin OSINT: finding leaked data in pastes">
+<meta name="twitter:description" content="Paste sites collect breach dumps and leaked configs within hours. Search psbdmp, recognise useful pastes, and correlate them with other findings.">
+<meta name="twitter:image" content="https://openosint.tech/assets/social-card.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Pastebin OSINT: Why Leaked Data Always Ends Up There First",
+  "description": "Paste sites collect breach dumps and leaked configs within hours. Search psbdmp, recognise useful pastes, and correlate them with other findings.",
+  "author": {
+    "@type": "Organization",
+    "name": "OpenOSINT"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "OpenOSINT",
+    "url": "https://openosint.tech/"
+  },
+  "datePublished": "2026-05-24",
+  "dateModified": "2026-05-24",
+  "mainEntityOfPage": "https://openosint.tech/blog/pastebin-osint.html",
+  "image": "https://openosint.tech/assets/social-card.png"
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="logo" href="/"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3"/><path d="M11 6v10M6 11h10" stroke="currentColor" stroke-width="1.5"/></svg>OpenOSINT</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/docs/">Docs</a>
+      <a href="/tools/">Tools</a>
+      <a href="/blog/" aria-current="page">Blog</a>
+      <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+    </nav>
+    <div class="bar-right">
+      <a class="btn btn-small" href="https://app.openosint.tech/?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=nav">Hosted products</a>
+      <details class="menu">
+        <summary>Menu</summary>
+        <div class="menu-panel">
+          <a href="/docs/">Docs</a>
+          <a href="/tools/">Tools</a>
+          <a href="/blog/">Blog</a>
+          <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap page">
+  <article class="prose">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/blog/">&larr; Blog</a></nav>
+    <h1>Pastebin OSINT: Why Leaked Data Always Ends Up There First</h1>
+    <p class="meta"><time datetime="2026-05-24">2026-05-24</time> &middot; 7 min read</p>
+    <h2>Why paste sites accumulate leaked data</h2>
+<div class="indent">
+<p>Paste sites are the path of least resistance for data exfiltration and sharing. They require no account creation, no email verification, offer optional expiry timers, and the resulting URL is immediately shareable. When a threat actor extracts a credential list, configuration file, or database dump, uploading it to Pastebin or a mirror service is typically the first step — before selling it on forums, before distributing through encrypted channels, before using it operationally.</p>
+
+<p>OSINT researchers who monitor paste sites therefore see leaked data earlier than most commercial threat intelligence services. The gap between paste creation and ingestion into major breach databases can range from hours to weeks. That window is where paste OSINT delivers unique value.</p>
+
+<p>The major paste surfaces worth knowing: <strong>Pastebin.com</strong> remains the highest-volume platform and is partially indexed by Google. <strong>ghostbin.com</strong> and <strong>privatebin.net</strong> offer encrypted pastes and self-hosting options. <strong>hastebin</strong> is common in developer workflows and occasionally leaks internal tooling. <strong>rentry.co</strong> and <strong>dpaste.com</strong> see use for code dumps. <strong>psbdmp.ws</strong> is a third-party aggregator that bulk-indexes Pastebin content and exposes it through a search API, making it the primary entry point for automated paste OSINT.</p>
+
+<p>Beyond the mainstream: Tor-accessible paste services exist specifically to evade takedown. Ahmia.fi indexes a subset of these. Intelligence X (intelx.io) ingests from dozens of sources including Telegram channels and dark web boards where paste links circulate after initial posting. These are more comprehensive but require paid API access.</p>
+</div>
+
+<h2>Searching psbdmp and its limitations</h2>
+<div class="indent">
+<p>psbdmp.ws exposes a straightforward REST API. To search for a string:</p>
+
+<pre>curl "https://psbdmp.ws/api/search/v3/target@example.com" | jq .</pre>
+
+<p>The response is a JSON object containing paste IDs, approximate timestamps, and content snippets that include the search term. To retrieve full paste content, fetch it from Pastebin directly using the paste ID:</p>
+
+<pre>curl "https://pastebin.com/raw/&lt;paste_id&gt;"</pre>
+
+<p>Rate limiting applies. psbdmp enforces request caps on the free tier. For sustained monitoring you need either the psbdmp API key tier or a queuing system that spaces requests appropriately.</p>
+
+<p>The key limitations to internalize: psbdmp captures public pastes only, and only those it indexed before deletion or expiry. Pastebin allows paste creators to set pastes as unlisted or private — these never appear in psbdmp. Short-lived pastes (set to expire in 10 minutes) are frequently missed entirely. And psbdmp's search is exact keyword matching — no fuzzy matching, no regex, no phonetic similarity. A credential list where the email is stored as <code>target [at] example [dot] com</code> will not match a search for <code>target@example.com</code>.</p>
+
+<p>For high-stakes investigations, do not rely solely on psbdmp. Cross-reference with Intelligence X, run domain-based searches (search for the domain without the local part), and check GitHub Gists separately — gist.github.com is a common paste alternative that psbdmp does not index.</p>
+</div>
+
+<h2>What to look for in a paste</h2>
+<div class="indent">
+<p>Not every paste match is useful. A single hit of your search term in a paste doesn't necessarily mean the paste is an exposure event. Context determines value.</p>
+
+<p>Structural patterns that indicate a paste contains actionable intelligence:</p>
+
+<ul>
+<li><strong>Credential list format</strong>: Lines structured as <code>email:password</code>, <code>user:hash</code>, or <code>login:token</code>. Thousands of lines suggest a database extract. Dozens of lines may indicate a targeted credential harvest.</li>
+<li><strong>Configuration file patterns</strong>: Lines matching <code>DB_PASSWORD=</code>, <code>API_KEY=</code>, <code>SECRET_KEY=</code>, <code>AWS_SECRET_ACCESS_KEY=</code>. These indicate a developer accidentally pasted a .env file or a CI/CD secret was leaked in a build log.</li>
+<li><strong>Source code with hardcoded secrets</strong>: Happens when developers paste code for help or debugging. Tokens embedded in strings, connection strings with credentials inline.</li>
+<li><strong>Dump headers</strong>: Database dumps often begin with comments identifying the database name, export date, and sometimes the MySQL/Postgres version. These help establish provenance and breach timeline.</li>
+</ul>
+
+<p>Paste age matters in both directions. An old paste referencing your target confirms historical exposure even if the credentials are rotated — it tells you the email address was involved in a breach not yet in known databases. A fresh paste is potentially exploitable right now, which shifts the response priority entirely.</p>
+
+<p>A paste that shows your target's email adjacent to a password string — even partial, hashed, or encoded — is evidence of breach exposure beyond what HIBP reports. HIBP depends on breach operators submitting data. Many smaller breaches, especially from smaller services, never make it into HIBP's dataset at all. Paste monitoring catches some of these.</p>
+</div>
+
+<h2>Correlating paste finds with other OSINT data</h2>
+<div class="indent">
+<p>A paste hit is a pivot point, not a conclusion. The value of finding a target in a paste is what it unlocks in subsequent investigation steps, not what it proves on its own.</p>
+
+<p>Correlation paths from a paste finding:</p>
+
+<ul>
+<li><strong>Email found in paste</strong> → run <code>search_breach</code> to cross-reference known breach databases → run <code>search_email</code> (holehe) to enumerate active platform accounts registered under that email.</li>
+<li><strong>Username found in paste</strong> → run <code>search_username</code> (sherlock) to find the same handle across 400+ platforms. Usernames in pastes are often real handles, not throwaway IDs.</li>
+<li><strong>IP address found in paste</strong> → check <code>search_ip</code> for geolocation and ASN context → check <code>search_abuseipdb</code> for reputation and reported abuse incidents. IPs appear in paste context as server logs, SSH connection lists, or admin panel access logs.</li>
+<li><strong>Domain or subdomain found in paste</strong> → run <code>search_whois</code> for registration details → run <code>search_domain</code> for subdomain enumeration. Domains appear in pastes as infrastructure identifiers, mail server configs, or database connection strings.</li>
+<li><strong>Infrastructure credentials found</strong> (AWS keys, database passwords, API tokens) → do not probe the systems. Alert the affected organization through responsible disclosure. Using leaked credentials is illegal in most jurisdictions regardless of investigative intent.</li>
+</ul>
+
+<p><a href="/blog/what-is-osint.html">OpenOSINT's</a> AI agent handles this correlation automatically. Pass a paste URL or the email/username found in a paste as the investigation target, and the agentic loop will issue follow-up tool calls based on what each tool returns. The analyst states the initial finding once and receives a consolidated multi-source report.</p>
+
+<pre># Example: OpenOSINT paste-triggered investigation
+$ openosint
+&gt; I found target@example.com in a paste at pastebin.com/abc123. Investigate.
+
+[search_breach] Checking breach databases...
+[search_email] Enumerating accounts...
+[search_paste] Cross-checking paste databases...
+[search_whois] Checking example.com registration...
+</pre>
+</div>
+
+<h2>Temporal analysis and continuous monitoring</h2>
+<div class="indent">
+<p>One-time paste searches are useful for point-in-time investigations, but paste monitoring is most valuable as a continuous process. The window between a paste being created and being acted on by threat actors is typically hours to days — sometimes less. Defenders who monitor paste sources can detect exposure within that window and respond: rotate credentials, revoke API tokens, notify affected users, and initiate incident response before the damage compounds.</p>
+
+<p>psbdmp includes timestamps for each indexed paste. That timestamp is when psbdmp's crawler captured the paste, not necessarily when it was originally posted to Pastebin. Pastebin's own API (for paying API subscribers) provides the actual creation time. The delta between these two timestamps tells you something about crawler latency and therefore how much time elapsed before the paste entered the searchable index.</p>
+
+<p>For defensive monitoring setups: maintain keyword lists of your organization's domains, executive names, internal service names, and IP ranges. Run automated psbdmp queries on a schedule (hourly or every few hours for high-priority targets, daily for lower-priority). Alert on new hits. Feed confirmed hits into your <a href="/blog/breach-check-open-source.html">breach tracking workflow</a> for documentation and response.</p>
+
+<p>For investigators building timeline reconstructions: paste timestamps combined with forum post timestamps and breach sale listings can establish a reasonably precise timeline of when data was exfiltrated, when it was shared, and when it first appeared in criminal markets. This is useful both for legal proceedings and for victim notification — knowing how long credentials have been exposed informs how urgently account holders need to act.</p>
+
+<p>OpenOSINT's <code>search_paste</code> tool wraps psbdmp search and returns structured results that feed directly into the AI agent's correlation loop. Combine it with <a href="/blog/email-osint-guide.html">email OSINT</a> for the most complete exposure picture from a single starting point.</p>
+</div>
+
+<h2>See also</h2>
+<div class="indent">
+<ul>
+<li><a href="/blog/email-osint-guide.html">Email OSINT Guide</a> &mdash; Techniques for investigating email addresses including account enumeration and breach correlation</li>
+<li><a href="/blog/breach-check-open-source.html">Breach Check with Open Source Tools</a> &mdash; How to query HIBP and other breach databases from the command line</li>
+<li><a href="/blog/what-is-osint.html">What Is OSINT?</a> &mdash; Foundational overview of open source intelligence methods and tooling</li>
+</ul>
+</div>
+
+
+<aside class="oo-cta">
+  <p>Want this watched for you? <a href="https://app.openosint.tech/monitor?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=blog">OpenOSINT Monitor</a> checks your domain&rsquo;s email authentication, TLS, security headers and lookalike domains, and emails you when something changes.</p>
+</aside>
+
+  </article>
+</div>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <ul class="footer-links">
+      <li><a href="/blog/">Blog</a></li>
+      <li><a href="/tools/">Tools</a></li>
+      <li><a href="/commercial/">Commercial</a></li>
+      <li><a href="/sponsors.html">Sponsors</a></li>
+      <li><a href="/terms/">Terms</a></li>
+      <li><a href="/privacy/">Privacy</a></li>
+      <li><a href="/acceptable-use/">Acceptable Use</a></li>
+      <li><a href="/subprocessors/">Subprocessors</a></li>
+      <li><a href="mailto:commercial@openosint.tech">Contact</a></li>
+    </ul>
+    <span>&copy; 2026 Tommaso Bertocchi, Trieste, Italy</span>
+  </div>
+</footer>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  if (!navigator.clipboard) return;
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "copy"; b.textContent = "Copy"; b.setAttribute("aria-label", "Copy code");
+  b.addEventListener("click", function () {
+    var code = pre.querySelector("code") || pre;
+    navigator.clipboard.writeText(code.innerText).then(function () {
+      b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+    });
+  });
+  pre.appendChild(b);
+});
+</script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "8c1e6e8590b649a5803fbbd3356aa7d2"}'></script>
+</body>
+</html>

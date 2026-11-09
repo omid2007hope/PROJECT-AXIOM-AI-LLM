@@ -1,0 +1,92 @@
+export const CHROME_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+export function clampInt(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(value as number)));
+}
+
+/**
+ * Resolve a sebuf page-size query parameter.
+ *
+ * The generated GET route parses an omitted `pageSize` as `Number(null ?? "0")`
+ * === 0, and `clampInt` only substitutes its fallback for a NON-finite value, so
+ * clamping 0 yields the minimum (1) rather than the documented default. The proto
+ * contract states "zero uses the server default", so treat 0 as unset here.
+ */
+export function resolvePageSize(requested: unknown, fallback: number, max: number): number {
+  const value = typeof requested === 'number' && Number.isFinite(requested)
+    ? Math.floor(requested)
+    : 0;
+  if (value <= 0) return fallback;
+  return Math.min(max, value);
+}
+
+/**
+ * Global Yahoo Finance request gate.
+ * Ensures minimum spacing between ANY Yahoo requests across all handlers.
+ * Multiple handlers calling Yahoo concurrently causes IP-level rate limiting (429).
+ */
+let yahooLastRequest = 0;
+// Under the node test runner every fetch is stubbed, so the real spacing only
+// idles the suite (each gated call slept up to 600 ms; the analyze-stock tests
+// alone burned ~17 s in this gate). Queue ordering is preserved either way.
+// Same pattern as the NODE_TEST_CONTEXT knobs in server/_shared/rate-limit.ts.
+const YAHOO_MIN_GAP_MS = process.env.NODE_TEST_CONTEXT ? 1 : 600;
+let yahooQueue: Promise<void> = Promise.resolve();
+
+export function yahooGate(): Promise<void> {
+  yahooQueue = yahooQueue.then(async () => {
+    const elapsed = Date.now() - yahooLastRequest;
+    if (elapsed < YAHOO_MIN_GAP_MS) {
+      await new Promise<void>(r => setTimeout(r, YAHOO_MIN_GAP_MS - elapsed));
+    }
+    yahooLastRequest = Date.now();
+  });
+  return yahooQueue;
+}
+
+/**
+ * Global Finnhub request gate.
+ * Free-tier Finnhub keys are sensitive to burst concurrency; spacing requests
+ * reduces 429 cascades that otherwise spill into Yahoo fallback.
+ */
+let finnhubLastRequest = 0;
+const FINNHUB_MIN_GAP_MS = process.env.NODE_TEST_CONTEXT ? 1 : 350;
+let finnhubQueue: Promise<void> = Promise.resolve();
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
+}
+
+function waitForGate(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return new Promise<void>((resolve) => setTimeout(resolve, ms));
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export function finnhubGate(signal?: AbortSignal): Promise<void> {
+  const turn = finnhubQueue.then(async () => {
+    if (signal?.aborted) throw abortReason(signal);
+    const elapsed = Date.now() - finnhubLastRequest;
+    if (elapsed < FINNHUB_MIN_GAP_MS) {
+      await waitForGate(FINNHUB_MIN_GAP_MS - elapsed, signal);
+    }
+    if (signal?.aborted) throw abortReason(signal);
+    finnhubLastRequest = Date.now();
+  });
+  // A canceled request must release its place without poisoning the shared
+  // queue for every later request.
+  finnhubQueue = turn.catch(() => {});
+  return turn;
+}

@@ -1,0 +1,51 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import OptionCards from '@components/molecules/OptionCards.astro';
+
+const cards = [
+  {
+    title: 'API Documentation',
+    description: 'View listing of all available endpoints, their usage, output and examples.',
+    buttons: [
+      { name: 'OpenAPI Spec', image: '/assets/images/swagger.svg', link: '/web-check-api/spec' },
+    ],
+  },
+  {
+    title: 'API Key',
+    description: 'Get your API key, and start using the API.',
+    buttons: [{ name: 'Sign Up', image: '/assets/images/webauthn.svg', link: '/account' }],
+  },
+  {
+    title: 'API Source',
+    description: 'View, edit, download or deploy the API from source.',
+    buttons: [
+      {
+        name: 'GitHub',
+        image: '/assets/images/github.svg',
+        link: 'https://github.com/xray-web/web-check-api',
+        newTab: true,
+      },
+    ],
+  },
+];
+---
+
+<PageLayout title="API | Web Check" description="Get started with the Web Check API.">
+  <h1>Web Check API</h1>
+  <p class="intro">
+    The Web Check API gives you programatic access to over 30 categories of web metrics.
+    <br />
+    Integrate into your own workflows and applications, to monitor any website's performance, SEO,
+    security, and more.
+  </p>
+
+  <OptionCards cards={cards} />
+</PageLayout>
+
+<style lang="scss">
+  .intro {
+    font-size: 1.2rem;
+    line-height: 1.5;
+    margin-top: 1rem;
+  }
+</style>

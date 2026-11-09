@@ -1,0 +1,203 @@
+---
+import Logo from '@components/molecules/Logo.astro';
+import { categoryIds, toolName } from '@/data/categories';
+import { checkIds } from '@/data/checks';
+
+interface Props {
+  miniView?: boolean;
+}
+
+const { miniView = false } = Astro.props;
+
+const repo = 'github.com/lissy93/web-check';
+const github = `https://${repo}`;
+
+const licenseText = 'MIT';
+const licenseLink = `${github}/blob/master/LICENSE`;
+
+const aboutLink = '/about';
+const projectName = 'Web Check';
+
+const authorName = 'Alicia Sykes';
+const authorLink = 'https://aliciasykes.com';
+const currentYear = new Date().getFullYear();
+
+const linkGroups = [
+  {
+    title: 'Tools',
+    links: categoryIds.map((id) => ({ label: toolName(id), href: `/${id}` })),
+  },
+  {
+    title: 'Docs',
+    links: [
+      { label: `All ${checkIds.length} checks`, href: '/checks' },
+      { label: 'Glossary', href: '/glossary' },
+      { label: 'Self-hosting', href: '/self-hosted-setup' },
+      { label: 'API', href: '/web-check-api' },
+    ],
+  },
+  {
+    title: 'Project',
+    links: [
+      { label: 'About', href: aboutLink },
+      { label: 'Source code', href: github },
+      { label: 'Report an issue', href: `${github}/issues` },
+      { label: 'Sponsor', href: 'https://github.com/sponsors/Lissy93' },
+    ],
+  },
+];
+---
+
+<footer>
+  {!miniView && (
+    <div class="links">
+      <div class="intro">
+        <a href="/">
+          <Logo />
+          {projectName}
+        </a>
+        <p>
+          The all-in-one OSINT and security tool, for revealing the inner workings of any website.
+        </p>
+      </div>
+      <nav aria-label="Footer">
+        {linkGroups.map((group) => (
+          <div>
+            <h2>{group.title}</h2>
+            <ul>
+              {group.links.map((link) => (
+                <li>
+                  <a href={link.href} target={link.href.startsWith('http') ? '_blank' : undefined}>
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    </div>
+  )}
+  <div class="bar">
+    <p>
+      View source at{' '}
+      <a href={github} target="_blank">
+        {repo}
+      </a>
+    </p>
+    <p>
+      <a href={aboutLink}>{projectName}</a> is licensed under{' '}
+      <a href={licenseLink} target="_blank">
+        {licenseText}
+      </a>{' '}
+      - ©{' '}
+      <a href={authorLink} target="_blank">
+        {authorName}
+      </a>{' '}
+      {currentYear}
+    </p>
+  </div>
+</footer>
+
+<style lang="scss">
+  @use '@styles/global.scss' as *;
+  $gap: 2rem clamp(2rem, 5vw, 4rem);
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: $gap;
+    padding: 3rem calc((100% - var(--page-width)) / 2);
+    background: var(--background-raised);
+    @include mobile-down {
+      display: grid;
+    }
+    .intro {
+      flex: 1 1 13rem;
+      max-width: 20rem;
+      a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--text-color);
+        :global(.logo) {
+          width: 1.5em;
+        }
+      }
+      p {
+        margin: 0.5rem 0 0;
+        line-height: 1.5;
+        color: var(--text-color-secondary);
+      }
+    }
+    nav {
+      display: grid;
+      grid-template-columns: repeat(3, auto);
+      gap: $gap;
+      @include tablet-landscape-down {
+        grid-template-columns: repeat(2, auto);
+        > div:has(li:nth-child(6)) {
+          grid-row: span 2;
+        }
+      }
+      @include mobile-down {
+        grid-template-columns: 1fr;
+      }
+    }
+    h2 {
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--primary-increased-contrast);
+    }
+    ul {
+      display: grid;
+      gap: 0.6rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      line-height: 1.4;
+      @include large-desktop-up {
+        &:has(> li:nth-child(6)) {
+          grid-template-rows: repeat(4, auto);
+          grid-auto-flow: column;
+          column-gap: 2.5rem;
+        }
+      }
+    }
+    li a {
+      color: var(--text-color-secondary);
+      transition: color 0.25s ease;
+      &:hover,
+      &:focus-visible {
+        color: var(--primary-increased-contrast);
+      }
+    }
+  }
+  .bar {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    flex-wrap: wrap;
+    padding: 0.25rem 1rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    background: var(--primary-increased-contrast);
+    color: var(--background);
+    p {
+      margin: 0;
+    }
+    a {
+      color: inherit;
+      text-decoration: underline;
+    }
+    @include tablet-portrait-down {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+  }
+</style>

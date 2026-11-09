@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Using Claude Code for OSINT from your terminal</title>
+<meta name="description" content="Add OpenOSINT to Claude Code as an MCP server, run an example investigation, script repeatable workflows, and know when the REPL is the better tool.">
+<link rel="canonical" href="https://openosint.tech/blog/claude-code-osint.html">
+<meta name="theme-color" content="#16181b">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/assets/fonts/HankenGrotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+<meta property="og:site_name" content="OpenOSINT">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Using Claude Code for OSINT from your terminal">
+<meta property="og:description" content="Add OpenOSINT to Claude Code as an MCP server, run an example investigation, script repeatable workflows, and know when the REPL is the better tool.">
+<meta property="og:url" content="https://openosint.tech/blog/claude-code-osint.html">
+<meta property="og:image" content="https://openosint.tech/assets/social-card.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="OpenOSINT: the OSINT toolkit for AI agents. Agent Skill, MCP server and CLI.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Using Claude Code for OSINT from your terminal">
+<meta name="twitter:description" content="Add OpenOSINT to Claude Code as an MCP server, run an example investigation, script repeatable workflows, and know when the REPL is the better tool.">
+<meta name="twitter:image" content="https://openosint.tech/assets/social-card.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Using Claude Code for OSINT: Investigations from Your Terminal",
+  "description": "Add OpenOSINT to Claude Code as an MCP server, run an example investigation, script repeatable workflows, and know when the REPL is the better tool.",
+  "author": {
+    "@type": "Organization",
+    "name": "OpenOSINT"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "OpenOSINT",
+    "url": "https://openosint.tech/"
+  },
+  "datePublished": "2026-05-24",
+  "dateModified": "2026-05-24",
+  "mainEntityOfPage": "https://openosint.tech/blog/claude-code-osint.html",
+  "image": "https://openosint.tech/assets/social-card.png"
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="logo" href="/"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3"/><path d="M11 6v10M6 11h10" stroke="currentColor" stroke-width="1.5"/></svg>OpenOSINT</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/docs/">Docs</a>
+      <a href="/tools/">Tools</a>
+      <a href="/blog/" aria-current="page">Blog</a>
+      <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+    </nav>
+    <div class="bar-right">
+      <a class="btn btn-small" href="https://app.openosint.tech/?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=nav">Hosted products</a>
+      <details class="menu">
+        <summary>Menu</summary>
+        <div class="menu-panel">
+          <a href="/docs/">Docs</a>
+          <a href="/tools/">Tools</a>
+          <a href="/blog/">Blog</a>
+          <a href="https://github.com/OpenOSINT/OpenOSINT" rel="noopener">GitHub</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap page">
+  <article class="prose">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/blog/">&larr; Blog</a></nav>
+    <h1>Using Claude Code for OSINT: Investigations from Your Terminal</h1>
+    <p class="meta"><time datetime="2026-05-24">2026-05-24</time> &middot; 4 min read</p>
+    <h2>What Claude code adds to the OSINT picture</h2>
+<div class="indent">
+<p>Claude Code is a terminal AI assistant with access to your filesystem, shell, and MCP tools. When OpenOSINT is configured as its MCP server, it can run any of the 14 OSINT tools on demand &mdash; but it can also do things the OpenOSINT REPL alone cannot: write Python scripts for custom workflows, read and parse output files from previous investigations, cross-reference findings against local data, and generate formatted reports written directly to disk. The combination of terminal AI and OSINT toolset is qualitatively more powerful than either in isolation.</p>
+<p>The critical distinction from using the OpenOSINT REPL directly: Claude Code operates in your workspace. It can read a file of targets, run investigations against each, and write structured results to JSON &mdash; all in one session without you handling the file I/O manually. It also generates Python scripts on request, letting you build reusable automation around OpenOSINT's tool functions.</p>
+</div>
+
+<h2>Configuring OpenOSINT as an MCP server</h2>
+<div class="indent">
+<p>Install <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a>; nothing else is needed. Passive tools (20) are exposed by default; append <code>--allow-active</code> to the command for all 25.</p>
+<p>Register with Claude Code:</p>
+<pre>claude mcp add openosint -- uvx --from openosint openosint-mcp
+claude mcp list
+# openosint: uvx --from openosint openosint-mcp - ✓ Connected</pre>
+<p>Set environment variables before launching so API-dependent tools work:</p>
+<pre>export ANTHROPIC_API_KEY=sk-ant-...
+export ABUSEIPDB_API_KEY=...       # IP abuse reputation
+export IP2LOCATION_API_KEY=...     # Enriched geo + VPN detection
+export HIBP_API_KEY=...            # Breach lookup
+claude</pre>
+<p>All 14 OpenOSINT tools now appear in Claude Code's tool palette. Claude Code calls them with JSON parameters, receives real Python-executed output, and uses results to decide next steps. No simulation, no fabrication &mdash; the same structural guarantee as the OpenOSINT REPL.</p>
+</div>
+
+<h2>Example investigation session</h2>
+<div class="indent">
+<p>Investigating an unknown suspicious domain from the terminal:</p>
+<pre>$ claude
+&gt; Investigate suspicious-domain.net. Check subdomains,
+  WHOIS registration, and IP reputation.
+
+&rarr; search_whois('suspicious-domain.net')
+  Registrar: Namecheap Inc.
+  Created: 2026-04-18 (37 days ago)
+  Registrant: REDACTED FOR PRIVACY
+
+&rarr; search_domain('suspicious-domain.net')
+  [+] api.suspicious-domain.net
+  [+] mail.suspicious-domain.net
+  [+] login.suspicious-domain.net
+
+&rarr; search_ip('185.220.101.47')   [from A record lookup]
+  Org: Tor Project Inc. | Country: DE
+
+&rarr; search_abuseipdb('185.220.101.47')
+  Abuse Confidence: 96% | Total Reports: 412
+  Last Reported: 2026-05-23
+
+Summary: Domain registered 37 days ago with privacy protection.
+Resolves to a known Tor exit node with 96% abuse confidence.
+Three structured subdomains (api, mail, login) suggest deliberate
+infrastructure. High probability of malicious use.</pre>
+<p>The full investigation ran in under 90 seconds. No manual tool selection, no copying output between commands, no context switching.</p>
+</div>
+
+<h2>Writing custom workflows</h2>
+<div class="indent">
+<p>Claude Code's most powerful OSINT capability: generating Python automation for tasks OpenOSINT doesn't natively cover. Ask in plain language:</p>
+<pre>&gt; Write a Python script that reads domains from targets.txt,
+  runs WHOIS on each, and outputs a CSV with: domain, registrar,
+  creation_date, nameservers, days_since_registration.</pre>
+<p>Claude Code writes, tests, and saves the script. It uses OpenOSINT's internal async functions directly:</p>
+<pre>import asyncio, csv
+from datetime import datetime, timezone
+from openosint.tools.search_whois import run_whois_osint
+
+async def bulk_whois(domains: list[str]) -> list[dict]:
+    results = []
+    for domain in domains:
+        raw = await run_whois_osint(domain)
+        results.append(parse_result(domain, raw))
+        await asyncio.sleep(1)  # rate limit
+    return results</pre>
+<p>This pattern extends to any workflow: credential exposure monitoring, bulk IP reputation checks, subdomain enumeration pipelines. The combination of AI code generation and live OSINT tool access makes Claude Code a fast way to build investigation infrastructure that doesn't exist yet.</p>
+</div>
+
+<h2>When to use Claude code vs. the OpenOSINT REPL</h2>
+<div class="indent">
+<p>Use Claude Code when investigations involve file I/O (reading target lists, writing results to disk), custom scripting, multi-session work where results need to persist, or workflows that combine OSINT with local data or other tools already in PATH. Claude Code's terminal integration lets it run arbitrary shell commands alongside tool calls.</p>
+<p>Use the OpenOSINT REPL for interactive single-session investigations, quick lookups, and exploratory work where you don't know ahead of time what you're looking for. The REPL's Rich-rendered markdown output and slash commands (<code>/history</code>, <code>/export</code>, <code>/model</code>) are optimized for the investigative workflow. The MCP server beneath both is identical &mdash; tool availability and execution quality are the same. Only the interaction model differs.</p>
+</div>
+
+<h2>See also</h2>
+<div class="indent">
+<ul>
+<li><a href="/blog/mcp-protocol-explained.html">Model Context Protocol explained</a> &mdash; the transport layer connecting Claude Code to OpenOSINT</li>
+<li><a href="/blog/osint-with-mcp.html">OpenOSINT as MCP server</a> &mdash; Claude Desktop configuration</li>
+<li><a href="/blog/osint-ai-agents.html">How AI agents are changing OSINT</a> &mdash; the agentic loop architecture behind the tool calls</li>
+</ul>
+</div>
+
+
+<aside class="oo-cta">
+  <p>Want this watched for you? <a href="https://app.openosint.tech/monitor?utm_source=openosint.tech&amp;utm_medium=referral&amp;utm_campaign=blog">OpenOSINT Monitor</a> checks your domain&rsquo;s email authentication, TLS, security headers and lookalike domains, and emails you when something changes.</p>
+</aside>
+
+  </article>
+</div>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <ul class="footer-links">
+      <li><a href="/blog/">Blog</a></li>
+      <li><a href="/tools/">Tools</a></li>
+      <li><a href="/commercial/">Commercial</a></li>
+      <li><a href="/sponsors.html">Sponsors</a></li>
+      <li><a href="/terms/">Terms</a></li>
+      <li><a href="/privacy/">Privacy</a></li>
+      <li><a href="/acceptable-use/">Acceptable Use</a></li>
+      <li><a href="/subprocessors/">Subprocessors</a></li>
+      <li><a href="mailto:commercial@openosint.tech">Contact</a></li>
+    </ul>
+    <span>&copy; 2026 Tommaso Bertocchi, Trieste, Italy</span>
+  </div>
+</footer>
+<script>
+document.querySelectorAll("pre").forEach(function (pre) {
+  if (!navigator.clipboard) return;
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "copy"; b.textContent = "Copy"; b.setAttribute("aria-label", "Copy code");
+  b.addEventListener("click", function () {
+    var code = pre.querySelector("code") || pre;
+    navigator.clipboard.writeText(code.innerText).then(function () {
+      b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+    });
+  });
+  pre.appendChild(b);
+});
+</script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "8c1e6e8590b649a5803fbbd3356aa7d2"}'></script>
+</body>
+</html>

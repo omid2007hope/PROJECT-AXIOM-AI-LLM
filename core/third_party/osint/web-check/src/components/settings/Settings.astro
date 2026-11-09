@@ -1,0 +1,263 @@
+---
+import Icon from '@components/molecules/Icon.svelte';
+import SettingRow from '@components/settings/SettingRow.astro';
+import { sections } from '@/data/settings';
+---
+
+<button
+  class="icon-button trigger"
+  commandfor="settings"
+  command="show-modal"
+  aria-label="Settings"
+  title="Settings"
+>
+  <Icon name="gear" size={1.1} />
+</button>
+
+<dialog id="settings" class="settings-dialog" aria-labelledby="settings-title" closedby="any">
+  <form method="dialog">
+    <header>
+      <h2 id="settings-title">Settings</h2>
+      <button class="icon-button" aria-label="Close settings" title="Close">
+        <Icon name="xmark" size={0.9} />
+      </button>
+    </header>
+    {sections.map(({ title, settings }) => (
+      <fieldset>
+        <legend>{title}</legend>
+        {settings.map((setting) => (
+          <SettingRow {...setting} />
+        ))}
+      </fieldset>
+    ))}
+  </form>
+</dialog>
+
+<script>
+  import {
+    clearAllData,
+    defaults,
+    getSetting,
+    isForced,
+    isSetting,
+    setSetting,
+  } from '../../client/utils/settings';
+
+  type Field = HTMLInputElement | HTMLSelectElement;
+
+  const countSkipped = (form: HTMLFormElement) => {
+    const count = form.querySelector('.skipped-count');
+    const total = new FormData(form).getAll('skippedChecks').length;
+    if (count) count.textContent = `${total || 'None'} skipped`;
+  };
+
+  // Show whatever's saved, or the default if nothing is. The OS can lock some toggles on
+  const fill = (form: HTMLFormElement) => {
+    for (const field of form.querySelectorAll<Field>('[name]')) {
+      if (!isSetting(field.name)) continue;
+      const value = getSetting(field.name);
+      field.disabled = isForced(field.name);
+      if (field instanceof HTMLSelectElement) field.value = `${value}`;
+      else if (Array.isArray(value)) field.checked = value.includes(field.value);
+      else if (field.type === 'radio') field.checked = field.value === value;
+      else field.checked = value === true || field.disabled;
+    }
+    countSkipped(form);
+  };
+
+  // Read a field back in the same shape as its default
+  const read = (form: HTMLFormElement, name: string) => {
+    const data = new FormData(form);
+    if (Array.isArray(defaults[name])) return data.getAll(name) as string[];
+    if (typeof defaults[name] === 'boolean') return data.has(name);
+    return data.get(name) as string;
+  };
+
+  // Wiping everything takes a second click, in case the first was a slip
+  const confirmClear = (button: HTMLButtonElement) => {
+    if (button.dataset.armed) return clearAllData();
+    const label = button.textContent;
+    button.dataset.armed = 'true';
+    button.textContent = 'Sure? Click again';
+    setTimeout(() => {
+      delete button.dataset.armed;
+      button.textContent = label;
+    }, 4000);
+  };
+
+  const actions: Record<string, (button: HTMLButtonElement) => void> = {
+    clearData: confirmClear,
+  };
+
+  document.addEventListener('astro:page-load', () => {
+    const form = document.querySelector<HTMLFormElement>('.settings-dialog form');
+    if (!form || form.dataset.bound) return;
+    form.dataset.bound = 'true';
+    fill(form);
+
+    // Refill on each open, as the OS or another tab may have changed things since
+    form.closest('dialog')?.addEventListener('command', () => fill(form));
+
+    form.addEventListener('change', ({ target }) => {
+      const { name } = target as Field;
+      if (!isSetting(name)) return;
+      setSetting(name, read(form, name));
+      countSkipped(form);
+    });
+
+    form.addEventListener('click', ({ target }) => {
+      const button = (target as Element).closest<HTMLButtonElement>('[data-action]');
+      if (button) actions[button.dataset.action!]?.(button);
+    });
+  });
+</script>
+
+<style lang="scss">
+  @use '@styles/media-queries.scss' as *;
+
+  .icon-button {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.5rem;
+    aspect-ratio: 1;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease;
+
+    :global(svg) {
+      transition: rotate 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    &:hover {
+      color: var(--text-color);
+      background: var(--hover);
+    }
+    &:focus {
+      outline: none;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    // Bigger targets for touch
+    @media (pointer: coarse) {
+      width: 3rem;
+    }
+  }
+
+  .trigger {
+    border: 1px solid var(--line);
+    background: var(--background-raised);
+
+    &:hover :global(svg) {
+      rotate: 45deg;
+    }
+  }
+
+  .settings-dialog {
+    width: min(42rem, 100% - 2rem);
+    max-height: min(46rem, 100% - 4rem);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--primary-transparent);
+    border-radius: 4px;
+    background: var(--background-raised);
+    color: var(--text-color);
+    line-height: 1.4;
+    box-shadow: 0 4px 30px var(--shadow-color);
+    overscroll-behavior: contain;
+    opacity: 0;
+    translate: 0 1rem;
+    transition:
+      opacity 0.25s ease,
+      translate 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      display 0.35s allow-discrete,
+      overlay 0.35s allow-discrete;
+
+    &[open] {
+      opacity: 1;
+      translate: 0;
+
+      @starting-style {
+        opacity: 0;
+        translate: 0 1rem;
+      }
+    }
+
+    &::backdrop {
+      background: color-mix(in srgb, var(--background-sunken) 60%, transparent);
+      backdrop-filter: blur(5px);
+      opacity: 0;
+      transition: inherit;
+    }
+
+    &[open]::backdrop {
+      opacity: 1;
+
+      @starting-style {
+        opacity: 0;
+      }
+    }
+
+    // Phones get the whole screen
+    @include mobile-down {
+      width: 100%;
+      max-width: none;
+      height: 100dvh;
+      max-height: none;
+      border: none;
+      border-radius: 0;
+    }
+
+    // Nested, so page level heading styles don't leak in
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem 0.75rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+      background: var(--background-raised);
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    fieldset {
+      min-width: 0;
+      margin: 0;
+      padding: 0 1.5rem;
+      border: none;
+
+      &:last-child {
+        padding-bottom: 1rem;
+      }
+    }
+
+    legend {
+      padding: 1.5rem 0 0.25rem;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--primary-increased-contrast);
+    }
+  }
+
+  // Keep the page still while the dialog is up
+  :global(html:has(.settings-dialog[open])) {
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+</style>

@@ -1,0 +1,12 @@
+---
+import ErrorPage from '@components/error/ErrorPage.astro';
+
+export const prerender = true;
+---
+
+<ErrorPage
+  status={404}
+  statusText="Not Found"
+  heading={['Page', 'not found']}
+  message="There's nothing at this address. The link may be mistyped, or the page has moved."
+/>

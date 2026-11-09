@@ -1,0 +1,88 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import PillLinks from '@components/molecules/PillLinks.astro';
+import TermList from '@components/molecules/TermList.astro';
+import { termGroups } from '@/data/glossary';
+
+const page = new URL(Astro.url.pathname.replace(/\/$/, ''), Astro.site).href;
+
+const description =
+  'Quick reference for website security and OSINT terms, like HSTS, DMARC and DNSSEC.';
+
+const groups = termGroups.map((group) => ({
+  ...group,
+  id: `group-${group.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+}));
+
+// Every term as a schema.org DefinedTerm, linked to its anchor on this page
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'DefinedTermSet',
+  name: 'Web Security Glossary',
+  url: page,
+  hasDefinedTerm: termGroups.flatMap((group) =>
+    Object.entries(group.terms).map(([id, term]) => ({
+      '@type': 'DefinedTerm',
+      '@id': `${page}#${id}`,
+      url: `${page}#${id}`,
+      name: term.title,
+      description: term.definition,
+    })),
+  ),
+};
+---
+
+<PageLayout
+  title="Web Security Glossary | Web Check"
+  description={description}
+  keywords="web security glossary, tls terms, hsts, csp, dmarc, dnssec, ssl certificate"
+  breadcrumbs={[
+    { name: 'Web Check', item: '' },
+    { name: 'Glossary', item: 'glossary' },
+  ]}
+  customSchemaJson={schema}
+>
+  <section class="intro">
+    <h1>Web security glossary</h1>
+    <p class="tagline">Quick reference for the terms used for website security and OSINT.</p>
+    <nav aria-label="Glossary sections">
+      <PillLinks links={groups.map((group) => ({ label: group.title, href: `#${group.id}` }))} />
+    </nav>
+  </section>
+
+  {groups.map((group) => (
+    <section>
+      <h2 id={group.id}>{group.title}</h2>
+      <TermList terms={Object.entries(group.terms)} />
+    </section>
+  ))}
+</PageLayout>
+
+<style lang="scss">
+  .intro {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.25rem, 6vw, 3.5rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+    }
+
+    .tagline {
+      margin: 0;
+      max-width: 62ch;
+      font-size: 1.2rem;
+      line-height: 1.6;
+      color: var(--text-color-secondary);
+    }
+  }
+
+  h2 {
+    scroll-margin-top: 2rem;
+  }
+</style>

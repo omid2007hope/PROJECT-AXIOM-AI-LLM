@@ -1,0 +1,67 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - '386'
+      - arm
+      - arm64
+
+    ignore:
+      - goos: darwin
+        goarch: '386'
+      - goos: windows
+        goarch: 'arm'
+
+    binary: '{{ .ProjectName }}'
+    main: cmd/subfinder/main.go
+
+archives:
+  - formats:
+      - zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ if eq .Os "darwin" }}macOS{{ else }}{{ .Os }}{{ end }}_{{ .Arch }}'
+
+checksum:
+  algorithm: sha256
+
+dockers_v2:
+  - images:
+      - projectdiscovery/subfinder
+    tags:
+      - '{{ .Tag }}'
+      - 'v{{ .Major }}.{{ .Minor }}'
+      - 'v{{ .Major }}'
+      - latest
+    labels:
+      org.opencontainers.image.created: '{{ .Date }}'
+      org.opencontainers.image.ref.name: '{{ .Tag }}'
+      org.opencontainers.image.revision: '{{ .FullCommit }}'
+      org.opencontainers.image.version: '{{ .Version }}'
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v6
+    # NOTE: CI snapshot runners may lack QEMU; only build images in CI on real
+    # releases.
+    disable: '{{ and .IsSnapshot (isEnvSet "CI") }}'
+
+announce:
+  slack:
+    enabled: true
+    channel: '#release'
+    username: GoReleaser
+    message_template: 'New Release: {{ .ProjectName }} {{.Tag}} is published! Check it out at {{ .ReleaseURL }}'
+
+  discord:
+    enabled: true
+    message_template: '**New Release: {{ .ProjectName }} {{.Tag}}** is published! Check it out at {{ .ReleaseURL }}'

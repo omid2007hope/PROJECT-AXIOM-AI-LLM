@@ -1,0 +1,248 @@
+appId: com.kangfenmao.CherryStudio
+productName: Cherry Studio
+extraMetadata:
+  cherryEdition: global
+electronLanguages:
+  - zh-CN
+  - zh-TW
+  - en-US
+  - ja # macOS/linux/win
+  - ru # macOS/linux/win
+  - zh_CN # for macOS
+  - zh_TW # for macOS
+  - en # for macOS
+  - de
+directories:
+  buildResources: build
+
+protocols:
+  - name: Cherry Studio
+    schemes:
+      - cherrystudio
+files:
+  - "**/*"
+  - "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**" # ClaudeCodeBinaryService downloads the native runtime on demand
+  - "!**/{.vscode,.yarn,.yarn-lock,.github,.cursorrules,.prettierrc}"
+  - "!electron.vite.config.{js,ts,mjs,cjs}}"
+  - "!electron-builder.cn.config.cjs"
+  - "!electron.vite.entries.config.ts"
+  - "!.*"
+  - "!components.json"
+  - "!**/{.eslintignore,.eslintrc.js,.eslintrc.json,.eslintcache,root.eslint.config.js,eslint.config.js,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,eslint.config.mjs,dev-app-update.yml,CHANGELOG.md,README.md,.oxfmtrc.json}"
+  - "!**/{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+  - "!**/{tsconfig.json,tsconfig.tsbuildinfo,tsconfig.node.json,tsconfig.web.json}"
+  - "!**/{.editorconfig,.jekyll-metadata}"
+  - "!src"
+  - "!native"
+  - "!config"
+  - "!patches"
+  - "!**/node_modules/**/*.cpp"
+  - "!**/node_modules/node-addon-api/**"
+  - "!**/node_modules/prebuild-install/**"
+  - "!scripts"
+  - "!local"
+  - "!docs"
+  - "!packages"
+  - "!.swc"
+  - "!.bin"
+  - "!._*"
+  - "!*.log"
+  - "!stats.html"
+  - "!*.md"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!**/*.{map,ts,tsx,jsx,less,scss,sass,css.d.ts,d.cts,d.mts,md,markdown,yaml,yml}"
+  - "!**/{test,tests,__tests__,powered-test,coverage}/**"
+  - "!**/{example,examples}/**"
+  - "!**/*.{spec,test}.{js,jsx,ts,tsx}"
+  - "!**/*.min.*.map"
+  - "!**/*.d.ts"
+  - "!**/dist/es6/**"
+  - "!**/dist/demo/**"
+  - "!**/amd/**"
+  - "!**/{.DS_Store,Thumbs.db,thumbs.db,__pycache__}"
+  - "!**/{LICENSE,license,LICENSE.*,*.LICENSE.txt,NOTICE.txt,README.md,readme.md,CHANGELOG.md}"
+  - "!node_modules/mammoth/{mammoth.browser.js,mammoth.browser.min.js}"
+  - "!**/node_modules/better-sqlite3/{bin,deps,src}/**"
+  - "!**/node_modules/better-sqlite3/build/{Debug,Release/obj}/**"
+  - "!**/node_modules/{selection-hook,@earendil-works/pi-coding-agent}/docs/**"
+  # node-gyp-build prefers build/Release over prebuilds/, so ship the prebuilds and drop the
+  # host-arch rebuild — a cross-built arm64 package would otherwise load the x86-64 binary (#20530).
+  - "!node_modules/selection-hook/build/**"
+  - "!node_modules/selection-hook/node_modules" # we don't need what in the node_modules dir
+  - "!node_modules/selection-hook/src" # we don't need source files
+  - "!node_modules/tesseract.js-core/{tesseract-core.js,tesseract-core.wasm,tesseract-core.wasm.js}" # we don't need source files
+  - "!node_modules/tesseract.js-core/{tesseract-core-lstm.js,tesseract-core-lstm.wasm,tesseract-core-lstm.wasm.js}" # we don't need source files
+  - "!node_modules/tesseract.js-core/{tesseract-core-simd.js,tesseract-core-simd.wasm,tesseract-core-simd.wasm.js}" # tesseract.js loads tesseract-core-simd-lstm (default LSTM_ONLY OEM on SIMD)
+  - "!node_modules/onnxruntime-web/**" # transformers.js's browser/WASM backend; local inference always runs onnxruntime-node instead
+  - "!node_modules/@huggingface/transformers/node_modules/onnxruntime-web/**" # same package, nested copy
+  - "!node_modules/onnxruntime-node/bin/**" # native binary is downloaded on first use (Toolchain/onnxruntime), never bundled — see OnnxRuntimeBinaryService
+  - "!node_modules/sherpa-onnx-{darwin,linux,win}-*/**" # binaries are downloaded on first use; only the JS wrapper ships
+  - "!**/*.{h,iobj,ipdb,tlog,recipe,vcxproj,vcxproj.filters,Makefile,*.Makefile}" # filter .node build files
+  - "resources/**/*" # include all files in resources, and unpack them from asar for runtime access
+  - "!resources/devtools/**" # dev-only extensions are loaded from source in development
+asarUnpack:
+  - resources/**
+  - "!resources/devtools/**"
+  - "**/*.{metal,exp,lib}"
+  - "node_modules/@img/sharp-*/**"
+  - "node_modules/sharp/**"
+  - "node_modules/@img/colour/**"
+  - "node_modules/detect-libc/**"
+  - "node_modules/semver/**"
+  - "node_modules/yaml/**"
+  - "node_modules/@silvia-odwyer/photon-node/**" # pi SDK WASM dep: photon_rs.js does fs.readFileSync(__dirname/photon_rs_bg.wasm)
+  - "node_modules/@aiany/sqlite-vec-*/**" # sqlite-vec extension (.dylib/.so/.dll) is dlopen'd at runtime — must live on disk
+  - "node_modules/@node-rs/xxhash-*/**" # native N-API binary must be unpacked for runtime loading
+  - "node_modules/@firecrawl/anydoc-*/**" # native N-API binary must be unpacked for runtime loading
+  - "node_modules/node-screenshots-*/**" # native N-API binary must be unpacked for runtime loading
+  - "node_modules/node-mac-permissions/**" # native N-API binary must be unpacked for runtime loading
+extraResources:
+  - from: "src/main/ai/voice/localAdapters/NOTICE.txt"
+    to: "voice-audio/NOTICE.txt"
+  - from: "migrations/sqlite-drizzle"
+    to: "migrations/sqlite-drizzle"
+  - from: "packages/provider-registry/data"
+    to: "provider-registry"
+  - from: "node_modules/pdfjs-dist/cmaps"
+    to: "pdfjs/cmaps"
+  - from: "node_modules/pdfjs-dist/standard_fonts"
+    to: "pdfjs/standard_fonts"
+win:
+  executableName: Cherry Studio
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  extraResources:
+    # before-pack adds system-speech only for x64; extraResources .exe files use signtoolOptions below.
+    - from: "node_modules/@aiany/sqlite-vec-windows-${arch}/vec0.dll"
+      to: "app.asar.unpacked/node_modules/@aiany/sqlite-vec-windows-${arch}/vec0.dll"
+  target:
+    - target: nsis
+    - target: portable
+  signtoolOptions:
+    sign: scripts/packaging/win-sign.js
+  signExts:
+    - .node
+  verifyUpdateCodeSignature: false
+nsis:
+  # Preserve the existing global installer identity so either edition replaces the same Windows installation.
+  guid: 41a4ccd8-bcc0-5710-9eee-0e164da68057
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  allowToChangeInstallationDirectory: true
+  oneClick: false
+  include: build/nsis-installer.nsh
+  buildUniversalInstaller: false
+  differentialPackage: true
+portable:
+  artifactName: ${productName}-${version}-${arch}-portable.${ext}
+  buildUniversalInstaller: false
+  # electron-builder 26.15.6 uses true for a unique $PLUGINSDIR on every launch.
+  unpackDirName: true
+mac:
+  extraFiles:
+    - from: native/system-speech/dist/native/darwin-${arch}/cherry-system-speech
+      to: Helpers/cherry-system-speech
+  entitlementsInherit: build/entitlements.mac.plist
+  sign: scripts/packaging/mac-sign.js
+  notarize: false
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  extendInfo:
+    NSCameraUsageDescription: Application requests access to the device's camera.
+    NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    NSSpeechRecognitionUsageDescription: Cherry Studio transcribes voice recordings on this device.
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSCalendarsUsageDescription: Cherry Studio allows local MCP servers to read and manage your calendar events.
+    NSCalendarsFullAccessUsageDescription: Cherry Studio allows local MCP servers to read and manage your calendar events.
+    NSCalendarsWriteOnlyAccessUsageDescription: Cherry Studio allows local MCP servers to create calendar events.
+    NSRemindersUsageDescription: Cherry Studio allows local MCP servers to read and manage your reminders.
+    NSRemindersFullAccessUsageDescription: Cherry Studio allows local MCP servers to read and manage your reminders.
+    NSAppleEventsUsageDescription: Cherry Studio allows local MCP servers to control other applications using AppleScript.
+  target:
+    - target: dmg
+    - target: zip
+dmg:
+  format: ULFO
+  writeUpdateInfo: false
+toolsets:
+  appimage: "1.0.3"
+linux:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  executableName: CherryStudio
+  target:
+    - target: AppImage
+    - target: deb
+    - target: rpm
+  maintainer: electronjs.org
+  category: Utility
+  desktop:
+    entry:
+      Name: Cherry Studio
+      StartupWMClass: CherryStudio
+  mimeTypes:
+    - x-scheme-handler/cherrystudio
+rpm:
+  # Workaround for electron build issue on rpm package:
+  # https://github.com/electron/forge/issues/3594
+  fpm: ["--rpm-rpmbuild-define=_build_id_links none"]
+publish:
+  provider: generic
+  url: https://releases.cherry-ai.com
+  useMultipleRangeRequest: false
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+beforePack: scripts/packaging/before-pack.js
+afterPack: scripts/packaging/after-pack.js
+afterSign: scripts/packaging/notarize.js
+artifactBuildCompleted: scripts/packaging/artifact-build-completed.js
+releaseInfo:
+  releaseNotes: |
+    <!--LANG:en-->
+    Cherry Studio 2.1.10 - File Comments, Touch Reorder, and Update Timeline
+
+    ✨ New Features
+    - [Agent Files] Comment on files for the agent. In a text file, hover a line and click '+' (or drag across several lines) to write a comment. In Word, Excel, PDF and PowerPoint files, pick a part and click Comment. Each comment is added to the message as a chip with its location.
+    - [Updates] View skipped stable-version release notes in a collapsible timeline; single-version updates show their notes directly. Markdown footnote navigation now works correctly with backlinks.
+    - [Proxy] Test proxy connection in General Settings before saving, with support for PAC proxy/direct fallback reporting.
+    - [Touch] Reorder lists by pressing and holding a row. Buttons inside a row no longer start a drag. Selection Assistant settings now show enabled and disabled actions in one list separated by a divider.
+
+    🐛 Bug Fixes
+    - [Chat] The message list no longer jumps back to the first message while scrolling a conversation that contains code blocks.
+    - [Agents] Existing conversations resume correctly after moving the data directory, preserving their history.
+    - [Local Dictation] Fix local speech recognition silently losing the second half of long utterances.
+    - [Streaming] Fix missing or duplicated response text when stream replay overlaps incoming output.
+    - [Composer] Option descriptions in question panels are no longer truncated.
+    - [Right Panel] The browser sidebar no longer opens unexpectedly when creating or switching Agent tasks.
+    - [Code Block] Diagram preview toolbars are no longer clipped. Mermaid, Graphviz, SVG, LaTeX, and ECharts previews blend into the message background.
+    - [Knowledge] File conversion progress starts from 0% and updates immediately instead of every 5 seconds.
+    - [Conversation List] Recent conversations no longer sort to the bottom after midnight.
+    - [MiMo] Fix MiMo models returning “Unsupported model” errors.
+
+    ⚡ Performance
+    - [Code Blocks] Reduce unnecessary rendering work while scrolling conversations with code blocks.
+
+    <!--LANG:zh-CN-->
+    Cherry Studio 2.1.10 - 文件评论、触控排序与更新时间轴
+
+    ✨ 新功能
+    - [智能体文件] 为智能体评论文件。在文本文件中，悬停一行并点击 '+'（或拖动多行）来编写评论。在 Word、Excel、PDF 和 PowerPoint 文件中，选择部分后点击评论。每条评论作为带有位置的芯片添加到消息中。
+    - [更新] 通过可折叠时间轴查看跨越的稳定版本更新日志；仅一个版本时直接展示日志。Markdown 脚注跳转及返回现已正常工作。
+    - [代理] 在通用设置中保存前测试代理连接，支持 PAC 代理/直接回退报告。
+    - [触控] 按住行可重新排序列表。行内按钮不再触发拖动。选区助手设置现以分隔线分隔启用和禁用的操作。
+
+    🐛 问题修复
+    - [聊天] 滚动包含代码块的会话时，消息列表不再跳回第一条消息。
+    - [智能体] 移动数据目录后，现有对话可正确恢复并保留历史。
+    - [本地语音识别] 修复本地语音识别在长语音后半段静默丢失的问题。
+    - [流式传输] 修复流式回放与传入输出重叠时响应文本丢失或重复的问题。
+    - [编辑器] 问题面板中的选项描述不再被截断。
+    - [右侧面板] 创建或切换智能体任务时，浏览器侧边栏不再意外打开。
+    - [代码块] 图表预览工具栏不再被裁剪。Mermaid、Graphviz、SVG、LaTeX 和 ECharts 预览融入消息背景。
+    - [知识库] 文件转换进度从 0% 开始并即时更新，而非每 5 秒更新一次。
+    - [对话列表] 午夜后最近对话不再排到底部。
+    - [MiMo] 修复 MiMo 模型返回”不支持的模型”错误的问题。
+
+    ⚡ 性能优化
+    - [代码块] 减少滚动包含代码块的会话时的不必要渲染工作。
+    <!--LANG:END-->

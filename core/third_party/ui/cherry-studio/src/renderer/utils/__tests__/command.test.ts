@@ -1,0 +1,200 @@
+import { describe, expect, it } from 'vitest'
+
+import { DefaultPreferences } from '@shared/data/preference/preferenceSchemas'
+import { findCommandDefinition, resolveCommandByKeybinding } from '@shared/utils/command'
+import { getShortcutBindingFromKeyboardEvent } from '@shared/utils/shortcut'
+
+import { getCommandShortcutLabel, resolveCommandDisplayState, resolveCommandPresentationKeybinding } from '../command'
+
+describe('getShortcutBindingFromKeyboardEvent', () => {
+  const focusOptions = {
+    preferences: { 'chat.input.focus': DefaultPreferences.default['shortcut.chat.input.focus'] },
+    scope: 'renderer',
+    platform: 'darwin',
+    context: { 'webview.focused': false },
+    canExecuteCommand: (id: string) => id === 'chat.input.focus'
+  } as const
+
+  it('leaves Dvorak Command+C available for native copy', () => {
+    const binding = getShortcutBindingFromKeyboardEvent({ key: 'c', code: 'KeyI', metaKey: true }, 'darwin')
+
+    expect(resolveCommandByKeybinding({ ...focusOptions, binding })).toBeUndefined()
+  })
+
+  it('resolves Dvorak Command+I to input focus', () => {
+    const binding = getShortcutBindingFromKeyboardEvent({ key: 'i', code: 'KeyG', metaKey: true }, 'darwin')
+
+    expect(resolveCommandByKeybinding({ ...focusOptions, binding })).toBe('chat.input.focus')
+  })
+
+  it('resolves the enabled default input-focus binding', () => {
+    expect(resolveCommandByKeybinding({ ...focusOptions, binding: ['CommandOrControl', 'I'] })).toBe('chat.input.focus')
+  })
+
+  it('normalizes command/control shortcuts by platform', () => {
+    expect(getShortcutBindingFromKeyboardEvent({ key: 'n', code: 'KeyN', metaKey: true }, 'darwin')).toEqual([
+      'CommandOrControl',
+      'N'
+    ])
+    expect(getShortcutBindingFromKeyboardEvent({ key: 'n', code: 'KeyN', ctrlKey: true }, 'win32')).toEqual([
+      'CommandOrControl',
+      'N'
+    ])
+  })
+
+  it('normalizes named, numpad, and symbol keys', () => {
+    expect(getShortcutBindingFromKeyboardEvent({ key: 'Escape', code: 'Escape' }, 'darwin')).toEqual(['Escape'])
+    expect(getShortcutBindingFromKeyboardEvent({ key: '+', code: 'NumpadAdd', ctrlKey: true }, 'win32')).toEqual([
+      'CommandOrControl',
+      'numadd'
+    ])
+    expect(getShortcutBindingFromKeyboardEvent({ key: '+', code: 'Equal', ctrlKey: true }, 'win32')).toEqual([
+      'CommandOrControl',
+      '='
+    ])
+    expect(
+      getShortcutBindingFromKeyboardEvent({ key: '+', code: 'Equal', ctrlKey: true, shiftKey: true }, 'win32')
+    ).toEqual(['CommandOrControl', 'Shift', '='])
+  })
+})
+
+describe('getCommandShortcutLabel', () => {
+  it('shows a configured label while keyboard routing is blocked by focus', () => {
+    const context = { 'webview.focused': true }
+    expect(
+      resolveCommandByKeybinding({
+        binding: ['CommandOrControl', '1'],
+        context,
+        platform: 'darwin',
+        scope: 'renderer'
+      })
+    ).toBeUndefined()
+    expect(getCommandShortcutLabel('app.sidebar.open_1', undefined, { context, isMac: true, platform: 'darwin' })).toBe(
+      '⌘1'
+    )
+    expect(
+      resolveCommandPresentationKeybinding('app.sidebar.open_1', undefined, { context, platform: 'darwin' })
+        ?.accelerator
+    ).toBe('CommandOrControl+1')
+  })
+
+  it('respects disabled bindings and unavailable features in presentation', () => {
+    expect(
+      getCommandShortcutLabel(
+        'topic.create',
+        { binding: ['CommandOrControl', 'N'], enabled: false },
+        {
+          context: {},
+          isMac: true,
+          platform: 'darwin'
+        }
+      )
+    ).toBe('')
+    expect(
+      resolveCommandPresentationKeybinding('selection.toggle', undefined, {
+        context: { 'feature.selection.enabled': false },
+        platform: 'darwin'
+      })
+    ).toBeUndefined()
+  })
+
+  it('formats primary binding for each platform family', () => {
+    expect(getCommandShortcutLabel('topic.create', undefined, { context: {}, isMac: true, platform: 'darwin' })).toBe(
+      '⌘N'
+    )
+    expect(getCommandShortcutLabel('topic.create', undefined, { context: {}, isMac: false, platform: 'win32' })).toBe(
+      'Ctrl+N'
+    )
+  })
+
+  it('formats macOS tab navigation shortcuts as control-tab', () => {
+    expect(getCommandShortcutLabel('tab.next', undefined, { context: {}, isMac: true, platform: 'darwin' })).toBe(
+      '⌃Tab'
+    )
+    expect(getCommandShortcutLabel('tab.prev', undefined, { context: {}, isMac: true, platform: 'darwin' })).toBe(
+      '⌃⇧Tab'
+    )
+  })
+
+  it('returns empty label when unavailable', () => {
+    expect(getCommandShortcutLabel('topic.create', { binding: [], enabled: true }, { context: {}, isMac: true })).toBe(
+      ''
+    )
+    expect(
+      getCommandShortcutLabel('selection.toggle', undefined, {
+        context: { 'feature.selection.enabled': true },
+        isMac: false,
+        platform: 'linux'
+      })
+    ).toBe('')
+  })
+})
+
+describe('resolveCommandDisplayState', () => {
+  it('translates the title and resolves the shortcut label', () => {
+    const definition = findCommandDefinition('topic.create')
+    const state = resolveCommandDisplayState('topic.create', {
+      definition,
+      preference: undefined,
+      context: {},
+      hasHandler: () => true,
+      translate: (key) => `t:${key}`,
+      isMac: true,
+      platform: 'darwin'
+    })
+
+    expect(state.label).toBe(`t:${definition?.titleKey}`)
+    expect(state.shortcutLabel).toBe('⌘N')
+  })
+
+  it('falls back to the command id and stays disabled without a definition', () => {
+    const state = resolveCommandDisplayState('topic.create', {
+      definition: undefined,
+      preference: undefined,
+      context: {},
+      hasHandler: () => true,
+      translate: (key) => key,
+      isMac: true,
+      platform: 'darwin'
+    })
+
+    expect(state.label).toBe('topic.create')
+    expect(state.enabled).toBe(false)
+    expect(state.shortcutLabel).toBe('⌘N')
+  })
+})
+
+describe('sidebar item shortcuts', () => {
+  const sidebarOptions = {
+    preferences: {},
+    scope: 'renderer',
+    platform: 'darwin',
+    canExecuteCommand: () => true
+  } as const
+
+  it.each(['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const)(
+    'resolves CommandOrControl+%s to its sidebar item without a focused webview',
+    (n) => {
+      expect(
+        resolveCommandByKeybinding({
+          ...sidebarOptions,
+          context: { 'webview.focused': false },
+          binding: ['CommandOrControl', n]
+        })
+      ).toBe(`app.sidebar.open_${n}`)
+    }
+  )
+
+  it.each(['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const)(
+    'leaves CommandOrControl+%s to a focused MiniApp guest',
+    (n) => {
+      expect(
+        resolveCommandByKeybinding({
+          ...sidebarOptions,
+          context: { 'webview.focused': true },
+          binding: ['CommandOrControl', n]
+        })
+      ).toBeUndefined()
+    }
+  )
+})

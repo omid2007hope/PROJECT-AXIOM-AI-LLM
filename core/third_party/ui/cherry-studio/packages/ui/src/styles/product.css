@@ -1,0 +1,142 @@
+/**
+ * Cherry Studio product semantics.
+ *
+ * Product semantics share the unprefixed public namespace with the official
+ * Shadcn contract. Internal Cherry Studio value providers remain under
+ * `--cs-*`, while feature-local and historical migration values stay outside
+ * this public runtime contract.
+ */
+
+:root {
+  /* Shared product semantics */
+  --background-subtle: var(--cs-background-subtle);
+  --foreground-tertiary: var(--cs-foreground-tertiary);
+  --foreground-disabled: var(--cs-foreground-disabled);
+  --border-subtle: var(--cs-border-subtle);
+  --border-strong: var(--cs-border-strong);
+  --border-selected: var(--cs-border-selected);
+  --link: var(--cs-blue-600);
+
+  /* Feedback */
+  --success: var(--cs-success);
+  --success-subtle: var(--cs-success-subtle);
+  --success-subtle-foreground: var(--cs-success-subtle-foreground);
+  --success-border: var(--cs-success-border);
+  --warning: var(--cs-warning);
+  --warning-subtle: var(--cs-warning-subtle);
+  --warning-subtle-foreground: var(--cs-warning-subtle-foreground);
+  --warning-border: var(--cs-warning-border);
+  --info: var(--cs-info);
+  --info-subtle: var(--cs-info-subtle);
+  --info-subtle-foreground: var(--cs-info-subtle-foreground);
+  --info-border: var(--cs-info-border);
+  --error: var(--cs-error);
+  --error-subtle: var(--cs-error-subtle);
+  --error-subtle-foreground: var(--cs-error-subtle-foreground);
+  --error-border: var(--cs-error-border);
+
+  /* Stable product domain: rich text and code */
+  --code-block: #e3e3e3;
+  --inline-code: rgba(0, 0, 0, 0.06);
+  --inline-code-foreground: rgb(218, 97, 92);
+
+  /* Default code theme: cherryCodeTheme maps syntax to these; `background` stays transparent */
+  --cherry-code-background: transparent;
+  --cherry-code-foreground: var(--foreground);
+  --cherry-code-muted: var(--muted-foreground);
+  --cherry-code-selection: color-mix(in oklab, var(--link) 20%, transparent);
+  --cherry-code-keyword: var(--cs-violet-700);
+  --cherry-code-string: var(--cs-emerald-700);
+  --cherry-code-constant: var(--cs-amber-700);
+  --cherry-code-type: var(--cs-cyan-700);
+  --cherry-code-function: var(--cs-blue-600);
+  --cherry-code-tag: var(--cs-rose-700);
+  --cherry-code-link: var(--link);
+  --cherry-code-inserted: var(--cs-green-700);
+  --cherry-code-deleted: var(--cs-red-600);
+
+  /* Stable product domain: references and search highlights */
+  --reference: #cfe1ff;
+  --reference-foreground: #000;
+  --reference-subtle: #f1f7ff;
+  --highlight-foreground: var(--foreground);
+  --highlight: var(--cs-amber-200);
+  --highlight-accent: var(--cs-orange-400);
+  --markdown-important: var(--cs-violet-600);
+
+  /* Stable product domain: conversation surfaces.
+   * The conversation is a three-level stack: `--chat-message-well` is the recessed
+   * well the messages sit in, the surrounding rails keep `--background`, and
+   * `--composer-surface` / `--chat-user` are the blocks that float above the well.
+   * In light mode the well and the composer are both plain white, so the stack
+   * only becomes visible in dark mode.
+   *
+   * `--composer-surface` covers EVERY `ComposerSurface` instance on purpose —
+   * hence the domain-free name — so the painting prompt bar lifts off its page
+   * the same way the chat and agent composers do.
+   *
+   * `--chat-message-well-solid` is the tone `--chat-message-well` resolves to over the
+   * rails in a normal window. Image exports need a concrete fill and have no
+   * window behind them, so they use this instead of the translucent value. */
+  --chat-message-well: var(--cs-background);
+  --chat-message-well-solid: var(--cs-background);
+  --composer-surface: var(--cs-card);
+
+  /* Stable product domain: user-message surface */
+  --chat-user: rgba(0, 0, 0, 0.045);
+
+  /* Stable product domain: cross-surface resource-list rows */
+  /* Hover and selected share one fill */
+  --resource-list-row-hover: var(--resource-list-row-selected);
+  --resource-list-row-active: var(--accent);
+  --resource-list-row-active-foreground: var(--accent-foreground);
+  --resource-list-row-selected: oklch(0 0 0 / 0.08);
+  --resource-list-row-selected-foreground: var(--accent-foreground);
+}
+
+.dark {
+  /* Shared product semantics */
+  --link: var(--cs-blue-400);
+
+  /* Stable product domain: rich text and code */
+  --code-block: #323232;
+  --inline-code: #323232;
+
+  /* Default code theme: one lightness band so no hue dominates */
+  --cherry-code-keyword: var(--cs-violet-300);
+  --cherry-code-string: var(--cs-emerald-300);
+  --cherry-code-constant: var(--cs-orange-300);
+  --cherry-code-type: var(--cs-cyan-300);
+  --cherry-code-function: var(--cs-blue-300);
+  --cherry-code-tag: var(--cs-rose-300);
+  --cherry-code-inserted: var(--cs-green-400);
+  --cherry-code-deleted: var(--cs-red-400);
+
+  /* Stable product domain: references and search highlights */
+  --reference: #404040;
+  --reference-foreground: #fff;
+  --reference-subtle: #0b0e12;
+  --highlight-foreground: var(--foreground);
+  --highlight: var(--cs-amber-900);
+  --highlight-accent: var(--cs-orange-800);
+  --markdown-important: var(--cs-violet-400);
+
+  /* Stable product domain: conversation surfaces.
+   * `--chat-message-well` carries the same 0.55 alpha as `--background`, so the
+   * conversation keeps the macOS transparent-window vibrancy the rest of the
+   * window shows instead of punching an opaque slab through it. Sharing the
+   * alpha also fixes the step: both surfaces composite over the same backdrop,
+   * so the well stays `0.55 × (0.209 − 0.1727)` below the rails whatever is
+   * behind the window — the hierarchy cannot invert on a light wallpaper.
+   * Over the rails in a normal window this lands on `--chat-message-well-solid`. */
+  --chat-message-well: oklch(0.1727 0 0 / 0.55);
+  --chat-message-well-solid: oklch(0.191 0 0);
+  --composer-surface: #2f2f2f;
+
+  /* Stable product domain: user-message surface.
+   * Sits between the well and the composer so a sent message never reads as
+   * the still-editable input. */
+  --chat-user: oklch(0.2393 0 0);
+
+  --resource-list-row-selected: oklch(1 0 0 / 0.14);
+}

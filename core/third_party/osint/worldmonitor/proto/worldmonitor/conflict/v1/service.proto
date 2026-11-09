@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package worldmonitor.conflict.v1;
+
+import "sebuf/http/annotations.proto";
+import "worldmonitor/conflict/v1/list_acled_events.proto";
+import "worldmonitor/conflict/v1/list_ucdp_events.proto";
+import "worldmonitor/conflict/v1/get_humanitarian_summary.proto";
+import "worldmonitor/conflict/v1/list_iran_events.proto";
+import "worldmonitor/conflict/v1/get_humanitarian_summary_batch.proto";
+
+// ConflictService provides APIs for armed conflict data from ACLED, UCDP, and HAPI/HDX.
+service ConflictService {
+  option (sebuf.http.service_config) = {base_path: "/api/conflict/v1"};
+
+  // ListAcledEvents retrieves ACLED armed-conflict events with country, location, actors, event type and fatalities, filterable by country and inclusive time range.
+  rpc ListAcledEvents(ListAcledEventsRequest) returns (ListAcledEventsResponse) {
+    option (sebuf.http.config) = {path: "/list-acled-events", method: HTTP_METHOD_GET};
+  }
+
+  // Browse cached, georeferenced UCDP violence events with optional country filtering, event dates and fatality estimates for country-level conflict data analysis.
+  rpc ListUcdpEvents(ListUcdpEventsRequest) returns (ListUcdpEventsResponse) {
+    option (sebuf.http.config) = {path: "/list-ucdp-events", method: HTTP_METHOD_GET};
+  }
+
+  // Retrieve a cached HAPI conflict summary for a country, with event counts, fatalities, demonstrations, reference period and update time for humanitarian context.
+  rpc GetHumanitarianSummary(GetHumanitarianSummaryRequest) returns (GetHumanitarianSummaryResponse) {
+    option (sebuf.http.config) = {path: "/get-humanitarian-summary", method: HTTP_METHOD_GET};
+  }
+
+  // ListIranEvents is disabled by default; enable IRAN_EVENTS_ENABLED to return cached LiveUAMap Iran conflict records, otherwise an empty list with scrapedAt zero.
+  rpc ListIranEvents(ListIranEventsRequest) returns (ListIranEventsResponse) {
+    option (sebuf.http.config) = {path: "/list-iran-events", method: HTTP_METHOD_GET};
+  }
+
+  // Retrieve humanitarian summaries for multiple countries in one request, with country indicators and requested versus fetched counts for coverage comparison.
+  rpc GetHumanitarianSummaryBatch(GetHumanitarianSummaryBatchRequest) returns (GetHumanitarianSummaryBatchResponse) {
+    option (sebuf.http.config) = {path: "/get-humanitarian-summary-batch", method: HTTP_METHOD_POST};
+  }
+}

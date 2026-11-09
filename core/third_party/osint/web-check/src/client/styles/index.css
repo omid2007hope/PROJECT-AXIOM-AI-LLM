@@ -1,0 +1,21 @@
+code {
+  font-family: var(--font-mono);
+}
+
+svg.rsm-svg {
+  background: var(--background);
+  border-radius: 6px;
+}
+
+:root {
+  --toastify-color-dark: var(--background-overlay) !important;
+  --toastify-text-color-dark: var(--text-color) !important;
+  --toastify-color-info: var(--info) !important;
+  --toastify-color-success: var(--success) !important;
+  --toastify-color-warning: var(--warning) !important;
+  --toastify-color-error: var(--danger) !important;
+}
+
+.Toastify__toast .Toastify__close-button {
+  color: var(--text-color);
+}

@@ -1,0 +1,108 @@
+import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
+import { Activity } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import { DialogPortalContainerProvider, PortalContainerProvider } from '@cherrystudio/ui'
+import { CommandFocusScope } from '@renderer/components/command'
+import { RouteErrorFallback } from '@renderer/components/layout/RouteErrorFallback'
+import { TabIdProvider } from '@renderer/components/layout/TabIdProvider'
+import { routeTree } from '@renderer/routeTree.gen'
+import type { AppRouter } from '@renderer/types/router'
+import type { Tab } from '@shared/data/cache/cacheValueTypes'
+
+// The annotation keeps this in step with the registered `AppRouter`: options that change the
+// router's type fail here instead of silently diverging from what pages are typed against.
+const createTabRouter = (url: string): AppRouter =>
+  createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [url] }),
+    // defaultErrorComponent contains a route render error to its tab; without it the
+    // error bubbles to the window-level boundary and tears down the whole window.
+    defaultErrorComponent: RouteErrorFallback
+  })
+
+interface TabRouterProps {
+  tab: Tab
+  isActive: boolean
+  onUrlChange: (url: string) => void
+}
+
+/**
+ * TabRouter - Independent MemoryRouter for each Tab
+ *
+ * Each tab maintains its own router instance with isolated history,
+ * enabling true KeepAlive behavior via React 19's Activity component.
+ */
+export const TabRouter = ({ tab, isActive, onUrlChange }: TabRouterProps) => {
+  // Create independent router instance per tab (only once)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const router = useMemo(() => createTabRouter(tab.url), [tab.id])
+
+  // External retargets update tab.url before an async route can replace the outgoing page.
+  // Cover that interval so teardown effects cannot repaint stale page loading UI.
+  const [resolvedHref, setResolvedHref] = useState(tab.url)
+  const transitionUrl = tab.url !== resolvedHref ? tab.url : null
+
+  // Sync internal navigation back to tab state
+  useEffect(() => {
+    return router.subscribe('onResolved', ({ toLocation }) => {
+      const nextHref = toLocation.href
+      setResolvedHref(nextHref)
+      if (nextHref !== tab.url) {
+        onUrlChange(nextHref)
+      }
+    })
+  }, [router, tab.url, onUrlChange])
+
+  // Navigate when tab.url changes externally (e.g., from Sidebar)
+  useEffect(() => {
+    const currentHref = router.state.location.href
+    if (tab.url !== currentHref) {
+      // Parse the query separately because search validation can lose parameters
+      // when the query is passed inside `to`.
+      const [pathname, search] = tab.url.split('?')
+      void router.navigate({
+        to: pathname,
+        search: search ? Object.fromEntries(new URLSearchParams(search)) : undefined
+      })
+    }
+  }, [router, tab.url])
+
+  const contentRef = useRef<HTMLElement | null>(null)
+  const [tabPortalContainer, setTabPortalContainer] = useState<HTMLElement | null>(null)
+  // Latch the captured node across Activity hide/show: a hidden tab detaches the ref
+  // (node === null) while its DOM node lives on, and clearing the container would
+  // un-scope a still-open overlay/PageSidePanel to a full-window document.body portal.
+  const captureTabPortalContainer = useCallback((node: HTMLElement | null) => {
+    if (node) {
+      contentRef.current = node
+      setTabPortalContainer(node)
+    }
+  }, [])
+
+  return (
+    <CommandFocusScope rootRef={contentRef} active={isActive && !transitionUrl}>
+      <Activity mode={isActive ? 'visible' : 'hidden'}>
+        <TabIdProvider tabId={tab.id}>
+          {/* This tab's content root is the portal target for overlays and PageSidePanel
+            scoped to the tab (`relative` anchors the scoped panel's absolute layout), so a
+            background tab's still-open surface stays hidden with its owning tab. */}
+          <div ref={captureTabPortalContainer} className="relative flex h-full min-h-0 w-full flex-1 flex-col">
+            <PortalContainerProvider container={tabPortalContainer}>
+              <DialogPortalContainerProvider container={tabPortalContainer}>
+                <RouterProvider router={router} />
+              </DialogPortalContainerProvider>
+            </PortalContainerProvider>
+            {transitionUrl && (
+              <div
+                data-testid="tab-route-transition-cover"
+                className="absolute inset-0 z-50 bg-card"
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        </TabIdProvider>
+      </Activity>
+    </CommandFocusScope>
+  )
+}

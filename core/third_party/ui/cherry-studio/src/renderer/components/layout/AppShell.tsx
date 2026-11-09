@@ -1,0 +1,301 @@
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+
+import { useCommandHandler, useCommandRuntime } from '@renderer/hooks/command'
+import { useTabs } from '@renderer/hooks/tab'
+import { useLeadingWindowControlsOverlay } from '@renderer/hooks/useLeadingWindowControlsOverlay'
+import useMacTransparentWindow from '@renderer/hooks/useMacTransparentWindow'
+import { useNativeFullscreen } from '@renderer/hooks/useNativeFullscreen'
+import { useNumberShortcutHints } from '@renderer/hooks/useNumberShortcutHints'
+import { ipcApi } from '@renderer/ipc'
+import { TAB_NUMBER_COMMANDS } from '@renderer/utils/numberShortcuts'
+import { isMac } from '@renderer/utils/platform'
+import { getDefaultRouteTitle, isPageTitledRoute } from '@renderer/utils/routeTitle'
+import { cn } from '@renderer/utils/style'
+import { isSettingsPath } from '@shared/data/types/settingsPath'
+import { MIN_WINDOW_HEIGHT, SECOND_MIN_WINDOW_WIDTH } from '@shared/utils/window'
+
+import Sidebar from '../app/Sidebar'
+import { createRecentRouteEntryFromTab, recordGlobalSearchRecentEntry } from '../GlobalSearch/globalSearchGroups'
+import GlobalSearchPopup from '../GlobalSearch/GlobalSearchPopup'
+import MiniAppTabsPool from '../MiniApp/MiniAppTabsPool'
+import { NotificationCenterProvider } from '../NotificationCenter'
+import { ResourceViewSourceProvider } from '../ResourceViewSourceProvider'
+import { AppShellTabBar } from './AppShellTabBar'
+import { TabRouter } from './TabRouter'
+
+// Routes whose pages stay usable below the global minimum window width.
+const isCompactMinWidthRoute = (url?: string): boolean =>
+  !!url && (url.startsWith('/app/chat') || url.startsWith('/app/agents') || url.startsWith('/app/scheduled-tasks'))
+
+export const AppShell = () => (
+  <NotificationCenterProvider>
+    <AppShellContent />
+  </NotificationCenterProvider>
+)
+
+const AppShellContent = () => {
+  const isMacTransparentWindow = useMacTransparentWindow()
+  const tabsApi = useTabs()
+  const {
+    tabs,
+    activeTabId,
+    setActiveTab,
+    closeTab,
+    closeTabs,
+    updateTab,
+    reorderTabs,
+    pinTab,
+    unpinTab,
+    detachTab,
+    openTab
+  } = tabsApi
+  const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId), [activeTabId, tabs])
+  const canCycleTabs = tabs.length > 1 && !!activeTab
+  const canCloseTab = !!activeTab
+  const isSettingsTabActive = isSettingsPath(activeTab?.url)
+  const previousWorkspaceTabIdRef = useRef<string | undefined>(undefined)
+  if (activeTab && !isSettingsTabActive) {
+    previousWorkspaceTabIdRef.current = activeTab.id
+  } else if (isSettingsTabActive && !previousWorkspaceTabIdRef.current) {
+    previousWorkspaceTabIdRef.current = tabs.reduce<(typeof tabs)[number] | undefined>((latest, tab) => {
+      if (isSettingsPath(tab.url)) return latest
+      return !latest || (tab.lastAccessTime ?? 0) > (latest.lastAccessTime ?? 0) ? tab : latest
+    }, undefined)?.id
+  }
+  const tabBarTabs = useMemo(
+    () => (isSettingsTabActive && activeTab ? [activeTab] : tabs),
+    [activeTab, isSettingsTabActive, tabs]
+  )
+  const isFullscreen = useNativeFullscreen()
+  const hasLeadingWindowControls = useLeadingWindowControlsOverlay()
+  const handleCloseTab = useCallback(
+    (id: string) => {
+      const tab = tabs.find((candidate) => candidate.id === id)
+      if (isSettingsPath(tab?.url)) {
+        closeTabs([id], previousWorkspaceTabIdRef.current)
+        return
+      }
+      closeTab(id)
+    },
+    [closeTab, closeTabs, tabs]
+  )
+
+  const handleDetachTab = useCallback(
+    (id: string) => {
+      const tab = tabs.find((candidate) => candidate.id === id)
+      detachTab(id, isSettingsPath(tab?.url) ? previousWorkspaceTabIdRef.current : undefined)
+    },
+    [detachTab, tabs]
+  )
+
+  const handleOpenGlobalSearch = useCallback(() => {
+    if (isSettingsTabActive) return
+    void GlobalSearchPopup.show()
+  }, [isSettingsTabActive])
+
+  // Pinned tabs join the same flat cycle, matching Chrome / VS Code Ctrl+Tab.
+  const cycleTab = useCallback(
+    (direction: 'next' | 'prev') => {
+      if (tabs.length <= 1) return
+      const currentIndex = tabs.findIndex((t) => t.id === activeTabId)
+      if (currentIndex === -1) return
+
+      const offset = direction === 'next' ? 1 : -1
+      const nextIndex = (currentIndex + offset + tabs.length) % tabs.length
+      setActiveTab(tabs[nextIndex].id)
+    },
+    [tabs, activeTabId, setActiveTab]
+  )
+
+  const handleCloseActiveTab = useCallback(() => {
+    if (!activeTabId) return
+    if (isMac && tabs.length === 1) {
+      void ipcApi.request('window.close')
+      return
+    }
+    handleCloseTab(activeTabId)
+  }, [activeTabId, handleCloseTab, tabs.length])
+
+  const commandRuntime = useCommandRuntime()
+  const tabCommandHints = useNumberShortcutHints(TAB_NUMBER_COMMANDS)
+  const orderedTabs = useMemo(
+    () => [...tabs.filter((tab) => tab.isPinned), ...tabs.filter((tab) => !tab.isPinned)],
+    [tabs]
+  )
+  const tabShortcutHints = new Map(
+    orderedTabs
+      .slice(0, TAB_NUMBER_COMMANDS.length)
+      .map((tab, index) => [tab.id, tabCommandHints.get(TAB_NUMBER_COMMANDS[index])])
+  )
+  useEffect(() => {
+    const disposers = TAB_NUMBER_COMMANDS.map((command, index) => {
+      const tab = orderedTabs[index]
+      return commandRuntime.registerHandler(
+        command,
+        () => {
+          if (tab) setActiveTab(tab.id)
+        },
+        { enabled: !!tab, allowInKeyboardLayer: true }
+      )
+    })
+    return () => disposers.forEach((dispose) => dispose())
+  }, [commandRuntime, setActiveTab, orderedTabs])
+
+  useCommandHandler('app.search', handleOpenGlobalSearch, { allowInKeyboardLayer: true })
+  useCommandHandler('tab.close', handleCloseActiveTab, { enabled: canCloseTab, allowInKeyboardLayer: true })
+  useCommandHandler('tab.next', () => cycleTab('next'), { enabled: canCycleTabs, allowInKeyboardLayer: true })
+  useCommandHandler('tab.prev', () => cycleTab('prev'), { enabled: canCycleTabs, allowInKeyboardLayer: true })
+
+  useEffect(() => {
+    if (isSettingsTabActive) {
+      GlobalSearchPopup.hide()
+    }
+  }, [isSettingsTabActive])
+
+  // The compact minimum tracks the active tab's route here, at window level.
+  // It must not live in the pages themselves: they sit inside <Activity>, whose
+  // hide/show re-runs mount effects, so a per-page []-dep effect re-issues this
+  // IPC pair on every tab switch.
+  const activeTabAllowsCompactWidth = isCompactMinWidthRoute(activeTab?.url)
+  useEffect(() => {
+    if (!activeTabAllowsCompactWidth) return
+    void ipcApi.request('window.main.set_minimum_size', { width: SECOND_MIN_WINDOW_WIDTH, height: MIN_WINDOW_HEIGHT })
+    return () => {
+      void ipcApi.request('window.main.reset_minimum_size')
+    }
+  }, [activeTabAllowsCompactWidth])
+
+  const recordRouteVisit = useCallback((tab: typeof activeTab, lastAccessTime = tab?.lastAccessTime) => {
+    if (!tab) return
+
+    const entry = createRecentRouteEntryFromTab(tab, lastAccessTime)
+    if (!entry) return
+
+    recordGlobalSearchRecentEntry(entry)
+  }, [])
+
+  useEffect(() => {
+    recordRouteVisit(activeTab)
+  }, [activeTab, recordRouteVisit])
+
+  // Chat / agent tabs are page-titled (topic / session name + emoji), so navigation keeps them.
+  const handleUrlChange = (tabId: string, url: string) => {
+    const isPageTitled = isPageTitledRoute(url)
+    const tab = tabs.find((candidate) => candidate.id === tabId)
+    const patch = isPageTitled
+      ? { url, lastAccessTime: Date.now() }
+      : {
+          url,
+          title: getDefaultRouteTitle(url),
+          icon: undefined,
+          lastAccessTime: Date.now(),
+          metadata: undefined
+        }
+    updateTab(tabId, patch)
+
+    if (tab) {
+      recordRouteVisit({ ...tab, ...patch }, Date.now())
+    }
+  }
+
+  const tabBar = (
+    <AppShellTabBar
+      tabs={tabBarTabs}
+      shortcutHints={tabShortcutHints}
+      activeTabId={activeTabId}
+      isFullscreen={isFullscreen}
+      isFocusedTab={isSettingsTabActive}
+      setActiveTab={setActiveTab}
+      closeTab={handleCloseTab}
+      closeTabs={closeTabs}
+      reorderTabs={reorderTabs}
+      pinTab={pinTab}
+      unpinTab={unpinTab}
+      detachTab={handleDetachTab}
+      openTab={openTab}
+    />
+  )
+
+  const contentArea = (
+    <>
+      <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col pr-1.5 pb-1.5', isSettingsTabActive && 'pl-1.5')}>
+        <main
+          data-ui="app.content"
+          className="relative min-h-0 flex-1 overflow-hidden rounded-[12px] border-[0.5px] border-border bg-background">
+          {/* Route Tabs: Only render non-dormant tabs */}
+          <ResourceViewSourceProvider>
+            {tabs
+              .filter((t) => t.type === 'route' && !t.isDormant)
+              .map((tab) => (
+                <TabRouter
+                  key={tab.id}
+                  tab={tab}
+                  isActive={tab.id === activeTabId}
+                  onUrlChange={(url) => handleUrlChange(tab.id, url)}
+                />
+              ))}
+          </ResourceViewSourceProvider>
+
+          {/* MiniApp keep-alive WebView pool — global, shared across modes */}
+          <MiniAppTabsPool />
+        </main>
+      </div>
+    </>
+  )
+
+  useEffect(() => {
+    if (isSettingsTabActive) document.documentElement.style.setProperty('--notification-left', '6px')
+  }, [isSettingsTabActive])
+
+  const contentColumn = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {tabBar}
+      {contentArea}
+    </div>
+  )
+
+  // Leading Linux WCO controls take the top-left corner like macOS traffic lights do.
+  if (!isMac && !hasLeadingWindowControls) {
+    return (
+      <div
+        data-ui="app.shell"
+        className={cn(
+          'flex h-screen w-screen flex-row overflow-hidden text-foreground',
+          isMacTransparentWindow ? 'bg-transparent' : 'bg-sidebar'
+        )}>
+        {!isSettingsTabActive && <Sidebar isFullscreen={isFullscreen} />}
+        {contentColumn}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      data-ui="app.shell"
+      className={cn(
+        'relative flex h-screen w-screen flex-row overflow-hidden text-foreground',
+        isMacTransparentWindow ? 'bg-transparent' : 'bg-sidebar'
+      )}>
+      {!isFullscreen && (
+        <div
+          aria-hidden="true"
+          data-testid="macos-traffic-light-drag-region"
+          className="pointer-events-none absolute top-0 left-0 h-11 w-[env(titlebar-area-x)] [-webkit-app-region:drag]"
+        />
+      )}
+      {!isSettingsTabActive && (
+        <div className="flex h-full min-h-0 shrink-0 flex-col [&>#app-sidebar]:min-h-0 [&>#app-sidebar]:flex-1">
+          {!isFullscreen && (
+            <div
+              aria-hidden="true"
+              data-testid="macos-traffic-light-spacer"
+              className="h-11 shrink-0 [-webkit-app-region:drag]"
+            />
+          )}
+          <Sidebar isFullscreen={isFullscreen} />
+        </div>
+      )}
+      {contentColumn}
+    </div>
+  )
+}

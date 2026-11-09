@@ -1,0 +1,48 @@
+retailer:
+  slug: jiomart_in
+  name: JioMart India
+  marketCode: in
+  currencyCode: INR
+  adapter: search
+  baseUrl: https://www.jiomart.com
+  enabled: true
+
+  searchConfig:
+    # Exa's neural index points overwhelmingly at the retired route (0 live
+    # URLs across 5 sampled items) while keyword search matches JioMart's
+    # current pages (33 live across the same 5), so the MODE is what reaches
+    # the live route. The live `/product/` URLs still rank below the top 5,
+    # so discovery has to look wider — but extraction must not: unbounded,
+    # a 10-result search cost up to 16 provider calls on items that never
+    # price. Search wide, extract from at most 4.
+    numResults: 10
+    searchType: keyword
+    maxExtractionCandidates: 4
+    # JioMart serves live product pages from `/product/<slug>-<id>`. The
+    # `/p/groceries/<slug>/<id>` shape Exa still has indexed is RETIRED: it
+    # answers 200 with a 3.6KB SPA shell reading "We couldn't find the page"
+    # (5/5 sampled URLs, 2026-08-05), so pointing discovery there produced a
+    # healthy "N passed host/path check" log and then `missing-price` on every
+    # candidate. Exa returns both shapes; only `/product/` is fetchable.
+    queryTemplate: "{canonicalName} {category} grocery food {market} {currency} price"
+    allowedHosts:
+      - www.jiomart.com
+    urlPathContains: /product/
+    # No Exa extraction fallback. Exa's render of a JioMart page carries the
+    # hidden installation-service and device-protection modals but not the
+    # selling price: one modal prints the product name followed by a
+    # placeholder "₹3,700.00", another a "₹77,000.00" television. All 72 Exa
+    # observations from 2026-08-08 to 10-22 were such placeholders (67 at
+    # ₹3,700 across 22 products) and passed the price-evidence gate because
+    # the number is on the page. Firecrawl renders the real price.
+    requireStrictValidator: true
+
+  rateLimit:
+    requestsPerMinute: 10
+    maxConcurrency: 1
+    delayBetweenRequestsMs: 6000
+
+  discovery:
+    mode: search
+    maxPages: 20
+    seeds: []

@@ -1,0 +1,99 @@
+---
+import PageLayout from '@layouts/Page.astro';
+import NavBar from '@components/scafold/Nav.astro';
+import Footer from '@components/scafold/Footer.astro';
+import Main from '../client/main.tsx';
+import { determineAddressType } from '../client/utils/address-type-checker';
+import '../client/styles/index.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  target?: string;
+  tool?: { name: string; href: string };
+}
+
+const { target, tool, ...page } = Astro.props;
+
+// Scanned site for the header, when the path holds a single address
+const site = target?.includes('/') ? undefined : target?.replace(/^www\./, '');
+---
+
+<PageLayout {...page}>
+  <link
+    slot="head"
+    href="/fonts/PTMono-Regular.woff2"
+    as="font"
+    rel="preload"
+    type="font/woff2"
+    crossorigin="anonymous"
+  />
+  {site ? (
+    <NavBar slot="nav">
+      {tool && (
+        <a slot="tool" class="tool" href={tool.href}>
+          {tool.name}
+        </a>
+      )}
+      <div class="site">
+        {determineAddressType(site) === 'url' && (
+          <a
+            href={`https://${target}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Visit ${site}`}
+          >
+            <img src={`https://icon.horse/icon/${site}`} alt="" width="32" height="32" />
+          </a>
+        )}
+        <h1>{site}</h1>
+      </div>
+    </NavBar>
+  ) : (
+    <NavBar slot="nav" />
+  )}
+  <Main client:only="react" />
+  <Footer slot="footer" miniView />
+</PageLayout>
+
+<style lang="scss">
+  .tool {
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--primary-transparent);
+    border-radius: 2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: border-color 0.25s ease;
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--primary);
+      text-decoration: none;
+    }
+  }
+
+  .site {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    img {
+      display: block;
+      border-radius: 4px;
+      width: 2rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      overflow-wrap: anywhere;
+    }
+  }
+</style>
+
+<style is:global>
+  body {
+    --page-width: min(94vw, 2200px);
+    --main-padding: 2rem 0;
+  }
+</style>

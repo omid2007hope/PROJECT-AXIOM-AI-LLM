@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openosint
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate version matches tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TOML_VERSION=$(python3 -c "
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              data = tomllib.load(f)
+          print(data['project']['version'])
+          ")
+          if [ "$TAG_VERSION" != "$TOML_VERSION" ]; then
+            echo "❌ Version mismatch: git tag=$TAG_VERSION, pyproject.toml=$TOML_VERSION"
+            echo "   Bump [project] version in pyproject.toml to $TAG_VERSION, commit, and re-tag."
+            exit 1
+          fi
+          echo "✅ Version match: $TAG_VERSION"
+      - name: Install build tools
+        run: pip install build
+      - name: Build package
+        run: python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+      - name: Wait for PyPI to propagate new version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Waiting for openosint==$VERSION to appear on PyPI..."
+          for i in $(seq 1 24); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://pypi.org/pypi/openosint/$VERSION/json")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ PyPI version $VERSION is available (attempt $i)"
+              exit 0
+            fi
+            echo "⏳ Attempt $i: PyPI returned $STATUS. Waiting 15s..."
+            sleep 15
+          done
+          echo "❌ PyPI version $VERSION did not appear after 6 minutes"
+          exit 1
+      - name: Sync server.json version with release tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '
+            .version = $v |
+            .packages = (.packages | map(
+              if (.registryType // .registry_type) == "pypi"
+              then .version = $v
+              else .
+              end
+            ))
+          ' .mcp/server.json > /tmp/server.json && mv /tmp/server.json .mcp/server.json
+          echo "Updated server.json to version $VERSION:"
+          cat .mcp/server.json
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/
+      - name: Publish to MCP Registry
+        run: |
+          mcp-publisher login github-oidc
+
+          MAX_ATTEMPTS=5
+          ATTEMPT=0
+          DELAYS=(15 30 60 120 120)
+
+          until mcp-publisher publish .mcp/server.json; do
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+              echo "❌ mcp-publisher publish failed after $MAX_ATTEMPTS attempts"
+              exit 1
+            fi
+            WAIT=${DELAYS[$ATTEMPT-1]}
+            echo "⚠️  Attempt $ATTEMPT failed. Retrying in ${WAIT}s..."
+            sleep "$WAIT"
+          done
+
+          echo "✅ MCP Registry publish succeeded on attempt $((ATTEMPT + 1))"
