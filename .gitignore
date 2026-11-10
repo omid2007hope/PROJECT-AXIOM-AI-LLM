@@ -13,6 +13,10 @@ Qwen3.8-27B-UD-IQ4_XS.gguf
 #Data 
 core/database
 core/training_data
+core/asset_sample/images/
+core/asset_sample/text/
+core/asset_sample/symbols/
+*.pdf
 .aider*
 models/
 
