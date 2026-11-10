@@ -87,13 +87,16 @@ std::filesystem::path locate_core_dir() {
 // Raw data samples used by developer mode (--train)
 Test make_sample_data() {
 	Test test;
-	test.test_input = {"The",  "quick", "brown", "fox", "jumps", "over", "the",
-					   "lazy", "dog",	"5.1",	 "3.5", "1.4",	 "0.2",	 "4.9",
-					   "3.0",  "1.4",	"0.2",	 "4.7", "3.2",	 "1.3",	 "0.2"};
+	test.test_input = {
+		"The", "silicon", "engine", "computes", "forward", "activations", "and", "analytical",
+		"backward", "gradients", "across", "unified", "tensor", "cores", "without", "numerical",
+		"divergence", "in", "native", "hardware", "execution", "using", "fast", "parallel",
+		"floating", "point", "tensor", "operations", "on", "modern", "gpus"
+	};
 
-	test.data_image = {"Photo.jpeg"};
-	test.data_video = {"Video.mp4"};
-	test.data_voice = {"Voice.ogg"};
+	test.data_image = {};
+	test.data_video = {};
+	test.data_voice = {};
 
 	return test;
 }
