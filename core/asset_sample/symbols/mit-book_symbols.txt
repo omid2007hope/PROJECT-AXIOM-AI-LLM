@@ -1,0 +1,8880 @@
+®
+6/29/2021
+6/29/2021
+6/29/2021
+6/29/2021
+6/29/2021
+6/29/2021
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48295
+.
++n +41
+p(n) ::=
++n +
+p(0) = 41
+p(1) = 43, p(2) = 47, p(3) = 53, … , p(20) = 461
+n = 39
+p(40) =
++40 +41 = 41 ⋅41
+∀
+∈
++
++
+=
+.
++
++
+≠
+.
+Z+
+Z+
+Z+
+Z+ a4
+Z+
+∀
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48295
+.
+.
++
++
+≠
+.
+Z+ a4
++
+) =
+.
+Z+
++
+=
+n > 2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48296
++1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48297
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48298
+.
+2 +2 = 4
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48298
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49290
+.”
+.
+:
+.”
+.
++bx +c = 0
+x = (−b ±
+) /2a.
+−
+−
+−−−−−
+√
+−
++4x +1 > 0
+−
++4x +1 > 0
+x = 0
+1 > 0
+x = 1
+4x = 4
+−
+= −1
+x > 2
+−
++4x
+−
++4x +1
+−
++4x
+−
++4x = x(2 −x)(2 +x)
+2 +x
+x(2 −x)(2 +x)+1 > 0
+−
++4x +1 > 0
+■
+□
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49290
+√
+m/n
+√
+√
+√
+=
+√
+=
+√
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49291
+(
++(
++⋯+(
+−
+−
+−−−−−−−−−−−−−−−−−−−−−−−−−−−−−
+√
+μ ::=
++
++⋯+
+= 0
+(
++(
++⋯+(
+−
+−
+−−−−−−−−−−−−−−−−−−−−−−−−−−−−−
+√
+(
++(
++⋯+(
+= 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49291
+(
+= μ
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49292
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49293
+√
+⋯
+√
+√
+√
+n/d
+/
+=
+=
+n/d
+√
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49294
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49294
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48300
+.
+√
+m/n
+/
+m/n
+> 0
+/
+p > 1
+=
+,
+/p
+/p
+/
+/p
+/p
+/p
+/p <
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48301
+.
+C ::= {n ∈N|NOT(P(n)) is true}.
+{n|Q(n)}
+■
+1 +2 +3 +⋯+n = n(n +1)/2
+n = 1
+1 +2 +3 +⋯+n
+i=1
+n = 1
+n = 0
+C ::= {n ∈N|1 +2 +3 +⋯+n ≠
+}.
+n(n +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48301
+n = c
+n < c
+n = 0
+c > 0
+c = 1
+1 +2 +3 +⋯+(c −1) =
+.
+1 +2 +3 +⋯+(c −1) =
++c =
+=
+.
+−c +2c
+c(c +1)
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48302
+.
+,
+1 < a, b < n
+⋯
+⋯
+n =
+⋯
+⋯
+■
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48305
+”:
+:
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48305
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48305
+[
+] AND [
+] AND⋯ AND [
+]
+−4 ≥0 IFF |x| ≥2.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48306
+:
+.
+:
+x > 0||(x ≤0 && y > 100)
+x > 0
+y > 100
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48306
+:
+.
+.
+.
+.
+)
+)
+(x > 0||y > 100)
+⋅
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48307
+(
+)
+(
+)
+(
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48307
+(
+)
+.
+[(
+).
+[(
+))
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48308
+).
+]
+).
+]
+).
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48308
+-
+,
+!
+(
+)
+)
+)
+)
+)
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+↔
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48308
+.
+.
+.
+.
+.
+.
+.
+-term
+.
+.
+.
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48308
+:
+.
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48309
+(\textbf{NP}\) problem.
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49338
+“
+”
+“
+”
+.
+.
+.
+.
+.
+.
+.
+.
+∀
+−7 = 0
+x = ±sqrt7/5
+∃
+−7 = 0
+−7 = 0
+−7 = 0
+−7 = 0
+−7 = 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49338
+
+
+
+
+
+
+
+
+
+n = p +q.
+
+
+
+
+
+
+
+
+
+n = p +q.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49338
+∃
+(
+(
+(
+x > y
+n +1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49338
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48311
+.
+. “
+.”
+B = {red, blue, yellow}
+C = {{a,b},{a,c},{b,c}}
+D ::= {1,2,4,8,16,…}
+{x, y} and {y, x}
+{x, x}
+{x, x} = {x}.
+∅
+{0,1,2,3,…}
+{…,−3,−2,−1,0,1,2,3,…}
+{ ,
+,16,etc.}
+{π,e,−9,
+,etc.}
+√
+{i,
+,
+−2i,etc.}
+√
++
+R+
+⊆
+≤
+⊂
+X ::= {1, 2, 3}.
+Y ::= {2, 3, 4}.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48311
+.
+.
+X ∪Y = {1, 2, 3, 4}.
+X ∩Y = {2, 3}.
+X −Y = {1} and Y −X = {4}.
+¯ ¯
+¯¯
+::= D−A.
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+= ∅ IFF A = D.
+¯ ¯
+¯¯
+=
+¯¯
+¯¯
+= ∅.
+¯ ¯
+¯¯
+({1, 2})
+∅, {1}, {2}, and {1, 2}.
+A ::= {n ∈N|n is a prime and n = 4k +1 for some integer k}
+B ::= {x ∈R|
+−3x +1 > 0}
+C ::= {a+bi ∈C|
++2
+≤1}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48311
+(
+:
+.
+n = 4k +1
+−3x +1 > 0
++2
+X = Y
+∩
+∪
+∩
+∪
+■
+∩
+∩
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48311
+.”
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+=
+∪
+.
+¯
+¯
+¯¯¯¯¯¯¯¯¯¯¯
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48312
+{a, b, a}
+{a, b, c}
+{a, c, b}
+×
+×⋯×
+N ×{a, b}
+N ×{a, b} = {(0, a), (0, b), (1, a), (1, b), (2, a), (2, b), …}
+{0, 1}3
+{0, 1
+}3
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48313
+,
+f(a) = b
+(x) ::=
+
+
+
+
+(P, Q) ::= [P IMPLIES Q].
+(0010) = 3,
+(100) = 1,
+(x) =
+f(S) ::= {b ∈B|f(s) = b for some s ∈S}
+[r, s]
+([1, 2]) = [1/4, 1].
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48313
+.
+(g∘f)(x) ::= g(f(x)),
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48314
+.
+.
+.
+a < b
+b = f(a)
+⋮
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48314
+in] instead of [
+in].
+has the [
+)/ is.
+has the [
+in] nor the [
+= 1
+= 1
+R+
+R+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48314
+.
+Chrg ({G. Freeman, T. Engg}) = {6.011, 6.881, 6.882, 6.UAT}
+.
+,
+.
+{T. Eng, D. Freeman}
+({6.UAT}).
+.”
+m < n
+m +n
+< (m, n)
++(m, n)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49339
+.
+.
+,
+,
+.
+.
+.
+,
+:
+.
+.
+.
+the [
+.
+|A|
+|A| ≥#arrows.
+#arrows ≥|B|.
+|A| ≥|B|
+|A| ≥|B|
+|A| ≥|B|
+|A| ≤|B|
+|A| = |B|
+■
+= {
+,
+,
+,
+,
+,
+}
+= {
+,
+,
+,
+. }
+) ::=
+) ::=
+) ::=
+) = f(
+) = f(
+) ::=
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49339
+,
+,
+.
+subset: {
+,
+,
+,
+,
+}
+),
+) ::=
+,
+≥
+|A| ≥|B|
+|A| ≥|B| iff A surj B,
+|A| ≤|B| iff A inj B,
+|A| = |B| iff A bij B.
+|A| = n implies |pow(A)| = 2n
+{
+,
+,
+}
+∅
+{
+}
+{
+}
+{
+,
+}
+{
+}
+{
+,
+}
+{
+,
+}
+{
+,
+,
+}
+{01}n
+,
+, … ,
+(
+,
+, … ,
+)
+= 1 iff
+n = 10
+{
+,
+,
+,
+,
+}
+|pow(A)| = |{0, 1
+|.
+}n
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48316
+:
+.
+n +1
+P(n +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48316
+,
+.
+—
+1 +2 +3 +⋯+n = n(n +1)
+P(n +1)
+1 +2 +3 +⋯+n +(n +1) = (n +1)(n +2)
+(n +1)
+1 +2 +3 +⋯+n +(n +1)
+=
++(n +1)
+n(n +1)
+= (n +2)(n +1)
+P(n +1)
+P(n +1)
+P(n +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48316
+.
+.
+.
+n = 0
+n +1
+1 +2 +3+ ↠n +(n +1) =
++(n +1)
+n(n +1)
+=
+(n +1)(n +2)
+P(n +1)
+■
+n = 3
+×
+n = 3
+n = 2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48316
+.
+×
+n = 2
+×
+×
+×
+×
+2n+1
+2n+1
+■
+P(n +1)
+×
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48316
+×
+×
+×
+P(n +1)
+■
+P(n +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48316
+.
+.
+.
+—
+,
+.
+P(n +1)
+n = 1 P(1)
+n +1
+,
+, … ,
+,
+hn hn+1
+n +1
+,
+,
+, … ,
+
+
+
+
+hn+1
+,
+, … ,
+,
+hn hn+1
+
+
+
+
+hn+1
+, … ,
+hn+1
+, … ,
+hn+1
+, … ,
+n +1
+P(n +1)
+P(n +1)
+■
+hn+1
+, … ,
+…
+…
+,
+, … ,
+,
+hn hn+1
+, … ,
+hn+1
+n = 1
+,
+, … ,
+,
+hn hn+1
+,
+P(n +1)
+n = 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48317
+.
+,
+,
+, ...,
+,
+.
+,
+,
+.
+n +1
+P(n +1)
+P(n +1)
+P(n +1)
+[∀k ≤n ∈N. P(k)] IMPLIES P(n +1)
+P(n +1)
+n +1
+n +1
+P(n +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48317
+.
+n +1
+n +1 = k ⋅m
+k ⋅m = n +1
+P(n +1)
+P(n +1)
+■
+n +1 ≥11
+(n +1)−3 ≥8
+(n +1)−3
+(n +1)
+n +8
+P(n +1)
+n +1 = 1
+n +1)+8 =
+n +1 = 2
+n +1)+8 =
+n +1 ≥3
+(n −2)+8
+(n +1)+8
+P(n +1)
+n +1 ≥1
+P(n +1)
+n +8
+■
+a+b
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48317
+.
+.
+n = 10
+n = 10
+n(n −1)/2
+P(n +1)
+n(n −1)/2
+n = 1
+1(1 −1)/2 = 0
+P(n +1)
+n +1
+a+b = n +1
+0 < a, b ≤n
+=
+=
+=
+ab +
++
+=
+(a+b
+−(a+b)
+(a+b)((a+b)−1)
+(n +1)n
+P(n +1)
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48318
+n +1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+= {0, 1, … , 99, overflow },
+= 0,
+= {n ⟶n +1 ∣0 ≤n < 99}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+{(m, n) ⟶(m ±1, n ±1) ∣m, n ∈Z}
+m +n
+Even-sum ((m, n)) ::= [m +n is even ].
+(±1)+(±1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+.
+n +1
+n +1
+■
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+.
+.
+.
+.
+,
+,
+l < 3
+b < 5
+l > 0
+b > 0
+l > 0
+(b, l) ⟶{ (b +l, 0)
+if b +l ≤5
+b > 0
+(b, l) ⟶{ (0, b +l)
+if b +l ≤3
+q ::= (b, l
+r = (b, 3)
+b +l > 3
+r = (b −(3 −l)), 3)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+.
+,
+,
+,
+,
+z ::= a
+z = 0
+r :=
+z :=
+r = 1
+y := xy
+x := x2
+y = ab
+(x, y, z) ⟶{
+(
+(
+=
+.
+,
+,
+)
+,
+,
+))
+=
+.
+=
+= y
+= z/2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+,
+,
+.
+t = y(
+)
+x2 z/2
+= yx2⋅z/2
+= yxz
+=
+=
+= xy
+= (z−1)/2
+t = xy(
+)
+x2 (z−1)/2
+= yx1+2⋅(z−1)/2
+= yx1+(z−1)
+= yxz
+=
+=
+z = 0
+y = y
+=
+2(⌈log b⌉+1)
+b > 1
+⌈log b⌉+1
+z = 0
+2(⌈log b⌉+1)
+b > 0
+f((a, b)) ::= a+b
+((i, j)) ::= i
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+.
+.
+).
+.
+x > 0
+N +F
+→N +F
+v(x, y) ::= y +
+x +1
+,
+)
+,
+)) < v((x, y))
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48319
+.
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48321
+.
+.
+.
+:
+.
+{0, 1}∗
+|s|
+|λ| ::= 0.
+|⟨a, s⟩| ::= 1 +|s|.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48321
+.
+,
+):
+.
+λ ⋅t ::= t.
+⟨a, s⟩⋅t ::= ⟨a, s⋅t⟩
+|s⋅t| = |s| +|t|.
+P(s) ::= ∀t ∈
+. |s⋅t| = |s| +|t|.
+s = λ
+|s⋅t| = |λ ⋅t|
+= |t|
+= 0 +|t|
+= |s| +|t|
+s ::= ⟨a, r⟩
+|s⋅t| = |⟨a, r⟩⋅t|
+= |⟨a, r ⋅t⟩|
+= 1 +|r ⋅t|
+= |1 +(|r| +|t|)
+= (1 +|r|)+|t|
+= |⟨a, r⟩| +|t|
+= |s| +|t|.
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48321
+,
+.
+.
+#c
+(λ) ::= 0
+#c
+(⟨a, s⟩) ::= {
+#c
+#c
+1 +
+#c
+if a = c
+(s⋅t) =
+(s)+
+#c
+#c
+#c
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48322
+:
+.
+.
+”
+{], [}∗
+{], [}∗
+[]][[[
+[[]][]
+s ∈{], [}∗
+x +y ∗
+÷y +7
+[[x +y] ∗
+÷y] +7, or
+x +[y ∗
+÷[y +7]] , or,
+[x +[y ∗
+]] ÷[y +7], or …?
+[s]t ∈RecMatch
+[s]t
+[⋅(s⋅(]⋅t)).
+⋅′
+s = t = λ
+[λ]λ = []∈RecMatch.
+[λ][]= [][]∈RecMatch
+(letting s = λ, t = [])
+[[]]λ = [[]] ∈RecMatch
+(letting s = [], t = λ)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48322
+.
+.
+.
+,
+[[]][]∈RecMatch
+(letting s = [], t = [])
+P(s) ::=
+(s) =
+#[
+#]
+(λ) = 0 =
+#[
+#]
+()
+#c
+P([s]t) :
+([s]t)
+#[
+=
+([)+
+(s)+
+(])+
+#[
+#[
+#[
+#[
+= 1 +
+(s)+0 +
+#[
+#[
+= 1 +
+(s)+0 +
+#]
+#]
+= 0 +
+(s)+0 +
+#]
+#]
+=
+([)+
+(s)+
+(])+
+#]
+#]
+#]
+#]
+=
+([s]t)
+#]
+())
+#[
+())
+#]
+AmbRecMatch ⊆{], [}∗
+[s]
+f([s])
+::= 0,
+::= 1 +f(s),
+:= 1 +f(s)+f(t).
+= f(λ)
+= f(λ ⋅λ)
+= 1 +f(λ)+f(λ)
+= 1 +0 +0 = 1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48323
+.
+.
+.
+n +1
+fac(0) ::= 1
+fac(n +1) ::= (n +1)⋅fac(n) for n ≥0.
+F(0) ::= 0,
+F(1) ::= 1,
+F(n) ::= F(n −1)+F(n −2)
+n = 2
+F(2) = F(1)+F(0) = 1, F(3) = F(2)+F(1) = 2
+F(4) = 3
+i=1
+S(0) ::= 0
+S(n +1) ::= f(n +1)+S(n)
+(n) ::= 2 +
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48323
+.
+.
+(n) ::= {
+(n +1)
+if n = 0
+(n) ::=
+⎧
+⎩
+⎨
+⎪
+⎪
+(6) = 0
+(6) = 1
+(n) ::=
+⎧
+⎩
+⎨
+⎪
+⎪
+(n/2)
+(3n +1)
+(3) = 1
+(3) ::=
+(10) ::=
+(5) ::=
+(16) ::=
+(8) ::=
+(4) ::=
+(2) ::=
+(1) ::= 1
+A(m, n) = 2n
+m = 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48324
+-
++2x +1
+[e+f]∈Aexp
+[e+f]
+[e∗f]∈Aexp
+[e∗f]
+[e]∈Aexp
+[e]∈Aexp
++2x +1
+[[3 ∗[x ∗x]] +[[2 ∗x]+1]].
++2x +1
++2x +1
++2x +1
+eval([
++
+], n)
+eval([
+∗
+], n)
+eval(−[
+], n)
+:= eval(
+, n)+eval(
+:= eval(
+:= −eval(
+3 +x2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48324
+:
+eval([3 +[x ∗x]], 2) = eval(3, 2)+eval([x ∗x], 2)
+= 3 +eval([x ∗x], 2)
+= 3 +(eval(x, 2)⋅eval(x, 2))
+= 3 +(2 ⋅2)
+= 3 +4 = 7.
+subst(f, [
++
+])
+subst(f, [
+∗
+])
+subst(f, −[
+])
+:= [subst(f,
+)+subst(f,
+)]
+:= [subst(f,
+)]
+:= −[subst(f,
+)]
+=
+=
+=
+=
+=
+=
+=
+subst([3 ∗x], [x ∗[x +−[1]]])
+[subst([3 ∗x], x)∗subst([3 ∗x], [x +−[1]])]
+[[3 ∗x]∗subst([3 ∗x], [x +−[1]])]
+[[3 ∗x]∗[subst([3 ∗x], x)+subst([3 ∗x], −[1])]]
+[[3 ∗x]∗[[3 ∗x]+−[subst([3 ∗x], 1)]]]
+[[3 ∗x]∗[[3 ∗x]+−[1]]]
+x = 2
+x = 2
+x = 2
+6 ⋅5 = 30
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48324
+,
+Case [
+]
+,
+Case [
+Case [
+[x]
+[k]
+[
++
+]
+i = 1, 2
++
+]), n) = eval([
++
+], eval(f, n))
+))+subst(f,
+)], n)
+[
+∗
+]
+−[
+]
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/49340
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+.
+.
+,
+,
+.
+.
+.
+(r ⋅s)⋅t = r ⋅(s⋅t)
+(x) ::= x
+f +g, fg, 2g
+1/x
+1/x = x−1
+::= df/dx
+n +2
+S ::= {
+∈N ∣k, m, n ∈N}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+.
+,
+.
+T ::= {
+∈N ∣k, m, n ∈N}
+2k32k+m5m+n
+L ::= {(a, b) ∈
+= L
+.
+,
+,
+|G|
+|⟨ leaf , l⟩| ::= 1, for all l ∈L.
+,
+, ⟩| ::= |
+| +|
+| +1.
+2 ⋅length (flatten(G)) = |G| +1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+,
+.
+:
+.
+.
+.
+j+k ∈Lm,n
+g = GCD(m, n)
+#c
+(λ) ::= 0
+#c
+(⟨a, s⟩) ::= {
+#c
+#c
+1 +
+#c
+if a = c.
+(s⋅t) =
+(s)+
+#c
+#c
+#c
+√
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+.
+.
+.
+,
+=
++1
+id(x) ::= x
+f +g
+::= df/dx
+id(r) ::= r
+⊛
++
+⋅
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+:
+,
+.
+:
+,
+.
+.
+.
+.
+.
+).
+.
+:
+⊛
+=
+⊆
+⊆
+(n) ::= |s| ≤n IMPLIES s ∈ RecMatch
+(s) ::= s ∈$ AmbRecMatch
+[][][]
+[]
+[[[]][]][]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+.
+:
+.
+.
+.
+.
+.
+.
+.
+[[[]][]][]→[[]] →[]→λ
+[]][[[[[]]
+][[[
+[]][[[[[]] →][[[[]→][[[↛
+P(n +1
+|x| = n +1
+|y| = n −1 ≥0
+(y = [s]t
+(x = py)
+[ ]t
+| | < |x|
+[ ]t
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+.
+.
+.
+[
+[
+]
+[
+]
+[
+[
+]
+[
+]
+[
+[
+[
+]
+[
+]
+]
+[
+]
+]
+]
+]
+GoodCount ::= {s ∈{], [
+}∗
+(m, n) ::= 2n,
+(A-base)
+B = A
+erase([[3 ∗[x ∗x]] +[[2 ∗x]+1]])= [[[]][[2 ∗x]+1]]
+[s]≠erase(e)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+.
+.
+{
+,
+, …}
+G ::= (a, {
+,
+, …})
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51299
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48326
+:
+.
+,
+.
+,
+.
+.
+|A| < |B|
+NOT(|A| ≥|B|)
+|A| < |B|.
+■
+[≤1 out, ≥1 in]
+[≥1 out, ≤1 in]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48326
+,
+—
+,
+.
+.
+■
+|A ∪{b}| = |A| +1
+A ∪{b}
+A ∪{b}
+A ∪{b}
+A ∪{b}
+A ∪{b}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48326
+:
+.
+,
+,
+, … ,
+, …
+e : A ∪{b} →A
+)
+::=
+,
+::= an+1
+::= a
+for a ∈A −{b,
+,
+, …} .
+■
+,
+, … ,
+, …
+,
+, … ,
+, …
+f(n) ::= { n/2
+−(n +1)/2
+Z+
+Q+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48326
+).
+,
+.
+.
+::= {a ∈A ∣a ∉g(a)}.
+= g(
+)
+a = a0
+)
+■
+{0, 1}n
+{0, 1}ω
+pow(N) bij {0, 1}ω
+{0, 1}ω
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48326
+{0, 1}ω
+√
+1/10
+1/3
+1/9
+= 1.4142 … ,
+= 5.000 … ,
+= 0.1000 … ,
+= 0.333 … ,
+= 0.111 … ,
+b(1/10)
+b(1/9)
+)
+), b(1/3)
+√
+= 000 … ,
+= 1000 … ,
+= 111 … ,
+= 010101 …
+.
+}ω
+(Z+)∗
+=
+⋅
+⋅
+⋅
+⋅
+⋅
+… ,
+=
+⋅
+⋅
+⋅
+⋅
+⋅
+… .
+⋅
+⋅
+⋅
+)
+= (2, 1),
+= (3, 1, 2),
+= λ,
+.
+Z+)∗
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48326
+:
+{0, 1}ω
+{0, 1}ω
+D = 1
+C = 0
+{0, 1}ω
+{a ∈A ∣a ∉g(a)}
+= 5.000 … = 4.999 … ,
+= 0.1000 … = 0.0999 … .
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48327
+,
+No-halt ::=
+zz ++ccBB
+{s ∈
+∣
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48327
+:
+No-halt =
+.
+f(s) ::= {t ∈
+∣
+.
+)
+s = s0
+)
+No-halt
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48327
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48328
+.
+,
+.
+W ::= {S ∣S ∉S}
+x = y
+{x, y}
+∀x, y. ∃u. ∀z. [z ∈u iff (z = x OR z = y)]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48328
+.
+.
+{y}
+∀s ∃t ∀y. [∃x. ϕ(x, y) IFF y ∈t]
+⋯∈
+∈⋯
+∈
+member-minimal(m, x) ::= [m ∈x AND ∀y ∈x. y ∉m]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48329
+?
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+.
+.
+.
+.
+.
+{0, 1}∗
+([≥1 out, ≤1 in])
+−x = −0.1.
+{1, 2, … , 10}
+|A|
+∀n ∈N, |A| ≤n.
+∀n ∈N, |A| ≥n.
+∃n ∈N, |A| ≤n.
+∃n ∈N, |A| < n.
+A bij (A ∪{
+})
+A bij (A ∪{
+,
+, … ,
+})
+{
+,
+, … ,
+} ⊂B
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+,
+.
+.
+(C) ::= [A bij C]
+ϵ > 0
+>
+> ⋯
+Z+
+(
+×
+)
+Z+
+Z+
+⋮
+Q+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+.
+.
+.
+.
+.
+.
+.
+.
+.
+(0, 1] to [0, ∞)×[0, ∞)
+(0, 1] to [0, ∞)
+1/x
+{0, 1, … , 9}
+(0, 1]
+(0, 1]2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+.
+.
+.
+.
+.
+.
+.
+(0, 1]
+(0, 1]2
+(0, 1]
+(0, 1]2
+(0, 1]
+[0, ∞)2
+,
+, … ,
+. …
+⋃∞
+n=0 An
+A = {
+,
+,
+,
+, …}
+B = {
+,
+,
+,
+, …}
+{0, 1}∗
+{0, 1}ω
+{0, 1}ω
+{0, 1}∗
+::= {0, 1
+¯ ¯
+¯¯
+}ω
+¯ ¯
+¯¯
+{0, 1}∗
+{0, 1}ω
+{0, 1}ω
+B ⊂{0, 1}ω
+{0, 1}ω
+{0, 1}ω
+{0, 1
+}ω
+pow({T, F}),
+{0, 1
+}∗
+{T, F} (truth values)
+pow({0, 1
+)
+}ω
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+.
+.
+,
+,
+.
+.
+U ::=
+⋃∞
+n=0 pown
+n > 0
+NOT[∃y, ∃z. s = y1z],
+(no-1s(s))
+{0, 1}∗
+strings(G) ::= {s ∈{0, 1
+∣Gs}.
+}∗
+x ∈{0, 1}∗
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+.
+.
+.
+)
+= G10 = no-1s
+=
+).
+U ::= {x ∈{0, 1
+)}.
+}∗
+[A →B]
+NOT(A surj [A →B])
+[A →B]
+diag(a) ::= { 0
+(a) = 1,
+{1, 2, 3}ω
+{1, 2, 3}ω
+{1, 2, 3}ω
+{a, b}
+{a, {b}}
+{{1}, {2}}
+pair(a, b) ::= {a, {a, b}}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+.
+.
+.
+::=
+∈
+∀
+∃
+x = y
+A = N
+0 < ⋯< n −1 < n
+⋯> n > ⋯> 1 > 0
+≤
+≤
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+.
+.
+.
+.
+"
+.
+.
+.”
+∈
+∈
+,
+, … ,
+)
+x ⊆{
+,
+, … ,
+}
+(
+, … ,
+)
+, … ,
+≠
+1 ≤i < j ≤n
+n(n −1)/2
+(
+, … ,
+)
+p = {a, b}
+x = y
+x = y
+pair(a, b) ::= {a, {a, b}}
+next(x) ::= x ∪{x}.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/51996
+⋯∈
+∈
+∈⋯∈
+∈
+vn+1
+(0, 1],
+{r ∈R ∣0 < r ≤1}.
+[0, ∞) ::= {r ∈R ∣r ≥0}.
+6/29/2021
+6/29/2021
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48331
+.
+,
+.
+ak = b.
+6 = 1 +2 +3
+28 = 1 +2 +4 +7 +14
+1 +2 +5 = 8
+1 +2 +3 +4 +6 = 16
+a ∣sb +tc
+= b
+= c
+sb ±tc = s(
+a)+t(
+a) = (s
++t
+sb +tc =
+::= (s
++t
+)
+a ∣sb +tc.
+■
+sb +tc
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48331
+.
+,
+.
+, … ,
+n =
++
++⋯+
+, … ,
+d > 0
+n = q ⋅r AND 0 ≤r < d
+2716 = 271 ⋅10 +6
+−11 = (−2)⋅7 +3
+(k. . n) ::=
+(k. . n] ::=
+[k. . n) ::=
+[k. . n] ::=
+{i ∣k < i < n},
+(k, n)∪{n},
+{k} ∪(k, n),
+{k} ∪(k, n)∪{n} = {i ∣k ≤i ≤n}.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48331
+:
+.
+(n = 0) P(0)
+0 ⋅a+0 ⋅b = 0
+P(n +1
+x +y
+x +y −a
+x +y −b
+P(n +1
+P(n +1
+■
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48332
+.
+.
+,
+,
+n > 0
+gcd(n, n) = n,
+gcd(n, 1) = 1,
+gcd(n, 0) = 0
+a = qb +r
+r = rem(a, b)
+■
+)
+
+
+
+
+=248
+= gcd(31, rem(62, 31) = 0)
+= 31
+gcd(26, 21) = gcd(21, 5) = gcd(5, 1) = 1.
+y > 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48332
+.
+x = gcd(x, 0) = gcd(a, b).
+1 +2
+gcd(a, b) = sa+tb,
+= gcd(21, 7)
+= gcd(7, 0)
+= 7.
+x = a
+y = b
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48332
+.
+.
+gcd(3, 6) = 3
+3 = s⋅21 +t ⋅26
+3 =
+⋅21 +
+s⋅21 +t ⋅26
+⋅21 +
+⋅26 = 3
+3 +26
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48332
+.
+.
+c ∈[0..a]
+for 0 < y ≤x.
+y ≤x/2
+y > x/2
+rem(x, y) = x −y < x/2
+(1 +
+)/2
+√
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48333
+.
+:
+p +2
+p +2
+n = pq
+1 +
+.
+)1/3
+)2/3
+4 = 2 +2, 6 = 3 +3, 8 = 3 +5
+π(n) ::= |{p ∈[2..n] ∣p is prime}|.
+π(1) = 0, π(2) = 1
+π(10) = 4
+n/ lnn
+= 1
+n/ lnn
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48333
+,
+.
+n > 1
+π(n) >
+{
+} ⋅ com
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48334
+.
+.
+12 = 2 ⋅2 ⋅3 = 2 ⋅3 ⋅2 = 3 ⋅2 ⋅2.
+n +m
+−−
+−
+√
+gcd(a, p) = p
+1 = sa+tp
+b = s(ab)+(tb)p
+■
+⋯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48334
+.
+.
+,
+n =
+⋅
+⋯
+,
+=
+⋅
+⋯
+,
+≤
+=
+n/q1
+⋯
+,
+⋯
+,
+n/
+< n
+<
+∣n =
+⋅
+⋅
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48335
+(A = 01, B = 02, C = 03
+→
+m^
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48335
+.
+= m ⋅k
+m^
+= m.
+m^
+m^ = m ⋅k
+= m ⋅k
+m^
+m^
+[
+]
+√
+[
+]
+√
+=
+^
+=
+^
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48335
+^
+^
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48336
+,
+,
+=
+n +r1
+=
+n +r2,
+,
+∈[0..n)
+a−b = (
+−
+)n +(
+−
+)
+−
+−
+−
+::= rem(a, n) =
+::= rem(b, n).
+■
+rem(29, 7) = 1 = rem(15, 7)
+≡
+{… , −6, −3, 0, 3, 6, 9, …}
+{… , −5, −2, 1, 4, 7, 10, …}
+{… , −4, −1, 2, 5, 8, 11, …}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48336
+.
+a+c ≡b +d (mod n),
+n ∣(b −a) = (b +c)−(a+c)
+a+c ≡b +c (mod n).
+b +c ≡b +d (mod n).
+a+c ≡b +d (mod n).
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48337
+.
+,
+[0..n)
+[0..n)
++
+)
+(
++
+)
+.
+= 3
+= 9
+= 27
+= 9.
+, 36) = rem(
+, 36) = 27.
+, 36) = 0
+, 36) = 1
+(
++
+)
+(
++
+⋅
+)(
+(
++0 ⋅
+)
+= 27
++n
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48337
+:
++n
+::= rem(i +j, n),
+::= rem(ij, n).
+rem(i +j, n) = rem(i, n)
++n
++n
+■
+[0. . n)
++n
+k = i
+(
+)
+(i ⋅j)⋅k = i ⋅(j⋅k)(
+)
+(i +j)+k
+0 +k
+k +(−k)
+i +j
+i ⋅(j+k)
+= i ⋅(j⋅k)
+= i +(j+k)
+= k
+= k
+= 0
+= j+i
+= (i ⋅j)+(i ⋅k)
+= j⋅i
+⋅
+⋯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48338
+k < n
+[0..n)
+m^
+::= m ⋅k(
+)
+m^
+m^
+m^
+m^
+{T, F}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48339
+:
+.
+.
+.
+.
+⋅x = 1
+1/3
+⋅3 = 1.
+n/m
+m/n
+2 ⋅8 = 1(
+).
+1 = 3 ⋅j(
+).
+5 = 0
+5 = 5 ⋅(3 ⋅j)
+= (5 ⋅3)⋅j
+= 0 ⋅j = 0(
+)
+gcd(a, b) = 1
+k ∈[0..n)
+gcd(n, k) = 1
+sn +tk = 1
+).
+rem(n, n) = 0
+rem(k, n) = k
+k ∈[0. . n)
+)
+■
+i = j
+i = i ⋅1 = i ⋅(k ⋅j) = (i ⋅k)⋅j = 1 ⋅j = j(
+).
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48339
+:
+,
+,
+.
+tr = ts
+r = s
+3 ⋅10 = 3 ⋅5(
+),
+k ⋅a = k ⋅b
+a = b(
+)
+a, b ∈[0. . n).
+k ∈[0..n)
+gcd(k, n) = 1
+⋅j = (m ⋅k)⋅j = m ⋅(k ⋅j) = m ⋅1 = m(
+).
+m^
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48339
+,
+m^
+= m ⋅k(
+).
+m^
+)
+= j⋅(m ⋅k) = j⋅(m ⋅k) = 1 ⋅k = k(
+).
+m^
+= k(
+)
+m^
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48340
+n > 0
+ϕ(7) = 6
+[0..7)
+ϕ(12) = 4
+[0..12)
+ϕ(p) = p −1
+[0..p)
+1 +x +
++
++⋯=
+x =
+, x =
+, x =
+1 +
++
++
++⋯
+1 +
++
++
++⋯
+1 +
++
++
++⋯
+=
+1 −1/2s
+=
+1 −1/3s
+=
+1 −1/5s
+=
+(
+)
+∑∞
+n=1
+1 −1/ps
+1/300s
+1/22s
+1/es
+1/52s
+ξ(s) = 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48340
+.
+,
+:
+.
+.
+)
+s = 1/2 +ci
+::= {k ∈(0. . n) ∣gcd(k, n) = 1}.
+ϕ(n) = |
+|
+= 1(
+)
+kS ::= {k
+s ∣s ∈S}
+|kS| = |S|
+[ks = kt (
+)]
+s = t.
+■
+=
+.
+⊆
+■
+P ::=
+⋅
+⋯
+(
+)
+Q ::= (k ⋅
+)(
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48340
+.
+.
+.
+:
+Q =
+).
+=
+P = Q =
+).
+1 =
+(
+).
+[0..pq)
+[0..pq)
+p +q −1
+[0..pq)
+ϕ(pq) = pq −(p +q −1)
+= (p −1)(q −1).
+■
+) =
+−
+ϕ(300) = ϕ (
+)
+= ϕ (
+)
+= (
+−
+)(
+−
+)(
+−
+)
+= 80.
+ϕ(p) = p −1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48340
+.
+.
+[0. .
+)
+1/p
+) =
+−(1/p)
+=
+−
+.
+,
+, … ,
+ϕ(n) = n(1 −
+).
+[0..n)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48341
+.
+n ::= pq
+e ∈[0..n)
+d ∈[0..n)
+m ∈[0..n)
+::=
+(
+).
+m^
+m^
+m^
+m =
+(
+).
+m^ d Zn
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48341
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48342
+,
+.
+.
+.
+ij = k
+i, j > 1
+ij = m
+i > 1
+ij = m
+j > 1
+d +1
+6/29/2021
+6/29/2021
+6/29/2021
+e = ⟨u →v⟩
+V = V (G)
+[1..12]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48344
+.
+.
+indeg(v) ::=∣{e ∈E(G) ∣head(e) = v}∣
+outdeg(v) ::=∣{e ∈E(G) ∣tail(e) = v}∣
+indeg(v) =
+∑
+∑
+■
+{1,2,… ,12}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48345
+.
+v ::=
+⟨
+→
+⟩
+⟨
+→
+⟩
+… ⟨
+→
+⟩
+→
+vi+1
+i ∈[0..k)
+≠
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48345
+^
+v^
+|f r| = |f| +|r|
+^
+w = e f g
+x^ x^
+x^
+■
+x^
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48345
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48346
+:
+:
+.
+.
+,
+, ⋯,
+(
+::= {
+→
+k +m
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48346
+(k +m)
+(k +m)
+k +m
+⋅
+(k +m)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48347
+,
+.
+,
+G+
+n = 0
+|V (G)| −1
+=
+∪
+∪
+∪… ∪
+= (G∪
+.
+G|V(G)−1|
+G0)|V(G)|−1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48348
+.
+D+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48348
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48348
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48348
+{a, b, c, d, e}
+{a, c}
+{b, e}
+{d}.
+,
+, … ,
+j < k
+,
+, … ,
+::= {a ∈V (D) ∣depth(a) = k}.
+::= {a ∈V (D) ∣depth(a) = k}
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48348
+.
+.
+.
+.
+.
+t > 0
+n/t
+ln/t
+■
+√
+√
+t =
+√
+■
+n = 10
+t = 3
+t = 4
+4 ≥10/4
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48349
+.
+.
+G+
+D+
+R+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48349
+,
+<
+x < y
+y < z
+x < z
+NOT(x < x)
+⊂
+D+
+≤
+⊆
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48349
+.
+.
+⪯
+⊑
+≺
+⊏
+⪯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48350
+,
+.
+⪯
+⪯
+a ⟷{b ∈A ∣b ⪯a}.
+⪯
+{1, 3, 4, 6, 8, 12}
+⟷{1}
+⟷{1, 3}
+⟷{1, 4}
+⟷{1, 3, 6}
+⟷{1, 4, 8}
+⟷{1, 3, 4, 6, 12}
+3|12
+{1, 3} ⊆{1, 3, 4, 6, 12}.
+⪯
+⪯
+⪯
+⊆
+⪯
+⊂
+⪯
+⊆
+≺
+⊂
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48351
+So < and
+[aRb OR bRa]
+≤
+⊆
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48352
+.
+.
+×
+×
+)
+×
+)
+(
+,
+)(
+×
+)(
+,
+)
+::= domain(
+),
+),
+iff [
+]
+×
+×
+(
+,
+,
+<
+≤
+.
+≤
+≤
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48353
+.
+.
+.
+.
+.
+.
+.
+IFF f(a) = f( ).
+[a]R
+[a
+::= {x ∈A ∣aRx}.
+]R
+[a]R
+A = Z
+[7
+= {… , −3, 2, 7, 12, 22, …}
+]R
+[7
+= [12
+= [17
+= ⋯.
+]R
+]R
+]R
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48353
+{… , −5, 0, 5, 10, 15, 20, …}
+{… , −4, 1, 6, 11, 16, 21, …}
+{… , −3, 2, 7, 12, 17, 22, …}
+{… , −2, 3, 8, 13, 18, 23, …}
+{… , −1, 4, 9, 14, 19, 24, …}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48354
+.
+.
+equals the in-the-same-
+).
+NOT[∃x ∈A. xRx].
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48356
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48357
+.
+{0, 1, … , N −1}
+i = 0 … , N −1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48358
+2 log N +2
+= 1024
+)+2 = 22.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48359
+1 +2 +4 +8 +⋯+N
+=
+,
+∑
+i=0
+rn+1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48360
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48361
+Id(i) ::= i
+π(i) ::= (N −1)−i
+π(i) ::= (N −1)−i
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48362
+.
+N = 4
+2 log N +2
+π(0) = 0
+π(N −1) = N −1
+■
+N = 1000
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48363
+.
+N ::= 2n
+Fn+1
+2n+1
+2n+1
++i
+i = 1, … , 2n
+Fn+1
+N = 21
+Fn+1
+2n+1
+n +1
+Fn+1
+n +1
+(n +1)
+2n+1
+n = log N
+N(log N +1)
+Fn+1
+n +1
+2n+1
+Fn+1
+−−
+√
+−−
+√
+N/2
+−−
+−−
+√
+Fn+1
+2n+1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48363
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48364
+.
+:
+N ::= 2n
+Bn+1
+2n+1
+2n+1
+Bn+1
+2n+1
+2n+i
+2n+i
+Bn+1
+2n+1
+Bn+1
+2(n +1)
+2(n +1)2n+1
+Bn+1
+2(n +1)−1
+2n+1
+N = 2n
+(n = 1)
+=
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48364
+N = 2n
+N = 8
+π(0) = 1
+π(4) = 3
+π(1) = 5
+π(5) = 6
+π(2) = 4
+π(6) = 0
+π(3) = 7
+π(7) = 2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48364
+■
+{0, 1, … , N −1}
+::= {⟨u −v⟩∣|u −v| = N/2}, and
+::= {⟨u −w⟩∣|π(u)−π(w)| = N/2}.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48364
+■
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48366
+.
+{u, v}
+V (H) = {a, b, c, d, e, f, g, h, i}.
+E(H) = {⟨a →b⟩, ⟨a →c⟩, ⟨b →d⟩, ⟨c →d⟩, ⟨c →e⟩, ⟨e →f⟩, ⟨e →g⟩, ⟨h →i⟩}.
+deg(e) = 3
+|E(G)|
+|V (G)|
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48366
+{v, v}
+{v}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48367
+|V | ≈300M
+|M| ≈147.6M
+|F| ≈152.4M
+deg(x) =
+∑
+∑
+|M| ⋅|F| :
+⋅
+=
+⋅
+|M|
+|F|
+|F|
+|M|
+|F|
+|M|
+|F|/|M|
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48367
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48368
+.
+n(n −1)/2
+) = {
+,
+, … ,
+}
+) = {⟨
+−
+⟩, ⟨
+−
+⟩, … , ⟨
+−
+⟩}
+(k −(k +1))
+⟨
+−
+⟩
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48369
+.
+::= 2
+::= 4
+::= 3
+::= 1.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48369
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48370
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48370
+.
+,
+|M|
+|M| = 1
+|M| = 1
+|M| = m +1 ≥2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48370
+.
+.
+.
+■
+N(S) ::= {r ∣⟨s−r⟩∈E(G) for some s ∈S}.
+|S| > |N(S)|.
+|N(S)| ≥|S|.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48370
+).
+.
+d > 0
+d|N(S)| ≥d|S|
+|L(G)| ≤|R(G)|
+|R(G)| ≤|L(G)|
+■
+L(G)∪R(G) = V (G)
+L(G)∩R(G) = ∅
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48371
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48371
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48371
+■
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48371
+.
+■
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48371
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48372
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48372
+.
+.
+:
+.
+) = 2.
+) = 3.
+) = n
+χ(G) = 2
+k +1
+k +1
+n = 1
+(n +1)
+(k +1)
+(k +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48372
+(k +1)
+(k +1)
+■
+k +1
+) = n
+k = n −1
+Kk+1
+k +1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48373
+.
+,
+.
+.
+.
+⟨
+−
+vi+1
+i ∈[0..k)
+|v|
+≠
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48373
+.
+.
+V (G) = {g, h, i} and E(G) = {⟨h −i⟩}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48374
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48374
+,
+■
+color(u) = { black,
+if |
+| is even,
+wu^
+wu ^
+|
+| +|
+| +1
+■
+w = f r
+x^
+|w| = |f| +|r|
+w = f g r
+y^ y^
+|g| > 0
+y^
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48374
+.
+.
+k = 2
+|V (G)| −|E(G)|
+|V (G)| −k
+k = 0
+|V (G)| = |V (G)| −0
+|V (G)−k|
+|V (G)| −k > |V (G)| −(k +1)
+(|V (G)| −k)−1 > |V (G)| −(k +1)
+|V (G)| −(k +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48374
+(k +1)
+(k +1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48375
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48375
+):
+.
+|p| +|q|
+|p| +|q|
+^
+n = 1
+1 −1 = 0
+n +1
+n = (n +1)−1
+P(n +1)
+■
+|V (G)| = |E(G)| +1.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48375
+.
+.
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48375
+.
+.
+.
+S +e
+E(S)∪{e}
+F +e
+|V (G)| −1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48375
+.
+|V (G)| −1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48375
+.
+F +e
+F +e
+M +e
+M +e
+M +e
+M +e−g
+M +e−g
+F +e
+M +e−g
+M +e
+M +e
+M +e−g
+M +e−g
+w(M +e−g) = w(M)+w(e)−w(g) ≤w(M).
+M +e−g
+M +e−g
+■
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48377
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48377
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48378
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48378
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48378
+γ = α β
+^
+^
+^
+^
+^ ^
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48378
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48378
+^
+^
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48379
+v−e+f = 2
+v = 4, e = 6,
+f = 4
+4 −6 +4 = 2
+v−e+f = 2
+v = 1, e = 0,
+f = 1
+1 −0 +1 = 2
+γ = a… b ⋯a
+v−e+f
++
++
++1
++
+(vG +
+)−(
++
++1)+(
++
+= (
+−
++
+)+(
+−
++
+= (2)+(2)−2
+= 2,
+v−e+f
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48380
+,
+f = e−v+2
+3(e−v+2)
+e−3v+6
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48381
+,
+),
+).
+,
+■
+■
+f = 2 −v+e
+2 −v+e
+4(2 −v+e) ≤2e,
+■
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48382
+.
+.
+e ≤3v−6 < 3v
+■
+v+1
+deg(g) < 5
+deg(g) = 5
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48382
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48383
+√
+mv = 2e.
+nf = 2e
+−e+
+= 2
++
+=
++
++
+=
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48383
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48384
+.
+6/29/2021
+6/29/2021
+1 + 2 + 3 + ⋯+ n =
+.
+n(n + 1)
+∑
+i=1
+n(n + 1)/2
+n(n + 1)/2
+1 + x + x2 + x3 + ⋯+ xn = 1 −xn+1
+1 + 2 + ⋯+ (n −1) = (n −1)n/2
+???
+???
+n! ::= 1 ⋅2 ⋅3⋯n.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48386
+.
+p = 0.08
+(1 +p)⋅10 = 10.80
+(1 +p
+1/(1 +p)⋅10 ≈9.26
+m/(1 +p)
+m/(1 +p)2
+m/(1 +p)n−1
+V = ∑
+i=1
+(1 +p)i−1
+= m ⋅
+(
+∑
+j=0
+1 +p )j
+= m ⋅∑
+j=0
+(substitute x = 1/(1 +p)).
+S = 1 +x +
++⋯+
+.
+xS = x +
++⋯+
+.
+xn+1
+= 1 +x +
++
++⋯+
+= −x −
+−
+−⋯−
+−
+.
+xn+1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48386
+S −xS = 1 −
+.
+xn+1
+S =
+.
+1 −xn+1
+V = m(
+)
+= m(
+)
+1 +p −(1/(1 +p))n−1
+(substituting x = 1/(1 +p)).
+m = $50, 000, n = 20,
+p = 0.08
+|x| < 1
+=
+.
+∑
+i=0
+∞
+∑
+i=0
+∞
+xi ::= lim
+= lim
+1 −xn+1
+=
+.
+= 0
+|x| < 1.
+■
+x = 1/(1 +p) < 1
+V = m ⋅∑
+j=0
+∞
+= m ⋅
+= m ⋅1 +p
+(x = 1/(1 +p)).
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48386
+.
+m = $50, 000
+p = 0 : 08
+$675, 000
+1 +1/2 +1/4 +⋯=
+=
+= 2
+∑
+i=0
+∞
+(
+)
+1 −(1/2)
+= 0.9 (
+) = 0.9 (
+) = 1
+∑
+i=0
+∞
+(
+)
+1 −1/10
+1 −1/2 +1/4 −⋯=
+=
+=
+∑
+i=0
+∞
+(
+)
+1 −(−1/2)
+1 +2 +4 +⋯+
+=
+=
+=
+∑
+i=0
+1 +3 +9 +⋯+
+=
+=
+=
+∑
+i=0
+(
+−1)/2
+= x +2
++3
++⋯+(n −1)
+∑
+i=1
+(
+) =
+(
+) .
+∑
+i=0
+(
+) =
+)
+∑
+i=0
+∑
+i=0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48386
+.
+)
+= −n
++n
++1 −
+)
+=
+.
++(n −1)
+=
+.
+∑
+i=0
++(n −1)
+=
+∑
+i=0
++(n −1)
+xn+1
+|x| < 1
+|x| < 1
+=
+.
+∑
+i=0
+∞
+m = $50, 000
+V = ∑
+i=1
+∞
+(1 +p)i
+= m ⋅1/(1 +p)
+1+p )2
+= m ⋅
+.
+1 +p
+(1 +p)2
+m = $50, 000
+p = 0.08
+V = $8, 437, 500
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48386
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48387
+.
+=
+.
+∑
+i=1
+(2n +1)(n +1)n
+S =
+∑
+i=1
+S = 1 +2+. . . +(n −1)+n,
+S = n +(n −1)+. . . +2 +1.
+= (n +1)+(n +1)+⋯+(n +1)+(n +1)
+= n(n +1).
+S =
+.
+n(n +1)
+= a
++b
++cn +d.
+∑
+i=1
+= 0 implies 0 = d
+= 1 implies 1 = a+b +c +d
+= 2 implies 5 = 8a+4b +2c +d
+= 3 implies 14 = 27a+9b +3c +d.
+a = 1/3, b = 1/2, c = 1/6, d = 0
+/3 +
+/2 +n/6
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48387
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48388
+S =
+.
+∑
+i=1
+√
+→
+R+
+R+
+x < y IMPLIES f(x) < f(y),
+x < y IMPLIES f(x) > f(y),
+√
+max{x, 2}
+1/x
+min{1/x, 1/2}
+⌊1/x⌋
+→
+R+
+R+
+S ::=
+∑
+i=1
+I ::=
+∫
+I + f(1) ≤S ≤I + f(n).
+I +f(n) ≤S ≤I +f(1).
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48388
+.
+.
+.
+.
+→
+R+
+R+
+I =
+∫
+S ≥I +f(1)
+S ≤I +f(n)
+■
+i=1
+I =
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48388
+S = ∑
+i=1
+√
+I =
+∫
+√
+= x3/2
+3/2
+∣
+∣∣
+=
+(
+3 n3/2
+(
+−1)+1 ≤S ≤
+(
+−1)+
+3 n3/2
+3 n3/2
+√
++
++
+−
+.
+3 n3/2
+3 n3/2
+√
+3 n3/2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48389
+(i +1)
+i = 1, 2, … , n −1.
+=
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48389
+n +1
+Bn+1
+n +1
+n +1
+n +1
+n +1
+n +1
+n +1
+1/2
+n +1
+=
+.
+0 ⋅n +(1/2)⋅1
+n +1
+2(n +1)
+=
++
+,
+Bn+1
+2(n +1)
+Bn+1 =
++
++
+2(n +1)
+=
++
++⋯+
++
+2(n +1)
+=
+.
+i=1
+n+1 1
+::=
+.
+∑
+i=1
+=
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48389
+.
+= 1 +
++
++
+=
+> 2.
+dx = ln(x)
+= ln(n),
+∫
+∣
+∣∣
+ln(n)+
+≤
+≤ln(n)+1.
+= ln(n)+γ +
++
++
+1/2 ln(n)
+n > 1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48389
+\iff
+.
+√
+f(x)/g(x) = 1.
+∼ln(n)+γ
+∼ln(n)+c
+n = 100
+|
+−ln(n)−γ| ≤|
+−
++
+| <
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48390
+.
+,
+n! ::=
+∏
+i=1
+P =
+∏
+i=1
+ln(P) =
+∑
+i=1
+= ln(1)+ln(2)+ln(3)+⋯+ln(n −1)+ln(n)
+=
+∑
+i=1
+∫
+= x ln(x)−x∣
+∣∣
+= n ln(n)−n +1.
+n ln(n)−n +1 ≤
+ln(i) ≤n ln(n)−n +1 +ln(n).
+∑
+i=1
+nn+1
+/
+n! =
+−−
+−
+√
+(
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48390
+.
+?
+0.1%.
+.
+12n +1
+n! >
+−−
+−
+√
+(
+)
+n ∈N+
+−−
+−
+√
+(
+)
+−−
+−
+√
+(
+)
+≤
+−−
+−
+√
+(
+)
+e1/12n
+−−
+−
+√
+(
+)
+e1/(12n+1)
+=
+−
+12n+1
++12n
+n > 100
+−−
+−
+√
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48390
+n! <
+⋅
+−−
+−
+√
+⎩
+⎨
+⎪
+⎪
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48391
+(
+)
+∑
+n=0
+∞
+i=0
+=
+(
+)
+∑
+n=0
+∞
+yn 1 −xn+1
+=
+−(
+)
+n=0
+∞
+∑
+n=0
+∞
+ynxn+1
+=
+−(
+)
+∑
+n=0
+∞
+=
+−
+=
+=
+=
+.
+=
+∑
+k=1
+∑
+k=1
+∑
+j=1
+= n ln(n)−n +1.
+∫
+∣
+∣∣
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48391
+∑
+k=1
+Hk = ∑
+k=1
+∑
+j=1
+= ∑
+j=1
+∑
+k=j
+=
+∑
+j=1
+k=j
+=
+(n −j+1)
+∑
+j=1
+=
+−
+∑
+j=1
+n +1
+∑
+j=1
+= (n +1)
+−
+∑
+j=1
+∑
+j=1
+= (n +1)
+6/29/2021
+https://eng.libretexts.org/@go/page/53956
+.
+.
+.
+f(x) = o(g(x)),
+f(x)/g(x) = 0.
+= o(
+)
+/(
+) = 1000/
+/
+= 0
+= o(
+)
+a < b
+log x < x
+x > 1
+log x = o(
+)
+ϵ > 0
+ϵ > δ > 0
+x = zδ
+log x < x
+log z <
+/δ = o(
+)
+= o(
+)
+a > 1
+f = O(g)
+|f(x)|/g(x) < ∞.
+6/29/2021
+https://eng.libretexts.org/@go/page/53956
+.
+.
+.
+.
+.
+.
+,
+.
+.
+,
+,
+f = O(g)
+limf/g = 0
+limf/g = 1
+limf/g < ∞
+lim supf/g < ∞
+2x = O(x)
+f = o(g)
+g = O(f)
+=
+=
+= ∞.
+f(x)/g(x)
+■
+f(x)/g(x)
+f(x)/g(x)
+f = O(g)
+f(x)/g(x) = 5
+f = O(g)
+f(x) = O(g(x))
+x < x0
+f(x)/g(x)
+f = O(g)
+= O(
+).
+c = 100
+= 1
+.
+■
++100x +10 = O(
+).
++100x +10)/
+= 1 +100/x +10/
+1 +0 +0 = 1
++100x +10 ∼
++100x +10 = O(
+).
+= O(
++100x +10).
+■
++
++⋯+
+x +
+= O(
+).
+)
+)
+)
+)
+)
+6/29/2021
+https://eng.libretexts.org/@go/page/53956
+.
+,
+.
+T(n) = O(
+)
+= O(T(n))
+f = Θ(g) iff f = O(g) and g = O(f).
+f = Θ(g)
+T(n) = 10
++1,
+T(n) = Θ(
+).
++
+−
+= Θ(
+).
++
+√
+)
+= O(
+)
+17 = O(1)
+f(x) = 17
+g(x) = 1
+c > 0
+|f(x)| ≤cg(x)
+c = 17
+= 1
+|17| ≤17 ⋅1
+i = O(n)
+∑
+i=1
+f(n) =
+i = 1 +2 +3 +⋯+n
+i=1
+f(n) = O(1)+O(1)+⋯+O(1) = O(n).
+■
+i = n(n +1)/2 ≠O(n).
+i=1
+i = O(1)
+i = O(1)
+f = O(1)
+f = O(g)
+6/29/2021
+https://eng.libretexts.org/@go/page/53956
+.”
+,
+.
+f = O(g)
+f = O(g)
+O(g) = f
+2n = O(n)
+O(n) = 2n
+n = O(n)
+n = O(n) = 2n
+n = 2n
+O(f) = g
+= ln(n)+γ +O(
+)
+n! = (1 +o(1))
+−−
+−
+√
+(
+)
+= ln(n)+γ +f(n)
+f(n) = O(1/n)
+n! = (1 +g(n))
+−−
+−
+√
+(
+)
+g(n) = o(1)
+= Θ(
+)
+)
+= O(T(n)).
+f = Ω(g)
+g = O(f).
+=  Ω(x)
+=  Ω(
+)
+x/100 = Ω(100x +
+√
+T(n) = Ω(
+).
+6/29/2021
+https://eng.libretexts.org/@go/page/53956
+.
+.
+f = ω(g)
+g = o(f).
+= ω(x)
+= ω(
+√
+h(x) ::=
+)
+)
+0 < c < d
+8d/c
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48273
+!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+|A| = |B|
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48273
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48394
+|S|
+|T|
+,
+, …
+×
+×⋯×
+,
+, …
+|
+×
+×⋯×
+| = |
+| ⋅|
+| ⋯|
+|
+|B×L×D| = |B| ⋅|L| ⋅|D|
+= 4 ⋅3 ⋅5
+= 60.
+{0, 1
+::=
+.
+}n
+{0, 1} ×{0, 1} ×⋯×{0, 1}
+
+
+
+
+
+|{0, 1
+| = |{0, 1}
+=
+.
+}n
+|n
+|C ∪I ∪S|
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48394
+.
+,
+, … ,
+|
+∪
+∪…
+| = |
+| +|
+| +⋯+|
+|
+|C ∪I ∪S| = |C| +|I| +|S|
+= 20 +40 +60
+= {a, b, … , z, A, B, … , Z}
+= {a, b, … , z, A, B, … , Z, 0, 1, … , 9}
+)
+|(F ×
+)
+)|
+= |F ×
+| +|F ×
+| +|F ×
+|
+= |F| ×|S
++|F| ×|S
++|F| ×|S
+|5
+|6
+|7
+= 52 ⋅
++52 ⋅
++52 ⋅
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48395
+::= P ×P ×P
+|
+| = |P
+=
+|3
+S = {(x, y, z) ∈
+⋮
+|S| =
+⋅
+⋅
+⋯
+|S| = n ⋅(n −1)⋅(n −2)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48395
+)
+)
+)
+)
+.
+.
+{serial numbers}
+= 1.8144
+(
+,
+,
+,
+,
+,
+)
+,
+,
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48395
+:
+{a, b, c}
+3! = 6
+{a, b, c}
+−−
+−
+√
+(
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48396
+is -to-1, then
+.
+.
+|A| = k ⋅|B|
+|A| = 2 ⋅|B|
+|B| = |A|/2
+(
+,
+,
+,
+)
+(
+,
+,
+,
+)
+|A| = 2 ⋅|B|
+|B| =
+=
+.
+|A|
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48396
+n = 4
+=
+= (n −1)!.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48397
+.
+-to-1.
+.
+( )
+(
+)
+( )
+( )
+{
+, … ,
+}
+…
+{
+,
+, … ,
+}
+, … ,
+{
+,
+, … ,
+}
+, … ,
+n! = k!(n −k)!( )
+( ) =
+.
+n!/0!n! = 1
+{
+,
+, … ,
+}
+{
+,
+,
+}
+( )
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48397
+(
+).
+n +(k −1)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48398
+.
+,
+, … ,
+,
+, … ,
+)
+(
+,
+, … ,
+)
+|
+| =
+i = 1, … , m
+…
+(
+,
+, … ,
+)
+!
+! ⋯
+!
+(
+,
+, … ,
+)
+, … ,
++
++⋯+
+= n
+,
+, … ,
+::=
+.
+!
+! …
+!
+(
+,
+, … ,
+)
+(
+).
+, … ,
+{1, 2, … , 10}
+({1}, {2, 3}, {4, 5}, {6, 7, 9}, {8}, {10}).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48398
+.
+:
+, … ,
+(
+).
++
++⋯+
+, … ,
+.
+a+b
+(a+b)4
+(a+b
+=
+aaaa+aaab +aaba+aabb
++abaa+abab +abba+abbb
++baaa+baab +baba+babb
++bbaa+bbab +bbba+bbbb
+= ( )
+( )
+n = 4
+(a+b
+= ( ) ⋅
++( ) ⋅
++( ) ⋅
++( ) ⋅
++( ) ⋅
+(a+b
+=
+( )
+∑
+k=0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48398
+,
+(b +o+k +e+p +r)10
+(
+) =
+(
++
++⋯+
+=
+(
+)
+⋯
+.
+∑
++⋯+
+=m
+,
+, … ,
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48399
+(
+{8♠, 8♢, Q♡, 8♡, 8♣}
+{A♣, 2♣, 2♡, 2♢, 2♠}
+(8, Q, ♡) ↔{8♠, 8♢, 8♡, 8♣, Q♡}
+(2, A, ♣) ↔{2♣, 2♡, 2♢, 2♠, A♣}
+{2♠, 2♣, 2♢, J♣, J♢}
+{5♢, 5♣, 5♡, 7♡, 7♣}
+( )
+( )
+(2, {♠, ♣, ♢}, J, {♣, ♢})
+(5, {♢, ♣, ♡}, 7, {♡, ♣})
+↔{2♠, 2♣, 2♢, J♣, J♢}
+↔{5♢, 5♣, 5♡, 7♡, 7♣}
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48399
+{3♢, 3♠, Q♢, Q♡, A♣}
+{9♡, 9♢, 5♡, 5♣, K♠}
+( )
+( )
+( ) = 4
+.
+( )
+( )
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48399
+( )
+( ) = 4
+({3, Q}, {♢, ♠}, {♢, ♡}, A, ♣)
+({9, 5}, {♡, ♣}, {♡, ♢}, K, ♠)
+↔{3♢, 3♠, Q♢, Q♡, A♣}
+↔{9♡, 9♢, 5♡, 5♣, K♠}
+(
+{7♢, K♣, 3♢, A♡, 2♠}
+(7, K, A, 2, ♢, 3) ↔{7♢, K♣, A♡, 2♠, 3♢}.
+.
+♠
+♡
+♣
+♢
+,
+,
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48400
+.
+.
+|A| > |B|
+|A| > k ⋅|B|
+k +1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48400
+,
+).
+B = {10, 000, 10, 001, … , 200, 000}
+|A| > 2|B|
+{0, 1, … , 90 ⋅
+}
+|A| =
+|B| = 90 ⋅
++1 ≤0.901 ×
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48400
+|A|
+|B|
+{1, 2, 4, 8, 16}
+{6, 9, 11, 12, 13}
+c > 0
+4! = 24
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48400
+.
+.
+,
+( )
+{8♡, K♠, Q♠, 2♢, 6♢}
+{8♡, K♠, Q♠, 9♣, 6♢},
+5 ⋅4! = 120
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48400
+.
+= 1
+= 2
+= 3
+= 4
+= 5
+= 6
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48400
+|X| = (
+) = 270, 725
+|Y | = 52 ⋅51 ⋅50 = 132, 600
+⌈
+⌉= 3
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48401
+.
+.
+|M ∪E ∪P|
+|M ∪E ∪P| = |M| +|E| +|P|.
+|M ∪E ∪P|
+|M|
+|E|
+|P|
+= 60
+= 200
+= 40.
+|
+∪
+∪
+|
+= |
+| +|
+| +|
+|
+−|
+∩
+| −|
+∩
+| −|
+∩
+|
++|
+∩
+∩
+|
+,
+,
+|
+|, |
+|,
+|
+|
+|
+∩
+|, |
+∩
+|,
+|
+∩
+|
+|
+∩
+∩
+|
+|
+|
+|
+|
+|
+∩
+|
+|M ∩E| = 4 +2, |M ∩P| = 3 +2, |E ∩P| = 11 +2,
+|M ∩E ∩P| = 2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48401
+.
+|M ∪E ∪P|
+= |M| +|E| +|P| −|M ∩E| −|M ∩P| −|E ∩P|
++|M ∩E ∩P|
+= 60 +200 +40 −6 −5 −13 +2
+= 278
+{0, 1, 2, … , 9}
+∪
+∪
+{0, 1, 2, … , 9}
+{60, 1, 2, 3, 4, 5, 7, 8, 9}.
+–––
+|
+| = 9!
+|
+| = |
+| = 9!
+∩
+{42, 60, 1, 3, 5, 7, 8, 9}.
+|
+∩
+| = 8!
+|
+∩
+| = 8!
+{604, 1, 2, 3, 5, 7, 8, 9}.
+|
+∩
+| = 8!
+|
+∩
+∩
+| = 7!
+{6042, 1, 3, 5, 7, 8, 9}.
+|
+∩
+∩
+| = 9! +9! +9! −8! −8! −8! +7!.
+|
+∪
+∪⋯∪
+| =
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48401
+|
+|.
+∑
+i=1
+∩
+∩
+∩
+i < j
+|
+∩
+|.
+∑
+i≤i<j≤n
+|
+∩
+∩
+|.
+∑
+i≤i<j<k≤n
+∣
+∣∣⋃
+i=1
+∣∣=
+|
+|
+∑
+i=1
+−
+|
+∩
+|
+∑
+i≤i<j≤n
++
+|
+∩
+∩
+| +⋯
+∑
+i≤i<j<k≤n
++(−1
+.
+∣∣⋂
+i=1
+∣∣
+=
+∣
+∣∣⋃
+i=1
+∣∣
+∑
+∅≠I⊆{1,…,n}
+)|I|+1∣
+∣∣⋂
+∣∣
+⋯
+ϕ(n) = n
+) .
+∏
+i=1
+[0..n)
+ϕ(n) = n −|S|
+[0..n)
+::= {k ∈[0..n) ∣a|k}.
+[0..n)
+S =
+.
+⋃
+i=1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48401
+).
+∩
+∩
+[0..n)
+n/k
+[0..n)
+n/pqr
+[0..n)
+|
+∩
+∩
+| =
+.
+=
+.
+∣
+∣∣⋂
+∣
+∣∣
+I ∈[1..m]
+|S| =
+∣
+∣
+∣⋃
+i=1
+∣
+∣
+∣
+=
+∑
+∅≠I⊆[1..m]
+)|I|+1 ∣
+∣
+∣∣⋂
+∣
+∣
+∣∣
+=
+∑
+∅≠I⊆[1..m]
+)|I|+1
+= −n
+∑
+∅≠I⊆[1..m]
+(−
+)
+= −n (
+)) +n,
+∏
+i=1
+ϕ(n) = n −|S| = n
+) ,
+∏
+i=1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48402
+( ) = (
+).
+.
+(
+).
+(
+).
+(
+) +(
+).
+( ).
+( ) = (
+) +(
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48402
+.
+.
+|S| = n
+|S| = m
+n = m
+|S| = (
+) +(
+)
+|S| = ( )
+[1..n]
+|S| = ( )
+::= {(1, X) ∣X ⊆[2, n] AND |X| = k −1}
+::= {(0, Y ) ∣Y ⊆[2, n] AND |Y | = k}
+|A ∪B| = |A| +|B|
+|A| = # specified sets X = (
+).
+|B| = # specified sets Y = (
+).
+f(c) ::= { X ∪{1}
+if c = (1, X),
+if c = (0, Y ).
+( )(
+) = (
+)
+∑
+r=0
+|S| = (
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48402
+( )(
+)
+( )
+(
+)
+|S| =
+( )(
+).
+∑
+r=0
+|S|
+■
+( )
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48272
+.
+F(x) =
++
+x +
++
++⋯.
+[
+]F(x)
+[
+]F(x) ::=
+,
+, …
+…
+G(x) ::= 1 +x +
++⋯+
++⋯.
+= 1 +x +
++
++⋯+
++⋯
+=
+−
+−⋯−
+−⋯
+= 1.
+= G(x) ::=
+.
+∑
+n=0
+∞
+[
+] (
+) = 1
+N(x) ::= 1 +2x +3
++⋯+(n +1)
++⋯.
+= 1 +2x +3
++4
++⋯+(n +1)
++⋯
+=
+−⋯
+= 1 +x +
++
++⋯+
++⋯
+= G(x).
+=
+= N(x) ::=
+(n +1)
+.
+∑
+n=0
+∞
+[
+] (
+) = n +1.
+|x| < 1
+|x| ≥1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48272
+x = 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48407
+= n +1
+n +1
+D(x) =
+.
+A(x) ::=
+,
+∑
+n=0
+∞
+B(x) ::=
+,
+∑
+n=0
+∞
+::= {
+A(x) = 1 +
++
++⋯+
++⋯
+= 1 +y +
++⋯+
++⋯
+where y =
+.
+=
+=
+.
+= n +1
+B(x) =
+.
++
++
++⋯+
+.
+[
+](A(x)⋅B(x)) =
++
++
++⋯+
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48407
+.
+,
+.
+.
+⋮
+…
+…
+…
+…
+…
+…
+(
+,
+,
+, …)
+(
+,
+,
+, …)
+1/(1 −x)
+1 = 1 +0x +0
++⋯+0
++⋯.
+1 −x = 1 +(−1)x +0
++⋯+0
++⋯.
+(1 −x)⋅G(x) = 1 +0x +0
++⋯+0
++⋯= 1.
+1/(1 −x)
+[
+](c ⋅F(x)) = c ⋅[
+]F(x).
+1/(1 −x)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48407
+.
+.
+D(x) =
+⋅
+=
+.
+1/(1 −x)k
+(
+)
+n+(k−1)
+[
+] (
+) = (
+).
+n +(k −1)
+1/(1 −x)k
+f(x) = f(0)+
+(0)x +
++
++⋯+
++⋯.
+1/(1 −x)k
+= k(k +1)⋅(k +n −1)(1 −x
+)−(k+n)
+(
+)
+= (
+= k(k +1)⋯(k +n −1)(1 −0)−(k+n)
+= (
+).
+n +(k −1)
+{
+}
+1 +x
+{
+}
+1 +x
+{
+,
+, … ,
+}
+(1 +x)m
+( )
+[
+](1 +x
+= (
+),
+(1 +x)m
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48407
+A(x) = 1 +
++
++
++⋯=
+B(x) = 1 +
++
++
++⋯=
+O(x) = 1 +x +
++
++
+=
+.
+P(x) = 1 +x
+(1 +x)
+=
+= 1 +2x +3
++4
++⋯
+1/(1 −x)2
+n +1
+n +1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48408
+.
+1/(1 −x)2
+, … ,
+, … ,
+=
++
++⋯+
+.
+R(x) ::=
+.
+,
+=
+,
+=
+.
+√
+−1 +
+√
+= (x −
+) =
+(1 −x/
+)(1 −x/
+).
+R(x) =
+= 1 +
+√
+=
+.
+√
+=
++
+x =
+x)+
+x = 1/α2
+=
+=
+= −
+.
+1/α2
+/
+−
+√
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48408
+.
+x = 1/α1
+=
+.
+√
+,
+R(x) =
+=
+(
+−
+)
+√
+= 1 +
+x +
++⋯
+= 1 +
+x +
++⋯
+R(x) =
+((1 +
+x +
++⋯)−(1 +
+x +
++⋯)),
+√
+[
+]R(x)
+=
+−
+√
+=
+(
+−
+)
+√
+(
+)
+1 +
+√
+(
+)
+√
+[
+] (
+) = c
+(
+).
+n +(k −1)
+α = 1
+[
+]F(αx) =
+⋅[
+]F(x).
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48409
+,
+, … ,
+, …
+::= 0
+::= 1
+=::=
++
+.
+F(x) ::=
++
+x +
++⋯+
++⋯.
+−
+)
+=
+=
+=
+=
+=
++
+−
++
++
+(
+−
++
+−
+−
++
++
++
+−
+−
++
+=
+⋯
+⋯
+⋯
+⋯
++
+−
+−
++
++
++
++
++
+⋯.
+⋯.
+⋯.
+⋯.
+F(x) =
+.
+=
+(
+−
+)
+√
+(
+)
+1 +
+√
+(
+)
+√
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48409
+.
+= 1
+= 3
+n = 3
++1 +
+= 2
++1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48409
++1 = 7
++1 ≤15
++1
+= 0
+= 2
++1
+T(x) ::=
++
+x +
++⋯+
++⋯.
+−1/(1 −x)
+=
+=
+=
+=
+=
++
+−
+−
++
++
+−
+−
++
+⋯
+⋯
+⋯
+⋯
++
+−
+−
++
++
++
++
++
+⋯
+⋯
+⋯
+⋯
+T(x)(1 −2x) =
+−1 =
+,
+T(x) =
+.
+=
++
+,
+x =
+(1 −x)+
+1/2
+= 1
+= −1
+T(x) =
+−
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48409
+.
+= [
+]T(x) = [
+] (
+) −[
+] (
+) =
+f(n) =
+f(n −1)+
+f(n −2)+⋯+
+f(n −d)+h(n)
+f(0)+f(1)x +f(2)
++⋯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48410
+.
+:
+).
+F(x) ::= 1 +1x +2
++⋯+n!
++⋯.
+= o(n!)
+x = 0 3
+H(x) ::= 0 +1x +4
++⋯+n ⋅n!
++⋯.
+x = 0
+(n +1)!
+[
+] (
+) = (n +1)!.
+n! = 1 +
+∑
+i=1
+[
+]H(x) ::= n ⋅n! = (n +1)! −n! = [
+] (
+) −[
+]F(x).
+H(x) =
+F(x) =
+.
+xH(x)+1
+[
+](xH(x)+1)
+n = 0
+[
+] (
+) = 1 +
+xH(x)+1
+∑
+i=1
+::= (
+,
+,
+, …),
+::= (
+,
+,
+, …),
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48410
+.
+⊕
+G⊕H ::= (
++
+,
++
+, … ,
++
+, …).
+⊗
+G⊗H ::= (
++
+,
++
+, … ,
+, …) .
+∑
+i=0
+= H ⊕G,
+= H ⊗G.
+::= (0, 0, 0, …),
+::= (1, 0, 0, 0, … , 0, …),
+= G,
+= Z,
+= G.
+−G ::= (−
+, −
+, −
+, …)
+G⊕(−G) = Z.
+⊕
+⊗
+G⊗H = I.
+1/G
+::= (1, −1, 0, 0, … 0, …)
+::= (1, 1, 1, 1, … , 1, …),
+⊗
+J ⊗K = I
+K = 1/J
+J = 1/Ke
+1/Z
+G(x) ::=
+.
+∑
+n=0
+∞
+(
+,
+, …)
+X ::= (0, 1, 0, 0, … , 0, …).
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48410
+= 1 +x +
++
++⋯
+1/J
+6/29/2021
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48415
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48416
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48416
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48416
+.
+S = {
+}
+{(C, A, B), (C, B, A), (C, C, A), (C, C, B)},
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48416
+1/2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48416
+).
+⋅
+⋅
+=
+.
+1/3 ⋅1/3 ⋅1/2 = 1/18
+Pr[−]
+Pr[(A, A, B)]
+Pr[(A, A, C)]
+Pr[(A, B, C)]
+=
+,
+=
+,
+=
+,
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48416
+Pr[E]
+= Pr[(A, B, C)] +Pr[(A, C, B)] +Pr[(B, A, C)] +Pr[(B, C, A)] +Pr[(C, A, B)] +Pr[(C, B, A)]
+=
++
++
++
++
++
+=
+.
+2/3
+1/3
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48417
+.
+:
+1/3
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48417
+.
+,
+5/9
+S = {(2, 1), (2, 5), (2, 9), (6, 1), (6, 5), (6, 9), (7, 1), (7, 5), (7, 9)}.
+{(2, 1), (6, 1), (6, 5), (7, 1), (7, 5)}.
+1/3
+1/3
+1/9
+Pr[E] =
+.
+|E|
+|S|
+|E| = 5 |S| = 9
+Pr[E] = 5/9.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48417
+.
+5/9
+5/9
+5/9
+5/9
+= 81
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48417
+-sum,
+-sum is
+.
+(1/3
+= 1/81
+×
+1 +3 +3 +3 +3 +6 +6 +6 +6 = 37.
+42/81 > 1/2
+2/81
+37/81
+≻
+≺
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48418
+.
+1/4
+1/d
+d = 365
+n = 95
+=
+⋅
+⋅
+⋯
+= (1 −
+)
+<
+⋅
+⋅
+⋯
+(since 1 +x <
+)
+e0 e−1/d e−2/d
+e−(n−1)/d
+= e−(
+i/d)
+i=1
+=
+.
+e−(n(n−1)/2d)
+n = 95
+d = 365
+/2
+/2
+1/e
+−−
+√
+−
+−
+−−−
+√
+1 −x < e−x
+x > 0
+= 1 −x +
+/2! −
+/3! +⋯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48419
+.
+:
+,
+Pr[ω] ≥0
+Pr[ω] = 1
+Pr[E] ::=
+Pr[ω].
+∑
+Pr[E ∪F] = Pr[E] +Pr[F].
+,
+, … ,
+, …
+Pr[
+] =
+Pr[
+].
+⋃
+∑
+Pr[A] +Pr[ ] = 1
+¯ ¯
+¯¯
+Pr[S] = 1
+¯ ¯
+¯¯
+Pr[ ] = 1 −Pr[A].
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48419
+.
+.
+,
+Pr[B−A]
+Pr[A ∪B]
+Pr[A ∪B]
+= Pr[B] −Pr[A ∩B],
+= Pr[A] +Pr[B] −Pr[A ∩B],
+≤Pr[A] +Pr[B],
+then Pr[A] ≤Pr[B].
+Pr[
+∪⋯∪
+∪⋯] ≤Pr[
+] +⋯+Pr[
+] +⋯.
+∪⋯∪
+Pr[
+]
+i=1
+Pr[ω]
+Pr[E] =
+.
+|E|
+|S|
+Pr[E]
+|S| = (
+)
+|E| = 13 ⋅( ) ⋅12 ⋅( )
+Pr[E] =
+( )
+=
+=
+≈
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48419
+Pr[first player wins] =
++
++
++
++⋯
+= 1
+n=0
+∞
+(
+)
+=
+(
+) =
+1 −1/4
+Pr[second player wins] =
++
++
++
++⋯=
+.
+S ::= {
+H ∣n ∈N},
+Pr[
+H] ::=
+.
+2n+1
+Pr[
+H] ::=
+= 1.
+∑
+∑
+2n+1
+,
+,
+, …
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48422
+:
+Pr[[[win by switching] ∣[[pick A AND goat at B]]
+1/18 +1/18 +1/9
+Pr[[[win by switching] ∣[[pick A AND goat at B]] = Pr[(C, A, B) ∣{(C, A, B), (A, A, B), (A, A, C)}]
++
+=
+=
+.
+Pr[(C, A, B)]
+Pr[{(C, A, B), (A, A, B), (A, A, C)}]
+1/9
+1/18 +1/18 +1/9
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48423
+Pr[X ∣Y ]
+Pr[X ∣Y ]
+Pr[X ∣Y ] ::=
+.
+Pr[X ∩Y ]
+Pr[Y ]
+Pr[X ∣Y ]
+Pr[{(A, A, B), (C, A, B)}] =
++
+=
+.
+Pr[[[win by switching] ∣[[pick A AND Carol opens B]] = Pr[(C, A, B) ∣{(C, A, B), (A, A, B)}]
++
+=
+=
+.
+Pr[(C, A, B)]
+Pr[{(C, A, B), (A, A, B)}]
+1/9
+1/9 +1/18
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48423
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48424
+.
+1/2
+2/3
+1/3
+Pr[A ∣B]
+S = {WW, WLW, WLL, LWW, LWL, LL}.
+T = {WW, WLW, LWW}.
+F = {WW, WLW, WLL}.
+1/2
+1/2
+1/3
+2/3
+⋅
+⋅
+=
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48424
+.
+Pr[A ∣B] = Pr[A ∩B]
+Pr[B]
+=
+Pr[{WW, WLW}]
+Pr[{WW, WLW, WLL}]
+=
+1/3 +1/18
+1/3 +1/18 +1/9
+=
+.
+7/9
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48425
+.
+.
+1/2
+2/3
+Pr[WW] =
+⋅
+=
+.
+Pr[
+∩
+] = Pr[
+] ⋅Pr[
+∣
+].
+=
+⋅
+.
+Pr[
+∩
+∩
+] = Pr[
+] ⋅Pr[
+∣
+] ⋅Pr[
+∣
+∩
+].
+[1..n]
+( )
+( )
+S ⊆[1..n]
+[1..n]
+1/p
+k/n
+(k −1)/(n −1)
+⋅
+.
+(k −2)/(n −2)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48425
+⋅
+⋅
+.
+p =
+⋅
+⋅
+⋯
+=
+=
+n!/(n −k)!
+=
+.
+[1..n]
+1/p
+.
+k!/(n −k)!
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48425
+Pr[A ∣B]
+Pr[A ∣B] =
+=
+≈15.4%
+Pr[A ∩B]
+Pr[B]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48425
+a-kind.
+).
+Pr[B ∣A]
+Pr[B ∣A]
+Pr[B ∣A] =
+=
+=
+.
+Pr[B∩A]
+Pr[A]
+1/3 +1/18
+1/3 +1/18 +1/9
+Pr[B ∣A] = Pr[A ∣B] ⋅Pr[B]
+Pr[A]
+Pr[B ∣A] ⋅Pr[A] = Pr[A ∩B] = Pr[A ∣B] ⋅Pr[B]
+Pr[A]
+■
+[
+1/2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48425
+3/4
+1/4
+(
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48426
+:
+:
+¯ ¯
+¯¯
+Pr[A]
+Pr[A] = Pr[A ∣E] ⋅Pr[E] +Pr[A ∣
+] ⋅Pr[
+].
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+Pr[E] = Pr[
+] = 1/2.
+¯ ¯
+¯¯
+Pr[A ∣E] = 1/6
+Pr[A ∣
+] = 1/36
+¯ ¯
+¯¯
+Pr[A] =
+⋅
++
+⋅
+=
+.
+,
+Pr[
+∪
+∪
+] = 1
+Pr[A] = Pr[A ∣
+] ⋅Pr[
+] +Pr[A ∣
+] ⋅Pr[
+] +Pr[A ∣
+] ⋅Pr[
+].
+,
+,
+∣A) =
+.
+Pr[A ∣
+] ⋅Pr[
+]
+Pr[A ∣
+] ⋅Pr[
+] +Pr[A ∣
+] ⋅Pr[
+] +Pr[A ∣
+] ⋅Pr[
+]
+Pr[A ∪B ∣C] = Pr[A ∣C] +Pr[B ∣C] −Pr[A ∩B ∣C].
+Pr[A ∣B∪C] = Pr[A ∣B] +Pr[A ∣C] −Pr[A ∣B∩C].
+Pr[A ∣B]
+Pr[A ∣C]
+::= [0..9],
+::= [10..18] ∪{0},
+::= [1..18],
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48426
+.
+Pr[A ∣B] =
+= Pr[A ∣C].
+Pr[A ∣B∩C] = 0
+18/19
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48427
+40%
+50%
+70%
+80%
+≈69%
+≈51%
+,
+,
+,
+Pr[A ∣
+∪
+] > Pr[A ∣
+∪
+].
+Pr[A ∣
+]
+Pr[A ∣
+]
+≤Pr[A ∣
+]
+≤Pr[A ∣
+].
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48427
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48428
+:
+.
+Pr[B] ≠0
+Pr[A ∣B] = Pr[A].
+A ∩B = ∅
+Pr[A ∩B] = Pr[A] ⋅Pr[B].
+Pr[A ∩B] = Pr[A] ⋅Pr[B] =
+⋅
+=
+.
+1/4
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48428
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48429
+.
+.
+.
+.
+,
+,
+,
+Pr[
+∩
+]
+Pr[
+∩
+]
+Pr[
+∩
+]
+Pr[
+∩
+]
+Pr[
+∩
+]
+Pr[
+∩
+]
+Pr[
+∩
+∩
+]
+Pr[
+∩
+∩
+]
+Pr[
+∩
+∩
+]
+Pr[
+∩
+∩
+]
+Pr[
+∩
+∩
+∩
+]
+= Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+] ⋅Pr[
+]
+= Pr[
+] ⋅Pr[
+] ⋅Pr[
+] ⋅Pr[
+]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48429
+.
+:
+Pr[A ∩B∩C ∩D∩E]
+= Pr[A] ⋅Pr[B] ⋅Pr[C] ⋅Pr[D] ⋅Pr[E]
+=
+⋅
+⋅
+⋅
+⋅
+=
+.
+,
+,
+(1/2
+= 1/8
+,
+,
+Pr[
+]
+= Pr[HHH] +Pr[HHT] +Pr[TTH] +Pr[TTT]
+=
++
++
++
+=
+Pr[
+] = Pr[
+] = 1/2
+Pr[
+∩
+]
+= Pr[HHH] +Pr[TTT] =
++
+=
+=
+⋅
+= Pr[
+]Pr[
+].
+Pr[
+∩
+] = Pr[
+] ⋅Pr[
+]
+Pr[
+∩
+] = Pr[
+] ⋅Pr[
+]
+Pr[
+∩
+∩
+]
+= Pr[HHH] +Pr[TTT] =
++
+=
+≠
+= Pr[
+]Pr[
+]Pr[
+].
+,
+,
+,
+, …
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48429
+,
+,
+.
+,
+,
+Pr[A ∩B∩C ∩D∩E] ≤Pr[A ∩E] = Pr[A]Pr[E]
+=
+⋅
+=
+.
+Pr[A ∩B∩C ∩D∩E]
+Pr[A ∩E]
+Pr[E] =
+.
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48431
+.
+.
+M = 1
+M = 0
+C = 2
+M = 0
+C = 0
+M = 1
+= 3
+C(THH) = 2
+= 2
+C(THT) = 1
+= 2
+C(TTH) = 1
+= 1
+C(TTT) = 0.
+= 1
+M(THH) = 0
+= 0
+M(THT) = 0
+= 0
+M(TTH) = 0
+= 0
+M(TTT) = 1.
+M = 1
+M = 0
+.
+
+
+
+
+M=1
+
+
+
+
+
+M=0
+(ω) = 1
+(ω) = 0
+M = IE
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48431
+.
+.
+
+
+
+
+C=0
+
+
+
+
+C=1
+
+
+
+
+C=2
+
+
+
+
+C=3
+C = 2
+[C = 2] = {THH, HTH, HHT},
+Pr[C = 2] = Pr[THH] +Pr[HTH] +Pr[HHT] =
++
++
+= 3/8.
+[M = 1]
+{TTT, HHH}
+1/4
+[C ≤1] = {TTT, TTH, THT, HTT},
+Pr[C ≤1] = 1/2.
+[C ⋅M is odd] = {HHH}.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48432
+,
+[
+=
+] and [
+=
+]
+M = 1
+,
+Pr[C =
+AND M =
+] ≠Pr[C =
+] ⋅Pr[M =
+].
+= 2
+= 1
+Pr[C = 2 AND M = 1] = 0 ≠
+⋅
+= Pr[M = 1] ⋅Pr[C = 2].
+(C = 2)
+(M = 1)
+[
+= 1] = {HHH, HTH, HHT, HTT}.
+Pr[M = 1] = 1/4 = Pr[M = 1 ∣
+= 1] = Pr[M = 1 ∣
+= 0]
+Pr[M = 0] = 3/4 = Pr[M = 0 ∣
+= 1] = Pr[M = 0 ∣
+= 0]
+,
+, … ,
+,
+, … ,
+[
+=
+], [
+=
+], … , [
+=
+]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48433
+.
+.
+: V →[0, 1]
+(x) ::= {
+Pr[R = x]
+: R →[0, 1]
+(x) ::= Pr[R ≤x].
+(x) = 1.
+∑
+V = {2, 3, … , 12}
+V = {2, 3, … , 12}
+(x) = Pr[R ≤x] =
+Pr[R = y] =
+∑
+∑
+(x) = 1 and
+(x) = 0.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48433
+.
+.
+=
+.
+: {0, 1} →[0, 1]
+= p, and
+= 1 −p,
+p ∈[0, 1]
+: R →[0, 1]
+(x) ::=
+⎧
+⎩
+⎨
+⎪
+⎪
+if x < 0
+f : V →[0, 1]
+f(v) = 1
+,
+, … ,
+F : R →[0, 1]
+F(x) ::=
+⎧
+⎩
+⎨
+⎪
+⎪
+k/n
+if x < a1
+for 1 ≤k < n
+ak+1
+{1, 2, … , 6}
+f1/2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48433
+.
+[0..n]
+,
+,
+, ⋯,
+T > x
+T < x
+(< L)
+(> H)
+(L < x < H)
+(T = L)
+(T = H)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48433
+:
+L/n
+(n −H)/n
+(H −L)/n
+Pr[win] =
++
++
++
+=
++
+≥
++
+1/2 +1/200 = 50.5%
+: [0..n] →[0, 1]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48433
+.
+.
+.
+(k) ::= ( )
+.
+( )
+k = 10
+n = 20,
+: [0..n] →[0, 1]
+(k) = ( )
+.
+n ∈N+
+p ∈[0, 1]
+( )
+n = 20
+p = 0.75
+k = 15
+n = 20
+p = .75
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48434
+.
+Ex[R] ::=
+R(ω)Pr[ω].
+∑
+Ex[R] = 1 ⋅
++2 ⋅
++3 ⋅
++4 ⋅
++5 ⋅
++6 ⋅
+=
+.
+{
+,
+, … ,
+}
+Ex[
+] =
+.
++
++⋯+
+S = 1/R
+Ex[S] = Ex[
+] =
+⋅
++
+⋅
++
+⋅
++
+⋅
++
+⋅
++
+⋅
+=
+.
+Ex[1/R] ≠1/Ex[R].
+Ex[
+] = Pr[A].
+Ex[
+] = 1 ⋅Pr[
+= 1] +0 ⋅Pr[
+= 0]
+= Pr[
+= 1]
+= Pr[A].
+)
+Ex[
+] = Pr[
+= 1] = p
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48434
+,
+):
+),
+Ex[R] =
+x ⋅Pr[R = x].
+∑
+Ex[R] ::=
+R(ω)Pr[ω]
+∑
+=
+R(ω)Pr[ω]
+∑
+∑
+x∈[R=x]
+=
+xPr[ω]
+∑
+∑
+x∈[R=x]
+=
+Pr[ω]
+∑
+⎛
+⎝∑
+x∈[R=x]
+⎞
+⎠
+=
+x ⋅Pr[R = x].
+∑
+(def of the event [R = x])
+(def of Pr[R = x])
+[R = x]
+[R = x]
+■
+Ex[R ∣A]
+Ex[R ∣A] ::=
+r ⋅Pr[R = r ∣A].
+∑
+Ex[R ∣R ≥4] =
+i ⋅Pr[R = i ∣R ≥4] = 1 ⋅0 +2 ⋅0 +3 ⋅0 +4 ⋅
++5 ⋅
++6 ⋅
+= 5.
+∑
+i=1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48434
+Ex[H] = Ex[H ∣M]Pr[M] +Ex[H ∣F]Pr[F]
+= (5 +11/12)⋅0.496 +(5 +5/12)⋅(1 −0.496)
+= 5.6646 ⋯
+.
+,
+, … ,
+Ex[R] =
+Ex[R ∣
+]Pr[
+].
+∑
+Ex[R] =
+r ⋅Pr[R = r]
+∑
+=
+Pr[R = r ∣
+]Pr[
+]
+∑
+∑
+=
+r ⋅Pr[R = r ∣
+]Pr[
+]
+∑
+∑
+=
+r ⋅Pr[R = r ∣
+]Pr[
+]
+∑
+∑
+=
+Pr[
+]
+r ⋅Pr[R = r ∣
+]
+∑
+=
+Pr[
+]Ex[R ∣
+].
+∑
+])
+■
+Ex[C]
+¯ ¯
+¯¯
+Ex[C]
+Ex[C] = Ex[C ∣A]Pr[A] +Ex[C ∣
+]Pr[ ].
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+Ex[C ∣A] = 1.
+¯ ¯
+¯¯
+¯ ¯
+¯¯
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48434
+):
+.
+.
+Ex[C ∣
+] = 1 +Ex[C].
+¯ ¯
+¯¯
+Ex[C] = 1 ⋅p +(1 +Ex[C])(1 −p)
+= p +1 −p +(1 −p)Ex[C]
+= 1 +(1 −p)Ex[C].
+1 = Ex[C] −(1 −p)Ex[C] = pEx[C],
+Ex[C] = 1/p.
+1/p
+1/0.01 = 100
+p = 1/2
+1/p = 2
+np/p
+1/p
+codomain(C) = Z+
+Pr[C = i] = (1 −p
+Ex[C] =
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48434
+):
+) ⋅1 = 0.
+−2 = 1.
+Ex[playoff]
+= 0 ⋅
++1 ⋅
++1 ⋅
++4 ⋅
++(−2)⋅
++(−2)⋅
++(−2)⋅
++0 ⋅
+= 0.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48434
+1/2
+Ex[playoff]
+= 0 ⋅0 +1 ⋅
++1 ⋅
++4 ⋅0 +(−2)⋅0 +(−2)⋅
++(−2)⋅
++0 ⋅−
+= −
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48434
+1/2
+−$.50
++$.07 2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48435
+,
+,
+,
+Ex[
++
+] = Ex[
+] +Ex[
+].
+T ::=
++
+Ex[T] ::=
+T(ω)⋅Pr[ω]
+∑
+=
+(
+(ω)+
+(ω))⋅Pr[ω]
+∑
+=
+(ω)⋅Pr[ω] +
+(ω)⋅Pr[ω]
+∑
+∑
+= Ex[
+] +Ex[
+].
+■
+,
+,
+Ex[
++
+] =
+Ex[
+] +
+Ex[
+].
+, … ,
+, … ,
+Ex[
+] =
+Ex[
+].
+∑
+i=1
+∑
+i=1
+Ex[
++
+] = Ex[
+] +Ex[
+] = 3.5 +3.5 = 7.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48435
+1/n
+1/n
+= 1
+= 0
+G =
++
++⋯+
+.
+Ex[
+] = Pr[
+= 1] = 1/n.
+Ex[G] = Ex[
++
++⋯+
+]
+= Ex[
+] +Ex[
+] +⋯+Ex[
+]
+=
++
++⋯+
+
+
+
+
+
+= 1.
+,
+, … ,
+Pr[
+].
+∑
+i=1
+(ω) = 1
+(ω) = 0
+R =
++
++⋯+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48435
+.
+Ex[R] =
+Ex[
+]
+∑
+i=1
+=
+Pr[
+= 1]
+∑
+i=1
+=
+Pr[
+].
+∑
+i=1
+Pr[J = k] = ( )
+.
+Ex[J] =
+kPr[J = k] =
+.
+∑
+k=0
+∑
+k=0
+::= {
+J =
++
++⋯+
+.
+Ex[J] =
+Pr[
+] = pn.
+∑
+i=1
+= pn,
+∑
+k=0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48435
+.
+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+T =
++
++⋯+
+.
+k/n
+1 −k/n = (n −k)/n
+n/(n −k)
+Ex[
+] =
+.
+Ex[T] = Ex[
++
++⋯+
+]
+= Ex[
++Ex[
+] +⋯+Ex[
+]
+=
++
++⋯+
++
++
+= n (
++
++
++⋯+
++
+)
+= nHn
+= 14.7 …
+= 2364.6 …
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48435
+$10.
+,
+, …
+Ex[|
+|]
+∑
+i=0
+∞
+Ex[
+] =
+Ex[
+].
+∑
+i=0
+∞
+∑
+i=0
+∞
+T ::=
+.
+∑∞
+i=0 Ri
+Ex[
+]
+∑
+i=0
+∞
+Ri =
+(s)⋅Pr[s]
+∑
+i=0
+∞
+∑
+=
+(s)⋅Pr[s]
+∑
+∑
+i=0
+∞
+=
+[
+(s)] ⋅Pr[s]
+∑
+∑
+i=0
+∞
+=
+T(s)⋅Pr[s]
+∑
+= Ex[T]
+= Ex[
+] .
+∑
+i=0
+∞
+■
+1/2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48435
+,
+∑
+n=1
+∞
+Ex[
+] .
+∑
+n=1
+∞
+Ex[
+] = 0
+Ex[
+] =
+0 = 0.
+∑
+n=1
+∞
+∑
+n=1
+∞
+Ex[|
+|] = 10 ⋅
+= 20.
+Ex[|
+|] = 20 +20 +20 +⋯
+∑
+n=1
+∞
++
++⋯+
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48435
+?
+Ex[R⋅R] = Ex[R] ⋅Ex[R]
+Ex[R] = 3 1
+Ex[R
+= 12
+]2
+Ex[R]2
+Ex[R]2 =
+(ω)Pr[w] =
+⋅Pr[
+= i]
+∑
+∑
+i=1
+=
++
++
++
++
++
+= 15 1/6 ≠12 1/4.
+Ex[R⋅R] ≠Ex[R] ⋅Ex[R].
+,
+,
+Ex[
+⋅
+] = Ex[
+] ⋅Ex[
+].
+Ex[
+⋅
+]
+,
+, … ,
+Ex[
+] =
+Ex[
+].
+∏
+i=1
+∏
+i=1
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48437
+.
+.
+.
+1/3
+1/3 ⋅300 = 100
+2/3
+1/3
+2/3
+1/3
+x > 0
+Pr[R ≥x] ≤
+.
+Ex[R]
+x > 0
+Ex[R] ::=
+yPr[R = y]
+∑
+≥
+yPr[R = y] ≥
+xPr[R = y] = x
+Pr[R = y]
+∑
+∑
+∑
+= xPr[R ≥x],
+■
+Pr[R ≥c ⋅Ex[R]] ≤
+.
+c ⋅Ex[R]
+Pr[G ≥x]
+Ex[G] = 1
+Pr[G ≥x] ≤
+=
+.
+Ex[G]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48437
+.
+1/n
+Ex[R] = 1
+Pr[R ≥n] ≤
+=
+.
+Ex[R]
+1/n
+1/(n!)
+150/200
+3/4
+Pr[R > 200] ≤
+=
+=
+.
+Ex[R]
+T ::= R−100
+Ex[T] = 50
+Pr[R > 200] = Pr[T > 100] ≤
+=
+=
+.
+Ex[T]
+3/4
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48438
+,
+.
+.
+|R|z
+[|R
+≥
+]
+|z
+[|R| ≥x]
+Pr[|R| ≥x] ≤
+.
+Ex[|R ]
+|z
+|R−Ex[R]|
+Pr[|R−Ex[R]| ≥x] ≤
+.
+Ex[(R−Ex[R]
+]
+z = 2
+Var[R]
+Var[R] ::= Ex[(R−Ex[R]
+].
+z = 2
+x ∈R+
+Pr[|R−Ex[R]| ≥x] ≤
+.
+Var[R]
+Ex[(R−Ex[R]
+]
+R−Ex[R]
+(R−Ex[R])2
+2/3
+1/3
+2/3
+1/3
+2/3
+2/3
+1/3
+Ex[A] = 2 ⋅
++(−1)⋅
+= 1,
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48438
+:
+Ex[B] = 1002 ⋅
++(−2001)⋅
+= 1.
+Var[A]
+A −Ex[A]
+(A −Ex[A])2
+Ex[(A −Ex[A]
+]
+Var[A]
+= {
+= {
+= 1 ⋅
++4 ⋅
+= 2.
+Var[B]
+B−Ex[B]
+(B−Ex[B])2
+Ex[(B−Ex[B]
+]
+Var[B]
+= {
+= {
+::=
+=
+.
+Var[R]
+−
+−
+−−−−
+√
+Ex[(R−Ex[R]
+]
+−
+−
+−−−−−−−−−−−−
+√
+=
+=
+Var[B]
+−
+−
+−−−−
+√
+−
+−
+−−−−−−
+√
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48438
+,
+.
+x = cσR
+Pr[|R−Ex[R]| ≥c
+] ≤
+.
+)
+Ex[R]
+Ex[R] = 100
+= 10
+Pr[R ≥300]
+Pr[R ≥300] ≤
+.
+Pr[R ≥300] = Pr[|R−100| ≥200] ≤
+=
+=
+.
+Var[R]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48439
+.
+.
+.
+R−Ex[R]
+Var[R] = Ex[
+] −
+[R],
+[R]
+(Ex[R])2
+μ = Ex[R].
+Var[R] = Ex[(R−Ex[R]
+]
+= Ex[(R−μ
+]
+= Ex[
+−2μR+
+]
+= Ex[
+] −2μEx[R] +
+= Ex[
+] −2
++
+= Ex[
+] −
+= Ex[
+] −
+[R].
+■
+p ::= Pr[B = 1]
+Var[B] = p −
+= p(1 −p).
+Ex[B] = p
+= B
+■
+1/p
+Var[C] = Ex[
+] −(1/p
+Ex[
+]
+(C +1)2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48439
+:
+:
+Ex[
+]
+= p ⋅
++(1 −p)Ex[(C +1
+]
+= p +(1 −p)(Ex[
+] +
++1)
+= p +(1 −p)Ex[
+] +(1 −p)(
++1) ,
+pEx[
+]
+= p +(1 −p)(
++1)
+=
++(1 −p)(2 +p)
+Ex[
+] =
+.
+Var[C] =
+.
+aR+b
+Var[aR] =
+Var[R].
+Var[aR] ::= Ex[(aR−Ex[aR]
+]
+= Ex[(aR
+−2aREx[aR] +
+[aR]]
+= Ex[(aR
+] −Ex[2aREx[aR]] +
+[aR]
+=
+Ex[
+] −2Ex[aR]Ex[aR] +
+[aR]
+=
+Ex[R] −
+[R]
+=
+(Ex[
+] −
+[R])
+=
+Var[R]
+■
+Var[R+b] = Var[R].
+aR+b
+|a|
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48439
+= |a|
+.
+σ(aR+b)
+Var[R+S] = Var[R] +Var[S].
+Ex[R] = 0
+R−Ex[R]
+Var[T] = Ex[
+]
+Ex[(R+S
+] = Ex[
+] +Ex[
+].
+Ex[RS] = Ex[R]Ex[S]
+Ex[(R+S
+]
+= Ex[
++2RS +
+]
+= Ex[
+] +2Ex[RS] +Ex[
+]
+= Ex[
+] +2Ex[R]Ex[S] +Ex[
+]
+= Ex[
+] +2 ⋅0 ⋅0 +Ex[
+]
+= Ex[
+] +Ex[
+]
+■
+R = S
+Var[R+R] = Var[R] +Var[R]
+4Var[R] = 2Var[R]
+Var[R] = 0
+R = S
+,
+, … ,
+Var[
++
++⋯+
+] = Var[
+] +Var[
+] +⋯+Var[
+].
+J = ∑n
+k=1 Ik
+Pr[
+= 1] = p
+Var[J] = nVar[
+] = np(1 −p).
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48440
+:
+K = 1
+K = 0
+,
+, …
+,
+, …
+::=
+.
+∑
+i=1
+/n
+/n
+Pr[
+∣
+∣
+∣∣
+p = 1 −p
+p = 1/2
+Var[
+] = n(p(1 −p)) ≤n ⋅
+=
+.
+/n
+Var[
+]
+= (
+) Var[
+]
+= 1
+Pr[
+−p ≥0.04] ≤
+≤
+=
+∣
+∣
+∣∣
+Var[
+/n]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48440
+.
+1/20
+≤
+,
+,
+, … ,
+[
+=
+]
+=
+1/d
+M ::=
+.
+∑
+1≤i<j≤n
+Ex[M] = Ex[
+] =
+= ( ) ⋅
+.
+∑
+1≤i<j≤n
+∑
+1≤i<j≤n
+Var[M] = Var[
+]
+∑
+1≤i<j≤n
+=
+∑
+1≤i<j≤n
+= ( ) ⋅
+) .
+n = 95
+d = 365
+Ex[M] ≈12.23
+Var[M] ≈12.23(1 −1/365) < 12.2
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48440
+Pr[|M −Ex[M]| ≥x] <
+.
+x = 7
+, … ,
+::=
+.
+∑
+i=1
+Pr[
+−μ ≥x] ≤
+(
+) .
+∣
+∣
+∣∣
+/n
+Ex[
+]
+= Ex[
+]
+i=1 Gi
+=
+Ex[
+]
+i=1
+=
+i=1
+=
+= μ.
+)
+/n
+Var[
+]
+=
+Var[
+]
+(
+)
+=
+Var[
+]
+∑
+i=1
+=
+Var[
+]
+i=1
+=
+=
+.
+)
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48440
+100%.
+,
+Pr[
+−μ ≥x]
+∣
+∣
+∣∣
+≤
+.
+Var[
+/n]
+=
+/n
+=
+.
+)
+■
+, … ,
+::=
+.
+i=1 Gi
+ϵ > 0
+Pr[|
+−μ| ≤ϵ] = 1.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48441
+.
+.
+1250/3125 −0.04 > 1/3
+1/3
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48442
+.
+1/c2
+1/ec
+,
+, … ,
+1/4
+24, 000 ⋅1/4 = 6000
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48442
+,
+.
+, … ,
+T =
++⋯+
+Pr[T ≥cEx[T]] ≤e−β(c)Ex[T]
+β(c) ::= c lnc −c +1
+[0, 1]
+[0, 1]
+T =
++⋯+
+.
+[0, 1]
+Pr[T ≥cEx[T]]
+c = 1.2
+β(c) = c ln(c)−c +1 = 0.0187 …
+Ex[T] = 500
+Pr[T ≥1.2Ex[T]] ≤e−β(c).Ex[T]
+=
+<
+,
+c = 1.3
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48442
+.
+)
+T =
++⋯+
+c = 2
+β(c) = 0.386 …
+Pr[T ≥2000] = Pr[T ≥2Ex[T]]
+≤
+=
+e−kEx[T]
+<
+.
+c = 1.1
+Pr[T ≥1.1Ex[T]] ≤e−kEx[T]
+=
+< 0.01.
+Pr[T ≥600]
+T = ∑Ti
+i=1
+n = 24, 000
+[0, 1]
+1/4
+= 6000/m seconds .
+6000/10 = 600
+600 = cEx[T]
+where c ::= m/10,
+Pr[T ≥600] = Pr[T ≥cEx[T]] ≤
+,
+e−(c ln(c)−c+1)⋅6000/m
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48442
+∑
+i=1
+,
+e−(c ln(c)−c+1)⋅6000/m
+c = m/10
+= 11 : 0.784 …
+m = 11
+m = 12
+m = 13
+T ≥cEx[T]
+Pr[T ≥cEx[T]] = Pr[
+≥
+]
+ccEx[T]
+≤Ex[
+]
+ccEx[T]
+≤e(c−1)Ex[T]
+ccEx[T]
+=
+=
+.
+e(c−1)Ex[T]
+ec ln(c)Ex[T]
+e−(c ln(c)−c+1)Ex[T]
+■
+Ex[
+] ≤
+.
+e(c−1)Ex[T]
+Ex[
+]
+= Ex[
+]
++⋯+
+= Ex[
+⋯
+]
+= Ex[
+] ⋯Ex[
+]
+≤
+⋯
+e(c−1)Ex[
+]
+e(c−1)Ex[
+]
+= e(c−1)(Ex[
+]+⋯+Ex[
+])
+= e(c−1)(Ex[
++⋯+
+])
+=
+.
+e(c−1)(Ex[T])
+■
+Ex[
+] ≤
+e(c−1)Ex[
+]
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48442
+.
+,
+[0, 1]
+Ex[
+]
+cTi =
+Pr[
+= v]
+≤∑(1 +(c −1)v)Pr[
+= v]
+= ∑Pr[
+= v] +(c −1)vPr[
+= v]
+= ∑Pr[
+= v] +(c −1)∑vPr[
+= v]
+= 1 +(c −1)Ex[
+]
+≤e(c−1)Ex[
+]
+(def of Ex[⋅])
+)
+≤1 +(c −1)v,
+[0, 1]
+1 +(c −1)v
+v =
+[0, 1].
+■
+,
+, … ,
+= Pr[
+= 1] = Pr[
+]
+T =
++
++⋯+
+Ex[T] = Ex[
+] +Ex[
+] +⋯+Ex[
+]
+=
+.
+∑
+i=1
+Var[T] = Var[
+] +Var[
+] +⋯+Var[
+]
+=
+),
+∑
+i=1
+=
+.
+)
+∑
+i=1
+−
+−
+−−−−−−−−−
+√
+c > 1
+Pr[T ≥cEx[T]] ≤
+.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48442
+,
+.
+Pr[|T −Ex[T]| ≥c
+] ≤
+.
+c > 0
+Pr[T −Ex[T] ≥cEx[T]] ≤
+.
+e−(c ln(c)−c+1)Ex[T]
+cEx[T]
+Ex[T]
+,
+, … ,
+T ::=
++
++⋯+
+Pr[T = 0] ≤
+,
+e−Ex[T]
+Pr[T = 0] = Pr[
+∩
+∩… ∩
+]
+=
+Pr[
+]
+∏
+i=1
+=
+(1 −Pr[
+])
+∏
+i=1
+≤∏
+i=1
+e−Pr[
+]
+= e−
+Pr[
+]
+i=1
+= e−
+Ex[
+]
+i=1
+= e−Ex[T]
+)
+)
+)
+■
+< 1/22000
+< 1/22000
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48442
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48443
+.
+k +1
+k +1
+2k+1
+k +1
+2−(k+1)
+T = k
+Ex[R]
+Ex[R]
+Ex[R] =
+Ex[R ∣T = k] ⋅Pr[T = k] =
+⋅
+=
+1 = ∞.
+∑
+∑
+2k+1 2−(k+1)
+∑
+6/29/2021
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48280
+.
+.
+.
+.
+T = n +m
+p = 1/2
+p > 1/2
+p < 1/2
+1/2
+n/T
+5/6
+1M/(1M +100) > .9999
+n = 500
+T = 100 +500 = 600
+500/600 = 5/6
+1/2
+5/6
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48280
+.
+m = T −n
+q ::= 1 −p
+r ::= q/p
+,
+, …
+rn+1
+,
+, …
+rn+2 rn+3
+rn+m
+⋅q = (
+⋅
+⋅q = 0.
+rn+1
+, … ,
+, … ,
+rn+m
+.
+∑
+i=n+1
+n+m
+i=1 ri
+0 = Ex[worth of Albert’s payoff] =
+)
+.
+i=n+1
+n+m
+i=1
+r = 1
+0 = m
+)
+= n/(n +m)
+0 = r ⋅
+⋅
+).
+−
+rn+m
+=
+=
+rn+m
+Pr[the gambler wins] =
+⎧
+⎩
+⎨
+⎪
+⎪
+⎪
+⎪
+for p =
+,
+,
+r ::= q/p.
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48280
+),
+).
+).
+= 0,
+= 1.
+0 < n < T
+n +1
+wn+1
+= p
++q
+wn+1
+wn+1
+=
+wn+1
+q/p
+n +1 ≤T
+wn+1
+n +1 > 1
+W(x) ::=
++
+x +
+x +⋯
+W(x) =
+.
+−x/p +1
+−
++1 = (1 −x)(1 −rx).
+W(x) =
++
+,
+x = A(1 −rx)+B(1 −x),
+x = 1
+A =
+/(1 −r)
+x = 1/r
+B =
+/(r −1)
+W(x) =
+(
+−
+) ,
+=
+.
+n = T
+=
+.
+=
+,
+p = q
+W(x) =
+,
+r > 1
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48280
+.
+<
+=
+(
+)
+p < 1/2
+Pr[the gambler wins] < (
+)
+r ::= q/p > 1.
+1/r
+=
+<
+.
+(
+)
+18/38
+20/38
+(
+)
+(9/10
+= ((9/10
+<
+,
+(
+)
+p < 1/2
+p −q = 2p −1
+m +k(1 −2p)
+−
+−
+−−−−−−
+√
+= Θ(
+)
+m +k(1 −2p)
+−
+−
+−−−−−−
+√
+√
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48280
+.
+.
+.
+n = 0
+=
+= 0
+0 < n < T
+n +1
+en+1
+Ex[
+.
+en+1
+Ex[
+.
+en = pEx[
+= p(1 +
+)+q(1 +
+) = p
++q
++1.
+en+1
+en+1
+=
+−
+−
+.
+en+1
+Ex[number of bets] =
+⎧
+⎩
+⎨
+⎪
+⎪
+⎪
+⎪
+for p =
+,
+= (
+−1)/(
+−1) = Pr[the gambler wins].
+n > 0
+p ≤1/2
+p = 1/2
+T > n
+1 −n/T
+■
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48280
+,
+15/16
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48446
+.
+, … ,
+⟨
+→
+⟩
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48446
+.
+.
+1/3
+.
+Pr[go to y] =
+∑
+=
+∑
+Pr[at x]
+Pr[go to
+] =
++
+.
+Pr[at
+]
+Pr[at
+]
+0.85/n
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48446
+):
+Pr[at x] = 1.
+∑
+Pr[at x] = Pr[go to x at next step]
+Rank(x) =
+∑
+Rank(x) = 1.
+∑
+n +1
+Rank(x) ::= 0
+6/29/2021
+CC-BY-NC-SA
+https://eng.libretexts.org/@go/page/48282
+6/29/2021
+6/29/2021
+https://eng.libretexts.org/@go/page/54598
+:
+:
+=
+=
+= 1
+= 2
++1
+=
+n = 1
+= 1 =
+=
+=
+Tn = 2
++1
+= 2(
+−1)+1
+=
+■
+=
+=
+≤
+≤
+n = 1
+= 1 ≤
+≤
+≤
+Tn = 2
++1
+)+1
+■
+6/29/2021
+https://eng.libretexts.org/@go/page/54598
+.
+:
+,
+Tn = 2
++1
+= 2(2
++1)+1
+= 4
++2 +1
+= 4(2
++1)+2 +1
+= 8
++4 +2 +1
+= 8(2
++1)+4 +2 +1
+= 16
++8 +4 +2 +1
++1
+Tn =
++
++
++⋯+
++
++
+=
++
+Tn =
++
+=
++1)+
+Tn−(k+1)
+=
++
+2k+1Tn−(k+1)
+2k+1
+k +1
+k = 1
+k +1
+k = n −1
+Tn =
++
+=
+⋅1 +
+=
+,
+,
+,
+6/29/2021
+https://eng.libretexts.org/@go/page/54599
+.
+= 0
+Tn/2
+Tn/2
+= 0
+= 2
++n −1
+Tn/2
+6/29/2021
+https://eng.libretexts.org/@go/page/54599
+.
+= 0
+= 2
++2 −1 = 1
+= 2
++4 −1 = 5
+= 2
++8 −1 = 17
+= 2
++16 −1 = 49.
+Tn = 2
++n −1
+Tn/2
+= 2(2
++n/2 −1)+(n −1)
+Tn/4
+= 4
++(n −2)+(n −1)
+Tn/4
+= 4(2
++n/4 −1)+(n −2)+(n −1)
+Tn/8
+= 8
++(n −4)−(n −2)+(n −1)
+Tn/8
+= 8(2
++n/8 −1)+(n −4)−(n −2)+(n −1)
+Tn/16
+= 16
++(n −8)+(n −4)−(n −2)+(n −1)
+Tn/16
+Tn =
++(n −
+)+(n −
+)+⋯(n −
+)
+2kTn/2k
+=
++kn −
+−
+⋯−
+2kTn/2k
+=
++kn −
++1.
+2kTn/2k
+Tn =
++kn −
++1
+2kTn/2k
+=
++n/
+−1)+kn −
++1
+Tn/2k+1
+=
++(k +1)n −
++1.
+2k+1Tn/2k+1
+2k+1
+k +1
+k = log n
+=
+Tn/2k
+Tn =
++kn −
++1
+2kTn/2k
+=
++n log n −
++1
+= n
++n log n −n +1
+= n log n −n +1.
+6/29/2021
+https://eng.libretexts.org/@go/page/54599
+1 log 1 −1 +1 = 0
+2 log 2 −2 +1 = 1
+4 log 4 −4 +1 = 5
+8 log 8 −8 +1 = 17
+16 log 16 −16 +1 = 49
+6/29/2021
+https://eng.libretexts.org/@go/page/54600
+= 1
+= 1
+= f(n −1)+f(n −2)
+f(n) =
+f(n −1)+
+f(n −2)+⋯+
+,
+, … ,
+d = 2
+=
+= 1
+g(n) = 0
+f(0) = 1
+f(1) = 1
+f(n) = xn
+f(0) = 0
+f(1) = 1
+6/29/2021
+https://eng.libretexts.org/@go/page/54600
+.
+f(n) = f(n −1)+f(n −2)
+=
++
+.
+= x +1.
+x =
+.
+√
+f(n) =
+or f(n) =
+(
+)
+1 +
+√
+(
+)
+√
+h(n) = sf(n)+tg(n)
+h(n) = sf(n)+tg(n)
+= s(
+f(n −1)+⋯+
+f(n −d))+t(
+g(n −1)+⋯+
+=
+(sf(n −1)+tg(n −1))+⋯
+=
+h(n −1)+⋯+
+■
+f(n) = s
++t
+(
+)
+1 +
+√
+(
+)
+√
+f(0) = 1
+f(1) = 1
+f(0) = s
++t
+= s+t = 1.
+(
+)
+1 +
+√
+(
+)
+√
+f(1) = s
++t
+= 1.
+(
+)
+1 +
+√
+(
+)
+√
+6/29/2021
+https://eng.libretexts.org/@go/page/54600
+s =
+⋅
+s = −
+⋅
+.
+√
+1 +
+√
+√
+√
+f(n) =
+⋅
+−
+⋅
+√
+1 +
+√
+(
+)
+1 +
+√
+√
+√
+(
+)
+√
+=
+−
+.
+√(
+)
+1 +
+√
+n+1
+√(
+)
+√
+n+1
+n = 0, 1, 2,
+(1 +
+)/2 = 1.618 …
+√
+)/2 = −0.618033988 …
+√
+f(n) =
++o(1).
+ϕn+1
+√
+√
+=
+f(n) =
+f(n −1)+
+f(n −2)+⋯+
+,
+, … ,
+f(n) = xn
+=
++
++⋯+
+.
+=
++
++⋯+
+x +
+.
+,
+, … ,
+6/29/2021
+https://eng.libretexts.org/@go/page/54600
+,
+,
+:
+f(n) =
+f(n) =
+f(n) =
+f(n) = n
+.
+f(n) = a⋅
++b ⋅
++c ⋅
++d ⋅n
+f(0) = 0 f(1) = 1 f(2) = 4
+f(3) = 9
+= 0
++b ⋅
++c ⋅
++d ⋅0
+= 0
+= 1
++b ⋅
++c ⋅
++d ⋅0
+= 1
+= 4
++b ⋅
++c ⋅
++d ⋅0
+= 4
+= 9
++b ⋅
++c ⋅
++d ⋅0
+= 9
+f(n) =
+f(n −1)+
+f(n −2)+⋯
+= 1
+= 2f(n −1)+1
++1
+f(n) =
+f(n −1)+
+f(n −2)+⋯
+f(n −d)+g(n).
+a+n
+a+1
+= 1
+= 2f(n −1)+n
+6/29/2021
+https://eng.libretexts.org/@go/page/54600
+.
+.
+.
++n
+f(n) = 2f(n −1)
+x = 2
+f(n) = c2n
+f(n) = 2f(n −1)+n
+f(n) = an +b
+an +b
+= 2(a(n −1)+b)+n
+= (a+1)n +(b −2a).
+a+1 = 0
+a = −1
+b −2a = 0
+b = −2
+f(n) = an +b = n −2
+f(n) = c
+f(1) = 1
+f(1) = 1
+−1 −2 = 1
+c = 2.
+f(n) = 2 ⋅
+f(n) = c
+f(n) = bn +c
+f(n) = a
++bn +c
+g(n) = 6n +5
+f(n) = bn +c
+f(n) = a
++bn +c
+f(n) = c3n
+f(n) = bn
++c
++bn
++c
+6/29/2021
+https://eng.libretexts.org/@go/page/54601
+= 0
+= 2T(n/2)+n −1
+T(n/2)
+f(n) =
+f(n −1)+
+f(n −2)+⋯+
+
+
+
+
+
++g(n)
+
+
+
+
+f(0) =
+, f(1) =
+=
++
++⋅+
+.
+…
+, … ,
+g(n) = n
+f(n) = bn +c
++bn +c
+f(n) = c3n
+f(n) = (bn +c)3n
++bn +c)
+f(n) =
++
++d(−1
+
+
+
+
+3n +1
+
+
+
+
+f(1) = 2
+= c ⋅
++d ⋅(−1
++3 ⋅1 +1
+= 2c −d.
+T(n) =
+T( n)+g(n)
+∑
+i=1
+, … ,
+, … ,
+= 2,
+= 1/2
+g(n) = n −1
+6/29/2021
+https://eng.libretexts.org/@go/page/54601
+.
+T(n) =
+T( n)+g(n)
+∑
+i=1
+T(n) = Θ(
+(1 +
+∫
+up+1
+= 1.
+∑
+i=1
+|
+(n)|
+g(n) =
+g(n) = 2n
+2 ⋅(1/2
+= 1.
+p = 1
+T(n) = Θ(n (1 +
+∫
+= Θ(n (1 +
+))
+[log u +
+]
+= Θ(n (log n +
+))
+= Θ(n log n)
+1/n
+T(n) = 2T(n/2)+(8/9)T(3n/4)+
+.
+= 2,
+= 1/2,
+= 8/9,
+= 3/4
+2 ⋅(1/2
++(8/9)(3/4
+= 1.
+p = 2
+T(n) = Θ(
+(1 +
+∫
+= Θ(
+(1 +log n))
+= Θ(
+6/29/2021
+https://eng.libretexts.org/@go/page/54601
+.
+= n
++n log n −n +1.
+= Θ(n log n)
+T(n) = 2T(n/2)
+T(n/2)
+⌈n/2⌉
+⌊n/2⌋
+= 0
+= T(⌈n/2⌉)+T(⌊n/2⌋)+n −1
+T( x +
+(x))+g(x)
+for x >
+,
+∑
+i=1
+, … ,
+, … ,
+|
+(x)|
+|
+(x)| = O(x/
+6/29/2021
+https://eng.libretexts.org/@go/page/54601
+T(x) = Θ(
+(1 +
+∫
+up+1
+= 1.
+∑
+i=1
+= 1
+= 1
+= 1/2
+= 1/2
+g(x) = x −1
+(x) = ⌈⌉−
+(x) = ⌊⌋−
+= 1 ⋅T (
++(⌈
+⌉−
+)) +⋅T (
++(⌊
+⌋−
+)) +x −1
+= T (⌈
+⌉) +T (⌊
+⌋) +x −1.
+O(x/
+T(n) = aT (
+) +g(n).
+g(n) = O(
+)
+ϵ > 0
+T(n) = Θ(
+) .
+g(n) = O(
+k > 0
+T(n) = Θ(
+logk+1
+6/29/2021
+https://eng.libretexts.org/@go/page/54601
+g(n) =  Ω (
+)
+(a)+ϵ
+ϵ > 0
+ag(n/b) < cg(n)
+c < 1
+T(n) = Θ(g(n)).
+6/29/2021
+https://eng.libretexts.org/@go/page/54602
+.
+= 2
++1
+= 2
++n −1
+Tn/2
+= 2
++n
+=
++
+∼
+/
+)n+1
+√
+n = 64
+n = 64
+n/2
++1
++n
+= 3
++1
+)
+)
+= 0
+= a
++n −1.
+Tn/2
+=
+⎧
+⎩
+⎨
+⎪
+⎪
+)
+for a < 2
+for a = 2
+for a > 2.
+6/29/2021
+https://eng.libretexts.org/@go/page/54602

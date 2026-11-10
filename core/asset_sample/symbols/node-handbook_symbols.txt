@@ -1,0 +1,265 @@
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+})
+server.listen(3000, () => {
+})
+#!/usr/bin/node
+#!/usr/bin/env node
+// your code
+node --watch --watch-path=./src app.js
+API_SECRET=your-secret-key-here
+const config = {
+}
+})
+: ['http://localhost:3000']
+console.log(`${index}: ${val}`)
+})
+args[0]
+args.name // joe
+{
+"name": "my-node-app",
+"test": "node --test",
+},
+},
+},
+"node": ">=18.0.0"
+}
+}
+node app.js --name=joe
+})
+console.log(`Hello ${name}!`)
+})
+{
+}
+eventEmitter.on('start', () => {
+})
+console.log(`started ${number}`)
+})
+console.log(`started from ${start} to ${end}`)
+})
+try {
+} catch (err) {
+}
+try {
+} catch (err) {
+}
+fs.stat('/Users/joe/test.txt', (err, stats) => {
+if (err) {
+}
+stats.size // 1024000 //= 1MB
+})
+try {
+stats.size // 1024000 //= 1MB
+} catch (err) {
+}
+}
+/users/joe/file.txt
+C:\\users\\joe\\file.txt
+// '/users/joe'
+// 'notes.txt'
+// '.txt'
+// Build paths
+// Clean up paths
+path.normalize('/users/joe/..//test.txt') // '/users/test.txt'
+try {
+} catch (err) {
+}
+try {
+} catch (err) {
+}
+fs.writeFile('/Users/joe/test.txt', content, { flag: 'a+' }, (err) => {})
+if (err) {
+}
+// done!
+})
+try {
+} catch (err) {
+}
+}
+try {
+}
+} catch (err) {
+}
+})
+const isFile = (fileName) => {
+}
+.map((fileName) => {
+})
+fs.rename('/Users/joe', '/Users/roger', (err) => {
+if (err) {
+}
+// done
+})
+try {
+} catch (err) {
+}
+try {
+} catch (err) {
+}
+}
+try {
+console.log(`${dir} is deleted!`)
+} catch (err) {
+}
+try {
+console.log(`${dir} is deleted!`)
+} catch (err) {
+}
+if (err) {
+}
+// done
+})
+try {
+// done
+} catch (err) {
+}
+try {
+} catch (error) {
+}
+try {
+} catch (error) {
+if (error.code === 'ENOENT') {
+}
+}
+}
+}
+try {
+}
+} catch (error) {
+}
+(|).
+try {
+const data = await fs.readFile(`${__dirname}/data.txt`)
+} catch (err) {
+}
+})
+const stream = fs.createReadStream(`${__dirname}/data.txt`)
+})
+if (process.env.NODE_ENV === 'production') {
+} else {
+}
+// ...
+}
+try {
+// lines of code
+} catch (e) {}
+})
+try {
+} catch (error) {
+}
+}
+try {
+try {
+} catch (error) {
+}
+} catch (error) {
+}
+}
+try {
+} catch (err) {
+}
+}
+res.end('<h1>Hello, World!</h1>')
+})
+server.listen(port, () => {
+console.log(`Server running at port ${port}`)
+})
+res.end('<h1>Hello, World!</h1>')
+try {
+} catch (error) {
+}
+const options = {
+}
+console.log(`statusCode: ${res.statusCode}`)
+res.on('data', (d) => {
+})
+})
+req.on('error', (error) => {
+})
+try {
+},
+}),
+})
+} catch (error) {
+}
+})
+const options = {
+},
+}
+console.log(`statusCode: ${res.statusCode}`)
+res.on('data', (d) => {
+})
+})
+req.on('error', (error) => {
+})
+})
+})
+)
+app.post('/todos', (req, res) => {
+})
+req.on('data', (chunk) => {
+console.log(`Data chunk available: ${chunk}`)
+})
+req.on('end', () => {
+// end of data
+})
+})
+req.on('data', (chunk) => {
+data += chunk
+})
+req.on('end', () => {
+})
+})
+const buffers = []
+}
+})
+const foo = () => {
+}
+const foo = () => {
+}
+const foo = () => {
+}
+process.nextTick(() => {
+// do something
+})
+setImmediate(() => {
+// run something
+})
+const start = () => {
+}).then((resolve) => {
+})
+}
+setTimeout(() => {
+}, 2000)
+setTimeout(() => {
+}, 50)
+// do something
+}
+const id = setTimeout(() => {
+}, 2000)
+setTimeout(() => {
+}, 0)
+setInterval(() => {
+}, 2000)
+const id = setInterval(() => {
+}, 2000)
+const interval = setInterval(() => {
+if (App.somethingIWait === 'arrived') {
+}
+}, 100)
+const myFunction = () => {
+// do something
+}
+node --watch --watch-path=./src app.js
+node --run start
+node --run test
+})
+})
+})
+node --test
+node --test --watch

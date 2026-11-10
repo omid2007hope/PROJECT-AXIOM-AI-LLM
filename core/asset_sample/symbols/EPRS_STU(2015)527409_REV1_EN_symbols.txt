@@ -1,0 +1,253 @@
+IP/G/STOA/FWC-2013-1/LOT 9/C5/SC1
+ISBN: 978-92-823-5535-0
+CAT: QA-05-14-155-EN-N
+
+
+
+
+
+2 http://www.zeit.de/datenschutz/malte-spitz-data-retention/ and
+https://www.bof.nl/2014/07/30/how-your-innocent-smartphone-passes-on-almost-your-entire-life-to-the-
+secret-service/
+3 https://www.aclu.org/files/natsec/nsa/20130816/NSA%20IG%20Report.pdf
+5 http://www.dni.gov/files/documents/0708/BR%2009-09%20Primary%20Order.pdf
+6 http://www.theguardian.com/world/2013/jun/06/nsa-phone-records-verizon-court-order
+12 http://curia.europa.eu/jcms/upload/docs/application/pdf/2014-04/cp140054en.pdf
+13 http://www.gpo.gov/fdsys/pkg/STATUTE-100/pdf/STATUTE-100-Pg1848.pdf
+14 http://www.enisa.europa.eu/activities/identity-and-trust/privacy-and-trust/library/pp/cookies
+http://www.ftc.gov/opa/2010/12/privacyreport.shtm
+16 http://www.iab.net/member_center/committees/working_groups/Future_of_the_Cookie_Working_Group
+20 http://www.nytimes.com/2014/01/28/world/spy-agencies-scour-phone-apps-for-personal-data.html?_r=0
+21 http://epic.org/misc/nrc_rept_100708.pdf
+28 https://www.eff.org/nsa-spying
+29 http://www.theguardian.com/world/interactive/2013/nov/01/snowden-nsa-files-surveillance-revelations-
+30 http://www.theguardian.com/world/interactive/2013/nov/01/snowden-nsa-files-surveillance-revelations-
+decoded#doc/2
+32 http://www.theguardian.com/uk/2013/jun/21/gchq-cables-secret-world-communications-nsa
+33 http://www.wired.com/2011/01/as-egypt-tightens-its-internet-grip-tunisia-seeks-to-open-up/
+34 http://www.bloomberg.com/news/2011-12-12/tunisia-after-revolt-can-alter-e-mails-with-big-brother-
+35 http://www.theguardian.com/business/2014/jun/06/vodafone-reveals-secret-wires-allowing-state-
+37 http://www.theguardian.com/world/2013/jun/06/nsa-phone-records-verizon-court-order
+38 http://www.theguardian.com/world/interactive/2013/nov/01/snowden-nsa-files-surveillance-revelations-
+decoded#doc/1
+39 http://www.theguardian.com/world/2013/aug/09/obama-legal-background-surveillance-nsa
+41 https://www.eff.org/files/2014/01/06/20131230-appelbaum-nsa_ant_catalog.pdf
+42 http://www.spiegel.de/international/world/catalog-reveals-nsa-has-back-doors-for-numerous-devices-a-
+44 http://www.emsec.rub.de/media/crypto/attachments/files/2011/04/imsi_catcher.pdf
+45 http://www.heise.de/ct/artikel/NSA-GCHQ-The-HACIENDA-Program-for-Internet-Colonization-
+2292681.html?hg=1&hgi=3&hgf=false
+48 https://citizenlab.org/2012/07/from-bahrain-with-love-finfishers-spy-kit-exposed/
+50 https://firstlook.org/theintercept/2014/03/12/nsa-plans-infect-millions-computers-malware/
+53 http://www.theguardian.com/world/2013/sep/05/nsa-how-to-remain-secure-surveillance
+54 http://www.nytimes.com/2013/09/06/us/nsa-foils-much-internet-encryption.html?_r=0
+55 http://www.technologyreview.com/news/519171/nsa-leak-leaves-crypto-math-intact-but-highlights-known-
+56 http://www.theguardian.com/world/2013/jun/17/edward-snowden-nsa-files-
+58 http://www.propublica.org/article/privacy-tools-encrypt-what-you-can
+61 http://heartbleed.com/
+62 https://gotofail.com/
+63 http://www.bloomberg.com/news/2014-04-11/nsa-said-to-have-used-heartbleed-bug-exposing-
+66 http://www.reuters.com/article/2013/12/20/us-usa-security-rsa-idUSBRE9BJ1C220131220
+67 http://www.dailydot.com/technology/apple-icloud-brute-force-attack-march/
+68 https://gotofail.com/
+69 http://heartbleed.com/
+70 http://news.netcraft.com/archives/2014/04/08/half-a-million-widely-trusted-websites-vulnerable-to-
+73 http://insidecybersecurity.com/Cyber-General/Cyber-Public-Content/policy-debate-looms-on-us-role-in-
+market-for-zero-day-cyber-threats/menu-id-1089.html
+
+
+
+
+
+
+
+
+76 http://csrc.nist.gov/groups/STM/cavp/documents/aes/aesval.html
+77 http://www.nist.gov/itl/csd/sp800-90-042114.cfm
+78 http://www.csjournals.com/IJCSC/PDF2-1/Article_22.pdf
+80 http://nakedsecurity.sophos.com/2014/03/21/google-switches-gmail-to-https-only/
+83 https://www.eff.org/deeplinks/2013/11/encrypt-web-report-whos-doing-what
+85 http://www.theregister.co.uk/2013/06/26/ssl_forward_secrecy/
+86 http://vincent.bernat.im/en/blog/2011-ssl-perfect-forward-secrecy.html
+87 http://www.computerworld.com/article/2473792/encryption/perfect-forward-secrecy-can-block-the-nsa-
+from-secure-web-pages--but-no-one-uses-it.html
+88 http://www.fbi.gov/news/speeches/going-dark-are-technology-privacy-and-public-safety-on-a-collision-
+89 http://www.washingtonpost.com/blogs/the-switch/wp/2014/10/17/fbi-director-comey-calls-on-congress-
+to-stop-unlockable-encryption-good-luck-with-that/
+90 http://www.microsoft.com/en-us/twc/
+91 http://cryptome.org/2013/12/nsa-ant-mobilfunk.pdf
+94 http://www.cl.cam.ac.uk/~sps32/microsemi_re.pdf
+96 http://securityaffairs.co/wordpress/16748/hacking/spy-agencies-ban-on-lenovo-pcs-due-to-backdoor-
+
+
+
+
+
+99 http://www.reuters.com/article/2013/12/20/us-usa-security-rsa-idUSBRE9BJ1C220131220
+100 http://www.spiegel.de/international/world/catalog-reveals-nsa-has-back-doors-for-numerous-devices-a-
+102 http://www.forbes.com/sites/robertlenzner/2013/09/23/attverizonsprint-are-paid-cash-by-nsa-for-your-
+103 http://www.mspy.com/en/
+
+
+
+110 http://cryptome.org/2012/07/nsa-scip.pdf
+
+
+
+
+
+
+
+
+
+
+
+
+
+114 https://bitcoin.org/
+117 http://www.nice.com/
+119 http://www.clear-trail.com/
+
+
+125 https://citizenlab.org/2013/01/planet-blue-coat-mapping-global-censorship-and-surveillance-tools/
+126 http://www.europarl.europa.eu/news/en/news-room/content/20121207IPR04411/html/Ban-exports-of-
+129 http://ec.europa.eu/transparency/regdoc/rep/3/2014/EN/3-2014-7567-EN-F1-1-ANNEX-1.Pdf
+http://curia.europa.eu/juris/document/document.jsf?text=&docid=150642&pageIndex=0&doclang=en&mode=
+lst&dir=&occ=first&part=1&cid=12322
+140 http://www.forbes.com/sites/kashmirhill/2013/07/24/blueprints-of-nsa-data-center-in-utah-suggest-its-
+storage-capacity-is-less-impressive-than-thought/
+141 http://www.washingtonpost.com/world/national-security/nsa-growth-fueled-by-need-to-target-
+terrorists/2013/07/21/24c93cf4-f0b1-11e2-bed3-b9b6fe264871_story.html
+142 http://www.theguardian.com/world/interactive/2013/jun/08/boundless-informant-nsa-full-text
+143 http://apps.washingtonpost.com/g/page/world/what-is-fascia/637/#document/p1/a135288
+147 http://www.theguardian.com/world/2013/sep/05/nsa-gchq-encryption-codes-security
+148 http://apps.washingtonpost.com/g/page/world/a-description-of-the-penetrating-hard-targets-project/691/
+149 http://www.washingtonpost.com/world/national-security/nsa-seeks-to-build-quantum-computer-that-
+could-crack-most-types-of-encryption/2014/01/02/8fff297e-7195-11e3-8def-a33011492df2_story.html
+153 http://www.justice.gov/opa/pr/joint-statement-attorney-general-eric-holder-and-director-national-
+154 https://cdt.org/insight/yahoo-v-u-s-prism-documents/
+155 http://epic.org/privacy/wiretap/stats/fisa_stats.html
+156 http://www.foreignpolicy.com/articles/2013/10/15/the_nsa_s_new_codebreakers
+160 https://www.eff.org/files/2014/01/06/20131230-appelbaum-nsa_ant_catalog.pdf
+161 https://firstlook.org/theintercept/document/2014/09/14/treasure-map-presentation/
+
+
+
+
+
+
+
+
+
+167 https://www.eff.org/files/2014/04/09/20140312-intercept-five_eyes_hacking_large_routers.pdf
+168 https://firstlook.org/theintercept/document/2014/09/14/treasure-map-presentation/
+169 https://firstlook.org/theintercept/2014/09/14/nsa-stellar/
+170 https://www.eff.org/files/2014/01/06/20131230-appelbaum-nsa_ant_catalog.pdf
+173 http://spectrum.ieee.org/semiconductors/design/the-hunt-for-the-kill-switch
+174 https://srlabs.de/badusb/
+
+
+
+176 http://www.reuters.com/article/2013/12/20/us-usa-security-rsa-idUSBRE9BJ1C220131220
+177 http://www.theguardian.com/world/2013/sep/05/nsa-gchq-encryption-codes-security
+179 http://www.washingtonpost.com/world/national-security/nsa-seeks-to-build-quantum-computer-that-
+could-crack-most-types-of-encryption/2014/01/02/8fff297e-7195-11e3-8def-a33011492df2_story.html?hpid=z1
+
+
+
+
+
+183 http://www.washingtonpost.com/world/national-security/in-nsa-intercepted-data-those-not-targeted-far-
+outnumber-the-foreigners-who-are/2014/07/05/8139adf8-045a-11e4-8572-4b1b969b6322_story.html
+185 https://www.ncp-e.com/fileadmin/pdf/techpapers/NCP-Attack-Vectors-WP.pdf
+186 http://www.theguardian.com/world/2013/sep/05/nsa-gchq-encryption-codes-security
+188 https://www.eff.org/deeplinks/2013/06/depth-review-new-nsa-documents-expose-how-americans-can-be-
+191 https://qubes-os.org/
+
+
+
+192 http://www.thewire.com/technology/2012/08/advice-hacker-password-security-best-practices/56343/
+
+
+
+
+194 http://www.guardian.co.uk/world/2013/jun/17/edward-snowden-nsa-files-whistleblower
+
+
+
+
+
+196 http://support.apple.com/en-us/HT4790
+199 https://gnupg.org/
+201 https://www.wuala.com/
+
+
+
+
+
+203 http://www.cloudfogger.com/en/
+204 http://seafile.com/en/home/
+206 https://pyd.io/
+210 https://bitmessage.org/wiki/Main_Page
+
+
+
+
+
+
+
+
+215 https://www.gnupg.org/
+217 https://gpgtools.org/
+218 http://cellcrypt.com/
+220 https://ostel.co/
+
+
+
+
+
+
+
+
+225 https://jitsi.org/
+226 https://tox.im/
+
+
+
+
+
+231http://www.top10bestvpn.com/?kw=anonymous%20vpn&c=49593689771&t=search&p=&m=e&adpos=1t2&
+Dev=c&devmod=&mobval=0&a=1031&gclid=CJifhKacjMICFXDItAodT3EAXQ
+232 http://www.abine.com/blog/2013/vpn-that-protects-your-privacy/
+233 https://torrentfreak.com/which-vpn-services-take-your-anonymity-seriously-2014-edition-140315/
+234 http://www.w3.org/TR/tracking-dnt/
+235 http://www.computerworld.com.au/article/545777/_do_track_oh_what_heck_go_ahead/
+238 http://noscript.net/
+
+
+
+
+
+
+
+
+
+240 https://itunes.apple.com/us/app/onion-browser/id519296448?mt=8
+241 http://www.deepdotweb.com/jolly-rogers-security-guide-for-beginners/tor-chat/
+245 https://pidgin.im/
+246 https://www.adium.im/
+247 http://code.google.com/p/mirotr/
+248 http://www.miranda-im.org/
+249 https://crypto.cat/
+250 https://jitsi.org/
+
+
+
+
+
+
+
+253 https://ixquick.com/
+257 http://www.howtogeek.com/113513/5-alternative-search-engines-that-respect-your-privacy/
+258 http://blekko.com/
+260 https://qubes-os.org/
+

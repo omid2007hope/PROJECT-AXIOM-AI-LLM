@@ -1,0 +1,648 @@
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.3 Wi-Fi . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+⟨⟩√∞≃≤≥×–̸= αβγµϕ→←
+0-127
+128-191
+192-223
+...
+...
+...
+T=3+2=5, A2 at T=4, A5 at T=6, and A4 at T=9.
+{0,1}.
+S = Ns*(1–s)2(N–1)
+= G(1–G/N)2N
+becomes 2/(2e-1+2), or 31%. For P=512 bytes=8*64, the effective bandwidth is 8/(2e+7), or 64%. For
+?
+?
+|
+|
+Wi-Fi
+2.4/5 GHz
+Wi-Fi
+Wi-Fi
+Wi-Fi RTS/CTS
+Wi-Fi
+Wi-Fi
+Wi-Fi
+Wi-
+• ...
+A−→F #1
+A−→F #2
+A−→F #1
+A−→F #2
+A−→F #1
+A−→F #2
+4B/5B
+STS-1
+STM-0
+STS-3
+STM-1
+STS-12
+STM-4
+STS-48
+STM-16
+STS-192
+STM-64
+STS-768
+STM-256
+...
+SN-1
+through Data[16].
+ets/sec):
++
+/
+tran-
+if M==LA+1,
+while (Data[LA+1] is in EA) {
+output Data[LA+1]
+LA = LA+1
+}
+send ACK[LA]
+LA=0. When ACK[M] arrives:
+set K = LA+1
+for (i=K; i≤LA; i++) send Data[i]
+...
+...
+• 10.0.0.0/8
+• third: size = 20+224 = 244 (note 376+376+224=976), FragOffset = 752.
+• ﬁrst: size = 20+376 = 396, FragOffset = 976+0 = 976
+• second: size = 20+128 = 148, FragOffset = 976+376=1352
+IP -
+• B/k extends A/n: k≥n
+128-255
+0-63
+64-95
+96-127
+-a.
+netstat -a | grep -i tcp6
+c(D,N) + cN
+iptables --table mangle --append PREROUTING \\
+--protocol tcp --source-port 25 --jump MARK --set-mark 1
+/15.
+entries ⟨preﬁx,mask⟩= ⟨B[i],M[i]⟩, we search for i such that (D & M[i]) = B[i].
+• AS-sequence=⟨AS2⟩
+• AS-set={AS3,AS4}
+MULTI_EXIT_DISC
+00.0.0.0/2
+40.0.0.0/2
+80.0.0.0/2
+C0.0.0.0/2
+AS-path.
+:
+:
+:
+/* simplex-talk server, UDP version */
+try {
+}
+}
+try {
+}
+while(true) { // read loop
+try {
+}
+}
+} // end of main
+}
+if (args.length >= 1) desthost = args[0];
+try {
+// DNS query
+}
+}
+try {
+}
+}
+try {
+}
+}
+buf = buf + "\n";
+byte[] bbuf = buf.getBytes();
+try {
+}
+}
+} // while
+}
+}
+#!/usr/bin/python3
+rhost = argv[1]
+print("\n
+buf = input("> ")
+is, ACK[N] acknowledges Data[N].
+Sor-
+try {
+}
+// try again
+// other errors
+}
+// TFTP_HDR_SIZE = 4
+write_the_data(...);
+expected_block ++;
+// MAX_DATA_SIZE = 512
+}
+“abc”, seq=1, ack=1
+ACK, seq=1, ack=4
+“defg”, seq=4, ack=1
+seq=1, ack=8
+seq=21, ack=6, FIN
+seq=6, ack=22, FIN
+/* THREADED simplex-talk TCP server */
+try {
+}
+while(true) { // accept loop
+try {
+}
+} else {
+}
+} // accept loop
+} // end of main
+}
+byte[] buf = new byte[bufsize];
+try {
+}
+}
+}
+if (len == -1) break;
+} //while reading from s
+try {istr.close();}
+try {s.close();}
+} // line_talker
+_s = s;
+}
+line_talker(_s);
+} // run
+}
+// class Talker
+}
+if (args.length >= 1) desthost = args[0];
+try {
+}
+}
+try {
+}
+}
+try {
+}
+}
+//============================================================
+try {
+}
+}
+buf = buf + "\n";
+byte[] bbuf = buf.getBytes();
+try {
+}
+}
+} // while
+}
+}
+SYN, ISNB=5,000, ACK=______
+ACK, SEQ=______, ACK=______
+Data1, SEQ=______, ACK=______
+ACK, SEQ=______, ACK=______
+Data2, SEQ=______, ACK=______
+ACK, SEQ=______, ACK=______
+Data3, SEQ=______, ACK=______
+ACK, SEQ=______, ACK=______
+DataB, SEQ=______, ACK=______
+ACK, SEQ=_____, ACK=______
+FIN, SEQ=______, ACK=______
+cwnd = cwnd + 1/cwnd
+Data[N]/ACK[N] terminology of 6.2
+Data[1]
+Data[1]
+ACK[1]
+Data[2],Data[3]
+Data[2]
+Data[3]
+ACK[2]
+ACK[3]
+ACK[4]
+ACK[5]
+..
+ACK[N]
+2N,2N+1
+N+1
+N+2 .. 2N+1
+cwnd/2
+cwnd *= 2
+cwnd += 1
+cwnd/2
+cwnd +=1
+cwnd += 1/cwnd
+ACK[1], ACK[2], ACK[2], ACK[2], ACK[2], we can infer two things:
+ACK[2]s following the ﬁrst ACK[2]).
+Data[1]
+ACK[1]
+Data[3]
+ACK[1]
+Data[4]
+ACK[1]
+Data[2]
+ACK[4]
+Data[6]
+ACK[4]
+Data[5]
+ACK[6]
+dupACK[9]/16
+Data[20]
+dupACK[9]/17
+Data[21]
+dupACK[9]/18
+Data[22]
+dupACK[9]/19
+Data[23]
+Data[23].
+Data[0]
+Data[0]-Data[11]
+Data[12]
+Data[12]-Data[15], Data[1]
+Data[16]
+Data[16]-Data[20], Data[4]
+Data[21]
+Data[21]-Data[26]
+cwnd = cwnd + 1/cwnd
+αQ = wA – 2α(dA+d)
+βQ = wB – 2β(dB+d)
+α[Q + 2d + 2dA] = wA
+β[Q + 2d + 2dB] = wB
+Q = wA + wB – 2d – 2(αdA+βdB)
+α/β = [Q + 2d + 2dB] / [Q + 2d + 2dA]
+is wA/(wA+wB).
+...
+sides, we get c1/c2 = N/(N/λ) = λ, and from that we can solve to get c1 = Cλ/(1+λ) and c2 = C/(1+λ).
+(r1–s1)/s1 + (r2–s2)/s2 + ... + (rN–sN)/sN < 0
+M = cwndmean = 1.225 p-1/2
+bandwidth = cwnd/RTT = 1.225/(RTT × √p)
+γ = (cwnd2/cwnd1) × (RTT2/RTT1)
+cwnd=k/√p rule
+(1-β/2)h.
+(3+α) = 2α/β, or β = 2α/(3+α). Solving for β we get
+α = 3β/(2-β)
+2 × 10-10
+10-2
+10-3
+10-4
+10-5
+10-6
+10-7
+10-8
+10-9
+10-10
+(a). β = 1/5
+(b). β = 2/9
+(c). α = 1/5
+cwndnew = (1-γ)×cwnd + γ×((RTTnoLoad/RTT)×cwnd + α)
+BWEk = α×BWEk-1 + (1–α)×BWMk
+cwnd = (t–t0)/RTT + cwndmin
+H-TCP
+α(t) = 1 + 10(t–tL) + (t–tL)2/4
+H-TCP
+http://tools.ietf.org/id/draft-rhee-tcpm-cubic-02.txt.
+W(t) = C×(t–K)3 + Wmax
+K = (Wmax/2)1/3 seconds
+queue_use = cwndV×Q/(Q+M)
+(101/204)x4 = 1.980 < β
+(99/205)×5 = 2.439
+= (cwndF+|R2|)/200.
+Recall 1+2+3+...+N = N(N+1)/2.
+?
+set foo [expr $foo + 1]
+set tcp0 [new Agent/TCP/Reno]
+set ack0 [$tcp0 set ack_]
+# basic1.tcl simulation: A---R---B
+$ns trace-all $tracefile
+proc finish {} {
+$ns flush-trace
+}
+set A [$ns node]
+set R [$ns node]
+set B [$ns node]
+$ns queue-limit $R $B 7
+$ns duplex-link-op $A $R orient right
+$ns duplex-link-op $R $B orient right
+$ns duplex-link-op $R $B queuePos 0.5
+set tcp0 [new Agent/TCP/Reno]
+$tcp0 set class_ 0
+$ns attach-agent $A $tcp0
+$ns attach-agent $B $end0
+$ns connect $tcp0 $end0
+$ns run
+r 0.58616 0 1 tcp 1000 ------- 0 0.0 2.0 28 43
++ 0.58616 1 2 tcp 1000 ------- 0 0.0 2.0 28 43
+d 0.58616 1 2 tcp 1000 ------- 0 0.0 2.0 28 43
+ack_ 3
+proc finish {} {
+$ns flush-trace
+set lastACK [$tcp0 set ack_]
+set lastSEQ [$tcp0 set maxseq_]
+}
+set ACKed [expr round ( [$end0 set bytes_] / 1000.0)]
+$ns trace-all $trace
+$ns trace-queue $R $B $trace
+d 3.963408 1 2 tcp 1000 ------- 0 0.0 2.0 254 531
+$ns duplex-link $A $R
+- time 1 2 tcp 1000 ------- 0 0.0 2.0 x y
+#!/usr/bin/python3
+SEND_NODE = 1
+DEST_NODE = 2
+FLOW = 0
+count = 0
+if (event == "-" and sendnode == SEND_NODE and dest == DEST_NODE and size >= 100
+count += 1
+link_count(sys.argv[1])
+{count=0; SEND_NODE=1; DEST_NODE=2; FLOW=0}
+$1 == "-" { if ($3 == SEND_NODE && $4 == DEST_NODE && $6 >= 1000 && $8 == FLOW) {
+count++;
+}
+}
+{print count;}
+...
+$ns queue-limit $R $B $queuesize
+queue=0
+while [ $queue -le 10 ]
+queue=$(expr $queue + 1)
+if { $argc >= 1 } {
+set queuesize [expr [lindex $argv 0]]
+}
+if { $argc >= 2 } {
+set endtime [expr [lindex $argv 1]]
+}
+70-30 = 40 down to 35-30 = 5, averaging around (40+5)/2 = 22.5.
+#!/usr/bin/python3
+QUEUE_NODE = 1
+sum = 0.0
+size= 0
+sum += size * (time -prevtime)
+if (event==’d’): size -= 1
+elif (event=="-"): size -= 1
+elif (event=="+"): size += 1
+#!/usr/bin/python3
+SEND_NODE = 1
+DEST_NODE = 2
+FLOW = 0
+count = 0
+COUNTS = {}
+if (event == "r" and dest == DEST_NODE and size >= 1000 and flow == FLOW):
+COUNTS[seqno] += 1
+COUNTS[seqno] = 1
+dup_counter(sys.argv[1])
+$ns trace-all $trace
+############## some globals (modify as desired) ##############
+############## arrange for output ##############
+proc finish {} {
+set ack0 [$tcp0 set ack_]
+set ack1 [$tcp1 set ack_]
+set recv0 [expr round ( [$end0 set bytes_] / 1000.0)]
+set recv1 [expr round ( [$end1 set bytes_] / 1000.0)]
+set rttratio [expr (2.0*$delayB+$RTTNL)/$RTTNL]
+set actualratio [expr 1.0*$recv0/$recv1]
+set rttratio2 [expr $rttratio*$rttratio]
+set ratio1 [expr $actualratio/$rttratio]
+set ratio2 [expr $actualratio/$rttratio2]
+set outstr [format "%f %f %d %d %f %f %f %f %f" $delayB $overhead $recv0 $recv1 $rt
+$ns flush-trace
+}
+############### create network topology ##############
+# A
+#
+\
+#
+\
+#
+R---D (Destination)
+#
+/
+#
+/
+# B
+set A [$ns node]
+set B [$ns node]
+set R [$ns node]
+set D [$ns node]
+$ns duplex-link $A $R ${fastbw}Mb ${basedelay}ms DropTail
+$ns duplex-link $B $R ${fastbw}Mb [expr $basedelay + $delayB]ms DropTail
+$ns duplex-link $R $D ${bottleneckBW}Mb 100ms DropTail
+$ns queue-limit $R $D $queuesize
+############## create and connect TCP agents, and start ##############
+set tcp0 [new Agent/TCP/Reno]
+$tcp0 set class_ 0
+$tcp0 set fid_ 0
+$ns attach-agent $A $tcp0
+set tcp1 [new Agent/TCP/Reno]
+$tcp1 set class_ 1
+$tcp1 set fid_ 1
+$ns attach-agent $B $tcp1
+$ns attach-agent $D $end0
+$ns attach-agent $D $end1
+$ns connect $tcp0 $end0
+$ns connect $tcp1 $end1
+$ftp0 attach-agent $tcp0
+$ftp1 attach-agent $tcp1
+$ns run
+actual_ratio/RTT_ratio
+set tcp10 [new Agent/TCP]
+$ns attach-agent $A $tcp10
+set tcp11 [new Agent/TCP]
+$ns attach-agent $B $tcp11
+$ns attach-agent $D $end10
+$ns attach-agent $D $end11
+goodput_ratio = 1/2 × (RTT_ratio)2
++ (1/6)×1 = 81%.
+T=220.
+T=45 and T=100.
+#!/usr/bin/python3
+def __init__(self):
+if varname != "cwnd_":
+if snode == 0: flow=flow0
+if cwnd == 1.0: flow.CTOcount += 1
+4.8%
+5.1%
+3.6%
+3.8%
+3.7%
+3.0%
+3.8%
+2.2%
+3.9%
+1.3%
+4.1%
+0%
+3.7%
+-2.6%
+3.4%
+-2.7%
+3.6%
+-3.0%
+3.1%
+-4.4%
+2.9%
+-2.0%
+2.5%
+-3.2%
+total_losses = total_sent × p = total_sent × K/cwnd2
+if (event==’d’):
+# dropcluster==(0,0) means i
+set tcp1 [new Agent/TCP/Vegas]
+$tcp1 set v_alpha_ 3
+$tcp1 set v_beta_
+# ======================================================================
+# ======================================================================
+Mac/802_11
+[expr ($opt(bottomrow)-1)*$opt(spacing)+1]
+[expr 1.0*$opt(x)/$opt(finish)]
+$ns use-newtrace
+$ns trace-all $tracefd
+$ns namtrace-all-wireless $namtrace $opt(x) $opt(y)
+# create
+$topo load_flatgrid $opt(x) $opt(y)
+create-god [expr $opt(bottomrow) + 1]
+set chan1 [new $opt(chan)]
+-llType $opt(ll) \
+-macType $opt(mac) \
+-ifqType $opt(ifq) \
+-ifqLen $opt(ifqlen) \
+-antType $opt(ant) \
+-propType $opt(prop) \
+-phyType $opt(netif) \
+-channel $chan1 \
+-topoInstance $topo \
+-agentTrace ON \
+-routerTrace ON \
+for {set i 0} {$i < $opt(bottomrow)} {incr i} {
+set rownode($i) [$ns node]
+$rownode($i) set X_ [expr $i * $opt(spacing)]
+$rownode($i) set Y_ $opt(brheight)
+$rownode($i) set Z_ 0
+}
+set mover [$ns node]
+$mover set X_ 0
+$mover set Y_ [expr $opt(mheight) + $opt(brheight)]
+$mover set Z_ 0
+set moverdestX [expr $opt(x) - 1]
+$ns at 0 "$mover setdest $moverdestX [$mover set Y_] $opt(speed)"
+set udp [new Agent/UDP]
+set null [new Agent/Null]
+$ns attach-agent $rownode(0) $udp
+$ns attach-agent $mover $null
+$ns connect $udp $null
+$cbr1 attach-agent $udp
+for {set i 0} {$i < $opt(bottomrow)} {incr i} {
+$ns initial_node_pos $rownode($i) 10
+}
+$ns initial_node_pos $mover 20
+proc finish {} {
+$ns flush-trace
+}
+$ns run
+d -t 22.586212333 -Hs 0 -Hd 5 ... -Nl RTR -Nw CBK ... -Ii 1100 ... -Pn cbr -Pi 1100 ...
+66.7%.
+FP = Start + S
+t = 1000+600 = 1600.
+1200*
+1550*
+FP = max(VC(now), Fprev) + S/(r×αi)
+Fi = Fi-1 + Si/(rα) = S1/(rα) + ... + Si/(rα)
+P1: T=0, L=1
+P2: T=0, L=2
+P5: T=10, L=5
+P3: T=2, L=10
+P4: T=4, L=6
+P1: T=0, L=1000
+P2: T=0, L=200
+P4: T=600, L=100
+P3: T=0, L=300
+FWFQ ≤FGPS + Lmax/r
+for each i, Fi+1 = Li+1/r + Fi.
+.. + Lk)/r = Fk - Fm. Therefore we have
+Gk - Tstart ≥Fk - Fm
+Gk - (Fm - Lm/r) ≥Fk - Fm
+Fk ≤Gk + Lm/r ≤Gk + Lmax/r
+70%×100%×50% = 35% of the bandwidth.
+FP = max(VC(now), Fprev) + S/αi
+taken from [BZ97].
+8×16 = 128.
+10 + 1.25
+10 + 2.50
+10 + 3.75
+10 + 5
+...
+128 + 15×1.0667 = 144
+10 + 16×1.25 = 30
+3 1/3
+2 2/3
+1 1/3
+2/3
+2 1/3
+1 2/3
+1/3
+2/3
+T=0
+T=1
+T=2.5
+T=3
+T=4
+T=5
+T=6
+T=10
+T=15
+T=20
+Ap-
+bits(t) <= rt + Bmax
+- rt is just r - bits’(t) + bits’(t) - r = 0.
+s = max(r, B/D)
+= B/D = 1/2 packets/µsec.
+weight fraction 200/(200+100) = 2/3.
+2. B/f
+• Fj = Startj + N×Lj
+P1, L=700
+Q1, L=400
+R1, L=500
+P2, L=700
+Q2, L=500
+R2, L=600
+P3, L=700
+R3, L=200
+P4, L=700
+Q4, L=200
+R4, L=900
+T=10
+• TB(1/2, 1)
+• TB(1/6, 4)
+• TB(1/12, 8)
+/
+\
+/
+\
+/
+\
+/
+\
+|
+|
+|
+|
+-5
+Devi = (Ri - Ri-1) - (Si - Si-1)
+Ji = α×Ji-1 + (1-α)×Devi
+group G = {B1,B2,B3}?
+[GP11] L
+http://tools.ietf.org/html/draft-gharai-avtcore-rtp-tfrc-00.
+4B/5B, 81
+ACK[N], 103
+clear-to-send, Wi-Fi, 58
+Data[N], 103
+OC-3, 86
+request-to-send, Wi-Fi, 58
+STM-1, 86
+STS-1, 85
+STS-3, 86
+Wi-Fi, 55

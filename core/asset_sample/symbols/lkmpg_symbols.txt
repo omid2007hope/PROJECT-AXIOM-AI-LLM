@@ -1,0 +1,1110 @@
+•
+•
+insmod /lib/modules/2.6.11/kernel/fs/fat/fat.ko
+insmod /lib/modules/2.6.11/kernel/fs/msdos/msdos.ko
+/*
+*/
+#include <linux/module.h> /* Needed by all modules */
+#include <linux/kernel.h> /* Needed for KERN_INFO */
+{
+/*
+*/
+}
+{
+}
+obj−m += hello−1.o
+make −C /lib/modules/$(shell uname −r)/build M=$(PWD) modules
+make −C /lib/modules/$(shell uname −r)/build M=$(PWD) clean
+make[1]: Entering directory `/usr/src/linux−2.6.11'
+CC [M] /root/lkmpg−examples/02−HelloWorld/hello−1.o
+make[1]: Leaving directory `/usr/src/linux−2.6.11'
+/*
+*/
+#include <linux/module.h> /* Needed by all modules */
+#include <linux/kernel.h> /* Needed for KERN_INFO */
+#include <linux/init.h> /* Needed for the macros */
+{
+}
+{
+}
+obj−m += hello−1.o
+obj−m += hello−2.o
+make −C /lib/modules/$(shell uname −r)/build M=$(PWD) modules
+make −C /lib/modules/$(shell uname −r)/build M=$(PWD) clean
+/*
+*/
+#include <linux/module.h> /* Needed by all modules */
+#include <linux/kernel.h> /* Needed for KERN_INFO */
+#include <linux/init.h> /* Needed for the macros */
+{
+}
+{
+}
+/*
+*
+*
+*
+*
+*
+* is free
+*/
+/*
+*/
+#include <linux/module.h> /* Needed by all modules */
+#include <linux/kernel.h> /* Needed for KERN_INFO */
+#include <linux/init.h> /* Needed for the macros */
+{
+}
+{
+}
+/*
+*/
+/*
+*/
+/*
+*/
+/*
+*/
+/*
+*/
+#include <linux/module.h>
+#include <linux/moduleparam.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/stat.h>
+static int myintArray[2] = { −1, −1 };
+/*
+*/
+module_param(myshort, short, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+module_param(myint, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+/*
+*/
+{
+printk(KERN_INFO "Hello, world 5\n=============\n");
+for (i = 0; i < (sizeof myintArray / sizeof (int)); i++)
+{
+printk(KERN_INFO "myintArray[%d] = %d\n", i, myintArray[i]);
+}
+}
+{
+}
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+{
+}
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+{
+}
+obj−m += hello−1.o
+obj−m += hello−2.o
+obj−m += hello−3.o
+obj−m += hello−4.o
+obj−m += hello−5.o
+make −C /lib/modules/$(shell uname −r)/build M=$(PWD) modules
+make −C /lib/modules/$(shell uname −r)/build M=$(PWD) clean
+to your kernel source tree: cp /boot/config−`uname −r` /usr/src/linux−`uname −r`/.config.
+...
+/lib/modules/2.6.5−1.358/build. A simple cp /lib/modules/`uname −r`/build/Makefile
+[root@pcsenonsrv linux−2.6.x]# make
+SPLIT include/linux/autoconf.h −> include/config/*
+...
+#include <stdio.h>
+# ls −l /dev/hda[1−3]
+% ls −l /dev/fd0 /dev/fd0u1680
+ssize_t(*read) (struct file *, char __user *, size_t, loff_t *);
+ssize_t(*aio_read) (struct kiocb *, char __user *, size_t, loff_t);
+ssize_t(*write) (struct file *, const char __user *, size_t, loff_t *);
+ssize_t(*aio_write) (struct kiocb *, const char __user *, size_t,
+loff_t);
+loff_t *);
+loff_t *);
+ssize_t(*sendfile) (struct file *, loff_t *, size_t, read_actor_t,
+void __user *);
+loff_t *, int);
+};
+};
+};
+•
+•
+/*
+*/
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <asm/uaccess.h> /* for put_user */
+/*
+*/
+static ssize_t device_read(struct file *, char *, size_t, loff_t *);
+/*
+*/
+};
+/*
+*/
+{
+if (Major < 0) {
+}
+printk(KERN_INFO "'mknod /dev/%s c %d 0'.\n", DEVICE_NAME, Major);
+}
+/*
+*/
+{
+/*
+*/
+if (ret < 0)
+}
+/*
+*/
+/*
+* "cat /dev/mycharfile"
+*/
+{
+Device_Open++;
+msg_Ptr = msg;
+}
+/*
+*/
+{
+/*
+*/
+}
+/*
+*/
+static ssize_t device_read(struct file *filp, /* see include/linux/fs.h */
+char *buffer, /* buffer to fill with data */
+size_t length, /* length of the buffer */
+loff_t * offset)
+{
+/*
+*/
+int bytes_read = 0;
+/*
+*/
+if (*msg_Ptr == 0)
+/*
+*/
+while (length && *msg_Ptr) {
+/*
+*/
+put_user(*(msg_Ptr++), buffer++);
+bytes_read++;
+}
+/*
+*/
+}
+/*
+*/
+{
+}
+value of this macro would be $2^{16}a+2^{8}b+c$.
+% cat /proc/helloworld
+/*
+*
+*/
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/proc_fs.h> /* Necessary because we use the proc fs */
+/**
+*
+*/
+struct proc_dir_entry *Our_Proc_File;
+*
+* =========
+*
+* ======================
+*
+* ====================
+* directory>/fs/proc/array.c.
+*
+*/
+char **buffer_location,
+{
+/*
+*
+*/
+if (offset > 0) {
+ret = 0;
+} else {
+}
+}
+{
+if (Our_Proc_File == NULL) {
+remove_proc_entry(procfs_name, &proc_root);
+}
+Our_Proc_File−>read_proc = procfile_read;
+Our_Proc_File−>owner = THIS_MODULE;
+Our_Proc_File−>mode = S_IFREG | S_IRUGO;
+Our_Proc_File−>uid = 0;
+Our_Proc_File−>gid = 0;
+Our_Proc_File−>size = 37;
+printk(KERN_INFO "/proc/%s created\n", procfs_name);
+return 0; /* everything is ok */
+}
+{
+remove_proc_entry(procfs_name, &proc_root);
+printk(KERN_INFO "/proc/%s removed\n", procfs_name);
+}
+/**
+*
+*/
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/proc_fs.h> /* Necessary because we use the proc fs */
+#include <asm/uaccess.h> /* for copy_from_user */
+/**
+*
+*/
+/**
+*
+*/
+/**
+*
+*/
+/**
+*
+*/
+char **buffer_location,
+{
+if (offset > 0) {
+ret = 0;
+} else {
+ret = procfs_buffer_size;
+}
+}
+/**
+*
+*/
+{
+/* get buffer size */
+if (procfs_buffer_size > PROCFS_MAX_SIZE ) {
+procfs_buffer_size = PROCFS_MAX_SIZE;
+}
+/* write data to the buffer */
+}
+}
+/**
+*
+*/
+{
+/* create the /proc file */
+if (Our_Proc_File == NULL) {
+remove_proc_entry(PROCFS_NAME, &proc_root);
+}
+Our_Proc_File−>read_proc = procfile_read;
+Our_Proc_File−>write_proc = procfile_write;
+Our_Proc_File−>owner = THIS_MODULE;
+Our_Proc_File−>mode = S_IFREG | S_IRUGO;
+Our_Proc_File−>uid = 0;
+Our_Proc_File−>gid = 0;
+Our_Proc_File−>size = 37;
+printk(KERN_INFO "/proc/%s created\n", PROCFS_NAME);
+return 0; /* everything is ok */
+}
+/**
+*
+*/
+{
+remove_proc_entry(PROCFS_NAME, &proc_root);
+printk(KERN_INFO "/proc/%s removed\n", PROCFS_NAME);
+}
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/proc_fs.h> /* Necessary because we use proc fs */
+#include <asm/uaccess.h> /* for copy_*_user */
+/**
+*
+*/
+/**
+*
+*/
+/**
+*
+*/
+/**
+*
+*/
+static ssize_t procfs_read(struct file *filp, /* see include/linux/fs.h */
+char *buffer, /* buffer to fill with data */
+size_t length, /* length of the buffer */
+loff_t * offset)
+{
+/*
+*/
+}
+/*
+*/
+}
+}
+/*
+*/
+{
+if ( len > PROCFS_MAX_SIZE ) {
+procfs_buffer_size = PROCFS_MAX_SIZE;
+}
+else {
+procfs_buffer_size = len;
+}
+}
+}
+/*
+*
+*
+*/
+{
+/*
+*/
+if (op == 4 || (op == 2 && current−>euid == 0))
+/*
+*/
+}
+/*
+*/
+{
+}
+/*
+*/
+{
+return 0; /* success */
+}
+static struct file_operations File_Ops_4_Our_Proc_File = {
+};
+/*
+* NULL).
+*/
+static struct inode_operations Inode_Ops_4_Our_Proc_File = {
+};
+/*
+*/
+{
+/* create the /proc file */
+if (Our_Proc_File == NULL){
+}
+Our_Proc_File−>owner = THIS_MODULE;
+Our_Proc_File−>proc_iops = &Inode_Ops_4_Our_Proc_File;
+Our_Proc_File−>proc_fops = &File_Ops_4_Our_Proc_File;
+Our_Proc_File−>mode = S_IFREG | S_IRUGO | S_IWUSR;
+Our_Proc_File−>uid = 0;
+Our_Proc_File−>gid = 0;
+Our_Proc_File−>size = 80;
+printk(KERN_INFO "/proc/%s created\n", PROC_ENTRY_FILENAME);
+return 0; /* success */
+}
+{
+printk(KERN_INFO "/proc/%s removed\n", PROC_ENTRY_FILENAME);
+}
+/**
+*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/proc_fs.h> /* Necessary because we use proc fs */
+#include <linux/seq_file.h> /* for seq_file */
+/**
+* ie, when:
+*
+*/
+static void *my_seq_start(struct seq_file *s, loff_t *pos)
+{
+/* beginning a new sequence ? */
+if ( *pos == 0 )
+{
+}
+{
+*pos = 0;
+}
+}
+/**
+*
+*/
+static void *my_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+(*tmp_v)++;
+(*pos)++;
+}
+/**
+*
+*/
+{
+}
+/**
+*
+*/
+{
+loff_t *spos = (loff_t *) v;
+seq_printf(s, "%Ld\n", *spos);
+}
+/**
+*
+*/
+static struct seq_operations my_seq_ops = {
+.start = my_seq_start,
+.next = my_seq_next,
+.stop = my_seq_stop,
+.show = my_seq_show
+};
+/**
+*
+*/
+{
+return seq_open(file, &my_seq_ops);
+};
+/**
+*
+*/
+.open = my_open,
+.read = seq_read,
+};
+/**
+*
+*/
+{
+entry−>proc_fops = &my_file_ops;
+}
+}
+/**
+*
+*/
+{
+}
+http://lwn.net/Articles/22355/
+•
+•
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/fs.h>
+#include <asm/uaccess.h> /* for get_user and put_user */
+/*
+*/
+/*
+*/
+/*
+*/
+/*
+*/
+{
+#endif
+/*
+*/
+Device_Open++;
+/*
+*/
+}
+{
+#endif
+/*
+*/
+}
+/*
+*/
+static ssize_t device_read(struct file *file, /* see include/linux/fs.h */
+char __user * buffer, /* buffer to be
+* filled with data */
+size_t length, /* length of the buffer */
+loff_t * offset)
+{
+/*
+*/
+int bytes_read = 0;
+#endif
+/*
+*/
+if (*Message_Ptr == 0)
+/*
+*/
+while (length && *Message_Ptr) {
+/*
+*/
+put_user(*(Message_Ptr++), buffer++);
+bytes_read++;
+}
+#endif
+/*
+*/
+}
+/*
+*/
+{
+#endif
+for (i = 0; i < length && i < BUF_LEN; i++)
+get_user(Message[i], buffer + i);
+/*
+*/
+}
+/*
+*
+*
+*/
+int device_ioctl(struct inode *inode, /* see include/linux/fs.h */
+struct file *file, /* ditto */
+{
+/*
+*/
+/*
+*/
+temp = (char *)ioctl_param;
+/*
+*/
+for (i = 0; ch && i < BUF_LEN; i++, temp++)
+/*
+*/
+/*
+*/
+put_user('\0', (char *)ioctl_param + i);
+case IOCTL_GET_NTH_BYTE:
+/*
+*/
+}
+}
+/* Module Declarations */
+/*
+*/
+.release = device_release, /* a.k.a. close */
+};
+/*
+*/
+{
+/*
+*/
+/*
+*/
+if (ret_val < 0) {
+}
+printk(KERN_INFO "mknod %s c %d 0\n", DEVICE_FILE_NAME, MAJOR_NUM);
+}
+/*
+*/
+{
+/*
+*/
+/*
+*/
+if (ret < 0)
+}
+/*
+*
+*/
+#include <linux/ioctl.h>
+/*
+* it.
+*/
+/*
+*/
+#define IOCTL_SET_MSG _IOR(MAJOR_NUM, 0, char *)
+/*
+*
+*
+*
+*/
+/*
+*/
+#define IOCTL_GET_MSG _IOR(MAJOR_NUM, 1, char *)
+/*
+*/
+/*
+*/
+#define IOCTL_GET_NTH_BYTE _IOWR(MAJOR_NUM, 2, int)
+/*
+* Message[n].
+*/
+/*
+*/
+#endif
+/*
+*
+*/
+/*
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h> /* open */
+#include <unistd.h> /* exit */
+#include <sys/ioctl.h> /* ioctl */
+/*
+*/
+{
+if (ret_val < 0) {
+printf("ioctl_set_msg failed:%d\n", ret_val);
+}
+}
+{
+/*
+*/
+if (ret_val < 0) {
+printf("ioctl_get_msg failed:%d\n", ret_val);
+}
+}
+ioctl_get_nth_byte(int file_desc)
+{
+i = 0;
+do {
+c = ioctl(file_desc, IOCTL_GET_NTH_BYTE, i++);
+if (c < 0) {
+}
+} while (c != 0);
+}
+/*
+*/
+{
+if (file_desc < 0) {
+}
+ioctl_get_nth_byte(file_desc);
+ioctl_get_msg(file_desc);
+}
+arch/$<$architecture$>$/kernel/entry.S, after the line ENTRY(system_call).
+/*
+*
+*/
+/*
+*/
+/*
+*/
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module, */
+#include <linux/moduleparam.h> /* which will have params */
+#include <linux/unistd.h> /* The list of system calls */
+/*
+*/
+#include <linux/sched.h>
+#include <asm/uaccess.h>
+/*
+*
+*/
+extern void *sys_call_table[];
+/*
+*/
+/*
+*
+*/
+/*
+* (it's at fs/open.c).
+*
+*/
+{
+int i = 0;
+/*
+*/
+if (uid == current−>uid) {
+/*
+*/
+do {
+i++;
+} while (ch != 0);
+}
+/*
+*/
+}
+/*
+*/
+{
+/*
+*/
+/*
+*/
+original_call = sys_call_table[__NR_open];
+sys_call_table[__NR_open] = our_sys_open;
+/*
+* call foo, go to sys_call_table[__NR_foo].
+*/
+}
+/*
+*/
+{
+/*
+*/
+if (sys_call_table[__NR_open] != our_sys_open) {
+}
+sys_call_table[__NR_open] = original_call;
+}
+[1] 6540
+[1]+ Terminated tail −f /proc/sleep
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/proc_fs.h> /* Necessary because we use proc fs */
+waking them up */
+#include <asm/uaccess.h> /* for get_user and put_user */
+/*
+*/
+/*
+* input
+*/
+/*
+*/
+static ssize_t module_output(struct file *file, /* see include/linux/fs.h */
+size_t len, /* The length of the buffer */
+loff_t * offset)
+{
+char message[MESSAGE_LENGTH + 30];
+/*
+*/
+}
+/*
+*/
+for (i = 0; i < len && message[i]; i++)
+put_user(message[i], buf + i);
+}
+/*
+* file.
+*/
+const char *buf, /* The buffer with input */
+size_t length, /* The buffer's length */
+loff_t * offset)
+{ /* offset to file − ignore */
+/*
+*/
+for (i = 0; i < MESSAGE_LENGTH − 1 && i < length; i++)
+get_user(Message[i], buf + i);
+/*
+*/
+Message[i] = '\0';
+/*
+*/
+}
+/*
+*/
+/*
+*/
+/*
+*/
+{
+/*
+*/
+if ((file−>f_flags & O_NONBLOCK) && Already_Open)
+/*
+*/
+/*
+*/
+int i, is_sig = 0;
+/*
+*/
+/*
+*/
+/*
+*
+*
+*
+*/
+for (i = 0; i < _NSIG_WORDS && !is_sig; i++)
+is_sig =
+current−>pending.signal.sig[i] & ~current−>
+blocked.sig[i];
+if (is_sig) {
+/*
+*/
+}
+}
+/*
+*/
+/*
+*/
+Already_Open = 1;
+return 0; /* Allow the access */
+}
+/*
+*/
+{
+/*
+*/
+Already_Open = 0;
+/*
+*/
+wake_up(&WaitQ);
+return 0; /* success */
+}
+/*
+*
+*
+*/
+{
+/*
+*/
+if (op == 4 || (op == 2 && current−>euid == 0))
+/*
+*/
+}
+/*
+*/
+/*
+*/
+static struct file_operations File_Ops_4_Our_Proc_File = {
+.read = module_output, /* "read" from the file */
+.write = module_input, /* "write" to the file */
+.open = module_open, /* called when the /proc file is opened */
+.release = module_close, /* called when it's closed */
+};
+/*
+*/
+static struct inode_operations Inode_Ops_4_Our_Proc_File = {
+};
+/*
+*/
+/*
+*/
+{
+if (Our_Proc_File == NULL) {
+}
+Our_Proc_File−>owner = THIS_MODULE;
+Our_Proc_File−>proc_iops = &Inode_Ops_4_Our_Proc_File;
+Our_Proc_File−>proc_fops = &File_Ops_4_Our_Proc_File;
+Our_Proc_File−>mode = S_IFREG | S_IRUGO | S_IWUSR;
+Our_Proc_File−>uid = 0;
+Our_Proc_File−>gid = 0;
+Our_Proc_File−>size = 80;
+}
+/*
+*/
+{
+}
+* wait for input */
+#include <stdio.h> /* standard I/O */
+#include <fcntl.h> /* for open */
+#include <unistd.h> /* for read */
+#include <stdlib.h> /* for exit */
+#include <errno.h> /* for errno */
+#define MAX_BYTES 1024*4
+main(int argc, char *argv[])
+{
+size_t bytes; /* The number of bytes read */
+char buffer[MAX_BYTES]; /* The buffer for the bytes */
+/* Usage */
+if (argc != 2) {
+printf("Usage: %s <filename>\n", argv[0]);
+}
+fd = open(argv[1], O_RDONLY | O_NONBLOCK);
+/* If open failed */
+if (fd == −1) {
+}
+do {
+/* Read characters from the file */
+if (bytes == −1) {
+}
+/* Print the characters */
+if (bytes > 0) {
+for(i=0; i<bytes; i++)
+}
+} while (bytes > 0);
+}
+/*
+*/
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/sched.h> /* For current */
+#include <linux/tty.h> /* For the tty declarations */
+#include <linux/version.h> /* For LINUX_VERSION_CODE */
+{
+/*
+*/
+#if ( LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,5) )
+/*
+*/
+my_tty = current−>tty;
+#else
+/*
+*/
+my_tty = current−>signal−>tty;
+#endif
+/*
+*/
+if (my_tty != NULL) {
+/*
+*
+*
+*/
+((my_tty−>driver)−>write) (my_tty, /* The tty itself */
+#if ( LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9) )
+from user space */
+#endif
+str, /* String */
+strlen(str)); /* Length */
+/*
+*
+*/
+#if ( LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9) )
+((my_tty−>driver)−>write) (my_tty, 0, "\015\012", 2);
+#else
+((my_tty−>driver)−>write) (my_tty, "\015\012", 2);
+#endif
+}
+}
+{
+}
+{
+}
+/*
+*/
+#include <linux/module.h>
+#include <linux/config.h>
+#include <linux/init.h>
+#include <linux/tty.h> /* For fg_console, MAX_NR_CONSOLES */
+#include <linux/kd.h> /* For KDSETLED */
+#include <linux/vt.h>
+#include <linux/console_struct.h> /* For vc_cons */
+#define BLINK_DELAY HZ/5
+#define ALL_LEDS_ON 0x07
+/*
+* /usr/src/linux/drivers/char/vt_ioctl.c, function vt_ioctl().
+*
+*
+*/
+{
+int *pstatus = (int *)ptr;
+if (*pstatus == ALL_LEDS_ON)
+*pstatus = RESTORE_LEDS;
+*pstatus = ALL_LEDS_ON;
+(my_driver−>ioctl) (vc_cons[fg_console].d−>vc_tty, NULL, KDSETLED,
+add_timer(&my_timer);
+}
+{
+for (i = 0; i < MAX_NR_CONSOLES; i++) {
+if (!vc_cons[i].d)
+printk(KERN_INFO "poet_atkm: console[%i/%i] #%i, tty %lx\n", i,
+MAX_NR_CONSOLES, vc_cons[i].d−>vc_num,
+(unsigned long)vc_cons[i].d−>vc_tty);
+}
+my_driver = vc_cons[fg_console].d−>vc_tty−>driver;
+/*
+*/
+init_timer(&my_timer);
+my_timer.function = my_timer_func;
+add_timer(&my_timer);
+}
+{
+del_timer(&my_timer);
+(my_driver−>ioctl) (vc_cons[fg_console].d−>vc_tty, NULL, KDSETLED,
+}
+/*
+*
+*/
+/*
+*/
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/proc_fs.h> /* Necessary because we use the proc fs */
+#include <linux/workqueue.h> /* We scheduale tasks here */
+#include <linux/init.h> /* For __init and __exit */
+#include <linux/interrupt.h> /* For irqreturn_t */
+struct proc_dir_entry *Our_Proc_File;
+/*
+*/
+/*
+*/
+/*
+*/
+{
+/*
+*/
+TimerIntrpt++;
+/*
+*/
+if (die == 0)
+}
+/*
+*/
+ssize_t
+char **buffer_location,
+{
+/*
+*/
+/*
+*/
+/*
+*/
+/*
+*/
+*buffer_location = my_buffer;
+/*
+*/
+}
+/*
+*/
+int __init init_module()
+{
+/*
+*/
+if (Our_Proc_File == NULL) {
+}
+Our_Proc_File−>read_proc = procfile_read;
+Our_Proc_File−>owner = THIS_MODULE;
+Our_Proc_File−>mode = S_IFREG | S_IRUGO;
+Our_Proc_File−>uid = 0;
+Our_Proc_File−>gid = 0;
+Our_Proc_File−>size = 80;
+/*
+*/
+printk(KERN_INFO "/proc/%s created\n", PROC_ENTRY_FILENAME);
+}
+/*
+*/
+{
+/*
+*/
+printk(KERN_INFO "/proc/%s removed\n", PROC_ENTRY_FILENAME);
+die = 1; /* keep intrp_routine from queueing itself */
+cancel_delayed_work(&Task); /* no "new ones" */
+/*
+*
+*/
+}
+/*
+*/
+/*
+*
+*/
+/*
+*/
+/*
+*/
+#include <linux/kernel.h> /* We're doing kernel work */
+#include <linux/module.h> /* Specifically, a module */
+#include <linux/sched.h>
+#include <linux/workqueue.h>
+#include <linux/interrupt.h> /* We want an interrupt */
+#include <asm/io.h>
+/*
+*/
+{
+printk(KERN_INFO "Scan Code %x %s.\n",
+(int)*((char *)scancode) & 0x7F,
+}
+/*
+*/
+{
+/*
+*/
+/*
+*/
+if (initialised == 0) {
+} else {
+}
+}
+/*
+*/
+{
+/*
+*/
+/*
+*/
+irq_handler, /* our handler */
+}
+/*
+*/
+{
+/*
+*/
+}
+/*
+*/

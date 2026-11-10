@@ -1,0 +1,3529 @@
+
+
+
+
+$ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+$ xcode-select --install
+$ rustc --version
+> echo %PATH%
+> echo $env:Path
+$ echo $PATH
+$ mkdir ~/projects
+$ cd ~/projects
+$ cd hello_world
+> mkdir "%USERPROFILE%\projects"
+> cd /d "%USERPROFILE%\projects"
+> cd hello_world
+fn main() {
+}
+$ ./main
+> .\main.exe
+fn main() {
+}
+$ ls
+> dir /B %= the /B option says to only show the file names =%
+$ ./main # or .\main.exe on Windows
+$ cargo --version
+$ cd hello_cargo
+[package]
+[dependencies]
+fn main() {
+}
+$ ./target/debug/hello_cargo # or .\target\debug\hello_cargo.exe on Windows
+Running `target/debug/hello_cargo`
+Running `target/debug/hello_cargo`
+[package]
+[dependencies]
+fn main() {
+}
+Running `target/debug/guessing_game`
+fn main() {
+}
+fn main() {
+let apples = 5; // immutable
+--> src/main.rs:10:5
+|
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|
+= note: `#[warn(unused_must_use)]` on by default
+let x = 5;
+let y = 10;
+println!("x = {x} and y + 2 = {}", y + 2);
+Running `target/debug/guessing_game`
+[dependencies]
+[dependencies]
+fn main() {
+}
+Running `target/debug/guessing_game`
+Running `target/debug/guessing_game`
+fn main() {
+// --snip--
+}
+}
+--> src/main.rs:22:21
+|
+| --- ^^^^^^^^^^^^^^ expected struct `String`, found integer
+| |
+|
+found reference `&{integer}`
+// --snip--
+}
+% , there
+Running `target/debug/guessing_game`
+// --snip--
+loop {
+// --snip--
+}
+}
+}
+Running `target/debug/guessing_game`
+// --snip--
+Ordering::Equal => {
+}
+}
+}
+}
+// --snip--
+Ok(num) => num,
+Err(_) => continue,
+};
+// --snip--
+Running `target/debug/guessing_game`
+fn main() {
+loop {
+Ok(num) => num,
+Err(_) => continue,
+};
+Ordering::Equal => {
+}
+}
+}
+}
+fn main() {
+let x = 5;
+x = 6;
+}
+--> src/main.rs:4:5
+|
+2 | let x = 5;
+| -
+| |
+| first assignment to `x`
+4 | x = 6;
+| ^^^^^ cannot assign twice to immutable variable
+fn main() {
+x = 6;
+}
+const THREE_HOURS_IN_SECONDS: u32 = 60 * 60 * 3;
+fn main() {
+let x = 5;
+let x = x + 1;
+{
+let x = x * 2;
+}
+}
+--> src/main.rs:3:14
+|
+2 | let mut spaces = " ";
+| ----- expected due to this value
+| ^^^^^^^^^^^^ expected `&str`, found `usize`
+--> src/main.rs:2:9
+|
+| ^^^^^
+|
+|
+| +++
+8-bit
+16-bit
+32-bit
+64-bit
+128-bit
+98_222
+fn main() {
+let x = 2.0; // f64
+let y: f32 = 3.0; // f32
+}
+fn main() {
+// addition
+let sum = 5 + 10;
+// subtraction
+let product = 4 * 30;
+// division
+let truncated = -5 / 3; // Results in -1
+// remainder
+}
+fn main() {
+}
+fn main() {
+let c = 'z';
+let heart_eyed_cat = '
+
+
+
+
+
+';
+}
+fn main() {
+}
+fn main() {
+}
+fn main() {
+let six_point_four = x.1;
+}
+fn main() {
+let a = [1, 2, 3, 4, 5];
+}
+let a: [i32; 5] = [1, 2, 3, 4, 5];
+let a = [3; 5];
+fn main() {
+let a = [1, 2, 3, 4, 5];
+let first = a[0];
+let second = a[1];
+}
+fn main() {
+let a = [1, 2, 3, 4, 5];
+let element = a[index];
+}
+fn main() {
+}
+}
+fn main() {
+}
+}
+fn main() {
+}
+}
+fn main() {
+let y = 6;
+}
+fn main() {
+let x = (let y = 6);
+}
+--> src/main.rs:2:14
+|
+2 | let x = (let y = 6);
+| ^^^
+--> src/main.rs:2:14
+|
+2 | let x = (let y = 6);
+| ^^^^^^^^^
+|
+--> src/main.rs:2:14
+|
+2 | let x = (let y = 6);
+| ^^^^^^^^^
+|
+= note: see issue #53667 <https://github.com/rust-lang/rust/issues/53667> for
+--> src/main.rs:2:13
+|
+2 | let x = (let y = 6);
+| ^ ^
+|
+= note: `#[warn(unused_parens)]` on by default
+|
+2 - let x = (let y = 6);
+2 + let x = let y = 6;
+|
+fn main() {
+let y = {
+let x = 3;
+x + 1
+};
+}
+{
+let x = 3;
+x + 1
+}
+fn five() -> i32 {
+}
+fn main() {
+}
+let x = 5;
+fn main() {
+let x = plus_one(5);
+}
+fn plus_one(x: i32) -> i32 {
+x + 1
+}
+fn main() {
+let x = plus_one(5);
+}
+fn plus_one(x: i32) -> i32 {
+x + 1;
+}
+--> src/main.rs:7:24
+|
+7 | fn plus_one(x: i32) -> i32 {
+| -------- ^^^ expected `i32`, found `()`
+| |
+8 | x + 1;
+// hello, world
+fn main() {
+}
+fn main() {
+}
+fn main() {
+if number < 5 {
+} else {
+}
+}
+Running `target/debug/branches`
+Running `target/debug/branches`
+fn main() {
+}
+}
+--> src/main.rs:4:8
+|
+4 | if number {
+| ^^^^^^ expected `bool`, found integer
+fn main() {
+if number != 0 {
+}
+}
+fn main() {
+if number % 4 == 0 {
+} else if number % 3 == 0 {
+} else if number % 2 == 0 {
+} else {
+}
+}
+Running `target/debug/branches`
+fn main() {
+let number = if condition { 5 } else { 6 };
+}
+Running `target/debug/branches`
+fn main() {
+let number = if condition { 5 } else { "six" };
+}
+--> src/main.rs:4:44
+|
+4 | let number = if condition { 5 } else { "six" };
+| - ^^^^^ expected integer, found
+`&str`
+| |
+fn main() {
+loop {
+}
+}
+Running `target/debug/loops`
+^Cagain!
+fn main() {
+let result = loop {
+counter += 1;
+if counter == 10 {
+}
+};
+}
+fn main() {
+println!("count = {count}");
+loop {
+if remaining == 9 {
+}
+if count == 2 {
+}
+remaining -= 1;
+}
+count += 1;
+}
+}
+Running `target/debug/loops`
+count = 0
+count = 1
+count = 2
+fn main() {
+while number != 0 {
+println!("{number}!");
+number -= 1;
+}
+}
+fn main() {
+let a = [10, 20, 30, 40, 50];
+while index < 5 {
+println!("the value is: {}", a[index]);
+index += 1;
+}
+}
+3-4.
+Running `target/debug/loops`
+fn main() {
+let a = [10, 20, 30, 40, 50];
+}
+}
+fn main() {
+println!("{number}!");
+}
+}
+// do stuff with s
+println!("{}", s); // This will print `hello, world!`
+{
+// do stuff with s
+// longer valid
+let x = 5;
+let y = x;
+--> src/main.rs:5:28
+|
+| -- move occurs because `s1` has type `String`, which does not
+3 | let s2 = s1;
+| -- value moved here
+4 |
+5 | println!("{}, world!", s1);
+|
+println!("s1 = {}, s2 = {}", s1, s2);
+let x = 5;
+let y = x;
+println!("x = {}, y = {}", x, y);
+fn main() {
+// use x afterward
+println!("{}", some_string);
+// memory is freed.
+println!("{}", some_integer);
+fn main() {
+// value into s1
+let s3 = takes_and_gives_back(s2); // s2 is moved into
+// takes_and_gives_back, which also
+// that calls it
+// function
+}
+fn takes_and_gives_back(a_string: String) -> String { // a_string comes into
+// scope
+}
+fn main() {
+println!("The length of '{}' is {}.", s2, len);
+}
+}
+fn main() {
+println!("The length of '{}' is {}.", s1, len);
+}
+fn calculate_length(s: &String) -> usize {
+}
+fn main() {
+}
+}
+error[E0596]: cannot borrow `*some_string` as mutable, as it is behind a `&`
+--> src/main.rs:8:5
+|
+7 | fn change(some_string: &String) {
+| ------- help: consider changing this to be a mutable
+reference: `&mut String`
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `some_string` is a `&` reference, so
+fn main() {
+}
+}
+let r1 = &mut s;
+let r2 = &mut s;
+println!("{}, {}", r1, r2);
+--> src/main.rs:5:14
+|
+4 | let r1 = &mut s;
+| ------ first mutable borrow occurs here
+5 | let r2 = &mut s;
+| ^^^^^^ second mutable borrow occurs here
+6 |
+7 | println!("{}, {}", r1, r2);
+{
+let r1 = &mut s;
+let r2 = &mut s;
+let r1 = &s; // no problem
+let r2 = &s; // no problem
+let r3 = &mut s; // BIG PROBLEM
+println!("{}, {}, and {}", r1, r2, r3);
+--> src/main.rs:6:14
+|
+4 | let r1 = &s; // no problem
+5 | let r2 = &s; // no problem
+6 | let r3 = &mut s; // BIG PROBLEM
+| ^^^^^^ mutable borrow occurs here
+7 |
+8 | println!("{}, {}, and {}", r1, r2, r3);
+let r1 = &s; // no problem
+let r2 = &s; // no problem
+println!("{} and {}", r1, r2);
+let r3 = &mut s; // no problem
+println!("{}", r3);
+fn main() {
+}
+fn dangle() -> &String {
+&s
+}
+--> src/main.rs:5:16
+|
+5 | fn dangle() -> &String {
+|
+|
+5 | fn dangle() -> &'static String {
+| +++++++
+// Danger!
+fn no_dangle() -> String {
+}
+fn first_word(s: &String) -> ?
+fn first_word(s: &String) -> usize {
+if item == b' ' {
+}
+}
+}
+if item == b' ' {
+}
+}
+fn main() {
+}
+fn second_word(s: &String) -> (usize, usize) {
+let hello = &s[0..5];
+let world = &s[6..11];
+let slice = &s[0..2];
+let slice = &s[..2];
+let slice = &s[3..len];
+let slice = &s[3..];
+let slice = &s[0..len];
+let slice = &s[..];
+fn first_word(s: &String) -> &str {
+if item == b' ' {
+return &s[0..i];
+}
+}
+&s[..]
+}
+fn second_word(s: &String) -> &str {
+fn main() {
+let word = first_word(&s);
+s.clear(); // error!
+}
+--> src/main.rs:18:5
+|
+16 | let word = first_word(&s);
+17 |
+18 | s.clear(); // error!
+| ^^^^^^^^^ mutable borrow occurs here
+19 |
+| ---- immutable borrow later used
+fn first_word(s: &String) -> &str {
+fn first_word(s: &str) -> &str {
+fn main() {
+let word = first_word(&my_string[0..6]);
+let word = first_word(&my_string[..]);
+// to whole slices of `String`s
+let word = first_word(&my_string);
+let word = first_word(&my_string_literal[0..6]);
+let word = first_word(&my_string_literal[..]);
+}
+let a = [1, 2, 3, 4, 5];
+let a = [1, 2, 3, 4, 5];
+let slice = &a[1..3];
+assert_eq!(slice, &[2, 3]);
+}
+fn main() {
+let user1 = User {
+sign_in_count: 1,
+};
+}
+fn main() {
+sign_in_count: 1,
+};
+}
+User {
+sign_in_count: 1,
+}
+}
+User {
+sign_in_count: 1,
+}
+}
+fn main() {
+// --snip--
+let user2 = User {
+};
+}
+fn main() {
+// --snip--
+let user2 = User {
+};
+}
+fn main() {
+}
+fn main() {
+}
+}
+fn main() {
+let user1 = User {
+sign_in_count: 1,
+};
+}
+--> src/main.rs:3:15
+|
+3 | username: &str,
+|
+|
+1 ~ struct User<'a> {
+3 ~ username: &'a str,
+|
+--> src/main.rs:4:12
+|
+4 | email: &str,
+|
+|
+1 ~ struct User<'a> {
+3 | username: &str,
+4 ~ email: &'a str,
+|
+fn main() {
+);
+}
+}
+5-10.
+fn main() {
+);
+}
+}
+}
+fn main() {
+};
+);
+}
+}
+}
+fn main() {
+};
+}
+= note: in format strings you may be able to use `{:?}` (or {:#?} for
+error[E0277]: `Rectangle` doesn't implement `Debug`
+= note: add `#[derive(Debug)]` to `Rectangle` or manually `impl Debug for
+#[derive(Debug)]
+}
+fn main() {
+};
+}
+}
+#[derive(Debug)]
+}
+fn main() {
+};
+}
+[src/main.rs:10] 30 * scale = 60
+[src/main.rs:14] &rect1 = Rectangle {
+}
+#[derive(Debug)]
+}
+fn area(&self) -> u32 {
+}
+}
+fn main() {
+};
+);
+}
+fn width(&self) -> bool {
+}
+}
+fn main() {
+};
+}
+}
+(&p1).distance(&p2);
+fn main() {
+};
+};
+};
+}
+fn area(&self) -> u32 {
+}
+fn can_hold(&self, other: &Rectangle) -> bool {
+}
+}
+fn square(size: u32) -> Self {
+Self {
+}
+}
+}
+fn area(&self) -> u32 {
+}
+}
+fn can_hold(&self, other: &Rectangle) -> bool {
+}
+}
+}
+}
+}
+let home = IpAddr {
+};
+};
+}
+}
+// --snip--
+}
+// --snip--
+}
+}
+Move { x: i32, y: i32 },
+}
+}
+fn call(&self) {
+}
+}
+enum Option<T> {
+}
+Option<i32> .
+let y: Option<i8> = Some(5);
+let sum = x + y;
+error[E0277]: cannot add `Option<i8>` to `i8`
+--> src/main.rs:5:17
+|
+5 | let sum = x + y;
+| ^ no implementation for `i8 + Option<i8>`
+|
+= help: the trait `Add<Option<i8>>` is not implemented for `i8`
+<&'a f32 as Add<f32>>
+<&'a f64 as Add<f64>>
+<&'a i128 as Add<i128>>
+<&'a i16 as Add<i16>>
+<&'a i32 as Add<i32>>
+<&'a i64 as Add<i64>>
+<&'a i8 as Add<i8>>
+<&'a isize as Add<isize>>
+}
+fn value_in_cents(coin: Coin) -> u8 {
+Coin::Penny => 1,
+Coin::Nickel => 5,
+Coin::Dime => 10,
+Coin::Quarter => 25,
+}
+}
+fn value_in_cents(coin: Coin) -> u8 {
+Coin::Penny => {
+}
+Coin::Nickel => 5,
+Coin::Dime => 10,
+Coin::Quarter => 25,
+}
+}
+// --snip--
+}
+}
+fn value_in_cents(coin: Coin) -> u8 {
+Coin::Penny => 1,
+Coin::Nickel => 5,
+Coin::Dime => 10,
+Coin::Quarter(state) => {
+}
+}
+}
+fn plus_one(x: Option<i32>) -> Option<i32> {
+match x {
+None => None,
+Some(i) => Some(i + 1),
+}
+}
+None => None,
+Some(i) => Some(i + 1),
+None => None,
+fn plus_one(x: Option<i32>) -> Option<i32> {
+match x {
+Some(i) => Some(i + 1),
+}
+}
+--> src/main.rs:3:15
+|
+3 | match x {
+| ^ pattern `None` not covered
+|
+note: `Option<i32>` defined here
+|
+4 ~ Some(i) => Some(i + 1),
+5 ~ None => todo!(),
+|
+let dice_roll = 9;
+match dice_roll {
+3 => add_fancy_hat(),
+7 => remove_fancy_hat(),
+}
+fn add_fancy_hat() {}
+fn remove_fancy_hat() {}
+fn move_player(num_spaces: u8) {}
+let dice_roll = 9;
+match dice_roll {
+3 => add_fancy_hat(),
+7 => remove_fancy_hat(),
+_ => reroll(),
+}
+fn add_fancy_hat() {}
+fn remove_fancy_hat() {}
+fn reroll() {}
+let dice_roll = 9;
+match dice_roll {
+3 => add_fancy_hat(),
+7 => remove_fancy_hat(),
+_ => (),
+}
+fn add_fancy_hat() {}
+fn remove_fancy_hat() {}
+_ => (),
+}
+}
+_ => count += 1,
+}
+} else {
+count += 1;
+}
+$ ls my-project
+$ ls my-project/src
+fn main() {
+let plant = Asparagus {};
+}
+#[derive(Debug)]
+mod front_of_house {
+fn add_to_waitlist() {}
+fn seat_at_table() {}
+}
+fn take_order() {}
+fn serve_order() {}
+fn take_payment() {}
+}
+}
+└── front_of_house
+│ ├── add_to_waitlist
+│ └── seat_at_table
+mod front_of_house {
+fn add_to_waitlist() {}
+}
+}
+// Absolute path
+// Relative path
+}
+--> src/lib.rs:9:28
+|
+| ^^^^^^^ private module
+|
+--> src/lib.rs:2:5
+|
+2 | mod hosting {
+| ^^^^^^^^^^^
+--> src/lib.rs:12:21
+|
+| ^^^^^^^ private module
+|
+--> src/lib.rs:2:5
+|
+2 | mod hosting {
+| ^^^^^^^^^^^
+mod front_of_house {
+fn add_to_waitlist() {}
+}
+}
+// Absolute path
+// Relative path
+}
+--> src/lib.rs:9:37
+|
+| ^^^^^^^^^^^^^^^ private function
+|
+--> src/lib.rs:3:9
+|
+3 | fn add_to_waitlist() {}
+| ^^^^^^^^^^^^^^^^^^^^
+--> src/lib.rs:12:30
+|
+| ^^^^^^^^^^^^^^^ private function
+|
+--> src/lib.rs:3:9
+|
+3 | fn add_to_waitlist() {}
+| ^^^^^^^^^^^^^^^^^^^^
+mod front_of_house {
+pub fn add_to_waitlist() {}
+}
+}
+// Absolute path
+// Relative path
+}
+fn deliver_order() {}
+mod back_of_house {
+fn fix_incorrect_order() {
+}
+fn cook_order() {}
+}
+mod back_of_house {
+}
+}
+}
+}
+}
+}
+mod back_of_house {
+}
+}
+}
+mod front_of_house {
+pub fn add_to_waitlist() {}
+}
+}
+}
+mod front_of_house {
+pub fn add_to_waitlist() {}
+}
+}
+}
+}
+--> src/lib.rs:11:9
+|
+| ^^^^^^^ use of undeclared crate or module `hosting`
+--> src/lib.rs:7:5
+|
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|
+= note: `#[warn(unused_imports)]` on by default
+mod front_of_house {
+pub fn add_to_waitlist() {}
+}
+}
+add_to_waitlist();
+}
+fn main() {
+}
+// --snip--
+}
+fn function2() -> io::Result<()> {
+// --snip--
+}
+fn function1() -> Result {
+// --snip--
+}
+fn function2() -> IoResult<()> {
+// --snip--
+}
+mod front_of_house {
+pub fn add_to_waitlist() {}
+}
+}
+}
+fn main() {
+}
+// --snip--
+// --snip--
+// --snip--
+// --snip--
+}
+pub fn add_to_waitlist() {}
+}
+this case src/front_of_house/.
+pub fn add_to_waitlist() {}
+let v: Vec<i32> = Vec::new();
+let v = vec![1, 2, 3];
+let v = vec![1, 2, 3, 4, 5];
+let third: &i32 = &v[2];
+let third: Option<&i32> = v.get(2);
+}
+8-5.
+let v = vec![1, 2, 3, 4, 5];
+let does_not_exist = &v[100];
+let mut v = vec![1, 2, 3, 4, 5];
+let first = &v[0];
+--> src/main.rs:6:5
+|
+4 | let first = &v[0];
+5 |
+| ^^^^^^^^^ mutable borrow occurs here
+7 |
+| ----- immutable borrow later used here
+let v = vec![100, 32, 57];
+for i in &v {
+println!("{i}");
+}
+8-9.
+let mut v = vec![100, 32, 57];
+for i in &mut v {
+*i += 50;
+}
+8-10.
+}
+let row = vec![
+];
+{
+let v = vec![1, 2, 3, 4];
+// do stuff with v
+} // <- v goes out of scope and is freed here
+");
+");
+println!("s2 is {s2}");
+fn add(self, s: &str) -> String {
+let s = s1 + "-" + &s2 + "-" + &s3;
+let s = format!("{s1}-{s2}-{s3}");
+let h = s1[0];
+error[E0277]: the type `String` cannot be indexed by `{integer}`
+--> src/main.rs:3:13
+|
+3 | let h = s1[0];
+| ^^^^^ `String` cannot be indexed by `{integer}`
+|
+= help: the trait `Index<{integer}>` is not implemented for `String`
+<String as Index<RangeFrom<usize>>>
+<String as Index<RangeFull>>
+<String as Index<RangeInclusive<usize>>>
+<String as Index<RangeTo<usize>>>
+<String as Index<RangeToInclusive<usize>>>
+<String as Index<std::ops::Range<usize>>>
+<str as Index<I>>
+let answer = &hello[0];
+['न', 'म', 'स', '◌्', 'त', '◌े']
+["न", "म", "स्", "ते"]
+let s = &hello[0..4];
+println!("{c}");
+}
+println!("{b}");
+}
+println!("{key}: {value}");
+}
+println!("{:?}", scores);
+println!("{:?}", scores);
+*count += 1;
+}
+println!("{:?}", map);
+fn main() {
+}
+Running `target/debug/panic`
+fn main() {
+let v = vec![1, 2, 3];
+v[99];
+}
+Running `target/debug/panic`
+3: <usize as core::slice::index::SliceIndex<[T]>>::index
+/core/src/slice/index.rs:242:10
+/core/src/slice/index.rs:18:9
+5: <alloc::vec::Vec<T,A> as core::ops::index::Index<I>>::index
+/src/vec/mod.rs:2591:9
+at ./src/main.rs:4:5
+/core/src/ops/function.rs:248:5
+enum Result<T, E> {
+}
+fn main() {
+}
+fn main() {
+Ok(file) => file,
+};
+}
+Running `target/debug/error-handling`
+fn main() {
+Ok(file) => file,
+Ok(fc) => fc,
+},
+other_error => {
+}
+},
+};
+}
+fn main() {
+})
+} else {
+}
+});
+}
+fn main() {
+}
+fn main() {
+}
+fn read_username_from_file() -> Result<String, io::Error> {
+Ok(file) => file,
+};
+Ok(_) => Ok(username),
+Err(e) => Err(e),
+}
+}
+fn read_username_from_file() -> Result<String, io::Error> {
+}
+fn read_username_from_file() -> Result<String, io::Error> {
+}
+fn read_username_from_file() -> Result<String, io::Error> {
+}
+fn main() {
+}
+--> src/main.rs:4:48
+|
+3 | fn main() {
+| --------- this function should return `Result` or `Option` to accept `?`
+| ^ cannot use the `?`
+|
+fn last_char_of_first_line(text: &str) -> Option<char> {
+}
+fn main() -> Result<(), Box<dyn Error>> {
+}
+loop {
+// --snip--
+Ok(num) => num,
+Err(_) => continue,
+};
+if guess < 1 || guess > 100 {
+}
+// --snip--
+}
+}
+if value < 1 || value > 100 {
+}
+Guess { value }
+}
+pub fn value(&self) -> i32 {
+}
+}
+fn main() {
+let mut largest = &number_list[0];
+}
+}
+}
+fn main() {
+let mut largest = &number_list[0];
+}
+}
+let mut largest = &number_list[0];
+}
+}
+}
+fn largest(list: &[i32]) -> &i32 {
+let mut largest = &list[0];
+if item > largest {
+}
+}
+}
+fn main() {
+}
+fn largest_i32(list: &[i32]) -> &i32 {
+let mut largest = &list[0];
+if item > largest {
+}
+}
+}
+fn largest_char(list: &[char]) -> &char {
+let mut largest = &list[0];
+if item > largest {
+}
+}
+}
+fn main() {
+let char_list = vec!['y', 'm', 'a', 'q'];
+}
+fn largest<T>(list: &[T]) -> &T {
+fn largest<T>(list: &[T]) -> &T {
+let mut largest = &list[0];
+if item > largest {
+}
+}
+}
+fn main() {
+let char_list = vec!['y', 'm', 'a', 'q'];
+}
+error[E0369]: binary operation `>` cannot be applied to type `&T`
+--> src/main.rs:5:17
+|
+5 | if item > largest {
+| ---- ^ ------- &T
+| |
+| &T
+|
+|
+1 | fn largest<T: std::cmp::PartialOrd>(list: &[T]) -> &T {
+| ++++++++++++++++++++++
+struct Point<T> {
+}
+fn main() {
+let float = Point { x: 1.0, y: 4.0 };
+}
+struct Point<T> {
+}
+fn main() {
+let wont_work = Point { x: 5, y: 4.0 };
+}
+--> src/main.rs:7:38
+|
+7 | let wont_work = Point { x: 5, y: 4.0 };
+| ^^^ expected integer, found floating-
+struct Point<T, U> {
+}
+fn main() {
+let both_integer = Point { x: 5, y: 10 };
+let both_float = Point { x: 1.0, y: 4.0 };
+let integer_and_float = Point { x: 5, y: 4.0 };
+}
+enum Option<T> {
+}
+enum Result<T, E> {
+}
+struct Point<T> {
+}
+impl<T> Point<T> {
+fn x(&self) -> &T {
+&self.x
+}
+}
+fn main() {
+let p = Point { x: 5, y: 10 };
+println!("p.x = {}", p.x());
+}
+impl Point<f32> {
+fn distance_from_origin(&self) -> f32 {
+}
+}
+struct Point<X1, Y1> {
+}
+impl<X1, Y1> Point<X1, Y1> {
+fn mixup<X2, Y2>(self, other: Point<X2, Y2>) -> Point<X1, Y2> {
+Point {
+}
+}
+}
+fn main() {
+let p1 = Point { x: 5, y: 10.4 };
+let p2 = Point { x: "Hello", y: 'c' };
+println!("p3.x = {}, p3.y = {}", p3.x, p3.y);
+}
+5, p3.y = c .
+enum Option_i32 {
+}
+enum Option_f64 {
+}
+fn main() {
+}
+}
+}
+fn summarize(&self) -> String {
+}
+}
+}
+fn summarize(&self) -> String {
+}
+}
+fn main() {
+let tweet = Tweet {
+),
+};
+}
+fn summarize(&self) -> String {
+}
+}
+),
+};
+fn summarize(&self) -> String {
+}
+}
+fn summarize_author(&self) -> String {
+format!("@{}", self.username)
+}
+}
+let tweet = Tweet {
+),
+};
+}
+pub fn notify<T: Summary>(item: &T) {
+}
+pub fn notify<T: Summary>(item1: &T, item2: &T) {
+pub fn notify<T: Summary + Display>(item: &T) {
+fn some_function<T: Display + Clone, U: Clone + Debug>(t: &T, u: &U) -> i32 {
+fn some_function<T, U>(t: &T, u: &U) -> i32
+{
+Tweet {
+),
+}
+}
+),
+),
+}
+} else {
+Tweet {
+),
+}
+}
+}
+struct Pair<T> {
+}
+impl<T> Pair<T> {
+fn new(x: T, y: T) -> Self {
+Self { x, y }
+}
+}
+impl<T: Display + PartialOrd> Pair<T> {
+fn cmp_display(&self) {
+if self.x >= self.y {
+} else {
+}
+}
+}
+// --snip--
+}
+let s = 3.to_string();
+fn main() {
+{
+let x = 5;
+r = &x;
+}
+println!("r: {}", r);
+}
+--> src/main.rs:6:13
+|
+6 | r = &x;
+7 | }
+8 |
+9 | println!("r: {}", r);
+fn main() {
+let r; // ---------+-- 'a
+// |
+{ // |
+let x = 5; // -+-- 'b |
+r = &x; // | |
+} // -+ |
+// |
+println!("r: {}", r); // |
+} // ---------+
+fn main() {
+let x = 5; // ----------+-- 'b
+// |
+let r = &x; // --+-- 'a |
+// | |
+println!("r: {}", r); // | |
+// --+ |
+} // ----------+
+fn main() {
+}
+fn longest(x: &str, y: &str) -> &str {
+if x.len() > y.len() {
+} else {
+}
+}
+--> src/main.rs:9:33
+|
+9 | fn longest(x: &str, y: &str) -> &str {
+| ---- ---- ^ expected named lifetime parameter
+|
+|
+9 | fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+| ++++ ++ ++ ++
+&i32
+// a reference
+&'a i32
+fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
+if x.len() > y.len() {
+} else {
+}
+}
+fn main() {
+{
+}
+}
+fn main() {
+{
+}
+}
+--> src/main.rs:6:44
+|
+| ^^^^^^^^^^^^^^^^ borrowed value
+7 | }
+| ------ borrow later used here
+fn longest<'a>(x: &'a str, y: &str) -> &'a str {
+}
+fn longest<'a>(x: &str, y: &str) -> &'a str {
+}
+--> src/main.rs:11:5
+|
+11 | result.as_str()
+| ^^^^^^^^^^^^^^^ returns a reference to data owned by the current
+}
+fn main() {
+'.'");
+};
+}
+fn first_word(s: &str) -> &str {
+if item == b' ' {
+return &s[0..i];
+}
+}
+&s[..]
+}
+fn first_word<'a>(s: &'a str) -> &'a str {
+fn first_word(s: &str) -> &str {
+fn first_word<'a>(s: &'a str) -> &str {
+fn first_word<'a>(s: &'a str) -> &'a str {
+fn longest(x: &str, y: &str) -> &str {
+fn longest<'a, 'b>(x: &'a str, y: &'b str) -> &str {
+impl<'a> ImportantExcerpt<'a> {
+fn level(&self) -> i32 {
+}
+}
+impl<'a> ImportantExcerpt<'a> {
+fn announce_and_return_part(&self, announcement: &str) -> &str {
+}
+}
+fn longest_with_an_announcement<'a, T>(
+x: &'a str,
+y: &'a str,
+) -> &'a str
+{
+if x.len() > y.len() {
+} else {
+}
+}
+$ cargo new adder --lib
+#[cfg(test)]
+#[test]
+fn it_works() {
+let result = 2 + 2;
+}
+}
+#[cfg(test)]
+#[test]
+assert_eq!(2 + 2, 4);
+}
+}
+#[cfg(test)]
+#[test]
+assert_eq!(2 + 2, 4);
+}
+#[test]
+}
+}
+---- tests::another stdout ----
+#[derive(Debug)]
+}
+fn can_hold(&self, other: &Rectangle) -> bool {
+}
+}
+#[cfg(test)]
+#[test]
+fn larger_can_hold_smaller() {
+};
+};
+}
+}
+#[cfg(test)]
+#[test]
+fn larger_can_hold_smaller() {
+// --snip--
+}
+#[test]
+fn smaller_cannot_hold_larger() {
+};
+};
+}
+}
+// --snip--
+fn can_hold(&self, other: &Rectangle) -> bool {
+}
+}
+---- tests::larger_can_hold_smaller stdout ----
+pub fn add_two(a: i32) -> i32 {
+a + 2
+}
+#[cfg(test)]
+#[test]
+fn it_adds_two() {
+}
+}
+pub fn add_two(a: i32) -> i32 {
+a + 3
+}
+---- tests::it_adds_two stdout ----
+left: `4`,
+right: `5`', src/lib.rs:11:9
+pub fn greeting(name: &str) -> String {
+}
+#[cfg(test)]
+#[test]
+}
+}
+pub fn greeting(name: &str) -> String {
+}
+---- tests::greeting_contains_name stdout ----
+#[test]
+);
+}
+---- tests::greeting_contains_name stdout ----
+}
+if value < 1 || value > 100 {
+}
+Guess { value }
+}
+}
+#[cfg(test)]
+#[test]
+#[should_panic]
+fn greater_than_100() {
+}
+}
+// --snip--
+if value < 1 {
+}
+Guess { value }
+}
+}
+---- tests::greater_than_100 stdout ----
+// --snip--
+if value < 1 {
+);
+} else if value > 100 {
+);
+}
+Guess { value }
+}
+}
+#[cfg(test)]
+#[test]
+fn greater_than_100() {
+}
+}
+if value < 1 {
+);
+} else if value > 100 {
+);
+}
+---- tests::greater_than_100 stdout ----
+200."`,
+#[cfg(test)]
+#[test]
+fn it_works() -> Result<(), String> {
+if 2 + 2 == 4 {
+} else {
+}
+}
+}
+$ cargo test -- --test-threads=1
+fn prints_and_returns_10(a: i32) -> i32 {
+}
+#[cfg(test)]
+#[test]
+fn this_test_will_pass() {
+}
+#[test]
+fn this_test_will_fail() {
+}
+}
+---- tests::this_test_will_fail stdout ----
+left: `5`,
+right: `10`', src/lib.rs:19:9
+$ cargo test -- --show-output
+$ cargo test -- --show-output
+---- tests::this_test_will_pass stdout ----
+---- tests::this_test_will_fail stdout ----
+left: `5`,
+right: `10`', src/lib.rs:19:9
+pub fn add_two(a: i32) -> i32 {
+a + 2
+}
+#[cfg(test)]
+#[test]
+fn add_two_and_two() {
+}
+#[test]
+fn add_three_and_two() {
+}
+#[test]
+fn one_hundred() {
+}
+}
+we can use cargo test -- --ignored :
+#[test]
+fn it_works() {
+assert_eq!(2 + 2, 4);
+}
+#[test]
+#[ignore]
+}
+--include-ignored .
+$ cargo test -- --ignored
+#[cfg(test)]
+#[test]
+fn it_works() {
+let result = 2 + 2;
+}
+}
+pub fn add_two(a: i32) -> i32 {
+}
+fn internal_adder(a: i32, b: i32) -> i32 {
+a + b
+}
+#[cfg(test)]
+#[test]
+}
+}
+#[test]
+fn it_adds_two() {
+}
+}
+#[test]
+fn it_adds_two() {
+}
+fn main() {
+}
+Running `target/debug/minigrep`
+[src/main.rs:5] args = [
+]
+[src/main.rs:5] args = [
+]
+fn main() {
+let query = &args[1];
+let file_path = &args[2];
+}
+fn main() {
+// --snip--
+}
+$ cargo run -- the poem.txt
+fn main() {
+// --snip--
+}
+fn parse_config(args: &[String]) -> (&str, &str) {
+let query = &args[1];
+let file_path = &args[2];
+}
+fn main() {
+// --snip--
+}
+}
+fn parse_config(args: &[String]) -> Config {
+let query = args[1].clone();
+let file_path = args[2].clone();
+Config { query, file_path }
+}
+fn main() {
+// --snip--
+}
+// --snip--
+fn new(args: &[String]) -> Config {
+let query = args[1].clone();
+let file_path = args[2].clone();
+Config { query, file_path }
+}
+}
+Running `target/debug/minigrep`
+// --snip--
+fn new(args: &[String]) -> Config {
+if args.len() < 3 {
+}
+// --snip--
+Running `target/debug/minigrep`
+fn build(args: &[String]) -> Result<Config, &'static str> {
+if args.len() < 3 {
+}
+let query = args[1].clone();
+let file_path = args[2].clone();
+}
+}
+fn main() {
+let config = Config::build(&args).unwrap_or_else(|err| {
+});
+// --snip--
+Running `target/debug/minigrep`
+fn main() {
+// --snip--
+}
+}
+// --snip--
+// --snip--
+fn run(config: Config) -> Result<(), Box<dyn Error>> {
+}
+--> src/main.rs:19:5
+|
+| ^^^^^^^^^^^^
+|
+= note: `#[warn(unused_must_use)]` on by default
+fn main() {
+// --snip--
+}
+}
+}
+pub fn build(args: &[String]) -> Result<Config, &'static str> {
+// --snip--
+}
+}
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+// --snip--
+}
+fn main() {
+// --snip--
+// --snip--
+}
+}
+#[cfg(test)]
+#[test]
+fn one_result() {
+let contents = "\
+}
+}
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+vec![]
+}
+--> src/lib.rs:28:51
+|
+28 | pub fn search(query: &str, contents: &str) -> Vec<&str> {
+| ---- ---- ^ expected named
+|
+|
+28 | pub fn search<'a>(query: &'a str, contents: &'a str) -> Vec<&'a str> {
+| ++++ ++ ++ ++
+---- tests::one_result stdout ----
+left: `["safe, fast, productive."]`,
+right: `[]`', src/lib.rs:44:9
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+}
+}
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+}
+}
+}
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+}
+}
+}
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+println!("{line}");
+}
+}
+$ cargo run -- frog poem.txt
+$ cargo run -- body poem.txt
+#[cfg(test)]
+#[test]
+let contents = "\
+}
+#[test]
+let contents = "\
+);
+}
+}
+) -> Vec<&'a str> {
+}
+}
+}
+}
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+} else {
+};
+println!("{line}");
+}
+}
+// --snip--
+pub fn build(args: &[String]) -> Result<Config, &'static str> {
+if args.len() < 3 {
+}
+let query = args[1].clone();
+let file_path = args[2].clone();
+})
+}
+}
+$ cargo run -- to poem.txt
+$ IGNORE_CASE=1 cargo run -- to poem.txt
+PS> $Env:IGNORE_CASE=1; cargo run -- to poem.txt
+fn main() {
+let config = Config::build(&args).unwrap_or_else(|err| {
+});
+}
+}
+$ cargo run -- to poem.txt > output.txt
+}
+}
+}
+fn most_stocked(&self) -> ShirtColor {
+let mut num_red = 0;
+ShirtColor::Red => num_red += 1,
+ShirtColor::Blue => num_blue += 1,
+}
+}
+if num_red > num_blue {
+} else {
+}
+}
+}
+fn main() {
+};
+"The user with preference {:?} gets {:?}",
+);
+"The user with preference {:?} gets {:?}",
+);
+}
+Running `target/debug/shirt-company`
+let expensive_closure = |num: u32| -> u32 {
+};
+add_one_v1
+(x: u32) -> u32 { x + 1 }
+let add_one_v2 = |x: u32| -> u32 { x + 1 };
+let add_one_v3 = |x| { x + 1 };
+let add_one_v4 = |x| x + 1 ;
+let example_closure = |x| x;
+--> src/main.rs:5:29
+|
+| --------------- ^- help: try using a conversion method:
+`.to_string()`
+| | |
+|
+--> src/main.rs:2:28
+|
+2 | let example_closure = |x| x;
+| ^
+fn main() {
+let list = vec![1, 2, 3];
+let only_borrows = || println!("From closure: {:?}", list);
+}
+Running `target/debug/closure-example`
+fn main() {
+let mut list = vec![1, 2, 3];
+}
+Running `target/debug/closure-example`
+fn main() {
+let list = vec![1, 2, 3];
+}
+impl<T> Option<T> {
+pub fn unwrap_or_else<F>(self, f: F) -> T
+F: FnOnce() -> T
+{
+Some(x) => x,
+None => f(),
+}
+}
+}
+#[derive(Debug)]
+}
+fn main() {
+let mut list = [
+];
+list.sort_by_key(|r| r.width);
+println!("{:#?}", list);
+}
+[
+},
+},
+},
+]
+#[derive(Debug)]
+}
+fn main() {
+let mut list = [
+];
+let mut sort_operations = vec![];
+list.sort_by_key(|r| {
+});
+println!("{:#?}", list);
+}
+--> src/main.rs:18:30
+|
+| ----- captured outer variable
+16 |
+17 | list.sort_by_key(|r| {
+| --- captured by this `FnMut` closure
+| ^^^^^ move occurs because `value` has type
+#[derive(Debug)]
+}
+fn main() {
+let mut list = [
+];
+list.sort_by_key(|r| {
+num_sort_operations += 1;
+});
+println!("{:#?}, sorted in {num_sort_operations} operations", list);
+}
+let v1 = vec![1, 2, 3];
+let v1 = vec![1, 2, 3];
+println!("Got: {}", val);
+}
+fn next(&mut self) -> Option<Self::Item>;
+}
+#[test]
+let v1 = vec![1, 2, 3];
+}
+#[test]
+fn iterator_sum() {
+let v1 = vec![1, 2, 3];
+}
+let v1: Vec<i32> = vec![1, 2, 3];
+v1.iter().map(|x| x + 1);
+--> src/main.rs:4:5
+|
+4 | v1.iter().map(|x| x + 1);
+| ^^^^^^^^^^^^^^^^^^^^^^^^^
+|
+= note: `#[warn(unused_must_use)]` on by default
+let v1: Vec<i32> = vec![1, 2, 3];
+let v2: Vec<_> = v1.iter().map(|x| x + 1).collect();
+assert_eq!(v2, vec![2, 3, 4]);
+}
+fn shoes_in_size(shoes: Vec<Shoe>, shoe_size: u32) -> Vec<Shoe> {
+}
+#[cfg(test)]
+#[test]
+fn filters_by_size() {
+let shoes = vec![
+Shoe {
+},
+Shoe {
+},
+Shoe {
+},
+];
+let in_my_size = shoes_in_size(shoes, 10);
+in_my_size,
+vec![
+Shoe {
+},
+Shoe {
+},
+]
+);
+}
+}
+pub fn build(args: &[String]) -> Result<Config, &'static str> {
+if args.len() < 3 {
+}
+let query = args[1].clone();
+let file_path = args[2].clone();
+})
+}
+}
+fn main() {
+let config = Config::build(&args).unwrap_or_else(|err| {
+});
+// --snip--
+}
+fn main() {
+});
+// --snip--
+}
+) -> Result<Config, &'static str> {
+// --snip--
+) -> Result<Config, &'static str> {
+Some(arg) => arg,
+};
+Some(arg) => arg,
+};
+})
+}
+}
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+}
+}
+}
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+}
+let buffer: &mut [i32];
+.zip(&buffer[i - 12..i])
+.map(|(&c, &s)| c * s as i64)
+.sum::<i64>() >> qlp_shift;
+let delta = buffer[i];
+}
+$ cargo build --release
+[profile.dev]
+opt-level = 0
+opt-level = 3
+[profile.dev]
+opt-level = 1
+///
+/// # Examples
+///
+/// ```
+/// let arg = 5;
+/// let answer = my_crate::add_one(arg);
+///
+/// assert_eq!(6, answer);
+/// ```
+pub fn add_one(x: i32) -> i32 {
+x + 1
+}
+14-2:
+//! # My Crate
+//!
+// --snip--
+//! # Art
+//!
+}
+}
+}
+/// a secondary color.
+// --snip--
+}
+}
+fn main() {
+}
+//! # Art
+//!
+// --snip--
+}
+// --snip--
+}
+fn main() {
+// --snip--
+}
+[package]
+--snip--
+[package]
+[package]
+[dependencies]
+(file:///projects/guessing_game/target/package/guessing_game-0.1.0)
+$ cargo yank --vers 1.0.1
+$ cargo yank --vers 1.0.1 --undo
+$ cd add
+[workspace]
+members = [
+]
+[workspace]
+members = [
+"add_one",
+]
+$ cargo new add_one --lib
+├── add_one
+pub fn add_one(x: i32) -> i32 {
+x + 1
+}
+[dependencies]
+add_one = { path = "../add_one" }
+fn main() {
+}
+Compiling add_one v0.1.0 (file:///projects/add/add_one)
+Running `target/debug/adder`
+[dependencies]
+--snip--
+Compiling add_one v0.1.0 (file:///projects/add/add_one)
+--> add_one/src/lib.rs:1:5
+|
+| ^^^^
+|
+= note: `#[warn(unused_imports)]` on by default
+--snip--
+--> adder/src/main.rs:2:5
+|
+| ^^^^ no external crate `rand`
+pub fn add_one(x: i32) -> i32 {
+x + 1
+}
+#[cfg(test)]
+#[test]
+fn it_works() {
+}
+}
+Compiling add_one v0.1.0 (file:///projects/add/add_one)
+$ cargo test -p add_one
+--snip--
+Installing ~/.cargo/bin/rg
+fn main() {
+println!("b = {}", b);
+}
+}
+fn main() {
+}
+--> src/main.rs:1:1
+|
+1 | enum List {
+| ^^^^^^^^^ recursive type has infinite size
+| ---- recursive without indirection
+|
+help: insert some indirection (e.g., a `Box`, `Rc`, or `&`) to make `List`
+|
+2 | Cons(i32, Box<List>),
+| ++++ +
+Move { x: i32, y: i32 },
+}
+help: insert some indirection (e.g., a `Box`, `Rc`, or `&`) to make `List`
+|
+2 | Cons(i32, Box<List>),
+| ++++ +
+}
+fn main() {
+}
+fn main() {
+let x = 5;
+let y = &x;
+assert_eq!(5, *y);
+}
+error[E0277]: can't compare `{integer}` with `&{integer}`
+--> src/main.rs:6:5
+|
+6 | assert_eq!(5, y);
+| ^^^^^^^^^^^^^^^^ no implementation for `{integer} == &{integer}`
+|
+= help: the trait `PartialEq<&{integer}>` is not implemented for `{integer}`
+fn main() {
+let x = 5;
+assert_eq!(5, *y);
+}
+struct MyBox<T>(T);
+impl<T> MyBox<T> {
+fn new(x: T) -> MyBox<T> {
+}
+}
+fn main() {
+let x = 5;
+assert_eq!(5, *y);
+}
+error[E0614]: type `MyBox<{integer}>` cannot be dereferenced
+--> src/main.rs:14:19
+|
+14 | assert_eq!(5, *y);
+| ^^
+impl<T> Deref for MyBox<T> {
+fn deref(&self) -> &Self::Target {
+&self.0
+}
+}
+*(y.deref())
+}
+fn main() {
+hello(&m);
+}
+• From &T to &U when T: Deref<Target=U>
+• From &mut T to &U when T: Deref<Target=U>
+fn main() {
+hello(&(*m)[..]);
+}
+}
+fn drop(&mut self) {
+}
+}
+fn main() {
+};
+};
+}
+Running `target/debug/drop-example`
+fn main() {
+};
+}
+--> src/main.rs:16:7
+|
+| --^^^^--
+| | |
+fn main() {
+};
+}
+Running `target/debug/drop-example`
+}
+fn main() {
+}
+error[E0382]: use of moved value: `a`
+--> src/main.rs:11:30
+|
+Cons(i32, Rc<List>),
+}
+fn main() {
+}
+Weak<T> ” section.
+fn main() {
+{
+}
+}
+Running `target/debug/cons-list`
+fn main() {
+let x = 5;
+let y = &mut x;
+}
+--> src/main.rs:3:13
+|
+2 | let x = 5;
+3 | let y = &mut x;
+| ^^^^^^ cannot borrow as mutable
+}
+}
+impl<'a, T> LimitTracker<'a, T>
+{
+}
+}
+if percentage_of_max >= 1.0 {
+} else if percentage_of_max >= 0.9 {
+} else if percentage_of_max >= 0.75 {
+}
+}
+}
+#[cfg(test)]
+}
+fn new() -> MockMessenger {
+sent_messages: vec![],
+}
+}
+}
+}
+}
+#[test]
+fn it_sends_an_over_75_percent_warning_message() {
+}
+}
+`&` reference
+--> src/lib.rs:58:13
+|
+2 | fn send(&self, msg: &str);
+`&mut self`
+...
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `self` is a `&`
+#[cfg(test)]
+sent_messages: RefCell<Vec<String>>,
+}
+fn new() -> MockMessenger {
+}
+}
+}
+}
+}
+#[test]
+fn it_sends_an_over_75_percent_warning_message() {
+// --snip--
+}
+}
+}
+}
+RefCell<T>
+---- tests::it_sends_an_over_75_percent_warning_message stdout ----
+tests::it_sends_an_over_75_percent_warning_message
+#[derive(Debug)]
+Cons(Rc<RefCell<i32>>, Rc<List>),
+}
+fn main() {
+*value.borrow_mut() += 10;
+println!("a after = {:?}", a);
+println!("b after = {:?}", b);
+println!("c after = {:?}", c);
+}
+Running `target/debug/cons-list`
+#[derive(Debug)]
+Cons(i32, RefCell<Rc<List>>),
+}
+fn tail(&self) -> Option<&RefCell<Rc<List>>> {
+Cons(_, item) => Some(item),
+Nil => None,
+}
+}
+}
+fn main() {}
+fn main() {
+*link.borrow_mut() = Rc::clone(&b);
+}
+// println!("a next item = {:?}", a.tail());
+}
+Running `target/debug/cons-list`
+#[derive(Debug)]
+children: RefCell<Vec<Rc<Node>>>,
+}
+fn main() {
+});
+});
+}
+#[derive(Debug)]
+parent: RefCell<Weak<Node>>,
+children: RefCell<Vec<Rc<Node>>>,
+}
+fn main() {
+});
+});
+}
+children: RefCell { value: [] } }] } })
+fn main() {
+});
+"leaf strong = {}, weak = {}",
+);
+{
+});
+"branch strong = {}, weak = {}",
+);
+"leaf strong = {}, weak = {}",
+);
+}
+"leaf strong = {}, weak = {}",
+);
+}
+fn main() {
+thread::spawn(|| {
+}
+});
+}
+}
+fn main() {
+let handle = thread::spawn(|| {
+}
+});
+}
+}
+fn main() {
+let handle = thread::spawn(|| {
+}
+});
+}
+}
+fn main() {
+let v = vec![1, 2, 3];
+let handle = thread::spawn(|| {
+});
+}
+--> src/main.rs:6:32
+|
+6 | let handle = thread::spawn(|| {
+| ^^ may outlive borrowed value `v`
+| - `v` is borrowed here
+|
+--> src/main.rs:6:18
+|
+6 | let handle = thread::spawn(|| {
+| __________________^
+7 | | println!("Here's a vector: {:?}", v);
+8 | | });
+| |______^
+|
+6 | let handle = thread::spawn(move || {
+| ++++
+fn main() {
+let v = vec![1, 2, 3];
+let handle = thread::spawn(|| {
+});
+drop(v); // oh no!
+}
+|
+6 | let handle = thread::spawn(move || {
+| ++++
+fn main() {
+let v = vec![1, 2, 3];
+let handle = thread::spawn(move || {
+});
+}
+error[E0382]: use of moved value: `v`
+--> src/main.rs:10:10
+|
+4 | let v = vec![1, 2, 3];
+| - move occurs because `v` has type `Vec<i32>`, which does not
+5 |
+6 | let handle = thread::spawn(move || {
+| ------- value moved into closure here
+...
+10 | drop(v); // oh no!
+fn main() {
+}
+fn main() {
+thread::spawn(move || {
+});
+}
+fn main() {
+thread::spawn(move || {
+});
+}
+fn main() {
+thread::spawn(move || {
+});
+}
+--> src/main.rs:10:31
+|
+| --- move occurs because `val` has type `String`, which does
+| --- value moved here
+10 | println!("val is {}", val);
+| ^^^ value borrowed here after move
+|
+fn main() {
+thread::spawn(move || {
+let vals = vec![
+];
+}
+});
+}
+}
+// --snip--
+thread::spawn(move || {
+let vals = vec![
+];
+}
+});
+thread::spawn(move || {
+let vals = vec![
+];
+}
+});
+}
+// --snip--
+fn main() {
+{
+*num = 6;
+}
+println!("m = {:?}", m);
+}
+fn main() {
+let mut handles = vec![];
+for _ in 0..10 {
+let handle = thread::spawn(move || {
+*num += 1;
+});
+}
+}
+}
+--> src/main.rs:9:36
+|
+| ------- move occurs because `counter` has type `Mutex<i32>`, which
+...
+9 | let handle = thread::spawn(move || {
+| ^^^^^^^ value moved into closure here,
+| ------- use occurs due to use in closure
+fn main() {
+let mut handles = vec![];
+for _ in 0..10 {
+let handle = thread::spawn(move || {
+*num += 1;
+});
+}
+}
+}
+error[E0277]: `Rc<Mutex<i32>>` cannot be sent between threads safely
+--> src/main.rs:11:36
+|
+11 | let handle = thread::spawn(move || {
+| ------------- ^------
+| | |
+| ______________________|_____________within this
+`[closure@src/main.rs:11:36: 11:43]`
+| | |
+13 | |
+14 | | *num += 1;
+15 | | });
+| |_________^ `Rc<Mutex<i32>>` cannot be sent between threads safely
+|
+= help: within `[closure@src/main.rs:11:36: 11:43]`, the trait `Send` is not
+implemented for `Rc<Mutex<i32>>`
+--> src/main.rs:11:36
+|
+11 | let handle = thread::spawn(move || {
+| ^^^^^^^
+fn main() {
+let mut handles = vec![];
+for _ in 0..10 {
+let handle = thread::spawn(move || {
+*num += 1;
+});
+}
+}
+}
+Similarities Between RefCell<T>/Rc<T> and Mutex<T>/Arc<T>
+list: Vec<i32>,
+}
+}
+pub fn remove(&mut self) -> Option<i32> {
+Some(value) => {
+}
+None => None,
+}
+}
+pub fn average(&self) -> f64 {
+}
+}
+}
+}
+pub components: Vec<Box<dyn Draw>>,
+}
+pub fn run(&self) {
+}
+}
+}
+}
+impl<T> Screen<T>
+{
+pub fn run(&self) {
+}
+}
+}
+}
+fn draw(&self) {
+}
+}
+}
+fn draw(&self) {
+}
+}
+fn main() {
+],
+}),
+}),
+],
+};
+}
+fn main() {
+};
+}
+--> src/main.rs:5:26
+|
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Draw` is
+|
+fn main() {
+}
+state: Option<Box<dyn State>>,
+}
+pub fn new() -> Post {
+Post {
+}
+}
+}
+trait State {}
+struct Draft {}
+// --snip--
+pub fn add_text(&mut self, text: &str) {
+}
+}
+// --snip--
+pub fn content(&self) -> &str {
+""
+}
+}
+// --snip--
+}
+}
+}
+fn request_review(self: Box<Self>) -> Box<dyn State>;
+}
+struct Draft {}
+fn request_review(self: Box<Self>) -> Box<dyn State> {
+}
+}
+fn request_review(self: Box<Self>) -> Box<dyn State> {
+}
+}
+// --snip--
+}
+}
+}
+fn request_review(self: Box<Self>) -> Box<dyn State>;
+fn approve(self: Box<Self>) -> Box<dyn State>;
+}
+struct Draft {}
+// --snip--
+fn approve(self: Box<Self>) -> Box<dyn State> {
+}
+}
+// --snip--
+fn approve(self: Box<Self>) -> Box<dyn State> {
+}
+}
+fn request_review(self: Box<Self>) -> Box<dyn State> {
+}
+fn approve(self: Box<Self>) -> Box<dyn State> {
+}
+}
+// --snip--
+pub fn content(&self) -> &str {
+}
+// --snip--
+}
+// --snip--
+fn content<'a>(&self, post: &'a Post) -> &'a str {
+""
+}
+}
+// --snip--
+// --snip--
+fn content<'a>(&self, post: &'a Post) -> &'a str {
+}
+}
+fn main() {
+}
+}
+}
+pub fn new() -> DraftPost {
+}
+}
+pub fn content(&self) -> &str {
+}
+}
+pub fn add_text(&mut self, text: &str) {
+}
+}
+// --snip--
+}
+}
+}
+}
+Post {
+}
+}
+}
+fn main() {
+}
+}
+match x {
+None => None,
+Some(i) => Some(i + 1),
+}
+fn main() {
+let favorite_color: Option<&str> = None;
+let age: Result<u8, _> = "34".parse();
+} else if is_tuesday {
+} else if let Ok(age) = age {
+if age > 30 {
+} else {
+}
+} else {
+}
+}
+println!("{}", top);
+}
+let v = vec!['a', 'b', 'c'];
+println!("{} is at index {}", value, index);
+}
+Running `target/debug/patterns`
+let x = 5;
+--> src/main.rs:2:9
+|
+2 | let (x, y) = (1, 2, 3);
+| ^^^^^^ --------- this expression has type `({integer}, {integer},
+{integer})`
+| |
+|
+= note: expected tuple `({integer}, {integer}, {integer})`
+found tuple `(_, _)`
+// code goes here
+}
+fn print_coordinates(&(x, y): &(i32, i32)) {
+println!("Current location: ({}, {})", x, y);
+}
+fn main() {
+}
+--> src/main.rs:3:9
+|
+3 | let Some(x) = some_option_value;
+| ^^^^^^^ pattern `None` not covered
+|
+note: `Option<i32>` defined here
+|
+3 | let x = if let Some(x) = some_option_value { x } else { todo!() };
+| ++++++++++ ++++++++++++++++++++++
+if let Some(x) = some_option_value {
+println!("{}", x);
+}
+if let x = 5 {
+println!("{}", x);
+};
+--> src/main.rs:2:8
+|
+2 | if let x = 5 {
+| ^^^^^^^^^
+|
+= note: `#[warn(irrefutable_let_patterns)]` on by default
+Running `target/debug/patterns`
+let x = 1;
+match x {
+1 => println!("one"),
+2 => println!("two"),
+3 => println!("three"),
+_ => println!("anything"),
+}
+let y = 10;
+match x {
+Some(y) => println!("Matched, y = {y}"),
+_ => println!("Default case, x = {:?}", x),
+}
+println!("at the end: x = {:?}, y = {y}", x);
+let x = 1;
+match x {
+1 | 2 => println!("one or two"),
+3 => println!("three"),
+_ => println!("anything"),
+}
+let x = 5;
+match x {
+}
+let x = 'c';
+match x {
+}
+}
+fn main() {
+let p = Point { x: 0, y: 7 };
+let Point { x: a, y: b } = p;
+}
+}
+fn main() {
+let p = Point { x: 0, y: 7 };
+let Point { x, y } = p;
+}
+fn main() {
+let p = Point { x: 0, y: 7 };
+match p {
+Point { x, y: 0 } => println!("On the x axis at {x}"),
+Point { x: 0, y } => println!("On the y axis at {y}"),
+Point { x, y } => {
+println!("On neither axis: ({x}, {y})");
+}
+}
+}
+Move { x: i32, y: i32 },
+}
+fn main() {
+Message::Quit => {
+}
+Message::Move { x, y } => {
+}
+Message::Write(text) => {
+}
+}
+}
+}
+}
+Move { x: i32, y: i32 },
+}
+fn main() {
+println!("Change color to red {r}, green {g}, and blue {b}");
+}
+}
+_ => (),
+}
+}
+let ((feet, inches), Point { x, y }) = ((3, 10), Point { x: 3, y: -10 });
+fn foo(_: i32, y: i32) {
+}
+fn main() {
+}
+(Some(_), Some(_)) => {
+}
+_ => {
+}
+}
+(first, _, third, _, fifth) => {
+println!("Some numbers: {first}, {third}, {fifth}")
+}
+}
+using _x .
+fn main() {
+let _x = 5;
+let y = 10;
+}
+if let Some(_s) = s {
+}
+println!("{:?}", s);
+if let Some(_) = s {
+}
+println!("{:?}", s);
+}
+Point { x, .. } => println!("x is {}", x),
+}
+fn main() {
+(first, .., last) => {
+}
+}
+}
+fn main() {
+(.., second, ..) => {
+},
+}
+}
+--> src/main.rs:5:22
+|
+5 | (.., second, ..) => {
+| -- ^^ can only be used once per tuple pattern
+| |
+Some(x) if x % 2 == 0 => println!("The number {} is even", x),
+None => (),
+}
+fn main() {
+let y = 10;
+match x {
+Some(n) if n == y => println!("Matched, n = {n}"),
+_ => println!("Default case, x = {:?}", x),
+}
+println!("at the end: x = {:?}, y = {y}", x);
+}
+let x = 4;
+match x {
+4 | 5 | 6 if y => println!("yes"),
+_ => println!("no"),
+}
+(4 | 5 | 6) if y => ...
+4 | 5 | (6 if y) => ...
+Hello { id: i32 },
+}
+id: id_variable @ 3..=7,
+} => println!("Found an id in range: {}", id_variable),
+Message::Hello { id: 10..=12 } => {
+}
+Message::Hello { id } => println!("Found some other id: {}", id),
+}
+let r1 = &num as *const i32;
+let r2 = &mut num as *mut i32;
+let r1 = &num as *const i32;
+let r2 = &mut num as *mut i32;
+unsafe {
+println!("r1 is: {}", *r1);
+println!("r2 is: {}", *r2);
+}
+unsafe {
+}
+--> src/main.rs:4:5
+|
+| ^^^^^^^^^^^ call to unsafe function
+|
+let mut v = vec![1, 2, 3, 4, 5, 6];
+let r = &mut v[..];
+let (a, b) = r.split_at_mut(3);
+assert_eq!(a, &mut [1, 2, 3]);
+assert_eq!(b, &mut [4, 5, 6]);
+fn split_at_mut(values: &mut [i32], mid: usize) -> (&mut [i32], &mut [i32]) {
+assert!(mid <= len);
+(&mut values[..mid], &mut values[mid..])
+}
+--> src/main.rs:6:31
+|
+1 | fn split_at_mut(values: &mut [i32], mid: usize) -> (&mut [i32], &mut [i32])
+{
+...
+6 | (&mut values[..mid], &mut values[mid..])
+| --------------------------^^^^^^--------
+| | | |
+fn split_at_mut(values: &mut [i32], mid: usize) -> (&mut [i32], &mut [i32]) {
+assert!(mid <= len);
+unsafe {
+(
+)
+}
+}
+let values: &[i32] = unsafe { slice::from_raw_parts_mut(r, 10000) };
+}
+fn main() {
+unsafe {
+}
+}
+#[no_mangle]
+}
+fn main() {
+}
+fn add_to_count(inc: u32) {
+unsafe {
+COUNTER += inc;
+}
+}
+fn main() {
+add_to_count(3);
+unsafe {
+}
+}
+// methods go here
+}
+}
+fn main() {}
+fn next(&mut self) -> Option<Self::Item>;
+}
+fn next(&mut self) -> Option<Self::Item> {
+// --snip--
+pub trait Iterator<T> {
+fn next(&mut self) -> Option<T>;
+}
+}
+Point {
+}
+}
+}
+fn main() {
+Point { x: 1, y: 0 } + Point { x: 2, y: 3 },
+Point { x: 3, y: 3 }
+);
+}
+trait Add<Rhs=Self> {
+}
+}
+}
+}
+}
+fn fly(&self) {
+}
+}
+fn fly(&self) {
+}
+}
+fn fly(&self) {
+}
+}
+fn main() {
+}
+fn main() {
+}
+Running `target/debug/traits-example`
+fn baby_name() -> String;
+}
+fn baby_name() -> String {
+}
+}
+fn baby_name() -> String {
+}
+}
+fn main() {
+}
+Running `target/debug/traits-example`
+fn main() {
+}
+--> src/main.rs:20:43
+|
+2 | fn baby_name() -> String;
+| ------------------------- `Animal::baby_name` defined here
+...
+| ^^^^^^^^^^^^^^^^^ cannot call
+|
+|
+| +++++++++ +
+fn main() {
+}
+Running `target/debug/traits-example`
+**********
+* *
+* (1, 3) *
+* *
+**********
+fn outline_print(&self) {
+println!("{}", "*".repeat(len + 4));
+println!("*{}*", " ".repeat(len + 2));
+println!("* {} *", output);
+println!("*{}*", " ".repeat(len + 2));
+println!("{}", "*".repeat(len + 4));
+}
+}
+}
+--> src/main.rs:20:6
+|
+| ^^^^^^^^^^^^ `Point` cannot be formatted with the default formatter
+|
+= note: in format strings you may be able to use `{:?}` (or {:#?} for
+--> src/main.rs:3:21
+|
+| ^^^^^^^^^^^^ required by this bound in `OutlinePrint`
+write!(f, "({}, {})", self.x, self.y)
+}
+}
+write!(f, "[{}]", self.0.join(", "))
+}
+}
+fn main() {
+println!("w = {}", w);
+}
+println!("x + y = {}", x + y);
+Box<dyn Fn() + Send + 'static>
+let f: Box<dyn Fn() + Send + 'static> = Box::new(|| println!("hi"));
+fn takes_long_type(f: Box<dyn Fn() + Send + 'static>) {
+// --snip--
+}
+fn returns_long_type() -> Box<dyn Fn() + Send + 'static> {
+// --snip--
+}
+type Thunk = Box<dyn Fn() + Send + 'static>;
+// --snip--
+}
+fn returns_long_type() -> Thunk {
+// --snip--
+}
+fn write(&mut self, buf: &[u8]) -> Result<usize, Error>;
+fn flush(&mut self) -> Result<(), Error>;
+fn write_all(&mut self, buf: &[u8]) -> Result<(), Error>;
+}
+fn write(&mut self, buf: &[u8]) -> Result<usize>;
+fn flush(&mut self) -> Result<()>;
+fn write_all(&mut self, buf: &[u8]) -> Result<()>;
+fn write_fmt(&mut self, fmt: fmt::Arguments) -> Result<()>;
+}
+fn bar() -> ! {
+// --snip--
+}
+Ok(num) => num,
+Err(_) => continue,
+};
+Ok(_) => 5,
+Err(_) => "hello",
+};
+impl<T> Option<T> {
+pub fn unwrap(self) -> T {
+Some(val) => val,
+None => panic!("called `Option::unwrap()` on a `None` value"),
+}
+}
+}
+loop {
+}
+fn generic<T>(t: T) {
+// --snip--
+}
+fn generic<T: Sized>(t: T) {
+// --snip--
+}
+fn generic<T: ?Sized>(t: &T) {
+// --snip--
+}
+fn add_one(x: i32) -> i32 {
+x + 1
+}
+fn do_twice(f: fn(i32) -> i32, arg: i32) -> i32 {
+}
+fn main() {
+}
+let list_of_numbers = vec![1, 2, 3];
+let list_of_strings: Vec<String> =
+let list_of_numbers = vec![1, 2, 3];
+let list_of_strings: Vec<String> =
+}
+let list_of_statuses: Vec<Status> =
+fn returns_closure() -> dyn Fn(i32) -> i32 {
+|x| x + 1
+}
+--> src/lib.rs:1:25
+|
+1 | fn returns_closure() -> dyn Fn(i32) -> i32 {
+| ^^^^^^^^^^^^^^^^^^ doesn't have a size known at
+|
+/book/ch10-02-traits.html#returning-types-that-implement-traits>
+type `[closure@src/lib.rs:2:5: 2:8]`, which implements `Fn(i32) -> i32`
+|
+1 | fn returns_closure() -> impl Fn(i32) -> i32 {
+| ~~~~~~~~~~~~~~~~~~~
+fn returns_closure() -> Box<dyn Fn(i32) -> i32> {
+Box::new(|x| x + 1)
+}
+let v: Vec<u32> = vec![1, 2, 3];
+#[macro_export]
+macro_rules! vec {
+( $( $x:expr ),* ) => {
+{
+$(
+temp_vec.push($x);
+)*
+}
+};
+}
+{
+}
+#[some_attribute]
+}
+#[derive(HelloMacro)]
+fn main() {
+}
+$ cargo new hello_macro --lib
+}
+fn hello_macro() {
+}
+}
+fn main() {
+}
+$ cargo new hello_macro_derive --lib
+[lib]
+proc-macro = true
+[dependencies]
+syn = "1.0"
+#[proc_macro_derive(HelloMacro)]
+impl_hello_macro(&ast)
+}
+// --snip--
+},
+)
+}
+)
+}
+19-30
+let gen = quote! {
+fn hello_macro() {
+}
+}
+};
+}
+19-30.
+hello_macro = { path = "../hello_macro" }
+hello_macro_derive = { path = "../hello_macro/hello_macro_derive" }
+#[route(GET, "/")]
+#[proc_macro_attribute]
+#[proc_macro]
+fn main() {
+}
+}
+Running `target/debug/hello`
+Vec<_> type annotation.
+use std::{
+io::{prelude::*, BufReader},
+};
+fn main() {
+}
+}
+let http_request: Vec<_> = buf_reader
+.take_while(|line| !line.is_empty())
+println!("Request: {:#?}", http_request);
+}
+Running `target/debug/hello`
+"GET / HTTP/1.1",
+/avif,image/webp,*/*;q=0.8",
+"Sec-Fetch-User: ?1",
+"Cache-Control: max-age=0",
+]
+HTTP/1.1 200 OK\r\n\r\n
+let http_request: Vec<_> = buf_reader
+.take_while(|line| !line.is_empty())
+let response = "HTTP/1.1 200 OK\r\n\r\n";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hello!</title>
+</head>
+<body>
+<h1>Hello!</h1>
+<p>Hi from Rust</p>
+</body>
+</html>
+use std::{
+io::{prelude::*, BufReader},
+};
+// --snip--
+let http_request: Vec<_> = buf_reader
+.take_while(|line| !line.is_empty())
+format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+}
+// --snip--
+if request_line == "GET / HTTP/1.1" {
+"{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
+);
+} else {
+}
+}
+// --snip--
+} else {
+"{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
+);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hello!</title>
+</head>
+<body>
+<h1>Oops!</h1>
+</body>
+</html>
+// --snip--
+// --snip--
+let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
+} else {
+};
+format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+}
+use std::{
+io::{prelude::*, BufReader},
+};
+// --snip--
+// --snip--
+let (status_line, filename) = match &request_line[..] {
+"GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+"GET /sleep HTTP/1.1" => {
+}
+_ => ("HTTP/1.1 404 NOT FOUND", "404.html"),
+};
+// --snip--
+}
+fn main() {
+thread::spawn(|| {
+});
+}
+}
+fn main() {
+pool.execute(|| {
+});
+}
+}
+--> src/main.rs:11:16
+|
+| ^^^^^^^^^^ use of undeclared type `ThreadPool`
+--> src/main.rs:12:28
+|
+`ThreadPool`
+}
+}
+--> src/main.rs:17:14
+|
+17 | pool.execute(|| {
+| ^^^^^^^ method not found in `ThreadPool`
+pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+F: FnOnce() -> T,
+// --snip--
+pub fn execute<F>(&self, f: F)
+{
+}
+}
+///
+///
+/// # Panics
+///
+}
+// --snip--
+}
+pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+F: FnOnce() -> T,
+threads: Vec<thread::JoinHandle<()>>,
+}
+// --snip--
+for _ in 0..size {
+}
+}
+// --snip--
+}
+}
+// --snip--
+}
+}
+// --snip--
+}
+}
+fn new(id: usize) -> Worker {
+let thread = thread::spawn(|| {});
+}
+}
+}
+// --snip--
+}
+}
+// --snip--
+}
+// --snip--
+}
+}
+// --snip--
+}
+// --snip--
+let thread = thread::spawn(|| {
+});
+}
+}
+--> src/lib.rs:26:42
+|
+| -------- move occurs because `receiver` has type
+...
+| ^^^^^^^^ value moved here, in
+use std::{
+};
+// --snip--
+// --snip--
+}
+}
+// --snip--
+}
+// --snip--
+fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+// --snip--
+}
+}
+// --snip--
+type Job = Box<dyn FnOnce() + Send + 'static>;
+// --snip--
+pub fn execute<F>(&self, f: F)
+{
+}
+}
+// --snip--
+// --snip--
+fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+});
+}
+}
+--> src/lib.rs:7:5
+|
+7 | workers: Vec<Worker>,
+| ^^^^^^^^^^^^^^^^^^^^
+|
+= note: `#[warn(dead_code)]` on by default
+--> src/lib.rs:48:5
+|
+| ^^^^^^^^^
+--> src/lib.rs:49:5
+|
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Running `target/debug/hello`
+// --snip--
+fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+let thread = thread::spawn(move || {
+}
+});
+}
+}
+fn drop(&mut self) {
+}
+}
+}
+--> src/lib.rs:52:13
+|
+| ^^^^^^^^^^^^^ ------ `worker.thread` moved due to this method
+| |
+| move occurs because `worker.thread` has type `JoinHandle<()>`,
+|
+`worker.thread`
+}
+--> src/lib.rs:52:27
+|
+| ^^^^ method not found in
+`Option<JoinHandle<()>>`
+|
+|
+| +++++++++++++++++
+--> src/lib.rs:72:22
+|
+72 | Worker { id, thread }
+| ^^^^^^ expected enum `Option`, found struct
+`JoinHandle`
+|
+= note: expected enum `Option<JoinHandle<()>>`
+found struct `JoinHandle<_>`
+|
+| +++++++++++++ +
+fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+// --snip--
+Worker {
+}
+}
+}
+fn drop(&mut self) {
+}
+}
+}
+}
+sender: Option<mpsc::Sender<Job>>,
+}
+// --snip--
+// --snip--
+}
+}
+pub fn execute<F>(&self, f: F)
+{
+}
+}
+fn drop(&mut self) {
+}
+}
+}
+}
+fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+Ok(job) => {
+}
+Err(_) => {
+}
+}
+});
+Worker {
+}
+}
+}
+fn main() {
+pool.execute(|| {
+});
+}
+}
+Running `target/debug/hello`
+fn main() {
+pool.execute(|| {
+});
+}
+}
+let mut buffer = [0; 1024];
+let get = b"GET / HTTP/1.1\r\n";
+let sleep = b"GET /sleep HTTP/1.1\r\n";
+} else {
+};
+"{}\r\nContent-Length: {}\r\n\r\n{}",
+);
+}
+use std::{
+};
+sender: Option<mpsc::Sender<Job>>,
+}
+type Job = Box<dyn FnOnce() + Send + 'static>;
+///
+///
+/// # Panics
+///
+}
+}
+}
+pub fn execute<F>(&self, f: F)
+{
+}
+}
+fn drop(&mut self) {
+}
+}
+}
+}
+}
+fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+Ok(job) => {
+}
+Err(_) => {
+}
+}
+});
+Worker {
+}
+}
+}
+fn match(needle: &str, haystack: &str) -> bool {
+}
+--> src/main.rs:4:4
+|
+4 | fn match(needle: &str, haystack: &str) -> bool {
+| ^^^^^ expected identifier, found keyword
+fn r#match(needle: &str, haystack: &str) -> bool {
+}
+fn main() {
+}
+!
+ident!{...} ,
+ident![...]
+!
+!=
+%
+%=
+var %= expr
+&
+&expr , &mut
+&
+&type , &mut
+type , &'a
+&
+&=
+var &= expr
+&&
+expr && expr
+*
+*=
+var *= expr
+*
+*expr
+*
++
+'a + trait
++
++=
+var += expr
+,
+-
+- expr
+-
+-=
+var -= expr
+->
+fn(...) ->
+type , |...| ->
+.
+..
+..=
+..=expr ,
+..
+..
+..) ,
+struct_type {
+x, .. }
+...
+/
+/=
+var /= expr
+:
+:
+:
+{...}
+;
+;
+[...; len]
+<<
+expr << expr
+<<=
+var <<= expr
+<
+<=
+expr <= expr
+=
+==
+expr == expr
+=>
+pat => expr
+>
+>=
+expr >= expr
+>>
+expr >> expr
+>>=
+var >>= expr
+@
+^
+^=
+var ^= expr
+|
+pat | pat
+|
+|=
+var |= expr
+||
+expr || expr
+?
+"..."
+r"..." , r#"..."# ,
+r##"..."## , etc.
+br"..." , br#"..."# ,
+br##"..."## , etc.
+'...'
+|...| expr
+!
+_
+<type>::...
+named (e.g., <&T>::... , <[T]>::... , etc.)
+<type as
+path<...>
+Vec<u8> )
+path::<...> ,
+method::<...>
+"42".parse::<i32>() )
+fn ident<...> ...
+struct ident<...>
+...
+enum ident<...> ...
+impl<...> ...
+for<...> type
+type<ident=type>
+'a + trait ,
+#[meta]
+#![meta]
+$ident
+$(…)…
+ident!(...) , ident!{...} , ident![...]
+//
+//!
+///
+/*...*/
+/*!...*/
+/**...*/
+()
+{...}
+Type {...}
+[...]
+[expr; len]
+[type; len]
+expr[expr]
+expr[..] , expr[a..] ,
+expr[..b] , expr[a..b]
+fn do_something() {}
+fn main() {
+}
+}
+--> src/main.rs:4:9
+|
+4 | for i in 0..100 {
+| ^ help: consider using `_i` instead
+|
+fn do_something() {}
+fn main() {
+for _i in 0..100 {
+}
+}
+fn main() {
+let r = 8.0;
+}
+--> src/main.rs:2:13
+|
+2 | let x = 3.1415;
+| ^^^^^^
+|
+= note: `#[deny(clippy::approx_constant)]` on by default
+fn main() {
+let r = 8.0;
+}
+nightly: * - - * - - *
+nightly: * - - * - - *
+|
+beta: *
+nightly: * - - * - - * - - * - - *
+|
+beta: *
+nightly: * - - * - - * - - * - - * - - *
+|
+beta: * - - - - - - - - *
+nightly: * - - * - - * - - * - - * - - * - * - *
+|
+beta: * - - - - - - - - *
+|
+stable: *
+nightly: * - - * - - * - - * - - * - - * - * - *
+| |
+beta: * - - - - - - - - * *
+|
+stable: *
+stable-x86_64-pc-windows-msvc (default)
+beta-x86_64-pc-windows-msvc
+nightly-x86_64-pc-windows-msvc
+$ cd ~/projects/needs-nightly

@@ -1,0 +1,2235 @@
+
+
+
+
+
+
+
+
+
+
+
+node --version
+https://nodejs.org/en/download/.
+npm -v
+npm install -g @angular/cli@^8.0.0
+...
+------------------------------------------------------
+ng --version
+...
+------------------------------------------------------
+cd /path/to/workspace
+| main.ts
+|
++---app
+|
++---assets
+|
++---environments
+
+
+
+
+
+
+
+
+http://localhost:4200/webpack-dev-server/
+[rendered]
+browser on http://localhost:4200/ **
+}
+
+
+
+
+// src/app/app.component.ts
+@Component({
+})
+}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ExpenseManager</title>
+<base href="/">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+<app-root></app-root>
+</body>
+</html>
+{{ title }}
+{{ title }}
+<p *ngIf="canShow">
+</p>
+<p [showToolTip]='tips' />
+@NgModule({
+],
+],
+providers: [],
+})
+
+
+
+
+
+@NgModule({
+],
+],
+providers: [],
+})
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ExpenseManager</title>
+<base href="/">
+scale=1">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+<app-root></app-root>
+</body>
+</html>
+@NgModule({
+],
+],
+providers: [],
+})
+<component-selector-name></component-selector-name>
+cd /go/to/expense-manager
+
+
+
+@Component({
+})
+constructor() { }
+}
+}
+<p>{{ title }}</p>
+<h1>{{ title }}</h1>
+<app-expense-entry></app-expense-entry>
+@Component({
+templateUrl: `<h1>{{ title }}</h1>`,
+})
+}
+}
+
+styles: ['h1 { color: '#ff0000'; }']
+
+{
+"build": {
+"assets": [
+],
+"styles": [
+],
+"scripts": []
+},
+},
+}
+}},
+}
+cd /go/to/expense-manager
+{
+"build": {
+"assets": [
+],
+"styles": [
+"./node_modules/bootstrap/dist/css/bootstrap.css",
+],
+"./node_modules/jquery/dist/jquery.js",
+"./node_modules/bootstrap/dist/js/bootstrap.js"
+]
+},
+},
+}
+}},
+}
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark static-top">
+<div class="container">
+<a class="navbar-brand" href="#">{{ title }}</a>
+<span class="navbar-toggler-icon"></span>
+</button>
+<ul class="navbar-nav ml-auto">
+<li class="nav-item active">
+<a class="nav-link" href="#">Home
+<span class="sr-only">(current)</span>
+</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Report</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Add Expense</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">About</a>
+</li>
+</ul>
+</div>
+</div>
+</nav>
+<app-expense-entry></app-expense-entry>
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+<div class="row">
+<div class="col-sm" style="text-align: left;">
+{{ title }}
+</div>
+<div class="col-sm" style="text-align: right;">
+class="btn btn-primary">Edit</button>
+</div>
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Item:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Amount:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Category:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Location:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Spend On:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+cd /go/to/workspace
+}
+<h1>{{appName}}</h1>
+<app-test></app-test>
+if($event) {
+}
+}
+}
+<h2>Event Binding</h2>
+<button (click)="showData($event)">Click here</button>
+<button on-click = "showData()">Click here</button>
+}
+<input type="text" [value]="userName">
+<HTMLTag [attr.ATTR]="Component data">
+<td [attr.colspan]="columnSpan"> ... </td>
+}
+<input type="text" [value]="userName">
+<p [class]="myClasses">
+}
+<p [class]="myCSSClass">This paragraph class comes from *myClass* property </p>
+.red {
+}
+.blue {
+}
+<HTMLTag [style.STYLE]="component data">
+<p [style.color]="myParaColor"> ... </p>
+<p [style.color]="myColor">Text color is styled using style binding</p>
+<HTML [(ngModel)]="model.name" />
+<input type="text" [(ngModel)]="model.name" />
+@NgModule({
+]
+})
+<input type="text" [(ngModel)]="userName">
+<p>Two way binding! Hello {{ userName }}!</p>
+cd /go/to/expense-manager
+}
+constructor() { }
+};
+}
+}
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+0px;">
+<div class="row">
+<div class="col-sm" style="text-align: left;">
+{{ title }}
+</div>
+<div class="col-sm" style="text-align: right;">
+primary">Edit</button>
+</div>
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Item:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.item }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Amount:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.amount }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Category:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.category }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Location:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.location }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Spend On:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.spendOn }}
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<HTMLTag [attrDirective]='value' />
+<p [showToolTip]='Tips' />
+<HTMLTag [structuralDirective]='value' />
+<div *ngIf="isNeeded">
+</div>
+<component-selector-name [input-reference]="input-value"> ... </component-
+selector-name>
+<list-item [items]="fruits"> ... </list-item>
+cd /go/to/workspace
+
+
+
+<p>test works!</p>
+<div *ngIf="true">Display data</div>
+<app-test></app-test>
+}
+<p>ngIfElse example!</p>
+<div *ngIf="isLogIn; else isLogOut">
+</div>
+<ng-template #isLogOut>
+</ng-template>
+list = [1,2,3,4,5];
+<h2>ngFor directive</h2>
+<ul>
+<li *ngFor="let l of list">
+{{l}}
+</li>
+</ul>
+{
+studentArr: any[] = [
+{
+},
+{
+},
+{
+},
+{
+}
+];
+}
+<ul>
+{{std.name}}
+</li>
+</ul>
+}
+<h2>ngSwitch directive</h2>
+<ul [ngSwitch]="logInName">
+<li *ngSwitchCase="'user'">
+<p>User is logged in..</p>
+</li>
+<li *ngSwitchCase="'admin'">
+<p>admin is logged in</p>
+</li>
+<li *ngSwitchDefault>
+<p>Please choose login name</p>
+</li>
+</ul>
+<p [ngStyle]="{'color': 'blue', 'font-size': '14px'}">
+</p>
+}
+import { User } from '../user';
+users: User[] = [
+{
+},
+{
+},
+];
+}
+{
+}
+<div class="container">
+<br/>
+<div *ngFor="let user of users" [ngClass]="{
+}">
+{{ user.userName }}
+</div>
+</div>
+@NgModule({
+]
+})
+@Directive({
+})
+}
+}
+<h3>ng-template</h3>
+<ng-template>ng-template tag is a virtual element</ng-template>
+<li *ngFor="let item in list">{{ item }}</li>
+<ng-template [ngIf]=true>
+<div><h2>ng-template works!</h2></div>
+</ng-template>
+@Component({
+<div>
+<ng-template ngFor let-item [ngForOf]="Fruits" let-i="index">
+<p>{{i}}</p>
+</ng-template>
+</div>`
+,
+})
+{
+}
+}
+<p>child works!</p>
+<p>Hi {{ userName }}</p>
+<h1>Test component</h1>
+<app-child [userName]="name"><app-child>
+[](images/directive-app/component_as_directive.PNG"
+cd /go/to/expense-manager
+(src/app/expense-entry-list/expense-entry-
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+];
+}
+constructor() { }
+}
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+0px;">
+<div class="row">
+<div class="col-sm" style="text-align: left;">
+{{ title }}
+</div>
+<div class="col-sm" style="text-align: right;">
+primary">Edit</button>
+</div>
+</div>
+</div>
+<thead>
+<tr>
+<th>Item</th>
+<th>Amount</th>
+<th>Category</th>
+<th>Location</th>
+<th>Spent On</th>
+</tr>
+</thead>
+<tbody>
+<tr *ngFor="let entry of
+<th scope="row">{{ entry.item
+}}</th>
+<th>{{ entry.amount }}</th>
+<td>{{ entry.category }}</td>
+<td>{{ entry.location }}</td>
+<td>{{ entry.spendOn | date:
+'short' }}</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+
+...
+<app-expense-entry-list></app-expense-entry-list>
+{
+}
+<div>
+Today's date :- {{presentDate}}
+</div>
+<div>
+Today's date :- {{presentDate | date }}
+</div>
+<div>
+short date :- {{presentDate | date:'shortDate' }} <br/>
+Full date :- {{presentDate | date:'fullDate' }} <br/>
+Formatted date:- {{presentDate | date:'M/dd/yyyy'}} <br/>
+Hours and minutes:- {{presentDate | date:'h:mm'}}
+</div>
+short date :- 6/15/20
+<div>
+Date with uppercase :- {{presentDate | date:'fullDate' | uppercase}} <br/>
+Date with lowercase :- {{presentDate | date:'medium' | lowercase}} <br/>
+</div>
+timeChange = new Observable<string>((observer: Observer<string>) => {
+});
+}
+<div>
+</div>
+@Component({
+<div style="text-align:center">
+<h3> Currency Pipe</h3>
+<p>{{ price | currency:'EUR':true}}</p>
+<p>{{ price | currency:'INR' }}</p>
+</div>
+`,
+})
+}
+}
+@Component({
+<div>
+<h3>Start index:- {{Fruits | slice:2}}</h3>
+<h4>Start and end index:- {{Fruits | slice:1:4}}</h4>
+<h5>Negative index:- {{Fruits | slice:-2}}</h5>
+<h6>Negative start and end index:- {{Fruits | slice:-4:-2}}</h6>
+</div>
+`,
+})
+}
+}
+
+
+
+
+{{Fruits | slice:-4:-2}} means starts from negative index -4 is Grapes to end-1
+@Component({
+<div style="text-align:center">
+<h3>Decimal Pipe</h3>
+<p> {{decimalNum1 | number}} </p>
+<p> {{decimalNum2 | number}} </p>
+</div>
+`,
+})
+}
+}
+@Component({
+<div style="text-align:center">
+<p> Apply formatting:- {{decimalNum1 | number:'3.1'}} </p>
+<p> Apply formatting:- {{decimalNum1 | number:'2.1-4'}} </p>
+</div>
+`,
+})
+@Component({
+<div style="text-align:center">
+<h3>Decimal Pipe</h3>
+<p> {{decimalNum1 | percent:'2.2'}} </p>
+</div>
+`,
+})
+}
+81.78%
+@Component({
+<div style="text-align:center">
+<p ngNonBindable>{{ jsonData }}</p> (1)
+<p>{{ jsonData }}</p>
+<p ngNonBindable>{{ jsonData | json }}</p>
+<p>{{ jsonData | json }}</p>
+</div>
+`,
+})
+jsonData = { id: 'one', name: { username: 'user1' }}
+}
+{{ jsonData }}
+[object Object]
+{{ jsonData | json }}
+{ "id": "one", "name": { "username": "user1" } }
+@Pipe({
+})
+}
+}
+@Component({
+<div>
+<p> DigitCount Pipe </p>
+<h1>{{ digits | digitcount }}</h1>
+</div>
+`,
+})
+}
+}
+cd /go/to/expense-manager
+src/app/expense-entry-
+<td>{{ entry.spendOn | date: 'short' }}</td>
+
+
+
+
+
+
+const api$ = ajax({
+url: 'https://httpbin.org/delay/1',
+},
+});
+{
+"args": {},
+"files": {},
+"form": {},
+*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+},
+"url": "https://httpbin.org/delay/1"
+}
+
+
+
+// observer
+const observer = {
+};
+
+
+
+
+});
+this.val2 += num } );
+@Component({
+})
+numbers : number[] = [];
+filteredNumbers : number[] = [];
+processedNumbers : number[] = [];
+// const numbers$ = of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+// const numbers$ = range(1,10);
+// observer
+const observer = {
+this.val1 += num },
+};
+const api$ = ajax({
+url: 'https://httpbin.org/delay/1',
+},
+});
+clickEvent$.subscribe( () => this.counter++ );
+}
+}
+
+
+
+<h1>{{ title }}</h1>
+<div>
+The summation of numbers ( <span *ngFor="let num of numbers"> {{ num }}
+</span> ) is {{ val1 }}
+</div>
+<div>
+filteredNumbers"> {{ num }} </span> ) is {{ val2 }}
+</div>
+<div>
+processedNumbers"> {{ num }} </span> ) is {{ val3 }}
+</div>
+<div>
+The response from the API is <em>{{ apiMessage }}</em>
+</div>
+<div>
+<a id="counter" href="#">Click here</a> to increment the counter value.
+<div>
+constructor() { }
+}
+
+
+
+
+
+@Injectable({
+})
+constructor() { }
+}
+@Component({
+})
+@Component({
+})
+<div>
+<child></child>
+</div>
+<ng-content></ng-content>
+<div>
+</div>
+<parent><!-- child template in content --><child></child></parent>
+
+
+
+
+
+
+
+
+import { Self } from '@angular/core';
+import { Host } from '@angular/core';
+}
+}
+}
+// Create value
+};
+providers: [{ provide: APP_CONFIG, useValue: HERO_DI_CONFIG }]
+}
+}
+
+
+cd /go/to/expense-manager
+@Injectable({
+})
+constructor() { }
+}
+
+
+}
+@Component({
+})
+}
+// other coding
+}
+
+
+// src/app/debug.service.ts
+}
+}
+}
+// src/app/expense-entry-list/expense-entry-list.component.ts
+@Component({
+})
+@Component({
+})
+}
+}
+<app-debug></app-debug>
+<ng-content></ng-content>
+<app-expense-entry-list>
+<app-debug></app-debug>
+</app-expense-entry-list>
+<app-debug></app-debug>
+<ng-content></ng-content>
+<app-expense-entry-list> </app-expense-entry-list>
+cd /go/to/workspace
+{
+},
+}
+if (err) {
+}else{
+)`,
+(err) => {
+if (err) {
+}else{
+10:10', '2020-05-26 10:10'])
+05-28 11:10', '2020-05-28 11:10'])
+05-29 09:22', '2020-05-29 09:22'])
+16:18', '2020-06-06 16:18'])
+06-01 18:14', '2020-05-01 18:14'])
+}
+});
+}
+});
+app.listen(HTTP_PORT, () => {
+});
+app.get("/", (req, res, next) => {
+});
+app.get("/api/expense", (req, res, next) => {
+var params = []
+if (err) {
+}
+});
+});
+app.get("/api/expense/:id", (req, res, next) => {
+if (err) {
+}
+});
+});
+app.post("/api/expense/", (req, res, next) => {
+var errors=[]
+}
+var data = {
+}
+if (err){
+}
+});
+})
+app.put("/api/expense/:id", (req, res, next) => {
+var data = {
+}
+item = ?,
+amount = ?,
+WHERE id = ?`,
+if (err){
+}
+});
+})
+app.delete("/api/expense/:id", (req, res, next) => {
+if (err){
+}
+});
+})
+});
+{
+}
+[
+{
+},
+{
+},
+{
+},
+{
+},
+{
+}
+]
+@NgModule({
+]
+})
+cd /go/to/expense-manager
+'@angular/common/http';
+};
+'@angular/common/http';
+@Injectable({
+})
+})
+};
+}
+{
+headers?: HttpHeaders | {[header: string]: string | string[]},
+params?: HttpParams|{[param: string]: string | string[]},
+}
+
+
+
+
+
+
+
+
+} else {
+}
+}
+cd /go/to/expense-manager
+);
+}
+);
+}
+} else {
+}
+}
+
+
+'@angular/common/http';
+@Injectable({
+})
+})
+};
+);
+}
+);
+}
+} else {
+}
+}
+}
+}
+@Component({
+})
+}
+}
+}
+);
+}
+);
+}
+const url = `${this.expenseRestUrl}/${id}`;
+);
+}
+cd /go/to/expense-manager
+o?theme=indigo-pink ]
+@NgModule({
+]
+})
+<div class="col-sm" style="text-align: right;">
+<!-- <button type="button" class="btn btn-primary">Edit</button> -->
+<button mat-raised-button color="primary">Edit</button>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+cd /go/to/expense-manager
+<div class="mat-elevation-z8">
+<table mat-table [dataSource]="expenseEntries">
+<th mat-header-cell *matHeaderCellDef> Item </th>
+left"> {{element.item}} </td>
+</ng-container>
+<th mat-header-cell *matHeaderCellDef > Amount </th>
+left"> {{element.amount}} </td>
+</ng-container>
+<th mat-header-cell *matHeaderCellDef> Category </th>
+left"> {{element.category}} </td>
+</ng-container>
+<th mat-header-cell *matHeaderCellDef> Location </th>
+left"> {{element.location}} </td>
+</ng-container>
+<th mat-header-cell *matHeaderCellDef> Spend On </th>
+left"> {{element.spendOn}} </td>
+</ng-container>
+<tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+<tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+</table>
+</div>
+
+
+
+
+
+
+
+
+const routes: Routes = [];
+@NgModule({
+})
+
+
+
+
+
+@NgModule({
+],
+],
+providers: [],
+})
+cd /go/to/expense-manager
+
+
+];
+
+
+<router-outlet></router-outlet>
+<a routerLink="/about" routerLinkActive="active">First Component</a>
+
+
+
+
+<a routerLink="../about">Relative Route to about component</a>
+{ path: '', redirectTo: '/about' },
+];
+
+];
+];
+
+
+
+
+
+
+
+
+});
+}
+switchMap(params => {
+})
+);
+<h2>Item Component</h2>
+<nav>
+<ul>
+<li><a routerLink="view">View</a></li>
+<li><a routerLink="edit">Edit</a></li>
+</ul>
+</nav>
+<router-outlet></router-outlet>
+{
+{
+},
+{
+}
+]
+}]
+cd /go/to/expense-manager
+];
+@NgModule({
+})
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark static-top">
+<div class="container">
+<a class="navbar-brand" href="#">{{ title }}</a>
+<span class="navbar-toggler-icon"></span>
+</button>
+<ul class="navbar-nav ml-auto">
+<li class="nav-item active">
+<a class="nav-link" href="#">Home
+<span class="sr-only" routerLink="/">(current)</span>
+</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" routerLink="/expenses">Report</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Add Expense</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">About</a>
+</li>
+</ul>
+</div>
+</div>
+</nav>
+<router-outlet></router-outlet>
+<thead>
+<tr>
+<th>Item</th>
+<th>Amount</th>
+<th>Category</th>
+<th>Location</th>
+<th>Spent On</th>
+<th>View</th>
+</tr>
+</thead>
+<tbody>
+<th scope="row">{{ entry.item }}</th>
+<th>{{ entry.amount }}</th>
+<td>{{ entry.category }}</td>
+<td>{{ entry.location }}</td>
+<td>{{ entry.spendOn | date: 'medium' }}</td>
+<td><a routerLink="../expenses/detail/{{ entry.id
+}}">View</a></td>
+</tr>
+</tbody>
+</table>
+switchMap(params => {
+}));
+}
+@Component({
+})
+switchMap(params => {
+}));
+}
+}
+}
+<div class="col-sm" style="text-align: right;">
+List</button>
+&nbsp;<button type="button" class="btn btn-primary">Edit</button>
+</div>
+@NgModule({
+],
+declarations: [ ],
+bootstrap: [ ]
+})
+@Component({
+]
+})
+
+
+...
+...
+]
+...
+...
+]
+
+
+...
+transition('start => end', [
+])
+...
+]
+
+
+
+})),
+})),
+transition('start => end', [
+]),
+transition('end => start', [
+])
+]),
+]
+<div [@triggerName]="expression">...</div>;
+<img [@enlarge]="isEnlarge ? 'end' : 'start'">...</img>;
+
+
+
+cd /go/to/workspace
+@NgModule({
+],
+],
+providers: [],
+})
+@Component({
+})),
+})),
+transition('start => end', [
+]),
+transition('end => start', [
+])
+])
+]
+})
+<h1>{{ title }}</h1>
+<img src="assets/puppy.jpeg" style="height: 200px" />
+<br />
+<button>{{ this.buttonText }}</button>
+}
+}
+<h1>{{ title }}</h1>
+<img [@enlarge]="isEnlarge ? 'end' : 'start'" src="assets/puppy.jpeg"
+style="height: 200px" />
+<br />
+<button (click)='triggerAnimation()'>{{ this.buttonText }}</button>
+<h1>{{ title }}</h1>
+<img [@enlarge]="isEnlarge ? 'end' : 'start'" src="assets/puppy.jpeg"
+style="height: 200px" />
+<br />
+<button (click)='triggerAnimation()'>{{ this.buttonText }}</button>
+@Component({
+})),
+})),
+transition('start => end', [
+]),
+transition('end => start', [
+])
+])
+]
+})
+}
+}
+<h1>{{ title }}</h1>
+<img [@enlarge]="isEnlarge ? 'end' : 'start'" src="assets/puppy.jpeg"
+style="height: 200px" />
+<br />
+<button (click)='triggerAnimation()'>{{ this.buttonText }}</button>
+],
+cd /go/to/workspace
+...
+@NgModule({
+],
+],
+providers: [],
+})
+<br/>
+<br/>
+<input type="submit" value="submit">
+</form>
+@Component({
+})
+}
+}
+}
+<app-test></app-test>
+]
+
+
+
+
+cd /go/to/workspace
+...
+@NgModule({
+],
+],
+providers: [],
+})
+@Component({
+})
+});
+}
+}
+
+
+
+<div>
+<br/>
+<br/>
+</form>
+</div>
+<p> Textbox result is: {{userName}} </p>
+
+
+
+
+<app-test></app-test>
+cd /go/to/reactive-form-app
+'@angular/forms';
+@Component({
+})
+}
+myForm() {
+});
+}
+{
+}
+}
+<div>
+<h2>
+</h2>
+<div class="form-group">
+<label class="center-block">Name:
+</label>
+</div>
+<div *ngIf="requiredForm.controls['name'].invalid &&
+</div>
+</div>
+</form>
+<p>Form value: {{ requiredForm.value | json }}</p>
+<p>Form status: {{ requiredForm.status | json }}</p>
+</div>
+
+
+cd /go/to/reactive-form-app
+'@angular/forms';
+@Component({
+})
+}
+myForm() {
+Validators.pattern("^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-
+z]{2,4}$")] ]
+});
+}
+{
+}
+}
+<div>
+<h2>
+</h2>
+<div class="form-group">
+<label class="center-block">Email:
+</label>
+</div>
+<div *ngIf="requiredForm.controls['email'].invalid &&
+</div>
+</div>
+</form>
+<p>Form value: {{ requiredForm.value | json }}</p>
+<p>Form status: {{ requiredForm.status | json }}</p>
+</div>
+
+
+
+
+
+cd /go/to/expense-manager
+@Injectable({
+})
+this.isUserLoggedIn = userName == 'admin' && password ==
+tap(val => {
+})
+);
+}
+}
+constructor() { }
+}
+
+
+
+
+
+@Component({
+})
+{ }
+});
+}
+.subscribe( data => {
+});
+}
+}
+
+
+
+
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+<div class="row">
+<div class="col-12" style="text-align: center;">
+<form [formGroup]="formData"
+class="form-signin">
+<h2 class="form-signin-
+heading">Please sign in</h2>
+class="sr-only">Email address</label>
+<input type="text"
+class="sr-only">Password</label>
+<button class="btn btn-lg btn-
+primary btn-block" type="submit">Sign in</button>
+</form>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+.form-signin {
+}
+input {
+}
+@Component({
+})
+{ }
+this.router.navigate(['/']);
+}
+}
+
+
+@Injectable({
+})
+{}
+}
+if(val != null && val == "true"){
+if(url == "/login")
+} else {
+}
+}
+}
+
+
+
+[ExpenseGuard]},
+];
+@NgModule({
+})
+
+
+
+
+<ul class="navbar-nav ml-auto">
+<li class="nav-item active">
+<a class="nav-link" href="#">Home
+<span class="sr-only" routerLink="/">(current)</span>
+</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" routerLink="/expenses">Report</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Add Expense</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">About</a>
+</li>
+<li class="nav-item">
+<a class="nav-link"
+routerLink="/logout">Logout</a>
+</div>
+<ng-template #isLogOut>
+<a class="nav-link"
+routerLink="/login">Login</a>
+</ng-template>
+</li>
+</ul>
+</div>
+@Component({
+})
+if( storeData != null && storeData == "true")
+}
+}
+]
+cd /go/to/workspace
+
+
+{
+"outDir": "./out-tsc/worker",
+"lib": [
+],
+"types": []
+},
+"src/**/*.worker.ts"
+]
+}
+"src/**/*.spec.ts",
+"src/**/*.worker.ts"
+]
+// src/app/app.worker.ts
+addEventListener('message', ({ data }) => {
+const response = `worker response to ${data}`;
+});
+// src/app/app.component.ts [only a snippet]
+// Create a new
+worker.onmessage = ({ data }) => {
+console.log(`page got message: ${data}`);
+};
+} else {
+}
+
+{
+for(idx = 2; idx < num / 2; idx++)
+{
+if(num % idx == 0)
+}
+}
+while(count < num) {
+count++;
+idx++;
+}
+}
+}
+
+
+/// <reference lib="webworker" />
+addEventListener('message', ({ data }) => {
+// const response = `worker response to ${data}`;
+});
+@Component({
+})
+}
+// Create a new
+'module' });
+worker.onmessage = ({ data }) => {
+};
+} else {
+}
+}
+}
+<h1>{{ title }}</h1>
+<div>
+<a href="#" (click)="find10thPrimeNumber()">Click here</a> to find 10th
+<div>The 10<sup>th</sup> prime number is {{ prime10 }}</div> <br/>
+<a href="#" (click)="find10000thPrimeNumber()">Click here</a> to find
+<div>The 10000<sup>th</sup> prime number is {{ prime10000 }}</div>
+</div>
+
+
+cd /go/to/workspace
+ng add @angular/pwa --project pwa-sample
+ng build --prod
+http-server -p 8080 -c-1 dist/pwa-sample
+
+
+cd /go/to/workspace
+<h1>{{ title }}</h1>
+<div>Hello</div>
+<div>The Current time is {{ currentDate | date : 'medium' }}</div>
+@NgModule({
+],
+],
+})
+
+
+@Component({
+})
+}
+}
+<h1>{{ title }}</h1>
+<div>Hello</div>
+<div>The Current time is {{ currentDate | date : 'medium' }}</div>
+<h1>{{ title }}</h1>
+<h1 i18n="greeting|Greeting a person@@greeting">Hello</h1>
+<div>
+</span>
+</div>
+
+
+ng xi18n --output-path src/locale
+<?xml version="1.0" encoding="UTF-8" ?>
+<body>
+<trans-unit id="greeting" datatype="html">
+<source>Hello</source>
+type="sourcefile">src/app/app.component.html</context>
+<context context-type="linenumber">3</context>
+</context-group>
+<note priority="1" from="meaning">greeting</note>
+</trans-unit>
+<source>
+currentDate | date : &apos;medium&apos; }}"/>
+</source>
+type="sourcefile">src/app/app.component.html</context>
+<context context-type="linenumber">5</context>
+</context-group>
+<note priority="1" from="meaning">time</note>
+</trans-unit>
+</body>
+</file>
+</xliff>
+"hi": {
+"baseHref": "/hi/"
+},
+"en": {
+"baseHref": "/en/"
+}
+"hi": {
+},
+"en": {
+}
+npm run start -- --configuration=hi
+
+
+
+
+npm install -g @angular/cli@^8.0.0
+ng new <project-name>
+ng g c <component-name>
+ng g class <class-name>
+ng g pipe <pipe-name>
+ng g module <module-name>
+ng g enum <enum-name>
+ng add [name]
+{
+"$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+"MyApp": {
+}
+},
+.............................
+.............................
+ng doc <keyword>
+ng e2e <project> [options]
+
+
+
+
+{
+"my-existing-project": {
+"build": {
+...
+}
+}
+}
+}
+}
+}
+{
+...
+}
+
+
+
+
+
+ng new --collection=@angular/bazel
+ng update @angular/cli@8 @angular/core@8
+
+
+
+
+
+cd /path/to/workspace
+}
+
+
+
+@Component({
+})
+constructor() { }
+}
+}
+<p>{{ title }}</p>
+<h1>{{ title }}</h1>
+<app-expense-entry></app-expense-entry>
+cd /go/to/expense-manager
+{
+"build": {
+"assets": [
+],
+"styles": [
+"./node_modules/bootstrap/dist/css/bootstrap.css",
+],
+"./node_modules/jquery/dist/jquery.js",
+"./node_modules/bootstrap/dist/js/bootstrap.js"
+]
+},
+},
+}
+}},
+}
+
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark static-top">
+<div class="container">
+<a class="navbar-brand" href="#">{{ title }}</a>
+<span class="navbar-toggler-icon"></span>
+</button>
+<ul class="navbar-nav ml-auto">
+<li class="nav-item active">
+<a class="nav-link" href="#">Home
+<span class="sr-only">(current)</span>
+</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Report</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Add Expense</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">About</a>
+</li>
+</ul>
+</div>
+</div>
+</nav>
+<app-expense-entry></app-expense-entry>
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+<div class="row">
+<div class="col-sm" style="text-align: left;">
+{{ title }}
+</div>
+<div class="col-sm" style="text-align: right;">
+class="btn btn-primary">Edit</button>
+</div>
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Item:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Amount:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Category:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Location:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Spend On:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+}
+constructor() { }
+};
+}
+}
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+0px;">
+<div class="row">
+<div class="col-sm" style="text-align: left;">
+{{ title }}
+</div>
+<div class="col-sm" style="text-align: right;">
+primary">Edit</button>
+</div>
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Item:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.item }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Amount:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.amount }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Category:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.category }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Location:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.location }}
+</div>
+</div>
+<div class="row">
+<div class="col-2" style="text-align: right;">
+<strong><em>Spend On:</em></strong>
+</div>
+<div class="col" style="text-align: left;">
+{{ expenseEntry.spendOn }}
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+cd /go/to/expense-manager
+(src/app/expense-entry-list/expense-entry-
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+{ id: 1,
+* 30) + 1), 10, 10, 10) },
+];
+}
+constructor() { }
+}
+(src/app/expense-entry-list/expense-entry-
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+0px;">
+<div class="row">
+<div class="col-sm" style="text-align: left;">
+{{ title }}
+</div>
+<div class="col-sm" style="text-align: right;">
+primary">Edit</button>
+</div>
+</div>
+</div>
+<thead>
+<tr>
+<th>Item</th>
+<th>Amount</th>
+<th>Category</th>
+<th>Location</th>
+<th>Spent On</th>
+</tr>
+</thead>
+<tbody>
+<tr *ngFor="let entry of
+<th scope="row">{{ entry.item
+}}</th>
+<th>{{ entry.amount }}</th>
+<td>{{ entry.category }}</td>
+<td>{{ entry.location }}</td>
+<td>{{ entry.spendOn }}</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+
+...
+<app-expense-entry-list></app-expense-entry-list>
+src/app/expense-entry-
+<td>{{ entry.spendOn | date: 'medium' }}</td>
+@Injectable({
+})
+constructor() { }
+}
+
+
+}
+@Component({
+})
+}
+// other coding
+}
+
+
+// src/app/debug.service.ts
+}
+}
+}
+// src/app/expense-entry-list/expense-entry-list.component.ts
+@Component({
+})
+@Component({
+})
+}
+}
+<app-debug></app-debug>
+<ng-content></ng-content>
+<app-expense-entry-list>
+<app-debug></app-debug>
+</app-expense-entry-list>
+(src/app/expense-entry-
+<app-debug></app-debug>
+<ng-content></ng-content>
+<app-expense-entry-list> </app-expense-entry-list>
+...
+@NgModule({
+...
+...
+]
+...
+...
+})
+'@angular/common/http';
+};
+'@angular/common/http';
+@Injectable({
+})
+})
+};
+}
+cd /go/to/expense-rest-api
+);
+}
+);
+}
+} else {
+}
+}
+
+
+'@angular/common/http';
+@Injectable({
+})
+})
+};
+);
+}
+);
+}
+} else {
+}
+}
+}
+}
+@Component({
+})
+}
+}
+}
+);
+}
+);
+}
+const url = `${this.expenseRestUrl}/${id}`;
+);
+}
+];
+@NgModule({
+})
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark static-top">
+<div class="container">
+<a class="navbar-brand" href="#">{{ title }}</a>
+<span class="navbar-toggler-icon"></span>
+</button>
+<ul class="navbar-nav ml-auto">
+<li class="nav-item active">
+<a class="nav-link" href="#">Home
+<span class="sr-only" routerLink="/">(current)</span>
+</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" routerLink="/expenses">Report</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Add Expense</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">About</a>
+</li>
+</ul>
+</div>
+</div>
+</nav>
+<router-outlet></router-outlet>
+(src/app/expense-entry-
+<thead>
+<tr>
+<th>Item</th>
+<th>Amount</th>
+<th>Category</th>
+<th>Location</th>
+<th>Spent On</th>
+<th>View</th>
+</tr>
+</thead>
+<tbody>
+<th scope="row">{{ entry.item }}</th>
+<th>{{ entry.amount }}</th>
+<td>{{ entry.category }}</td>
+<td>{{ entry.location }}</td>
+<td>{{ entry.spendOn | date: 'medium' }}</td>
+<td><a routerLink="../expenses/detail/{{ entry.id
+}}">View</a></td>
+</tr>
+</tbody>
+</table>
+(src/app/expense-entry/expense-
+switchMap(params => {
+}));
+}
+@Component({
+})
+switchMap(params => {
+}));
+}
+}
+}
+<div class="col-sm" style="text-align: right;">
+List</button>
+&nbsp;<button type="button" class="btn btn-primary">Edit</button>
+</div>
+@Injectable({
+})
+this.isUserLoggedIn = userName == 'admin' && password ==
+tap(val => {
+})
+);
+}
+}
+constructor() { }
+}
+
+
+
+
+
+@Component({
+})
+{ }
+});
+}
+.subscribe( data => {
+});
+}
+}
+
+
+
+
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+<div class="row">
+<div class="col-12" style="text-align: center;">
+<form [formGroup]="formData"
+class="form-signin">
+<h2 class="form-signin-
+heading">Please sign in</h2>
+class="sr-only">Email address</label>
+<input type="text"
+class="sr-only">Password</label>
+<button class="btn btn-lg btn-
+primary btn-block" type="submit">Sign in</button>
+</form>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+
+.form-signin {
+}
+input {
+}
+@Component({
+})
+{ }
+this.router.navigate(['/']);
+}
+}
+
+
+@Injectable({
+})
+{}
+}
+if(val != null && val == "true"){
+if(url == "/login")
+} else {
+}
+}
+}
+
+
+
+[ExpenseGuard]},
+];
+@NgModule({
+})
+
+
+
+
+<ul class="navbar-nav ml-auto">
+<li class="nav-item active">
+<a class="nav-link" href="#">Home
+<span class="sr-only" routerLink="/">(current)</span>
+</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" routerLink="/expenses">Report</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">Add Expense</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" href="#">About</a>
+</li>
+<li class="nav-item">
+<a class="nav-link"
+routerLink="/logout">Logout</a>
+</div>
+<ng-template #isLogOut>
+<a class="nav-link"
+routerLink="/login">Login</a>
+</ng-template>
+</li>
+</ul>
+</div>
+@Component({
+})
+if( storeData != null && storeData == "true")
+}
+}
+]
+@Component({
+})
+});
+.subscribe( (data) =>
+{
+})
+}
+}
+}
+}
+}
+if(expenseEntry.id == null || expenseEntry.id == 0) {
+this.router.navigate(['/expenses']); });
+} else {
+this.router.navigate(['/expenses']); });
+}
+}
+}
+
+
+
+
+
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+0px;">
+</div>
+<div class="form-group">
+<label for="item">Item</label>
+<div
+<div [hidden]="!itemValue.errors.required">
+</div>
+</div>
+</div>
+<div class="form-group">
+<label for="amount">Amount</label>
+<div
+||amountValue?.touched)">
+</div>
+</div>
+</div>
+<div class="form-group">
+<label for="category">Category</label>
+<option>Food</option>
+<option>Vegetables</option>
+<option>Fruit</option>
+<option>Electronic Item</option>
+<option>Bill</option>
+</select>
+</div>
+<div class="form-group">
+<label for="location">location</label>
+</div>
+<div class="form-group">
+<label for="spendOn">spendOn</label>
+</div>
+[disabled]="!formData.valid">Submit</button>
+</form>
+</div>
+</div>
+</div>
+</div>
+
+
+
+.form {
+}
+}
+input {
+}
+@Component({
+})
+constructor() { }
+}
+}
+<!-- Page Content -->
+<div class="container">
+<div class="row">
+<div class="col-lg-12 text-center" style="padding-top: 20px;">
+0px;">
+<div class="row">
+<div class="col-sm" style="text-align: left;">
+<h1>{{ title }}</h1>
+</div>
+</div>
+</div>
+<div class="row">
+<div class="col" style="text-align: left;">
+<p>Expense management Application</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+[ExpenseGuard]},
+[ExpenseGuard]},
+[ExpenseGuard]},
+];
+@NgModule({
+})
+<thead>
+<tr>
+<th>Item</th>
+<th>Amount</th>
+<th>Category</th>
+<th>Location</th>
+<th>Spent On</th>
+<th>View</th>
+<th>Edit</th>
+<th>Delete</th>
+</tr>
+</thead>
+<tbody>
+<th scope="row">{{ entry.item }}</th>
+<th>{{ entry.amount }}</th>
+<td>{{ entry.category }}</td>
+<td>{{ entry.location }}</td>
+<td>{{ entry.spendOn | date: 'medium' }}</td>
+<td><a routerLink="../expenses/detail/{{ entry.id }}">View</a></td>
+<td><a routerLink="../expenses/edit/{{ entry.id }}">Edit</a></td>
+<td><a href="#" (click)="deleteExpenseEntry($event,
+entry.id)">Delete</a></td>
+</tr>
+</tbody>
+</table>
+}
+}
+<div class="col-sm" style="text-align: right;">
+<button class="btn btn-primary" routerLink="/expenses/add">ADD</button>
+<!-- <button type="button" class="btn btn-primary">Edit</button> -->
+</div>
+<div class="col-sm" style="text-align: right;">
+List</button>
+(click)="goToEdit()">Edit</button>
+</div>
+}
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark static-top">
+<div class="container">
+<a class="navbar-brand" href="#">{{ title }}</a>
+<span class="navbar-toggler-icon"></span>
+</button>
+<ul class="navbar-nav ml-auto">
+<li class="nav-item active">
+<a class="nav-link" href="#">Home
+<span class="sr-only" routerLink="/">(current)</span>
+</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" routerLink="/expenses/add">Add
+Expense</a>
+</li>
+<li class="nav-item">
+<a class="nav-link" routerLink="/about">About</a>
+</li>
+<li class="nav-item">
+<a class="nav-link"
+routerLink="/logout">Logout</a>
+</div>
+<ng-template #isLogOut>
+<a class="nav-link"
+routerLink="/login">Login</a>
+</ng-template>
+</li>
+</ul>
+</div>
+</div>
+</nav>
+<router-outlet></router-outlet>
+npm install -g @angular/cli@^9.0.0
+
+
+
+
+
+
+@Injectable({
+})
+
+
+
+
+

@@ -1,0 +1,3363 @@
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Chap-
+y = f[x].
+y = f[x, ϕ].
+L [ϕ]
+.
+=
+f[x, ϕ]
+=
+ϕ0 + ϕ1x.
+=
+L[ϕ]
+=
+i=1
+(f[xi, ϕ] −yi)2
+=
+i=1
+=
+L[ϕ]
+=
+i=1
+(f[xi, ϕ] −yi)2
+#
+=
+i=1
+#
+.
+=
+f[x, ϕ]
+=
+ϕ0 + ϕ1a[θ10 + θ11x] + ϕ2a[θ20 + θ21x] + ϕ3a[θ30 + θ31x].
+a[z] = ReLU[z] =
+(
+z < 0
+dataset {xi, yi}I
+=
+a[θ10 + θ11x]
+=
+a[θ20 + θ21x]
+=
+a[θ30 + θ31x],
+y = ϕ0 + ϕ1h1 + ϕ2h2 + ϕ3h3.
+hd = a[θd0 + θd1x],
+y = ϕ0 +
+d=1
+=
+a[θ10 + θ11x]
+=
+a[θ20 + θ21x]
+=
+a[θ30 + θ31x]
+=
+a[θ40 + θ41x],
+=
+ϕ10 + ϕ11h1 + ϕ12h2 + ϕ13h3 + ϕ14h4
+=
+ϕ20 + ϕ21h1 + ϕ22h2 + ϕ23h3 + ϕ24h4.
+=
+a[θ10 + θ11x1 + θ12x2]
+=
+a[θ20 + θ21x1 + θ22x2]
+=
+a[θ30 + θ31x1 + θ32x2],
+y = ϕ0 + ϕ1h1 + ϕ2h2 + ϕ3h3.
+hd = a
+"
+θd0 +
+i=1
+#
+,
+yj = ϕj0 +
+d=1
+HardSwish[z] =
+
+
+
+
+
+z < −3
+z(z + 3)/6
+z > 3
+.
+j=0
+
+that f[2a] = 2f[a].The weighted sum f[h1, h2, h3] = ϕ1h1 + ϕ2h2 + ϕ3h3 is linear, but once the
+ReLU[α · z] = α · ReLU[z].
+heaviside[z] =
+(
+z < 0
+rect[z] =
+
+
+
+
+
+z < 0
+z > 1
+.
+j=0
+
+=
+a[θ10 + θ11x]
+=
+a[θ20 + θ21x]
+=
+a[θ30 + θ31x],
+y = ϕ0 + ϕ1h1 + ϕ2h2 + ϕ3h3.
+=
+a[θ′
+10 + θ′
+11y]
+=
+a[θ′
+20 + θ′
+21y]
+=
+a[θ′
+30 + θ′
+31y],
+y′ = ϕ′
+0 + ϕ′
+1 + ϕ′
+2 + ϕ′
+10 +θ′
+20 +θ′
+30 +θ′
+=
+a[θ′
+10 + θ′
+11y]
+=
+a[θ′
+10 + θ′
+11ϕ0 + θ′
+11ϕ3h3]
+=
+a[θ′
+20 + θ′
+21y]
+=
+a[θ′
+20 + θ′
+21ϕ0 + θ′
+21ϕ3h3]
+=
+a[θ′
+30 + θ′
+31y]
+=
+a[θ′
+30 + θ′
+31ϕ0 + θ′
+31ϕ3h3],
+=
+a[ψ10 + ψ11h1 + ψ12h2 + ψ13h3]
+=
+a[ψ20 + ψ21h1 + ψ22h2 + ψ23h3]
+=
+a[ψ30 + ψ31h1 + ψ32h2 + ψ33h3],
+10 + θ′
+31]T [ϕ1, ϕ2, ϕ3].
+=
+a[θ10 + θ11x]
+=
+a[θ20 + θ21x]
+=
+a[θ30 + θ31x],
+=
+a[ψ10 + ψ11h1 + ψ12h2 + ψ13h3]
+=
+a[ψ20 + ψ21h1 + ψ22h2 + ψ23h3]
+=
+a[ψ30 + ψ31h1 + ψ32h2 + ψ33h3],
+y′ = ϕ′
+0 + ϕ′
+1 + ϕ′
+2 + ϕ′
+=
+0 + ϕ′
+1a [ψ10 + ψ11a[θ10 + θ11x] + ψ12a[θ20 + θ21x] + ψ13a[θ30 + θ31x]]
++ϕ′
+2a[ψ20 + ψ21a[θ10 + θ11x] + ψ22a[θ20 + θ21x] + ψ23a[θ30 + θ31x]]
++ϕ′
+3a[ψ30 + ψ31a[θ10 + θ11x] + ψ32a[θ20 + θ21x] + ψ33a[θ30 + θ31x]],
+
+
+
+= a
+
+
+
+
+
++
+
+
+
+
+,
+
+
+
+= a
+
+
+
+
+
++
+
+
+
+
+
+
+
+
+
+,
+y′ = ϕ′
+0 +
+
+
+
+
+,
+=
+a [θ0 + θx]
+=
+a [ψ0 + Ψh]
+=
+0 + ϕ′h′,
+=
+a[β0 + Ω0x]
+=
+a[β1 + Ω1h1]
+=
+a[β2 + Ω2h2]
+...
+=
+a[βK−1 + ΩK−1hK−1]
+=
+βK + ΩKhK.
+ϕ = {βk, Ωk}K
+k=0.
+y = βK + ΩKa
+
+βK−1 + ΩK−1a [. . . β2 + Ω2a [β1 + Ω1a [β0 + Ω0x]] . . .]
+
+.
+
+
+Nr =
+k=1
+Di + 1
+j=0
+!
+.
+β1+λ1·Ω1ReLU [β0+λ0 · Ω0x]
+
+
+,
+range x ∈[a, b].
+=
+i=1
+Pr(yi|xi)
+#
+=
+i=1
+Pr(yi|θi)
+#
+=
+i=1
+Pr(yi|f[xi, ϕ])
+#
+.
+i=1
+Pr(yi|xi).
+=
+i=1
+Pr(yi|f[xi, ϕ])
+#
+=
+"
+i=1
+Pr(yi|f[xi, ϕ])
+##
+=
+i=1
+Pr(yi|f[xi, ϕ])
+i#
+.
+=
+"
+−
+i=1
+Pr(yi|f[xi, ϕ])
+i#
+=
+L[ϕ]
+,
+Pr(y|f[x, ˆϕ])
+.
+so θ = f[x, ϕ] and Pr(y|θ) = Pr(y|f[x, ϕ]).
+L[ϕ]
+= argmin
+"
+−
+i=1
+Pr(yi|f[xi, ϕ])
+i#
+.
+Pr(y|µ, σ2) =
+√
+
+
+.
+Pr(y|f[x, ϕ], σ2) =
+√
+
+−(y −f[x, ϕ])2
+
+.
+L[ϕ]
+=
+−
+i=1
+
+Pr(yi|f[xi, ϕ], σ2)
+
+=
+−
+i=1
+
+√
+
+−(yi −f[xi, ϕ])2
+
+.
+=
+"
+−
+i=1
+
+√
+
+−(yi −f[xi, ϕ])2
+#
+=
+"
+−
+i=1
+
+√
+
+−(yi −f[xi, ϕ])2
+#
+=
+"
+−
+i=1
+−(yi −f[xi, ϕ])2
+#
+=
+i=1
+(yi −f[xi, ϕ])2
+#
+,
+L[ϕ] =
+i=1
+(yi −f[xi, ϕ])2.
+mean µ = f[xi, ϕ] (figure 5.4).
+Pr(y|f[x, ˆϕ])
+.
+"
+−
+i=1
+
+√
+
+−(yi −f[xi, ϕ])2
+#
+.
+=
+f1[x, ϕ]
+=
+f2[x, ϕ]2,
+"
+−
+i=1
+"
+2πf2[xi, ϕ]2
+#
+−(yi −f1[xi, ϕ])2
+2f2[xi, ϕ]2
+#
+.
+so sig[z] ∈[0, 1]. An input of 0 is mapped
+Pr(y|λ) =
+(
+y = 0
+y = 1 ,
+Pr(y|λ) = (1 −λ)1−y · λy.
+sig[z] =
+1 + exp[−z].
+Pr(y|x) = (1 −sig[f[x, ϕ]])1−y · sig[f[x, ϕ]]y.
+L[ϕ] =
+i=1
+1 −sig[f[xi, ϕ]]
+sig[f[xi, ϕ]]
+.
+Pr(y = k) = λk.
+softmaxk[z] =
+exp[zk]
+k′=1 exp[zk′]
+,
+Pr(y = k|x) = softmaxk
+f[x, ϕ]
+.
+L[ϕ]
+=
+−
+i=1
+f [xi, ϕ]
+=
+−
+i=1
+fyi [xi, ϕ] −log
+k′=1
+exp [ fk′ [xi, ϕ]]
+#!
+,
+argmaxk[Pr(y = k|f[x, ˆϕ])].
+Pr(y|f[xi, ϕ]) =
+Pr(yd|fd[xi, ϕ]),
+y ∈R+
+y ∈[0, 1]
+y ∈(−π, π]
+y ∈{0, 1}
+y ∈{1, 2, . . . , K}
+y ∈[0, 1, 2, 3, . . .]
+y ∈Perm[1, 2, . . . , K]
+L[ϕ] = −
+i=1
+Pr(y|f[xi, ϕ])
+= −
+i=1
+Pr(yid|fd[xi, ϕ])
+.
+
+q||p
+
+=
+−∞
+
+
+−∞
+
+
+i=1. We
+q(y) = 1
+i=1
+δ[y −yi],
+=
+−∞
+
+
+−∞
+
+Pr(y|θ)
+
+
+=
+
+−
+−∞
+
+Pr(y|θ)
+
+
+,
+=
+"
+−
+−∞
+i=1
+δ[y −yi]
+!
+
+Pr(y|θ)
+
+#
+=
+"
+i=1
+
+Pr(yi|θ)
+
+#
+=
+"
+−
+i=1
+
+Pr(yi|θ)
+
+#
+.
+"
+−
+i=1
+
+Pr(yi|f[xi, ϕ])
+
+#
+.
+main (−π, π].
+sig[z] =
+1 + exp[−z].
+L = −(1 −y) log
+1 −sig[f[x, ϕ]]
+sig[f[x, ϕ]]
+,
+output sig[f[x, ϕ]] ∈[0, 1] (i) when the training label y = 0 and (ii) when y = 1.
+Pr(y|µ, κ) = exp
+
+κ cos[y −µ]]
+
+2π · Bessel0[κ]
+,
+2}:
+2) =
+
++
+
+,
+Pr(y = k) = λke−λ
+.
+hood Pr(y|f[x, ϕ]).
+L[ϕ]
+.
+∂ϕ =
+
+
+
+
+.
+=
+f[x, ϕ]
+=
+ϕ0 + ϕ1x.
+L[ϕ]
+=
+i=1
+=
+i=1
+(f[xi, ϕ] −yi)2
+=
+i=1
+∂ϕ = ∂
+i=1
+ℓi =
+i=1
+∂ϕ =
+
+
+
+=
+#
+.
+f[x, ϕ] = sin[ϕ0 + 0.06 · ϕ1x] · exp
+
+
+.
+L[ϕ] =
+i=1
+(f[xi, ϕ] −yi)2 .
+ϕt+1 ←−ϕt −α ·
+∂ℓi[ϕt]
+,
+mt+1
+←
+β · mt + (1 −β)
+∂ℓi[ϕt]
+ϕt+1
+←
+ϕt −α · mt+1,
+mt+1
+←
+β · mt + (1 −β)
+∂ℓi[ϕt −α · mt]
+ϕt+1
+←
+ϕt −α · mt+1,
+mt+1
+←
+∂L[ϕt]
+vt+1
+←
+∂L[ϕt]
+.
+ϕt+1
+←
+mt+1
+√vt+1 + ϵ,
+mt+1
+←
+β · mt + (1 −β)∂L[ϕt]
+vt+1
+←
+γ · vt + (1 −γ)
+∂L[ϕt]
+,
+˜mt+1
+←
+mt+1
+1 −βt+1
+˜vt+1
+←
+vt+1
+1 −γt+1 .
+ϕt+1
+←
+˜mt+1
+˜vt+1 + ϵ.
+mt+1
+←
+β · mt + (1 −β)
+∂ℓi[ϕt]
+vt+1
+←
+γ · vt + (1 −γ)
+∂ℓi[ϕt]
+,
+H[ϕ] =
+
+
+. . .
+. . .
+...
+...
+...
+...
+. . .
+
+
+.
+H[ϕ] =
+
+
+
+,
+Pr(y = 1|x) = sig[ϕ0 + ϕ1x],
+sig[z] =
+1 + exp[−z].
+f[x, ϕ] = ϕ0 + ϕ1a[θ10 + θ11x] + ϕ2a[θ20 + θ21x] + ϕ3a[θ30 + θ31x].
+=
+a[β0 + Ω0x]
+=
+a[β1 + Ω1h1]
+=
+a[β2 + Ω2h2]
+f[x, ϕ]
+=
+β3 + Ω3h3,
+L[ϕ] =
+i=1
+ϕt+1 ←−ϕt −α
+∂ℓi[ϕt]
+,
+,
+f[x, ϕ] = β3 + ω3 · cos
+
+β1 + ω1 · sin[β0 + ω0 · x]
+,
+ℓi = (f[xi, ϕ] −yi)2,
+,
+,
+,
+,
+,
+,
+,
+.
+=
+
+
+β1 + ω1 · sin[β0 + ω0 · xi]
+
+β1 + ω1 · sin[β0 + ω0 · xi]
+
+β1 + ω1 · sin[β0 + ω0 · xi]
+.
+=
+β0 + ω0 · xi
+=
+sin[f0]
+=
+β1 + ω1 · h1
+=
+exp[f1]
+=
+β2 + ω2 · h2
+=
+cos[f2]
+=
+β3 + ω3 · h3
+=
+,
+,
+,
+,
+,
+,
+.
+= 2(f3 −yi).
+= ∂f3
+.
+=
+
+=
+
+=
+
+=
+
+=
+
+.
+=
+=
+.
+= 1
+=
+= 1
+=
+=
+β0 + Ω0xi
+=
+a[f0]
+=
+β1 + Ω1h1
+=
+a[f1]
+=
+β2 + Ω2h2
+=
+a[f2]
+=
+β3 + Ω3h3
+=
+l[f3, yi],
+= ∂h3
+.
+=
+
+=
+
+.
+=
+∂
+(β3 + Ω3h3) = ΩT
+=
+=
+∂
+=
+,
+=
+=
+∂
+=
+=
+β0 + Ω0xi
+=
+a[fk−1]
+k ∈{1, 2, . . . , K}
+=
+βk + Ωkhk.
+k ∈{1, 2, . . . , K}
+=
+k ∈{K, K −1, . . . , 1}
+=
+k ∈{K, K −1, . . . , 1}
+=
+I[fk−1 > 0] ⊙
+
+
+,
+k ∈{K, K −1, . . . , 1}
+=
+=
+=
+βk + Ωkhk
+=
+βk + Ωka[fk−1],
+=
+a[f],
+=
+β + Ωh
+E[f ′
+i]
+=
+
+βi +
+j=1
+
+
+=
+E [βi] +
+j=1
+E [Ωijhj]
+=
+E [βi] +
+j=1
+E [Ωij] E [hj]
+=
+0 +
+j=1
+0 · E [hj] = 0,
+=
+E[f ′2
+i ] −E[f ′
+i]2
+=
+
+
+
+βi +
+j=1
+
+
+=
+
+
+
+
+j=1
+
+
+
+=
+j=1
+
+
+
+
+=
+j=1
+
+
+= σ2
+j=1
+
+
+,
+where we have used the variance identity σ2 = E[(z −E[z])2] = E[z2] −E[z]2. We have
+f ′ = σ2
+j=1
+2 = 1
+Ω=
+,
+Ω=
+Ω=
+Dh + Dh′ .
+D_i, D_k, D_o = 10, 40, 5
+nn.Linear(D_i, D_k),
+nn.Linear(D_k, D_k),
+nn.Linear(D_k, D_o))
+epoch_loss = 0.0
+x_batch, y_batch = data
+epoch_loss += loss.item()
+print(f'Epoch {epoch:5d}, loss {epoch_loss:.3f}')
+=
+ϕ0 + ϕ1a
+ψ01 + ψ11a[θ01 + θ11x] + ψ21a[θ02 + θ12x]
++ϕ2a
+ψ02 + ψ12a[θ01 + θ11x] + ψ22a[θ02 + θ12x]
+,
+ℓi = (yi −f[xi, ϕ])2.
+
+f[xi, ϕ]
+
+f[xi, ϕ]
+,
+sig[z] =
+1 + exp[−z].
+∂h = ΩT ,
+Heaviside[z] =
+(
+z < 0
+rect[z] =
+
+
+
+
+
+z < 0
+z > 1
+.
+∂Ω= ∂ℓ
+a[z] = ReLU[z] =
+(
+z < 0
+y = exp
+
+exp[x] + exp[x]2
++ sin[exp[x] + exp[x]2].
+=
+exp[x]
+=
+=
+f1 + f2
+=
+exp[f3]
+=
+sin[f3]
+=
+f4 + f5.
+b = ReLU[a] =
+(
+a < 0
+µ[x] = Ey[y[x]] =
+y[x]Pr(y|x)dy,
+
+(µ[x] −y[x])2
+L[x]
+=
+ f[x, ϕ] −y[x]
+=
+ f[x, ϕ] −µ[x]
+
++
+ µ[x] −y[x]
+=
+ f[x, ϕ] −µ[x]
+2 + 2
+ f[x, ϕ]) −µ[x]
+ µ[x] −y[x]
+
++
+ µ[x] −y[x]
+
+L[x]
+
+=
+h f[x, ϕ]−µ[x]
+2 + 2
+ f[x, ϕ]−µ[x]
+ µ[x]−y[x]
+
++
+ µ[x]−y[x]
+=
+ f[x, ϕ]−µ[x]
+2 + 2
+ f[x, ϕ] −µ[x]
+ µ[x]−Ey [y[x]]
+
++ Ey
+
+(µ[x]−y[x])2
+=
+ f[x, ϕ]−µ[x]
+2 + 2
+ f[x, ϕ]−µ[x]
+
+· 0 + Ey
+h µ[x]−y[x]
+=
+ f[x, ϕ] −µ[x]
+2 + σ2,
+write f [x, ϕ[D]].
+fµ[x] = ED
+
+x, ϕ[D]
+.
+ f[x, ϕ[D]]−µ[x]
+=
+ f[x, ϕ[D]]−fµ[x]
+
++
+ fµ[x] −µ[x]
+=
+ f[x, ϕ[D]]−fµ[x]
+2 + 2
+ f[x, ϕ[D]]−fµ[x]
+ fµ[x]−µ[x]
+
++
+ fµ[x]−µ[x]
+h f[x, ϕ[D]] −µ[x]
+= ED
+h f[x, ϕ[D]] −fµ[x]
++
+ fµ[x] −µ[x]
+Ey[L[x]]
+= ED
+h f[x, ϕ[D]] −fµ[x]
+|
+{z
+}
++
+ fµ[x]−µ[x]
+|
+{z
+}
++ σ2.
+|{z}
+Vol[r] =
+rDπD/2
+Γ[D/2 + 1],
+=
+
+L[ϕ]
+
+=
+i=1
+ℓi[xi, yi]
+#
+,
+i=1
+ℓi[xi, yi] + λ · g[ϕ]
+#
+,
+i=1
+#
+.
+i=1
+#
+.
+by minus one, we see that λ · g[ϕ] = −log[Pr(ϕ)].
+
+
+i=1
+ℓi[xi, yi] + λ
+
+,
+∂t = −∂L
+ϕt+1 = ϕt −α∂L[ϕt]
+,
+˜LGD[ϕ] = L[ϕ] + α
+.
+˜LSGD[ϕ]
+=
+˜LGD[ϕ] + α
+b=1
+=
+L[ϕ] + α
++ α
+b=1
+.
+L = 1
+i=1
+ℓi[xi, yi]
+Lb = 1
+|B|
+ℓi[xi, yi].
+Pr(ϕ|{xi, yi}) =
+i=1 Pr(yi|xi, ϕ)Pr(ϕ)
+,
+Pr(y|x, {xi, yi}) =
+Pr(y|x, ϕ)Pr(ϕ|{xi, yi})dϕ.
+ϕ1 = ϕ0 + α · g[ϕ0],
+∂t = g[ϕ].
+∂t ≈g[ϕ] + αg1[ϕ] + . . . ,
+ϕ[α]
+≈
+ϕ + α∂ϕ
+∂t + α2
+ϕ=ϕ0
+≈
+ϕ + α (g[ϕ] + αg1[ϕ]) + α2
+∂g[ϕ]
+∂t + α∂g1[ϕ]
+
+ϕ=ϕ0
+=
+ϕ + α (g[ϕ] + αg1[ϕ]) + α2
+∂g[ϕ]
+∂ϕ g[ϕ] + α∂g1[ϕ]
+g[ϕ]
+
+ϕ=ϕ0
+≈
+ϕ + αg[ϕ] + α2
+
+g1[ϕ] + 1
+∂g[ϕ]
+∂ϕ g[ϕ]
+
+ϕ=ϕ0
+,
+g1[ϕ] = −1
+∂g[ϕ]
+∂ϕ g[ϕ].
+≈
+g[ϕ] + αg1[ϕ]
+=
+LGD[ϕ] = L[ϕ] + α
+,
+Pr(ϕ) =
+j=1
+ϕ],
+˜L[ϕ] = L[ϕ] + λ
+d=1 |ϕd|P .
+
+t[x]
+
+= f[x].
+
+t[x]
+
+= t
+
+f[x]
+
+.
+zi = ω1xi−1 + ω2xi + ω3xi+1,
+=
+a [β + ω1xi−1 + ω2xi + ω3xi+1]
+=
+
+β +
+j=1
+ωjxi+j−2
+
+,
+=
+
+βi +
+j=1
+
+.
+=
+"
+β +
+m=1
+n=1
+ωmnxi+m−2,j+n−2
+#
+,
+=
+f1[x, ϕ1]
+=
+f2[h1, ϕ2]
+=
+f3[h2, ϕ3]
+=
+f4[h3, ϕ4],
+y = f4
+
+
+f1[x, ϕ1], ϕ2
+
+
+.
+= ∂f4
+.
+=
+x + f1[x, ϕ1]
+=
+h1 + f2[h1, ϕ2]
+=
+h2 + f3[h2, ϕ3]
+=
+h3 + f4[h3, ϕ4],
+y = x + f1[x]
++ f2
+
+x + f1[x]
+
++ f3
+x + f1[x] + f2
+
+x + f1[x]
++ f4
+
+x + f1[x] + f2
+
+x + f1[x]
+
++ f3
+x + f1[x] + f2
+
+x + f1[x]
+,
+= I + ∂f2
++
++ ∂f3
+
++
++ ∂f4
++ ∂f4
++ ∂f4
+
+√
+√
+=
+|B|
+=
+|B|
+sh + ϵ
+hi ←γhi + δ
+π/(π −1) ≈
+i=1
+f1 = E[zi]
+f3i = f 2
+f4 = E[f3i]
+f5 =
+f4 + ϵ
+f6 = 1/f5
+i = f7i × γ + δ,
+where E[zi] =
+f[x] = ReLU[β + Ωx],
+vm = βv + Ωvxm,
+san[x1, . . . , xN] =
+m=1
+a[xm, xn]vm.
+=
+βq + Ωqxn
+=
+βk + Ωkxm,
+a[xm, xn]
+=
+
+
+=
+
+
+m′=1 exp
+
+,
+V[X]
+=
+Q[X]
+=
+K[X]
+=
+Sa[X] = V[X] · Softmax
+K[X]T Q[X]
+,
+To en-
+Sa[X] = V · Softmax[KT Q].
+Sa[X] = V · Softmax
+"
+√
+#
+.
+=
+=
+=
+Sah[X] = Vh · Softmax
+"
+√
+#
+,
+MhSa[X] = Ωc
+Sa1[X]T , Sa2[X]T , . . . , SaH[X]T iT
+.
+←
+X + MhSa[X]
+←
+LayerNorm[X]
+←
+xn + mlp[xn]
+∀n ∈{1, . . . , N}
+←
+LayerNorm[X],
+=
+n=2
+Adapted from https://openai.com/blog/image-gpt/.
+Sa[X] = V · Softmax
+"
+√
+#
+,
+=
+=
+βq1T + Ωq(X + Π)
+=
+βk1T + Ωk(X + Π).
+Sa[XP] = Sa[X]P.
+yi = softmaxi[z] =
+exp[zi]
+j=1 exp[zj]
+,
+a[xm, xn] = softmaxm
+=
+
+
+m′=1 exp
+
+.
+
+
+b) Posi-
+=
+=
+Pr(y = 1|X, A) = sig [βK + ωKHK1/N] ,
+Pr(y(n) = 1|X, A) = sig
+βK + ωKh(n)
+.
+Pr(y(mn) = 1|X, A) = sig
+.
+=
+F[X, A, ϕ0]
+=
+F[H1, A, ϕ1]
+=
+F[H2, A, ϕ2]
+...
+=
+...
+=
+F[HK−1, A, ϕK−1],
+Hk+1P = F[HkP, PT AP, ϕk].
+y = sig [βK + ωKHK1/N] = sig [βK + ωKHKP1/N] ,
+agg[n, k] =
+m∈ne[n]
+,
+k+1 = a
+βk + Ωk · h(n)
++ Ωk · agg[n, k]
+.
+Hk+1
+=
+
+βk1T + ΩkHk + ΩkHkA
+
+=
+
+βk1T + ΩkHk(A + I)
+
+,
+=
+
+β01T + Ω0X(A + I)
+
+=
+
+β11T + Ω1H1(A + I)
+
+...
+=
+...
+=
+
+βK−11T + ΩK−1Hk−1(A + I)
+
+f[X, A, Φ]
+=
+sig [βK + ωKHK1/N] ,
+k=0
+f[X, A, Φ] = sig
+
+
+,
+Hk+1 = a
+βk1T + ΩkHk(A + I)
+.
+Hk+1 = a
+βk1T + ΩkHk(A + (1 + ϵk)I)
+.
+Hk+1
+=
+
+βk1T + ΩkHkA + ΨkHk
+
+=
+
+βk1T +
+
+
+=
+
+βk1T + Ω′
+
+
+,
+k =
+
+Hk+1 =
+
+
+
+
+.
+agg[n] =
+|ne[n]|
+m∈ne[n]
+Hk+1 = a
+βk1T + ΩkHk(AD−1 + I)
+.
+agg[n] =
+m∈ne[n]
+|ne[n]||ne[m]|
+,
+Hk+1 = a
+βk1T + ΩkHk(D−1/2AD−1/2 + I)
+.
+agg[n] =
+m∈ne[n]
+
+
+,
+k = βk1T + ΩkH.
+smn = a
+
+
+.
+Hk+1 = a
+k · Softmask[S, A + I]
+,
+
+xn, xm∈ne[n], ee∈nee[n], hm∈ne[n], ϕ
+
+,
+k+1 = mlp
+
+(1 + ϵk) h(n)
++
+m∈ne[n]
+
+.
+A1 =
+
+
+
+
+A2 =
+
+
+
+
+.
+sig [βK + ωKHK1] = sig [βK + ωKHKP1] ,
+Hk+1
+=
+GraphLayer[Hk, A]
+=
+
+βk1T + Ωk
+
+,
+GraphLayer[Hk, A]P = GraphLayer[HkP, PT AP],
+agg[n] =
+1 + |ne[n]|
+
+hn +
+m∈ne[n]
+
+.
+L[ϕ] = −
+i=1
+Pr(xi|ϕ)
+.
+✓
+✓
+
+✓
+?
+n/a
+✓
+
+?
+✓
+?
+
+✓
+
+?
+✓
+?
+✓
+
+✓
+?
+
+
+
+=
+"
+i=1
+Pr(yi|x∗
+i )||Pr(y)
+i#
+,
+Pr(y) = 1
+i=1
+Pr(yi|x∗
+j = g[zj, θ] = zj + θ,
+1 −sig[f[xi, ϕ]]
+sig[f[xi, ϕ]]
+i#
+,
+
+1 −sig[f[x∗
+j, ϕ]]
+−
+sig[f[xi, ϕ]]
+
+,
+j = g[zj, θ] and note that we
+
+
+1−sig[f[g[zj, θ], ϕ]]
+−
+sig[f[xi, ϕ]]
+
+
+
+.
+L[ϕ]
+=
+1 −sig[f[g[zj, θ], ϕ]]
+−
+sig[f[xi, ϕ]]
+L[θ]
+=
+1 −sig[f[g[zj, θ], ϕ]]
+,
+j}
+j = g[zj, θ]. Then we choose a
+L[ϕ]
+=
+j=1
+
+1 −sig[f[x∗
+j, ϕ]]
++ 1
+i=1
+
+sig[f[xi, ϕ]]
+≈
+
+1 −sig[f[x∗, ϕ]]
++ Ex
+
+sig[f[x, ϕ]]
+=
+1 −sig[f[x∗, ϕ]]
+dx∗+
+sig[f[x, ϕ]]
+
+f[x, ϕ]
+
+=
+Pr(x∗) + Pr(x).
+L[ϕ]
+=
+1 −sig[f[x∗, ϕ]]
+dx∗+
+sig[f[x, ϕ]]
+=
+
+Pr(x∗) + Pr(x)
+
+dx∗+
+
+Pr(x∗) + Pr(x)
+
+=
+
+Pr(x∗) + Pr(x)
+
+dx∗+
+
+Pr(x∗) + Pr(x)
+
+Pr(x∗) || Pr(x)
+= 1
+
+Pr(x∗) + Pr(x)
+
++ 1
+
+Pr(x∗) + Pr(x)
+
+= 1
+
+Pr(x∗) + Pr(x)
+
+|
+{z
+}
++ 1
+
+Pr(x∗) + Pr(x)
+
+|
+{z
+}
+.
+Pr(x)||q(x)
+= min
+
+Pij · |i −j|
+
+,
+j Pij =
+Pr(x = i)
+i Pij =
+q(x = j)
+≥
+=
+≥
+≤
+Pr(x)||q(x)
+= max
+
+Pr(x = i)fi −
+q(x = i)fj
+
+,
+|fi+1 −fi| < 1.
+= min
+π[•,•]
+π(x1, x2) · ||x1 −x2||dx1dx2
+
+,
+= max
+f[x]
+Pr(x)f[x]dx −
+q(x)f[x]dx
+
+,
+L[ϕ]
+=
+f[x∗
+j, ϕ] −
+f[xi, ϕ]
+=
+f[g[zj, θ], ϕ] −
+f[xi, ϕ],
+∂f[x, ϕ]
+< 1.
+b =
+
+Pr(x=1), Pr(x=2), Pr(x=3), Pr(x=4), q(x=1), q(x=2), q(x=3), q(x=4)
+Pr(z) =
+
+
+
+
+
+z < 0
+z > 1
+,
+Pr(z) =
+
+
+
+
+
+z < a
+a ≤z ≤a + 1
+z > a
+.
+Dkl = log
+
++ σ2
+1 + (µ1 −µ2)2
+Dw = (µ1 −µ2)2 + σ1 + σ2 −2√σ1σ2,
+Pr(x|ϕ)
+=
+∂f[z, ϕ]
+=
+i=1
+Pr(xi|ϕ)
+#
+=
+i=1
+Pr(xi|ϕ)
+i#
+=
+i=1
+"
+∂f[zi, ϕ]
+#
+
+
+#
+,
+that x∗= f[z∗, ϕ].
+Pr(x|ϕ) =
+∂f[z, ϕ]
+x = f[z, ϕ] = fK
+
+
+f1[z, ϕ1], ϕ2
+
+
+.
+z = f−1[x, ϕ] = f−1
+
+
+K [x, ϕK], ϕK−1
+
+
+.
+∂f[z, ϕ]
+= ∂fK[fK−1, ϕK]
+· ∂fK−1[fK−2, ϕK−1]
+. . . ∂f2[f1, ϕ2]
+· ∂f1[z, ϕ1]
+,
+∂f[z, ϕ]
+=
+∂fK[fK−1, ϕK]
+·
+∂fK−1[fK−2, ϕK−1]
+. . .
+∂f2[f1, ϕ2]
+·
+∂f1[z, ϕ1]
+.
+=
+i=1
+∂f[zi, ϕ]
+−1#
+=
+i=1
+
+∂f[zi, ϕ]
+
+
+
+#
+,
+A linear flow has the form f[h] = β + Ωh.
+Ω= PL(U + D),
+f[h] =
+f[h1, ϕ], f[h2, ϕ], . . . f[hD, ϕ]
+.
+∂f[h]
+=
+d=1
+∂f[hd]
+.
+f[hd, ϕ] =
+k=1
+!
++ (hK −b)ϕb,
+flow f[h, ϕ] as:
+=
+=
+h2, ϕ[h1]
+.
+=
+=
+2, ϕ[h1]
+.
+d = g
+hd, ϕ[h1:d−1]
+.
+=
+=
+h2, ϕ[h1]
+=
+h3, ϕ[h1:2]
+=
+h4, ϕ[h1:3]
+.
+=
+=
+2, ϕ[h1]
+=
+3, ϕ[h1:2]
+=
+4, ϕ[h1:3]
+.
+two parts h = [hT
+=
+h1 + f1[h2, ϕ1]
+=
+h2 + f2[h′
+1, ϕ2],
+=
+2 −f2[h′
+1, ϕ2]
+=
+1 −f1[h2, ϕ1].
+the same position as where y∗= z + f[z].
+f[z′], f[z]
+< β · dist
+y = z + f[z]
+y∗−f[zk]. This has a fixed point at z + f[z] = y∗(figure 16.9b).
+
+I + ∂f[h, ϕ]
+
+=
+
+
+I + ∂f[h, ϕ]
+
+=
+∞
+k=1
+∂f[h, ϕ]
+,
+trace[A]
+=
+
+
+=
+
+
+=
+
+
+=
+
+
+
+=
+
+
+,
+trace[A]
+=
+
+
+≈
+i=1
+"
+i=1
+
+x −f[zi, ϕ]
+
+##
+.
+"
+"
+i=1
+δ[x −xi]
+##
+.
+Pr(z) =
+√
+
+,
+x = f[z] =
+1 + exp[−z].
+Ω1 =
+
+
+
+
+Ω2 =
+
+
+
+.
+Problem 16.6∗Prove that if x = f[z] = Az + b and Pr(z) = Normz[µ, Σ], then Pr(x) =
+Pr(x) = Pr(z) ·
+∂f[z]
+.
+LReLU[z] =
+(
+z < 0
+f[z] =
+LReLU[z1], LReLU[z2], . . . , LReLU[zD]
+.
+for the domain h′ ∈[0, 1] elementwise to an input h = [h1, h2, . . . , hD]T so that f[h] =
+[f[h1, ϕ], f[h2, ϕ], . . . , f[hD, ϕ]].
+h′ = f[h, ϕ] =
+[Kh −b] ϕb +
+k=1
+Pr(x) =
+Pr(x) =
+Pr(z = n)
+=
+Pr(x|z = n)
+=
+
+
+.
+=
+n=1
+Pr(x, z = n)
+=
+n=1
+Pr(x|z = n) · Pr(z = n)
+=
+n=1
+
+
+.
+Pr(z) = Normz[0, I].
+Pr(x|z, ϕ) = Normx
+f[z, ϕ], σ2I
+.
+Pr(x|ϕ)
+=
+=
+=
+f[z, ϕ], σ2I
+· Normz [0, I] dz.
+log[E[y]] > E[log[y]].
+i=1 with
+=
+i=1
+Pr(xi|ϕ)
+i#
+,
+Pr(xi|ϕ)
+=
+Normxi[f[z, ϕ], σ2I] · Normz[0, I]dz.
+rithm, we have log[E[y]] ≥E[log[y]]. The left-hand side of the figure corresponds
+g[E[y]] ≥E
+
+g[y]
+
+.
+
+E[y]
+
+
+log[y]
+
+,
+
+≥
+Pr(y) log[y]dy.
+Pr(y)h[y]dy
+
+≥
+Pr(y) log[h[y]]dy.
+log[Pr(x|ϕ)]
+=
+
+=
+
+,
+
+≥
+Pr(x, z|ϕ)
+
+ELBO[θ, ϕ] =
+q(z|θ) log
+Pr(x, z|ϕ)
+q(z|θ)
+
+ELBO[θ, ϕ]
+=
+q(z|θ) log
+Pr(x, z|ϕ)
+q(z|θ)
+
+=
+q(z|θ) log
+Pr(z|x, ϕ)Pr(x|ϕ)
+q(z|θ)
+
+=
+q(z|θ) log
+
+Pr(x|ϕ)
+
+dz +
+q(z|θ) log
+Pr(z|x, ϕ)
+q(z|θ)
+
+=
+
+Pr(x|ϕ)
+
++
+q(z|θ) log
+Pr(z|x, ϕ)
+q(z|θ)
+
+=
+
+Pr(x|ϕ)
+
+q(z|θ)
+Pr(z|x, ϕ)
+.
+bound on log[Pr(x|ϕ)].
+ELBO[θ, ϕ]
+=
+q(z|θ) log
+Pr(x, z|ϕ)
+q(z|θ)
+
+=
+q(z|θ) log
+q(z|θ)
+
+=
+q(z|θ) log [Pr(x|z, ϕ)] dz +
+q(z|θ) log
+q(z|θ)
+
+=
+q(z|θ) log
+
+Pr(x|z, ϕ)
+
+q(z|θ)
+,
+Pr(z|x, ϕ) = Pr(x|z, ϕ)Pr(z)
+Pr(x|ϕ)
+,
+q(z|x, θ) = Normz
+gµ[x, θ], gΣ[x, θ]
+,
+ELBO[θ, ϕ] =
+
+Pr(x|z, ϕ)
+
+q(z|x, θ)
+,
+
+a[z]
+
+=
+a[z]q(z|x, θ)dz ≈1
+n=1
+a[z∗
+n],
+ELBO[θ, ϕ]
+≈
+
+Pr(x|z∗, ϕ)
+
+q(z|x, θ)
+.
+q(z|x, θ)
+= 1
+
+Tr[Σ] + µT µ −Dz −log
+det[Σ]
+.
+z∗= µ + Σ1/2ϵ∗,
+=
+=
+Pr(x|z)
+=
+Normx[f[z, ϕ], σ2I]
+.
+n=1
+Pr(x|zn).
+=
+=
+=
+≈
+n=1
+,
+i q(z|xi, θ):
+Lnew = −ELBO[θ, ϕ] + λ1EP r(x)
+
+q(z|x, θ)
++ λ2r2
+
+q(z|θ)
+
+.
+ELBO[θ, ϕ]
+≈
+
+Pr(x|z∗, ϕ)
+
+q(z|x, θ)
+,
+Pr(h|x, ϕ)
+
+E[y]
+
+
+g[y]
+
+.
+q(z|x)
+Pr(z|x, ϕ)
+=
+q(z|x) log
+
+q(z|x)
+Pr(z|x, ϕ)
+
+function f[x]:
+∂
+∂ϕEP r(x|ϕ)
+
+f[x]
+
+,
+∂
+∂ϕEP r(x|ϕ)
+
+f[x]
+
+=
+EP r(x|ϕ)
+
+f[x] ∂
+
+Pr(x|ϕ)
+
+≈
+i=1
+f[xi] ∂
+
+Pr(xi|ϕ)
+
+.
+=
+1 −β1 · x +
+=
+1 −βt · zt−1 +
+q(z1|x)
+=
+q(zt|zt−1)
+=
+∀t ∈{2, . . . , T}.
+q(z1...T |x) = q(z1|x)
+t=2
+q(zt|zt−1).
+=
+1 −β1 · x +
+=
+1 −β2 · z1 +
+=
+1 −β1 · x +
+
++
+=
+1 −β1 · x +
+
++
+=
+=
+zt = √αt · x +
+√
+q(zt|x) = Normzt
+.
+=
+=
+q(zt) =
+q(zt−1|zt) = q(zt|zt−1)q(zt−1)
+.
+t |zt−1)q(zt−1|x∗). This is nor-
+=
+q(zt|zt−1, x)q(zt−1|x)
+q(zt|x)
+∝
+q(zt|zt−1)q(zt−1|x)
+=
+∝
+
+
+Normv [Aw, B] ∝Normw
+,
+Normw[a, A] · Normw[b, B]
+∝
+h A−1 + B−1−1(A−1a + B−1b),
+ A−1 + B−1−1i
+,
+1 −βtzt +
+
+=
+NormzT [0, I]
+=
+ft[zt, ϕt], σ2
+=
+f1[z1, ϕ1], σ2
+,
+t } are
+Pr(x, z1...T |ϕ1...T ) = Pr(x|z1, ϕ1)
+t=2
+Pr(x|ϕ1...T ) =
+i=1
+i#
+.
+log [Pr(x|ϕ1...T )]
+=
+
+=
+q(z1...T |x)
+
+≥
+q(z1...T |x)
+
+
+
+=
+q(z1...T |x)
+
+q(z1...T |x)
+
+= log
+"
+q(z1|x) QT
+t=2 q(zt|zt−1)
+#
+= log
+q(z1|x)
+
++log
+t=2 Pr(zt−1|zt, ϕt)
+t=2 q(zt|zt−1)
+#
++log
+.
+q(zt|zt−1) = q(zt|zt−1, x) = q(zt−1|zt, x)q(zt|x)
+q(zt−1|x)
+,
+q(z1...T |x)
+
+= log
+q(z1|x)
+
++ log
+t=2 Pr(zt−1|zt, ϕt)
+t=2 q(zt−1|zt, x)
+· q(zt−1|x)
+q(zt|x)
+#
++ log
+= log [Pr(x|z1, ϕ1)] + log
+t=2 Pr(zt−1|zt, ϕt)
+t=2 q(zt−1|zt, x)
+#
++ log
+q(zT |x)
+
+≈log [Pr(x|z1, ϕ1)] +
+t=2
+
+,
+
+
+=
+q(z1...T |x)
+
+≈
+q(z1...T |x)
+log [Pr(x|z1, ϕ1)] +
+t=2
+!
+= Eq(z1|x)
+log [Pr(x|z1, ϕ1)]
+−
+t=2
+Eq(zt|x)
+
+,
+Pr(x|z1, ϕ1) = Normx
+f1[z1, ϕ1], σ2
+,
+=
+ft[zt, ϕt], σ2
+=
+1 −βtzt +
+
+.
+=
+1 −βtzt +
+x −ft[zt, ϕt]
++ C.
+L[ϕ1...T ]
+=
+i=1
+
+}|
+{
+
+f1[zi1, ϕ1], σ2
++
+t=2
+1 −βtzit +
+|
+{z
+}
+−
+ft[zit, ϕt]
+|
+{z
+}
+,
+zt = √αt · x +
+√
+x =
+1 −βtzt +
+= (1 −αt−1)
+1 −βtzt +
+
+= (1 −αt−1)
+1 −βtzt +
+
+
+,
+1 −βtzt +
+=
++
+
+=
++
+
+= (1 −αt−1)(1 −βt) + βt
+=
+=
+L[ϕ1...T ]
+=
+i=1
+
+f1[zi1, ϕ1], σ2
++
+t=2
+
+
+−ft[zit, ϕt]
+.
+ft[zt, ϕt] =
+gt[zt, ϕt].
+L[ϕ1...T ] =
+i=1
+
+f1[zi1, ϕ1], σ2
++
+t=2
+gt[zit, ϕt] −ϵit
+.
+L[ϕ1...T ] =
+i=1
+xi −f1[zi1, ϕ1]
++
+t=2
+gt[zit, ϕt] −ϵit
++ Ci.
+xi −f1[zi1, ϕ1]
+=
+g1[zi1, ϕ1] −
+.
+L[ϕ1...T ] =
+i=1
+t=1
+gt[zit, ϕt] −ϵit
+,
+L[ϕ1...T ]
+=
+i=1
+t=1
+gt[zit, ϕt] −ϵit
+=
+i=1
+t=1
+h√αt · xi +
+√
+,
+t ∼Uniform[1, . . . T]
+ϵ ∼Norm[0, I]
+// Sample noise
+ℓi =
+zT ∼Normz[0, I]
+ˆzt−1 =
+√1−βt gt[zt, ϕt]
+ϵ ∼Normϵ[0, I]
+zt−1 = ˆzt−1 + σtϵ
+x =
+√1−β1 g1[z1, ϕ1]
+zt−1 = ˆzt−1 + σ2
+
+Pr(c|zt)
+
++ σtϵ.
+Text-to-image:
+xt =
+1 −βt · xt−1 +
+z = a · ϵ1 + b · ϵ2,
+E[z]
+=
+Var[z]
+=
+a2 + b2,
+√
+=
+Normv [Aw, B] ∝Normw
+.
+Normx[a, A]Normx[b, B] ∝Normx
+(A−1 + B−1)−1(A−1a + B−1b), (A−1 + B−1)−1i
+.
+Normw[a, A]
+Normw[b, B]
+= 1
+
+
+
+−d + (a −b)T B−1(a −b) + log
+ |B|
+|A|
+
+.
+αt−1 =
+=
+.
+Gt =
+∞
+k=0
+γkrt+k+1.
+to the policy π[at|st].
+v[st|π] = E
+Gt|st, π
+.
+q[st, at|π] = E
+.
+v∗[st] = max
+
+Gt|st, π
+.
+q∗[st, at] = max
+.
+π[at|st] ←argmax
+q∗[st, at]
+.
+v[st] =
+π[at|st]q[st, at].
+q[st, at] = r[st, at] + γ ·
+st+1
+Pr(st+1|st, at)v[st+1].
+v[st] =
+π[at|st]
+
+r[st, at] + γ ·
+st+1
+Pr(st+1|st, at)v[st+1]
+
+.
+q[st, at] = r[st, at] + γ ·
+st+1
+Pr(st+1|st, at)
+
+at+1
+π[at+1|st+1]q[st+1, at+1]
+
+.
+v[st] ←
+π[at|st]
+
+r[st, at] + γ ·
+st+1
+Pr(st+1|st, at)v[st+1]
+
+,
+π[at|st] ←argmax
+
+r[st, at] + γ ·
+st+1
+Pr(st+1|st, at)v[st+1]
+
+.
+π[a|s] ←argmax
+q[s, a]
+.
+q[st, at] ←q[st, at] + α
+
+r[st, at] + γ · q[st+1, at+1] −q[st, at]
+
+,
+mate r[st, at]+γ · q[st+1, at+1] after taking a single step.
+q[st, at] ←q[st, at] + α
+
+r[st, at] + γ · max
+
+q[st+1, a]
+
+−q[st, at]
+
+,
+L[ϕ] =
+
+r[st, at] + γ · max
+q[st+1, a, ϕ]
+−q[st, at, ϕ]
+,
+ϕ ←ϕ + α
+
+r[st, at] + γ · max
+q[st+1, a, ϕ]
+−q[st, at, ϕ]
+∂q[st, at, ϕ]
+.
+ϕ ←ϕ + α
+
+r[st, at] + γ · max
+q[st+1, a, ϕ−]
+−q[st, at, ϕ]
+∂q[st, at, ϕ]
+.
+q[st, at] ←q[st, at] + α
+
+r[st, at] + γ · max
+
+q[st+1, a]
+
+−q[st, at]
+
+q1[st, at]
+←
+q1[st, at] + α
+
+r[st, at] + γ · q2
+
+q1[st+1, a]
+−q1[st, at]
+
+q2[st, at]
+←
+q2[st, at] + α
+
+r[st, at] + γ · q1
+
+q2[st+1, a]
+−q2[st, at]
+
+.
+ϕ1 ←ϕ1+α
+
+r[st, at]+γ·q
+
+q[st+1, a, ϕ1]
+
+−q[st, at, ϕ1]
+∂q[st, at, ϕ1]
+ϕ2 ←ϕ2+α
+
+r[st, at]+γ·q
+
+q[st+1, a, ϕ2]
+
+−q[st, at, ϕ2]
+∂q[st, at, ϕ2]
+.
+Pr(τ|θ)
+=
+t=1
+π[at|st, θ]Pr(st+1|st, at).
+
+r[τ]
+= argmax
+Pr(τ|θ)r[τ]dτ
+
+,
+←
+θ + α · ∂
+Pr(τ|θ)r[τ]dτ
+=
+θ + α ·
+Z ∂Pr(τ|θ)
+r[τ]dτ.
+←
+θ + α ·
+Z ∂Pr(τ|θ)
+r[τ]dτ
+=
+θ + α ·
+Pr(τ|θ)
+Pr(τ|θ)
+∂Pr(τ|θ)
+r[τ]dτ
+≈
+θ + α · 1
+i=1
+Pr(τ i|θ)
+∂Pr(τ i|θ)
+r[τ i].
+∂log[f[z]]
+=
+f[z]
+∂f[z]
+θ ←θ + α · 1
+i=1
+
+Pr(τ i|θ)
+
+r[τ i].
+log[Pr(τ|θ)]
+=
+t=1
+π[at|st, θ]Pr(st+1|st, at)
+=
+
+
++
+t=1
+
+π[at|st, θ]
+
++
+t=1
+
+Pr(st+1|st, at)
+
+,
+θ ←θ + α · 1
+i=1
+t=1
+
+π[ait|sit, θ]
+
+r[τ i],
+r[τ i] =
+t=1
+rit =
+k=1
+rik +
+k=t
+θ ←θ + α · 1
+i=1
+t=1
+
+π[ait|sit, θ]
+
+k=t
+r[τ it] =
+k=t+1
+
+πait[sit, θ]
+
+r[τ it]
+θ ←θ + α · 1
+i=1
+t=1
+
+πait[sit, θ]
+
+(r[τ it] −b) .
+t=1
+
+πait[sit, θ]
+
+#
+= 0,
+b =
+t=1
+
+πait[sit, θ]
+
+/∂θ
+2 r[τ it]
+t=1
+
+πait[sit, θ]
+
+/∂θ
+.
+b = 1
+r[τ i].
+θ ←θ + α · 1
+i=1
+t=1
+
+πait[sit, θ]
+
+(r[τ it] −b[sit]) .
+L[ϕ] =
+i=1
+t=1
+
+v[sit, ϕ] −
+j=y
+
+
+.
+k=t rk
+k=1
+r[τ ik] ≈rit + γ · v[si,t+1, ϕ].
+θ ←θ + α · 1
+i=1
+t=1
+
+Pr(ait|sit, θ)]
+
+
+rit + γ · v[si,t+1, ϕ] −v[si,t, ϕ]
+
+.
+L[ϕ] =
+i=1
+t=1
+(rit + γ · v[si,t+1, ϕ] −v[si,t, ϕ])2 .
+π′[at|st] = argmax
+
+r[st, at] + γ ·
+st+1
+Pr(st+1|st, at)v[st+1|π]
+
+.
+
+st, π′[a|st]
+
+v[st|π]
+≤
+st, π′[at|st]
+=
+rt+1 + γ · v[st+1|π]
+.
+π[a|s] =
+
+q[s, a]/τ
+
+
+q[s, a′]/τ
+.
+
+q[s, a]
+
+= r[s, a] + γ · max
+
+q[s′, a]
+
+.
+
+q1[s, a]
+
+
+q2[s, a]
+
+∞
+<
+q1[s, a] −q2[s, a]
+∞
+ ∂
+
+Pr(τ|θ)
+
+
+= 0,
+a′ = a −c(b −µb).
+g[θ](r[τ t] −b)
+,
+g[θ] =
+t=1
+
+Pr(at|st, θ)]
+
+,
+r[τ t] =
+k=t
+b = E[g[τ]2]r[τ]
+E[g[τ]2]
+.
+Mod-
+Im-
+The pro-
+notation {xi, yi}I
+argminx[f[x]], then minx[f[x]] = f[y].
+such that f[n] < c ∗g[n] for all n > n0.
+||f[z1] −f[z2]|| ≤β||z1 −z2||,
+Γ[x] =
+x ∈{1, 2, . . .}.
+f[x]δ[x −x0]dx = f[x0].
+√
+.
+
+
+=
+r[τ] =
+−∞
+f[t + τ]f[t]dt,
+||z||p =
+d=1
+|zd|p
+!1/p
+.
+||Z||F =
+
+
+i=1
+j=1
+|zij|2
+
+
+1/2
+.
+Cij =
+d=1
+aT b = bT a =
+d=1
+aT b = ||a||||b|| cos[θ].
+|AT |
+=
+|A|
+|AB|
+=
+|A||B|
+|A−1|
+=
+1/|A|.
+trace[AT]
+=
+trace[A]
+trace[AB]
+=
+trace[BA]
+trace[A + B]
+=
+trace[A] + trace[B]
+trace[ABC]
+=
+trace[BCA] = trace[CAB],
+general, trace[ABC]̸ = trace[BAC].
+so A−1 = AT .
+
+
+
+
+
+
+
+=
+
+
+
+.
+f[z1, z2, . . . zD] = ϕ1z1 + ϕ2z2 + . . . ϕDzD,
+=
+ϕ10 + ϕ11z1 + ϕ12z2 + ϕ13z3
+=
+ϕ20 + ϕ21z1 + ϕ22z2 + ϕ23z3
+=
+ϕ20 + ϕ31z1 + ϕ32z2 + ϕ33z3.
+
+
+
+=
+
+
+
++
+
+
+
+
+
+
+
+,
+y = ax
+−→
+∂x = a,
+y = Ax
+−→
+∂x = AT .
+=
+=
+Pr(x|y) = Pr(x, y)
+Pr(y|x) = Pr(x, y)
+Pr(x, y) = Pr(x|y)Pr(y) = Pr(y|x)Pr(x),
+Pr(x|y) = Pr(y|x)Pr(x)
+.
+=
+Pr(x|y)Pr(y) = Pr(x)Pr(y)
+
+f[x]
+
+=
+f[x]Pr(x)dx.
+
+f[x, y]
+
+=
+f[x, y]Pr(x, y)dxdy.
+and write E[f[x]] instead of Ex[f[x]].
+
+f[x]
+
+i=1
+f[xi].
+
+
+=
+
+k · f[x]
+
+=
+
+f[x]
+
+
+f[x] + g[x]
+
+=
+
+f[x]
+
++ E
+
+g[x]
+
+
+f[x] · g[y]
+
+=
+
+f[x]
+
+
+g[y]
+
+
+
+=
+=
+=
+
+k · [x]
+
+=
+k · f[x]Pr(x)dx
+=
+f[x]Pr(x)dx
+=
+
+f[x]
+
+.
+The expectation of a sum E[f[x] + g[x]] of terms is the sum E[f[x]] + E[g[x]] of
+
+f[x] + g[x]
+
+=
+(f[x] + g[x]) · Pr(x)dx
+=
+Z  f[x] · Pr(x) + g[x] · Pr(x)
+
+=
+f[x] · Pr(x)dx +
+g[x] · Pr(x)dx
+=
+
+f[x]
+
++ E
+
+g[x]
+
+.
+The expectation of a product E[f[x]·g[y]] of terms is the product E[f[x]]·E[g[y]]
+
+f[x] · g[y]
+
+=
+f[x] · g[y]Pr(x, y)dxdy
+=
+f[x] · g[y]Pr(x)Pr(y)dxdy
+=
+f[x] · Pr(x)dx
+g[y] · Pr(y)dy
+=
+
+f[x]
+
+
+g[y]
+
+,
+
+
+=
+
+A · f[x]
+
+=
+
+f[x]
+
+
+f[x] + g[x]
+
+=
+
+f[x]
+
++ E
+
+g[x]
+
+
+f[x]T g[y]
+
+=
+
+f[x]
+
+g[y]
+
+
+= E
+
+
+
+=
+
+=
+
+
+
++ E
+
+=
+
+
+
++ µ2
+=
+
+−2µ2 + µ2
+=
+
+=
+
+
+z = x −µ
+,
+E[z]
+=
+
+=
+
+
+=
+
+
+
+
+=
+σ (µ −µ) = 0,
+
+=
+
+(z −E[z])2
+=
+
+=
+2#
+=
+σ2 · E[(x −µ)2]
+=
+σ2 · σ2 = 1.
+x = µ + σz.
+z = Σ−1/2(x −µ).
+x = µ + Σ1/2z.
+Pr(x) = Normx[µ, σ2] =
+√
+
+
+.
+√
+Normx[µ, Σ] =
+(2π)D/2|Σ|1/2 exp
+
+
+.
+Σspher =
+
+
+Σdiag =
+
+
+Σfull =
+
+
+.
+=
+|Σ|
+
+
+
+=
+
+ 
+ 
+
+=
+
+
+·
+
+
+=
+Normx[a, A]Normx[b, B] ∝Normx
+(A−1 + B−1)−1(A−1a + B−1b), (A−1 + B−1)−1i
+.
+Normx [Ay + b, Σ] ∝Normy[(AT Σ−1A)−1AT Σ−1(x −b), (AT Σ−1A)−1].
+x∗= F−1[z∗].
+Pr(x, y, z) = Pr(x)Pr(y|x)Pr(z|y).
+
+p(x)||q(x)
+
+=
+
+=
+
+=
+−
+
+≥
+
+
+=
+=
+1 −1 = 0.
+The KL divergence is not symmetric (i.e., DKL[p(x)||q(x)]̸= DKL[q(x)||p(x)]).
+= 1
+
+p(x) + q(x)
+
++ 1
+
+p(x) + q(x)
+
+.
+=
+p(x)q(y)|x −y|2dxdy
+
+,
+Norm[µ1, Σ1]
+Norm[µ2, Σ2]
+=
+
+|Σ2|
+|Σ1| −D + tr
+
+
++ (µ2 −µ1)Σ−1
+
+.
+F r/W
+Norm[µ1, Σ1]
+Norm[µ2, Σ2]
+= |µ1 −µ2|2 + tr
+Σ1 + Σ2 −2 (Σ1Σ2)1/2i
+.
+Im-
+Im-
+https://www.forter.com/blog/lets-
+talk-about-generative-ai-and-fraud/. 428
+stereo-
+/ / medium . com / @blaisea / do - algorithms -
+reveal - sexual - orientation - or - just -
+& Wahed,
+The de-
+sexu-
+www.newsweek.com/ai-can-tell-if-youre-
+IN-
+article/machine- bias- risk- assessments-
+2019. https://www.wsj.com/articles/mtas-
+initial- foray- into- facial- recognition-
+at-high-speed-is-a-bust-11554642000. 427
+Inter-
+&
+& Morik,
+Eu-
+In-
+& Hsieh, C.-J. (2019).
+&
+Come-
+3D U-Net:
+https : / / www . theverge . com / 2022 / 7 / 22 /
+23274958 / google - ai - engineer - blake -
+Vasude-
+& Le,
+&
+Distill, https://distill.pub/2021/
+https : / / github . com /
+&
+Iden-
+Inter-
+&
+Inter-
+https://people.cs.umass.edu/~domke/. 116
+&
+Inter-
+Inter-
+& Pa-
+Tu-
+https://www.
+6 - neural - natural - language - generation -
+& Doya,
+8(3/4). 423
+ERNIE-
+The fu-
+&
+Inter-
+&
+is - enabling - script - kiddies - to - write -
+why-businesses-need-explainable-ai-and-
+how-to-deliver-it/. 13
+&
+&
+com/2022/07/07/1055526/why-business-is-
+booming- for- military- ai- startups/.
+Lec-
+~tijmen / csc321 / slides / lecture _ slides _
+Denois-
+Cas-
+Train-
+& Wang, H.-M. (2017a).
+C.-W.,
+&
+Snap-
+https://
+learning - rate - implications - of - scale -
+&
+Ter-
+batch-
+&
+& Laine,
+Analyz-
+&
+J.-w.,
+S.-J.,
+J.-J.,
+& Shin,
+Auto-
+Inter-
+technologyreview.com/2018/11/17/66372/
+one- of- the- fathers- of- ai- is- worried-
+about-its-future/. 430
+In-
+https://www.nitrd.gov/pubs/
+Inter-
+In-
+//www.skynettoday.com/overviews/neural-
+In-
+Detec-
+Ma-
+03/07/opinion/artificial- intelligence-
+&
+ker-
+Inter-
+& Yang,
+IEEE/CVF Inter-
+Object-
+& Hutter,
+Decou-
+S.-P.,
+&
+&
+com/gadgets/2023/04/generative- ai- is-
+cool-but-lets-not-forget-its-human-and-
+&
+io / 2020 / 02 / 18 / BatchNorm - exploding -
+Neu-
+&
+&
+Mao, Q., Lee, H.-Y., Tseng, H.-Y., Ma, S., &
+/ / www . vice . com / en / article / a33xb4 / a -
+frightening-ai-can-determine-a-persons-
+A logi-
+output/perspectives-on-big-data-ethics-
+and-society/. 430
+Ma-
+Ro-
+& Assel-
+&
+In-
+//distill.pub/2019/gan-open-problems. 299
+Dis-
+https : / / distill . pub / 2016 / deconv -
+org/wiki/File:Chess_pieces_and_board_
+Park, S.-W., Ko, J.-S., Huh, J.-H., & Kim, J.-C.
+&
+Con-
+&
+Com-
+sions. https://www.borealisai.com/en/blog/
+ing. https://www.borealisai.com/en/blog/
+tutorial- 17- transformers- iii- training/.
+com / research - blogs / explainability - i -
+Meth-
+&
+&
+A Style-
+image-to-image
+//thegradient.pub/ai-democratization-in-
+the-era-of-gpt-3/. 430
+& Adams,
+High-
+& van
+Artifi-
+in-
+Neu-
+//distill.pub/2021/gnn-intro/. 261
+Inter-
+&
+INTER-
+Learn-
+&
+&
+LeGres-
+LeGres-
+De-
+Inter-
+&
+&
+&
+Prob-
+Jour-
+&
+Im-
+&
+Deep la-
+Neu-
+A., & Andriyash, E. (2018b). DVAE++: Dis-
+&
+face - depixelizer - ai - machine - learning -
+Ma-
+T.-C.,
+M.-Y.,
+J.-Y.,
+&
+&
+&
+Du-
+&
+qual-
+progan-how-nvidia-generated-images-of-
+Learn-
+&
+&
+& Xiao,
+DNA-
+IEEE/CVF Com-
+Invert-
+In-
+&
+IEEE/CVF Com-
+Multi-scale con-
+IEEE/CVF In-
+&
+&
+&
+A selec-
+&
+&
+Ex-
+&
+To-
+&
+Eu-
+& Li,
+N., & Liang, J. (2018). UNet++: A nested U-
+Inter-
+<cls> token, 221
+++, 205

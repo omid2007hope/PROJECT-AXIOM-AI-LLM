@@ -1,0 +1,149 @@
+Vue-CLI
+<html>
+<head>
+<script type="text/javascript" src="vue.min.js"></script>
+</head>
+<body>
+</body>
+</html>
+(https://cdn.jsdelivr.net/npm/vue/dist/vue.js)
+(https://cdnjs.cloudflare.com/ajax/libs/vue/2.4.0/vue.js).
++ vue-cli@2.8.2
+<html>
+<head>
+<title>VueJs Introduction</title>
+<script type="text/javascript" src="js/vue.js"></script>
+</head>
+<body>
+<div id="intro" style="text-align:center;">
+<h1>{{ message }}</h1>
+</div>
+<script type="text/javascript">
+var vue_det = new Vue({
+data: {
+}
+});
+</script>
+</body>
+</html>
+<script type="text/javascript" src="js/vue.js"></script>
+<div id="intro" style="text-align:center;">
+<h1>{{ message }}</h1>
+</div>
+var vue_det = new Vue({
+data: {
+}
+})
+var app = new Vue({
+// options
+})
+<html>
+<head>
+<title>VueJs Instance</title>
+<script type="text/javascript" src="js/vue.js"></script>
+</head>
+<body>
+<div id="vue_det">
+<h1>Firstname : {{firstname}}</h1>
+<h1>Lastname : {{lastname}}</h1>
+<h1>{{mydetails()}}</h1>
+</div>
+<script type="text/javascript" src="js/vue_instance.js"></script>
+</body>
+</html>
+var vm = new Vue({
+el: '#vue_det',
+data: {
+},
+}
+}
+})
+<div id="vue_det"></div>
+<div id="vue_det">
+<h1>Firstname : {{firstname}}</h1>
+<h1>Lastname : {{lastname}}</h1>
+</div>
+<h1>{{mydetails()}}</h1>
+<html>
+<head>
+<title>VueJs Introduction</title>
+<script type="text/javascript" src="js/vue.js"></script>
+</head>
+<body>
+<script type="text/javascript">
+var _obj = { fname: "Raj", lname: "Singh"}
+var vm = new Vue({
+});
+</script>
+</body>
+</html>
+<html>
+<head>
+<title>VueJs Introduction</title>
+<script type="text/javascript" src="js/vue.js"></script>
+</head>
+<body>
+<script type="text/javascript">
+var _obj = { fname: "Raj", lname: "Singh"};
+var vm = new Vue({
+});
+}
+});
+</script>
+</body>
+</html>
+}
+})
+props: {
+// just type check
+age: {
+return value >= 0
+}
+}
+}
+})
+props: ['msg'],
+template: '<div>{{ msg }}</div>'
+})
+var vm = new Comp({
+}
+})
+<html>
+<head>
+<title>VueJs Introduction</title>
+<script type="text/javascript" src="js/vue.js"></script>
+</head>
+<body>
+<script type="text/javascript">
+var vm = new Vue({
+data: { a: 2 },
+},
+// both get and set
+},
+this.a = v*2;
+}
+}
+}
+})
+console.log(vm.aSquare); // -> 4
+console.log(vm.a); // -> 6
+console.log(vm.aSum); // -> 8
+</script>
+</body>
+</html>
+<html>
+<head>
+<title>VueJs Introduction</title>
+<script type="text/javascript" src="js/vue.js"></script>
+</head>
+<body>
+<script type="text/javascript">
+var vm = new Vue({
+data: { a: 5 },
+this.a *= this.a;
+}
+}
+})
+</script>
+</body>
+</html>

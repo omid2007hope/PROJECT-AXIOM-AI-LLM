@@ -1,0 +1,90 @@
+X ———–> Y
+13-May-02
+13-May-02
+13-May-02
+1-July-02
+13-May-02
+13-May-02
+13-May-02
+1-July-02
+13-May-02
+13-May-02
+1-July-02
+1. ____________________ produces a lower normal form.
+____________________.
+3. An attribute that cannot be further divided is said to display ____________________.
+4. ____________________ refers to the level of detail represented by the values stored in a
+5. A relational table must not contain ____________________ groups.
+contents/606cc532-0b1d-419d-a0ec-ac4e2e2d533b@1@1
+(
+);
+(
+);
+(
+);
+(
+);
+(
+);
+(
+)
+(col_name [, col_name2 […, col_name16]])
+[ON segment_name]
+(
+)
+[FOREIGN KEY (col_name [, col_name2 […, col_name16]])]
+REFERENCES [owner.]ref_table [(ref_col [, ref_col2 […, ref_col16]])]
+(
+)
+(
+)
+(
+)
+[FOR col_name]
+(
+‘ [0-9][0-9][0-9] – [0-9][0-9] [0-9] – [0-9][0-9][0-9] ‘)
+)
+EMP_NUM
+269-311.
+604-232-3232
+604-244-2322
+WHERE qty >= 20 and qty <= 50
+SELECT *
+SELECT *
+%
+_
+[ ]
+[^]
+SELECT *
+SELECT *
+INSERT [INTO] Table_name | view name [column_list]
+)
+SET job_lvl =
+DELETE [FROM] {table_name | view_name }
+[WHERE clause]
+COUNT(*)
+Example #3: COUNT (*)
+WHERE job_lvl = 35
+1-4
+1-12
+1-366
+1-31
+1-53
+1-7 (Sun.-Sat.)
+0-23
+0-59
+0-59
+0-999
+CREATE TABLE [dbo].[tblCustomers]
+);
+CREATE TABLE [dbo].[tblSupplier] (
+);
+CREATE TABLE [dbo].[tblShippers] (
+);
+CREATE TABLE [dbo].[tblProducts] (
+);
+CREATE TABLE [dbo].[tblOrders] (
+);
+);
+)
+CREATE TABLE [dbo].[tblEmployee](
