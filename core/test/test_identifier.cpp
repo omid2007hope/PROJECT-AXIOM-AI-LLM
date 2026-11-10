@@ -148,6 +148,11 @@ bool test_identifier() {
 			auto sandbox_files = Identifier::identify_directory(sandbox_dir, false);
 			identified_files.insert(identified_files.end(), sandbox_files.begin(), sandbox_files.end());
 		}
+		std::filesystem::path pdfs_dir = test_core_dir() / "pdfs";
+		if (std::filesystem::exists(pdfs_dir)) {
+			auto pdf_files = Identifier::identify_directory(pdfs_dir, false);
+			identified_files.insert(identified_files.end(), pdf_files.begin(), pdf_files.end());
+		}
 	}
 	test_check(!identified_files.empty(), "identify_directory finds files in asset_sample/", s_pass, s_fail);
 	test_check(identified_files.size() >= 70, "identify_directory indexed at least 70 assets", s_pass, s_fail);

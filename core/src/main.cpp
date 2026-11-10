@@ -1276,8 +1276,20 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 					}
 					std::cout << "   " << std::flush;
 
-					// 1. ANOMALY TRIPWIRE (Fail Fast on Divergence)
-					if (current_loss > 25.0 || std::isnan(current_loss)) {
+					// Normalized evaluation loss: per-token validation loss or normalized window loss
+					const double effective_loss =
+						(has_validation && validation_loss > 0.0)
+							? validation_loss
+							: (portion.context_window_size > 0
+								   ? (current_loss / static_cast<double>(portion.context_window_size))
+								   : current_loss);
+
+					// 1. ANOMALY TRIPWIRE (Ignore warmup; halt only on NaN or genuine post-warmup explosion)
+					constexpr size_t warmup_guard_steps = 1000;
+					if (std::isnan(current_loss) ||
+						(step >= warmup_guard_steps &&
+						 (effective_loss > 25.0 || current_loss > 2500.0 ||
+						  (first_loss && current_loss > *first_loss * 3.0)))) {
 						std::cerr
 							<< "\n[FATAL ANOMALY] Loss exploded to " << current_loss
 							<< ". Gradients destabilized. Halting to prevent VRAM corruption.\n";
@@ -1285,11 +1297,11 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 						break; // Kill the loop instantly
 					}
 
-					// 2. EARLY STOPPING (1.5 - 3.0 Sweet Spot with Warmup Guard)
-					if (step >= config::loss_report_interval && current_loss <= target_stop_loss &&
-						current_loss > 0.0 && step < target_steps) {
+					// 2. EARLY STOPPING (Ignore first 1,000 steps; stop when normalized loss <= target_stop_loss)
+					if (step >= warmup_guard_steps && effective_loss <= target_stop_loss &&
+						effective_loss > 0.0 && step < target_steps) {
 						std::cout << "\n[!] Target loss threshold reached (" << std::setprecision(4)
-								  << current_loss << " <= " << target_stop_loss
+								  << effective_loss << " <= " << target_stop_loss
 								  << "). Halting to lock in generalization.\n";
 						ai.save_weights(weights_path.string());
 						parser.save_vocabulary(vocab_path, input);
