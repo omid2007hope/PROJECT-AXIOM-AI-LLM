@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <filesystem>
 #include <io.h> // For _isatty() and _fileno()
 #include <iomanip>
@@ -1102,10 +1103,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 	size_t total_dataset_steps =
 		(available_span > 0) ? ((available_span - 1) / window_stride + 1) : 0;
 
-	size_t target_steps =
-		(max_steps > 0)
-			? std::min(max_steps, total_dataset_steps > 0 ? total_dataset_steps : max_steps)
-			: total_dataset_steps;
+	size_t target_steps = (max_steps > 0) ? max_steps : total_dataset_steps;
 
 	if (target_steps == 0) {
 		std::cerr << "[!] No training data available in " << optimizer.data_path.filename().string()
@@ -1124,6 +1122,9 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
 	std::optional<double> first_loss;
+	double lowest_loss = 1e9;
+	std::deque<double> recent_losses;
+	double rolling_loss_sum = 0.0;
 	auto session_start_time = std::chrono::steady_clock::now();
 	bool fatal_anomaly = false;
 	bool checkpoint_saved = false;
@@ -1168,6 +1169,9 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
 					first_loss.reset();
+					lowest_loss = 1e9;
+					recent_losses.clear();
+					rolling_loss_sum = 0.0;
 					session_start_time = std::chrono::steady_clock::now();
 					std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
 				} else {
@@ -1209,14 +1213,31 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 				TrainingTelemetry telemetry {};
 				if (ai.read_telemetry(telemetry)) {
 					current_loss = telemetry.mean_loss;
-					if (telemetry.nonfinite_count > 0 || !std::isfinite(current_loss)) {
-						std::cerr << "\n[!] Training aborted at step " << step
-								  << ": non-finite gradient or activation detected ("
-								  << telemetry.nonfinite_count
-								  << " events). Existing checkpoint preserved.\n";
+					if (!std::isfinite(current_loss) || telemetry.nonfinite_count > 0) {
+						std::cerr << "\n[ABORT] Non-finite loss detected (" << current_loss
+								  << "). Preserving last checkpoint.\n";
 						fatal_anomaly = true;
 						break;
 					}
+					if (step > 20 && current_loss > lowest_loss * 2.0) {
+						std::cerr << "\n[ABORT] Loss spike divergence (" << current_loss
+								  << " > 2x lowest " << lowest_loss << "). Preserving last checkpoint.\n";
+						fatal_anomaly = true;
+						break;
+					}
+					recent_losses.push_back(current_loss);
+					rolling_loss_sum += current_loss;
+					if (recent_losses.size() > 50) {
+						rolling_loss_sum -= recent_losses.front();
+						recent_losses.pop_front();
+					}
+					double rolling_avg_50 = rolling_loss_sum / recent_losses.size();
+					if (step > 100 && recent_losses.size() == 50 &&
+						std::fabs(current_loss - rolling_avg_50) < 1e-4) {
+						std::cerr << "\n[ABORT] Loss plateaued for 100 steps.\n";
+						break;
+					}
+					lowest_loss = std::min(lowest_loss, current_loss);
 
 					if (!first_loss) {
 						first_loss = current_loss;
@@ -1339,14 +1360,20 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 		}
 
 		// When the RAM buffer is exhausted, the offset resets to 0.
-		// Pull the next massive chunk from disk into RAM.
+		// Pull the next massive chunk from disk into RAM or cycle to next epoch.
 		if (portion.offset == 0) {
 			if (!portion.ram_buffer_token_ids.empty()) {
-				// Completed pass over in-memory token IDs
+				if (step < target_steps) {
+					continue;
+				}
 				break;
 			}
 			optimizer.disk_to_ram(portion);
 			if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
+				if (step < target_steps && total_dataset_steps > 0) {
+					optimizer.disk_to_ram(portion);
+					continue;
+				}
 				break;
 			}
 		}

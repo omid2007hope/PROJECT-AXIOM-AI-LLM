@@ -35,7 +35,7 @@ TEST_TARGET      = test.exe
 TEST_LOSS_TARGET = test_loss.exe
 TEST_LOSS_SRC    = test/CUDA/test_loss.cu
 DLL_TARGET       = build/axiom_core.dll
-DLL_SRCS         = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp $(UTIL_SRCS)
+DLL_SRCS         = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp src/cuda_graph.cpp src/interface.cpp src/paged_cache.cpp src/training.cpp $(UTIL_SRCS)
 DLL_OBJS         = $(DLL_SRCS:.cpp=.o)
 
 # ─── Default: compile everything ──────────────────────────────────────────────
