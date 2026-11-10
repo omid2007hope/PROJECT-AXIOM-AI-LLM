@@ -37,10 +37,11 @@ def is_symbol_heavy(text: str) -> bool:
     return (symbols / max(alphanumeric, 1)) > 0.15
 
 
-def separate_with_fitz(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: Path):
+def separate_with_fitz(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: Path, extract_images: bool = False):
     stem = pdf_path.stem
     prose_lines, symbol_lines = [], []
     image_count = 0
+    seen_xrefs = set()
 
     try:
         doc = fitz.open(str(pdf_path))
@@ -61,20 +62,28 @@ def separate_with_fitz(pdf_path: Path, text_dir: Path, symbols_dir: Path, images
                 else:
                     prose_lines.append(clean_line)
 
-            # Rapid raw stream image extraction by XREF
-            for img_info in page.get_images(full=True):
-                xref = img_info[0]
-                try:
-                    base_image = doc.extract_image(xref)
-                    img_bytes = base_image.get("image")
-                    ext = base_image.get("ext", "png")
-                    if img_bytes:
-                        img_filename = f"{stem}_p{page_idx + 1}_xref{xref}.{ext}"
-                        with open(images_dir / img_filename, "wb") as f_img:
-                            f_img.write(img_bytes)
-                        image_count += 1
-                except Exception:
-                    pass
+            # Rapid image extraction (deduplicated by XREF & filtered for genuine diagrams)
+            if extract_images:
+                for img_info in page.get_images(full=True):
+                    xref = img_info[0]
+                    if xref in seen_xrefs:
+                        continue
+                    seen_xrefs.add(xref)
+                    try:
+                        base_image = doc.extract_image(xref)
+                        w = base_image.get("width", 0)
+                        h = base_image.get("height", 0)
+                        if w < 100 or h < 100:
+                            continue  # Skip decorative bullets, 1px rules, and tiny icons
+                        img_bytes = base_image.get("image")
+                        ext = base_image.get("ext", "png")
+                        if img_bytes:
+                            img_filename = f"{stem}_xref{xref}.{ext}"
+                            with open(images_dir / img_filename, "wb") as f_img:
+                                f_img.write(img_bytes)
+                            image_count += 1
+                    except Exception:
+                        pass
         except Exception:
             continue
 
@@ -138,10 +147,10 @@ def separate_with_pypdf(pdf_path: Path, text_dir: Path, symbols_dir: Path, image
     return words_text, words_symbols, image_count
 
 
-def separate_pdf(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: Path):
+def separate_pdf(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: Path, extract_images: bool = False):
     print(f"[..] Processing: {pdf_path.name}")
     if HAVE_FITZ:
-        return separate_with_fitz(pdf_path, text_dir, symbols_dir, images_dir)
+        return separate_with_fitz(pdf_path, text_dir, symbols_dir, images_dir, extract_images)
     else:
         return separate_with_pypdf(pdf_path, text_dir, symbols_dir, images_dir)
 
@@ -150,6 +159,8 @@ def main():
     parser = argparse.ArgumentParser(description="Axiom Multimodal High-Speed PDF Separator")
     parser.add_argument("--input-dir", type=str, default="asset_sample")
     parser.add_argument("--output-dir", type=str, default="asset_sample")
+    parser.add_argument("--extract-images", action="store_true", default=False,
+                        help="Extract embedded diagrams & figures (default: False for maximum text extraction speed)")
     args = parser.parse_args()
 
     input_str = args.input_dir
@@ -199,7 +210,7 @@ def main():
     total_images = 0
 
     for pdf in pdf_files:
-        t_words, s_words, imgs = separate_pdf(pdf, text_dir, symbols_dir, images_dir)
+        t_words, s_words, imgs = separate_pdf(pdf, text_dir, symbols_dir, images_dir, args.extract_images)
         total_prose += t_words
         total_symbols += s_words
         total_images += imgs
