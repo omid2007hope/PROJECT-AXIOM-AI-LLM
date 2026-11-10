@@ -403,6 +403,37 @@ __global__ static void sync_scattered_embeddings(const uint32_t* __restrict__ to
 	}
 }
 
+extern "C" CUDA_API bool backward_scatter_embeddings(
+	const GpuPortion* gpu_portion, GpuEmbeddings* gpu_embeddings, const void* d_dx,
+	size_t num_tokens, size_t embedding_dim, float learning_rate, int buffer_index, void* stream) {
+
+	if (!gpu_portion || !gpu_embeddings || !gpu_embeddings->d_table ||
+		!gpu_embeddings->d_table_master || !d_dx || buffer_index < 0 || buffer_index >= 2 ||
+		!gpu_portion->d_token_ids[buffer_index] || num_tokens == 0 || embedding_dim == 0) {
+		return false;
+	}
+
+	cudaStream_t s = stream ? static_cast<cudaStream_t>(stream)
+							: static_cast<cudaStream_t>(gpu_portion->stream[buffer_index]);
+	size_t input_dim = num_tokens * embedding_dim;
+	int threads = 256;
+	int blocks = static_cast<int>((input_dim + threads - 1) / threads);
+	bool update_table = true;
+
+	backward_scatter_embeddings_kernel<<<blocks, threads, 0, s>>>(
+		static_cast<const uint32_t*>(gpu_portion->d_token_ids[buffer_index]),
+		static_cast<float*>(gpu_embeddings->d_table_master), static_cast<const float*>(d_dx),
+		num_tokens, embedding_dim, gpu_embeddings->vocab_size, learning_rate, update_table);
+
+	sync_scattered_embeddings<<<blocks, threads, 0, s>>>(
+		static_cast<const uint32_t*>(gpu_portion->d_token_ids[buffer_index]),
+		static_cast<float*>(gpu_embeddings->d_table_master),
+		static_cast<__nv_bfloat16*>(gpu_embeddings->d_table), num_tokens, embedding_dim,
+		gpu_embeddings->vocab_size);
+
+	return CUDA_CHECK(cudaGetLastError());
+}
+
 extern "C" CUDA_API bool backward_pass_with_embeddings(
 	const GpuPortion* gpu_portion, GpuEmbeddings* gpu_embeddings, GpuWeights* gpu_weights,
 	const GpuActivations* gpu_activations, size_t input_dim, size_t output_dim, float learning_rate,

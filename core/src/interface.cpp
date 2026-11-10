@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <unordered_set>
 
 bool AI::predict(const std::vector<std::bfloat16_t>& context_window,
 		 std::vector<float>& output_prediction) {
@@ -79,13 +80,47 @@ bool AI::predict_tokens(const std::vector<uint32_t>& context_ids,
 	}
 
 	gpu_embeddings.active_vocab_size = active_vocab_size;
-	if (!forward_pass_with_embeddings(&gpu_portion,
-					  &gpu_embeddings,
-					  &gpu_weights,
-					  &gpu_activations,
-					  input_elements_x_total,
-					  target_elements_y_total,
-					  0)) {
+	if (enable_transformer && gpu_weights.d_query_weights != nullptr &&
+	    gpu_portion.d_context_window[0] != nullptr) {
+		const size_t model_dim = embedding_dim > 0 ? embedding_dim : target_elements_y_total;
+		const size_t sequence_length = context_ids.size();
+		size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
+		if (model_dim / heads > 64 && model_dim % 64 == 0) {
+			heads = model_dim / 64;
+		}
+		const size_t feedforward_network_dimension =
+			(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim) ? ffn_dimension
+																			: (model_dim * 4);
+
+		launch_gather_embeddings_batched(
+			static_cast<const uint32_t*>(gpu_portion.d_token_ids[0]), gpu_embeddings.d_table,
+			gpu_portion.d_context_window[0], static_cast<uint32_t>(sequence_length),
+			static_cast<uint32_t>(model_dim), static_cast<uint32_t>(vocab_size),
+			gpu_portion.stream[0]);
+
+		if (!transformer_forward_block(gpu_portion.d_context_window[0], &gpu_weights,
+									   &gpu_activations, sequence_length, model_dim, heads,
+									   feedforward_network_dimension, gpu_portion.stream[0])) {
+			std::cerr << "[AI Brain] Transformer forward block failed during prediction.\n";
+			return false;
+		}
+
+		gpu_portion.token_ids_active[0] = false;
+		const bool fwd_ok = forward_pass_with_embeddings(
+			&gpu_portion, &gpu_embeddings, &gpu_weights, &gpu_activations,
+			input_elements_x_total, target_elements_y_total, 0);
+		gpu_portion.token_ids_active[0] = true;
+		if (!fwd_ok) {
+			std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
+			return false;
+		}
+	} else if (!forward_pass_with_embeddings(&gpu_portion,
+											 &gpu_embeddings,
+											 &gpu_weights,
+											 &gpu_activations,
+											 input_elements_x_total,
+											 target_elements_y_total,
+											 0)) {
 		std::cerr << "[AI Brain] Forward pass failed during prediction.\n";
 		return false;
 	}
@@ -153,23 +188,34 @@ bool AI::generate(const std::string& prompt,
 
 		uint32_t token_id = 0;
 
+		// Repetition penalty window: tracks recently emitted tokens to prevent absorbing Markov loops
+		std::unordered_set<uint32_t> recent_tokens;
+		const size_t lookback = std::min<size_t>(context_ids.size(), 64);
+		for (size_t k = context_ids.size() - lookback; k < context_ids.size(); ++k) {
+			if (context_ids[k] != 0 && context_ids[k] != vocab::PAD) {
+				recent_tokens.insert(context_ids[k]);
+			}
+		}
+		constexpr float repetition_penalty = 1.35f;
+
 		if (config.temperature <= 1e-4f) {
-			// Greedy Fallback: directly use on-device GPU argmax winner
-			token_id = last_predicted_token_id;
-			if (token_id == 0) {
-				size_t vocab_sz =
-					(active_vocab_size > 0) ? active_vocab_size : vocab_size;
-				std::vector<float> probabilities(vocab_sz, 0.0f);
-				if (download_probabilities(
-					    &gpu_activations, probabilities.data(), vocab_sz)) {
-					float best_prob = -1.0f;
-					for (uint32_t id = 1; id < vocab_sz; ++id) {
-						if (probabilities[id] > best_prob) {
-							best_prob = probabilities[id];
-							token_id = id;
-						}
+			size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
+			std::vector<float> probabilities(vocab_sz, 0.0f);
+			if (download_probabilities(&gpu_activations, probabilities.data(), vocab_sz)) {
+				float best_prob = -1.0f;
+				for (uint32_t id = 1; id < vocab_sz; ++id) {
+					float p = probabilities[id];
+					if (recent_tokens.find(id) != recent_tokens.end()) {
+						p /= repetition_penalty;
+					}
+					if (p > best_prob) {
+						best_prob = p;
+						token_id = id;
 					}
 				}
+			}
+			if (token_id == 0) {
+				token_id = last_predicted_token_id;
 			}
 		} else {
 			size_t vocab_sz = (active_vocab_size > 0) ? active_vocab_size : vocab_size;
@@ -179,8 +225,12 @@ bool AI::generate(const std::string& prompt,
 				std::vector<std::pair<float, uint32_t>> candidates;
 				candidates.reserve(vocab_sz);
 				for (uint32_t id = 1; id < vocab_sz; ++id) {
-					if (probabilities[id] > 0.0f) {
-						candidates.emplace_back(probabilities[id], id);
+					float p = probabilities[id];
+					if (p > 0.0f) {
+						if (recent_tokens.find(id) != recent_tokens.end()) {
+							p /= repetition_penalty;
+						}
+						candidates.emplace_back(p, id);
 					}
 				}
 

@@ -25,6 +25,15 @@ CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_portion,
 					    int buffer_index,
 					    bool use_adamw);
 
+CUDA_API bool backward_scatter_embeddings(const GpuPortion* gpu_portion,
+					  GpuEmbeddings* gpu_embeddings,
+					  const void* d_dx,
+					  size_t num_tokens,
+					  size_t embedding_dim,
+					  float learning_rate,
+					  int buffer_index,
+					  void* stream);
+
 // Phase 3: Multi-Head Attention, SwiGLU & Transformer Backward Block
 CUDA_API bool fused_causal_backward(const void* grad_output,
 				    const void* query,

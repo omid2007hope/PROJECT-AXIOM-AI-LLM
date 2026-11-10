@@ -109,28 +109,40 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 			const bool fwd_ok = forward_pass_with_embeddings(
 				&gpu_portion, &gpu_embeddings, &gpu_weights, &gpu_activations,
 				input_elements_x_total, target_elements_y_total, buffer_index);
-			gpu_portion.token_ids_active[buffer_index] = true;
 			if (!fwd_ok) {
+				gpu_portion.token_ids_active[buffer_index] = true;
 				std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
 
-			// Readout loss, telemetry, and upstream gradient d_dx computation
+			// Readout loss, telemetry, and upstream gradient d_dx computation.
+			// token_ids_active is kept false so backward_pass_with_embeddings does NOT scatter prematurely into embedding table
 			if (!backward_pass_with_embeddings(&gpu_portion, &gpu_embeddings, &gpu_weights,
 											   &gpu_activations, input_elements_x_total,
 											   target_elements_y_total, learning_rate, buffer_index,
 											   true /* use_adamw */)) {
+				gpu_portion.token_ids_active[buffer_index] = true;
 				std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
+			gpu_portion.token_ids_active[buffer_index] = true;
 
 			// Sequence-parallel Transformer Backward Block (M = S)
+			// Backpropagates d_dx (readout gradient) through SwiGLU and Attention into d_dx (input embedding gradient)
 			if (!transformer_backward_block(gpu_portion.d_dx[buffer_index],
 											gpu_portion.d_dx[buffer_index],
 											gpu_portion.d_hidden_state[buffer_index], &gpu_weights,
 											&gpu_activations, sequence_length, model_dim, heads,
 											feedforward_network_dimension, learning_rate, stream)) {
 				std::cerr << "[AI Brain] Transformer backward block failed.\n";
+				return TrainStatus::Failed;
+			}
+
+			// Scatter the true post-transformer input gradient into the embedding table
+			if (!backward_scatter_embeddings(&gpu_portion, &gpu_embeddings,
+											 gpu_portion.d_dx[buffer_index], sequence_length,
+											 model_dim, learning_rate, buffer_index, stream)) {
+				std::cerr << "[AI Brain] Backward scatter embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
 		} else {

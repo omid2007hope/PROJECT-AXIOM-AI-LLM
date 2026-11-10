@@ -1459,7 +1459,7 @@ bool execute_training_session(
 	bool developer_mode, size_t max_steps, bool is_interactive, bool auto_archive, bool auto_purge,
 	uint32_t min_frequency = 3, double target_stop_loss = 2.8) {
 	parser.developer_mode = developer_mode;
-	ai.enable_transformer = false;
+	ai.enable_transformer = true;
 
 	if (mode != AppMode::BulkTrain && std::filesystem::exists(vocab_path)) {
 		std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
