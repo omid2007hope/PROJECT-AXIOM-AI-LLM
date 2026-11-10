@@ -1,160 +1,215 @@
-# PROJECT-AXIOM: Systems Architecture & Numerical Stability Protocol
+# PROJECT-AXIOM: Master Systems Architecture & Numerical Stability Protocol
 
-This document establishes the formal engineering specification for numerical stability, gradient backpropagation, multimodal data ingestion, and byte-level fusion within the native C++/CUDA Transformer engine.
-
----
-
-## 1. Forward vs. Backward Mathematical Coupling
-
-The backward pass cannot be verified in isolation because it inherits its operational state directly from the forward pass. Every backward gradient is the analytical derivative of intermediate operations computed during forward inference:
-
-$$\mathbf{Y} = \mathbf{X} \mathbf{W} \implies \nabla_{\mathbf{W}} \mathcal{L} = \mathbf{X}^T \nabla_{\mathbf{Y}} \mathcal{L}, \quad \nabla_{\mathbf{X}} \mathcal{L} = \nabla_{\mathbf{Y}} \mathcal{L} \mathbf{W}^T$$
-
-- **Poisoned Inputs:** If forward activations ($\mathbf{X}$) underflow, overflow, or lack normalization (e.g., missing RMSNorm scaling), backward kernels compute valid derivatives over poisoned activations, destabilizing parameter updates.
-- **Operator Symmetry:** Structural modifications to forward kernels (e.g., transitioning from standard GeLU to gated SwiGLU) require exact analytical derivatives in the backward pass. Mismatched forward-backward operators yield gradient ascent instead of descent.
+This document establishes the formal, end-to-end engineering specification, mathematical analysis, and 4-gate diagnostic plan for Project Axiom.
 
 ---
 
-## 2. Deterministic Isolation Pipeline
+## 1. Executive Analysis & Mathematical Root Causes
 
-When training anomalies emerge, execute diagnostics in strict forward-first order to decouple corpus artifacts from kernel defects.
+The system instability (loss clamping at $\approx 25.05$, gradient divergence, and sudden `NaN` emergence) is driven by two distinct, compounding engineering flaws: **Ingestion Poisoning** and the **262,144 Fan-In Step-Size Overshoot**.
 
 ```
-       [ Training Anomaly Detected ]
-                    │
-                    ▼
-     [ Step 1: Forward-Only Sanity ] ──── NaN / Inf / > 50.0 ───► Fix forward_pass.cu
-                    │
-                  Finite
-                    ▼
-     [ Step 2: Single-Batch Overfit ] ─── Fails to reach 0.0 ───► Fix backward_pass.cu
-                    │
-              Loss -> 0.00
-                    ▼
-     [ Step 3: Dataset Sanitization ] ─── Binary / Outliers ───► Clean asset_sample
+   [ Compressed Binary Files ]                     [ Flattened Window (262,144) ]
+   (MP4 mdat, JPEG DCT, MP3)                       (256 tokens x 1024 embedding dim)
+              │                                                   │
+              ▼                                                   ▼
+   [ Maximum Shannon Entropy ]                     [ AdamW Step-Size Trap ]
+   (Orthogonal noise vectors)                      (ΔW ~ ±η across 262k inputs)
+              │                                                   │
+              ▼                                                   ▼
+   [ Degenerate Attention ]                        [ Extreme Logit Swing (±20 to ±50) ]
+   (A_ij ≈ 1/S uniform smear)                      (P_target clamped to 1e-11)
+              │                                                   │
+              └─────────────────────┬─────────────────────────────┘
+                                    │
+                                    ▼
+                     [ Loss Clamped at 25.05 / NaN ]
 ```
 
-### Phase 1: Forward Pass Telemetry (Zero Weight Updates)
-1. Set `learning_rate = 0.0` or bypass optimizer parameter integration.
-2. Execute a single forward pass over clean prose input.
-3. Inspect activations across intermediate tensors (RMSNorm, Attention logits, SwiGLU gates):
-   - **Check for `NaN` / `+Inf`:** Indicates division by zero in Softmax, uninitialized VRAM buffers, or numerical overflow.
-   - **Check activation magnitudes:** Transformer activations must remain bounded within $[-5.0, +5.0]$. Values exceeding $\pm 50.0$ signal missing variance scaling ($1 / \sqrt{d_k}$).
-   - **Verdict:** If activations explode with frozen weights, the defect exists exclusively in `forward_pass.cu`.
+### 1.1 The Ingestion Poisoning (The Fake Decompressor Trap)
+Inspection of the C++ decompressor implementations reveals that they do not decode media:
+- **`decompress_video.cpp`:** Locates the MP4 `mdat` container and dumps raw **H.264/H.265 compressed NAL units** into `video.raw_frames`. For MKV, it dumps the raw compressed binary file.
+- **`decompress_image.cpp`:** BMP is the only decoded format. For JPEG, PNG, and WebP, it parses width/height from the headers and dumps raw compressed bitstreams directly into `img.pixels`.
+- **`decompress_audio.cpp`:** Skips headers and dumps raw **compressed MP3 / Ogg Vorbis packets** directly into `audio.pcm_bytes`.
+- **`main.cpp` (lines 94–96):** `make_sample_data()` explicitly loaded `Photo.jpeg`, `Video.mp4`, and `Voice.ogg` into every developer training session (`--train`).
 
-### Phase 2: Single-Batch Overfitting Test (Sterile Environment)
-1. **Sterilize Corpus:** Isolate one sentence (e.g., *"The quick brown fox jumps over the lazy dog."*) into a single text file. Remove all other assets.
-2. **Disable Shuffling:** Lock the dataset stream offset so the identical sequence window is processed every step.
-3. **Train for 100 Steps:** Monitor loss trajectory:
-   - **Loss converges toward ~0.00:** Forward and backward kernels are mathematically consistent. Divergence on full datasets originates from corpus defects (e.g., raw binary bytes, malformed UTF-8, or high-entropy static).
-   - **Loss plateaus, ascends, or outputs NaN:** The defect exists in kernel backpropagation or optimizer state updates.
+**The Mathematical Impact:** Compression algorithms maximize Shannon entropy ($\approx 8$ bits/byte) by stripping all spatial, temporal, and linguistic redundancy. To a neural network, a compressed bitstream is mathematically indistinguishable from white noise.
 
-### Phase 3: Backward Kernel & Optimizer Inspection
-When the single-batch overfit test fails, systematically verify the following invariants in `backward_pass.cu`:
-1. **Gradient Sign Invariant:** Ensure negative descent orientation:
-   $$\mathbf{W}_{t+1} = \mathbf{W}_t - \eta \cdot \frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}_t} + \epsilon}$$
-   A positive sign ($+$) executes gradient ascent, causing exponential weight divergence.
-2. **Atomic Accumulation (`atomicAdd` vs. `=`):** Parallel CUDA threads writing to shared gradient buffers (embedding lookup tables, projection layers) must accumulate atomically. Unsynchronized assignments (`=`) cause thread collisions and gradient truncation.
-3. **Residual Connection Addition:** Skip-connections require accumulating upstream gradients directly into the identity path:
-   $$\nabla_{\mathbf{X}_{\text{in}}} \mathcal{L} = \nabla_{\mathbf{X}_{\text{norm}}} \mathcal{L} + \nabla_{\mathbf{X}_{\text{out}}} \mathcal{L}$$
-   Omitting residual accumulation fractures gradient flow across deeper Transformer blocks.
-4. **Classification vs. Regression Target Mode:** Discrete token prediction requires Softmax Cross-Entropy ($\nabla_{\mathbf{z}} \mathcal{L} = \mathbf{p} - \mathbf{y}_{\text{one-hot}}$). Ensure `token_ids_active` remains true so kernels do not default to continuous MSE regression against invalid memory.
-5. **AdamW State Initialization:** Momentum ($\mathbf{m}$) and second-moment ($\mathbf{v}$) buffers must be explicitly zeroed (`cudaMemsetAsync`) upon allocation to prevent uninitialized VRAM values from corrupting initial updates.
+### 1.2 The 262,144 Fan-In Step-Size Trap (Why Loss Clamped at Exactly 25.05)
+Your cross-entropy loss function in `backward_pass.cu` clamps minimum target probability:
+$$\mathcal{L} = -\ln\left(\max(P_{\text{target}}, 10^{-11})\right) \implies -\ln(1.3 \times 10^{-11}) \approx 25.05$$
+
+The mechanism driving $P_{\text{target}} \to 10^{-11}$ on Step 2:
+1. **The Flattened Readout:** The readout layer maps the entire context window directly to output logits:
+   $$K = \text{context\_window\_size} \times \text{token\_dim} = 256 \times 1024 = 262,144$$
+2. **Initial Variance Scaling:** Weights were initialized with $\sigma = \frac{1}{\sqrt{K}} = \frac{1}{512}$, ensuring Step 1 logits have unit variance and initial loss evaluates cleanly to maximum entropy:
+   $$\mathcal{L}_0 \approx -\ln\left(\frac{1}{V}\right) = -\ln\left(\frac{1}{65536}\right) \approx 11.09$$
+3. **The AdamW Normalization Defect:** In AdamW, updates are normalized by the second-moment accumulator:
+   $$\Delta \mathbf{W} \approx -\eta \cdot \frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}_t} + \epsilon} \approx -\eta \cdot \text{sign}(\mathbf{g}_t)$$
+   Every single weight in that $262,144$-element row shifts by roughly $\pm \eta = \pm 0.001$.
+4. **Logit Divergence:** When $262,144$ weights each shift by $0.001$, the dot product $\mathbf{x} \cdot (\mathbf{W} + \Delta \mathbf{W})$ experiences a massive variance shock:
+   $$\sigma_{\Delta z} \approx \sqrt{K} \cdot \eta = 512 \times 0.001 = 0.512 \quad \text{(uncorrelated inputs)}$$
+   When activations correlate across the sequence window, the logit shift scales linearly:
+   $$\Delta z \sim K \cdot \eta \cdot \bar{x} \gg 20.0$$
+   A logit shift of $+20$ on an incorrect class forces $\text{Softmax}$ to assign $P_{\text{target}} \le 10^{-11}$, immediately locking the loss to **$25.05$ on Step 2**, even when training on clean prose.
 
 ---
 
-## 3. Failure Mode Diagnostic Matrix
+## 2. Theoretical Grounding: "Attention Is All You Need" vs. Omnimodal Fusion
 
-| Observed Phenomenon | Primary Root Cause | Verification Target |
+### 2.1 Why Self-Attention Requires Structured Geometric Space
+The core self-attention operator:
+$$\mathbf{A} = \text{Softmax}\left(\frac{\mathbf{Q} \mathbf{K}^T}{\sqrt{d_k}}\right) \mathbf{V}$$
+operates strictly on **geometric alignment in vector space**:
+- In language models, tokens map via an embedding table $\mathbf{E} \in \mathbb{R}^{V \times D}$ into continuous vectors where angular alignment ($\mathbf{q}_i \cdot \mathbf{k}_j^T$) denotes semantic relevance.
+- On compressed binary data, high-dimensional random vectors are mutually orthogonal ($\mathbf{q}_i \cdot \mathbf{k}_j^T \approx 0$).
+- Softmax collapses into a uniform smear: $A_{i,j} \approx \frac{1}{S}$.
+- Gradients through the attention mechanism scatter into high-frequency noise, poisoning AdamW moment buffers ($\mathbf{v}_t \to \infty$).
+
+### 2.2 Sifting Section 6.2: What Must Be Killed vs. What Is Kept
+
+| Concept | Verdict | Systems Rationale |
 | :--- | :--- | :--- |
-| **Step 1 Loss $> 400.0$** | Sequence-accumulated Cross-Entropy vs. normalized per-token loss metric. | Verify metric divides accumulated loss by context window length $S$. |
-| **Loss explodes at Step 1000** | Token mode flag disabled; regression kernel treats target as continuous bfloat16. | Ensure `token_ids_active` remains true through backward pass. |
-| **Instant `NaN` on Step 1** | Uninitialized AdamW momentum buffers or Softmax denominator underflow. | Inspect `cudaMemsetAsync` on optimizer tensors and verify $\epsilon \ge 10^{-8}$. |
-| **Loss climbs steadily** | Flipped gradient sign or missing residual gradient accumulation. | Confirm weight subtract operation ($\mathbf{W} - \eta \mathbf{G}$) and verify skip connections. |
-| **Loss oscillates violently** | Learning rate too high or high-entropy binary static in corpus. | Reduce learning rate by $5\times$ or inspect corpus for non-text artifacts. |
+| **Feeding Compressed File Bytes** | **KILL** | Linear projection cannot invert Huffman trees, DEFLATE, or DCT quantization. |
+| **Linear Projection on Raw Text Bytes** | **KILL** | Text bytes are categorical symbols (`'A'=65`, `'z'=122`), not continuous physical measurements. Multiplying ASCII integers by weights breaks semantic equivalence. Text requires **discrete embedding table lookup**. |
+| **Continuous Signal Patching + Linear Projection** | **KEEP** | This is the foundation of Vision Transformers (ViT) and Whisper. When applied to **uncompressed, continuous physical tensors** (raw RGB floats $[-1, 1]$ or 80-bin Mel-spectrograms), linear patch projection is mathematically sound and optimal. |
 
 ---
 
-## 4. Verification Commands
+## 3. The Sane Architecture: Division of Labor
 
-Run targeted differential verification to confirm kernel math before launching full corpus training:
-
-```powershell
-# 1. Execute CUDA loss & SwiGLU backward verification
-cd "core"
-.\test_loss.exe
-
-# 2. Execute full regression and integration suite
-.\test.exe --test
-
-# 3. Validate convergence on clean text corpus
-.\app.exe --bulk 1050 --data asset_sample/text
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                    OFFLINE INGESTION PIPELINE (Python)                     │
+│  • PDF / DOCX  ──► PyMuPDF / python-docx ──► Clean UTF-8 Text (.txt/.md)   │
+│  • Images      ──► Pillow (libjpeg/zlib) ──► Normalized Float32 RGB Tensors│
+│  • Audio       ──► librosa / soundfile   ──► 80-bin Log-Mel Spectrograms   │
+│  • Video       ──► ffmpeg / NVDEC        ──► Raw Uncompressed Video Frames │
+└─────────────────────────────────────┬──────────────────────────────────────┘
+                                      │ Clean Tensors & Tokens
+┌─────────────────────────────────────▼──────────────────────────────────────┐
+│                    PROJECT AXIOM CORE ENGINE (C++ / CUDA)                  │
+│  • Zero File Parsing / Zero Codec Logic                                    │
+│  • Text: Discrete Vocabulary Embedding Lookup (V = 65,536, D = 1,024)      │
+│  • Vision: 2D Spatial Patch-Embedding (16x16x3 floats -> D)                │
+│  • Backbone: Fused CUTLASS GEMM + SwiGLU + RMSNorm + Paged GQA             │
+│  • Optimizer: Fused CUDA AdamW with Analytical Gradient Backpropagation   │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Multimodal Data Ingestion & Signal Fidelity
+## 4. Master 4-Gate Diagnostic & Verification Plan
 
-Corpus quality directly dictates optimization landscape geometry. High-entropy non-linguistic data destabilizes optimizer moments.
+Follow this sequential execution protocol. Do not advance to a subsequent gate until the current gate's criteria are completely satisfied.
 
-### 5.1 Semantic vs. Coordinate-Based Text Formats
-- **Plain Text (`.txt`):** Stores discrete linguistic units sequentially in universal encodings (UTF-8). The parser processes unambiguous reading order.
-- **Portable Document Format (`.pdf`):** A visual display description rather than a semantic text stream. Glyphs are positioned via 2D coordinate operators (`Tj`, `TJ`). Multi-column layouts, figures, and font encodings often cause extractors to emit interleaved fragments or raw binary font tables. Scanned PDFs without OCR contain zero digital text.
-- **Markdown (`.md`):** The optimal format for language modeling. Preserves structural hierarchy (headers `#`, lists `*`, tables `|`, code blocks ```` ````) using standard ASCII/UTF-8 tokens without introducing binary metadata.
-
-### 5.2 Continuous Modalities & Signal Encodings
-Unlike discrete symbolic text, visual and acoustic signals are continuous waveforms and spatial fields. The objective is balancing lossless fidelity against decode latency:
-
-1. **Images:**
-   - **Lossless PNG:** Preserves exact pixel channel values. Critical for dense high-frequency features (technical diagrams, charts, medical imaging).
-   - **JPEG:** Suitable for large-scale web scraping, but aggressive compression introduces blocking artifacts that inject noise into early convolutional and patch-projection layers.
-2. **Audio & Voice:**
-   - **Uncompressed WAV / Lossless FLAC:** Preserves full harmonic spectrum and phase consistency required for high-fidelity spectrogram computation.
-   - **Lossy MP3:** Employs psychoacoustic masking that eliminates high-frequency components humans cannot perceive, but models detect as missing spectral bands, degrading voice synthesis and acoustic modeling.
-3. **Video:**
-   - **Container & Codec:** MP4 container using the standard **H.264** codec.
-   - **Hardware Acceleration:** Enterprise GPUs incorporate dedicated silicon decoders (NVDEC) optimized for parallel H.264 frame extraction, eliminating CPU decode bottlenecks that starve GPU compute pipelines.
-
-### 5.3 High-Throughput Streaming Formats
-Direct filesystem operations on millions of loose individual files exhaust OS inode tables and generate extreme random I/O latency. Production pipelines aggregate assets into contiguous streamable containers:
-
-- **JSON Lines (`.jsonl`):** Stores one document per line with associated metadata keys:
-  ```json
-  {"text": "# Header\nContent...", "source": "manual.md", "domain": "engineering"}
-  ```
-- **WebDataset (`.tar` Archives):** Shards multimodal tuples into sequential archive blocks (e.g., 100 MB – 2 GB per shard):
-  - `sample_001.mp4` (Raw video stream)
-  - `sample_001.md` (Transcribed text ground truth)
-  - `sample_001.json` (Sensor and acquisition metadata)
-  
-  Enables sequential streaming from storage directly into host pinned memory and GPU VRAM via direct DMA transfers.
+```
+                  [ Gate 0: Decontamination ]
+                  • Purge binary samples from main.cpp
+                  • Lock ingestion to clean UTF-8 text
+                               │
+                               ▼
+                  [ Gate 1: Zero-Update Sanity ]
+                  • Set lr = 0.0 on sterile.txt
+                  • Verify L_0 ≈ 11.09, no NaNs
+                               │
+                             Pass
+                               ▼
+                  [ Gate 2: Readout Overfit Test ]
+                  • 100 steps on 1 sentence (sterile.txt)
+                  • If L jumps to 25.05 -> Scale lr by fan-in
+                  • Target: Loss -> 0.00
+                               │
+                             Pass
+                               ▼
+                  [ Gate 3: Full Transformer Integration ]
+                  • Enable SwiGLU + Paged GQA (enable_transformer = true)
+                  • Verify gradient backprop through all 7 parameter matrices
+                  • Target: Monotonic convergence faster than Gate 2
+                               │
+                             Pass
+                               ▼
+                  [ Gate 4: Scaled Training & Multimodal Ingestion ]
+                  • Bulk corpus training on verified text
+                  • Pre-decoded float tensors for vision/audio
+```
 
 ---
 
-## 6. Tokenization vs. Byte-Level Early Fusion
+### Gate 0: Decontamination & Environment Sterilization
+1. **Purge Binary Feeds:**
+   - In `main.cpp`, clear `test.data_image`, `test.data_video`, and `test.data_voice` from `make_sample_data()`.
+   - Restrict `Parser` to process only `.txt` and `.md` files.
+2. **Create the Sterile Single-Batch Corpus:**
+   - Create `asset_sample/text/sterile.txt` containing exactly one clean sentence (32 words):
+     > *"The silicon engine computes forward activations and analytical backward gradients across unified tensor cores without numerical divergence."*
+   - Remove or isolate all other assets from the active input directories (`asset_sample/`, `training_data/Data`).
+3. **Lock Stream Offset:**
+   - Disable token shuffling in `Portion` so the identical 256-token window is evaluated on every training step.
 
-The central design trade-off in modern neural sequence modeling centers on tokenization overhead versus raw byte scaling.
+---
 
-### 6.1 The Tokenizer Dilemma: Semantic Density vs. $O(N^2)$ Complexity
-Standard tokenizers map variable-length byte strings to discrete integer vocabularies:
+### Gate 1: Forward-Only Telemetry Sanity ($\eta = 0.0$)
+Execute a single forward pass without optimizer updates to isolate the forward kernel math.
 
-- **Advantages:** Maximizes **semantic density**. A single integer token maps directly to a high-dimensional concept vector, enabling deep Transformer attention over multi-thousand token contexts.
-- **Constraints:** Standard self-attention scales quadratically with sequence length $N$:
-  $$\text{Complexity} = \mathcal{O}(N^2 \cdot d)$$
-  Expanding raw bytes directly into the sequence window explodes computational complexity:
-  - Text word: 1 token $\to$ 8–12 bytes ($\approx 100\times$ self-attention compute).
-  - Audio: 1 second uncompressed $\to$ 48,000 bytes.
-  - Image: $512 \times 512$ RGB $\to$ 786,432 bytes.
-  
-  Processing uncompressed raw bytes directly through naive self-attention exhausts VRAM capacity and memory bandwidth.
+* **Execution:** Run 1 step on `sterile.txt` with `learning_rate = 0.0`.
+* **Telemetry Pass Criteria:**
+  1. **Initial Loss Value:** Loss must evaluate near theoretical maximum entropy:
+     $$\mathcal{L}_0 \approx -\ln\left(\frac{1}{V}\right) = -\ln\left(\frac{1}{65536}\right) \approx 11.0903$$
+  2. **Numerical Validity:** `loss[telemetry_nonfinite] == 0` (zero `NaN` / `+Inf` values).
+  3. **Activation Range:** Transformer activations across intermediate buffers must remain strictly bounded within $[-5.0, +5.0]$.
+* **Gate Verdict:** If $\mathcal{L}_0 \gg 12.0$ or outputs `NaN`, the defect is in `forward_pass.cu` (Softmax denominator underflow or uninitialized VRAM). If valid, proceed to Gate 2.
 
-### 6.2 Omnimodal Early Fusion Architecture
-To process arbitrary modalities without brittle modality-specific encoders, the engine can implement **Patch-Level Byte Ingestion**:
+---
 
-```
- [ Raw Byte Stream ] ──► [ Fixed-Size Patching (e.g. 256 Bytes) ] ──► [ Linear Projection Layer ] ──► [ Unified Latent Space ]
-```
+### Gate 2: Single-Batch Overfit (Readout Layer Sanity)
+Test whether the readout layer and AdamW optimizer can memorize one single sentence down to zero loss.
 
-1. **Byte Patching:** Chunk arbitrary incoming memory streams into uniform byte patches (e.g., $P = 256$ bytes) regardless of source modality.
-2. **Universal Projection:** Feed the byte patch through a lightweight linear projection layer that maps $P$ raw bytes directly into the model embedding dimension $D$.
-3. **Unified Transformer Backbone:** Once projected into latent vectors in VRAM, the Transformer backbone processes all modalities symmetrically as a continuous, unified sequence of representations.
+* **Execution:** Train for 100 steps on `sterile.txt` with `enable_transformer = false`.
+* **Diagnostic Test for the 262,144 Fan-In Trap:**
+  - Run first at default learning rate ($\eta = 0.001$).
+  - **Observation A (Loss drops smoothly toward $0.00$):** Readout backward pass and optimizer are verified.
+  - **Observation B (Loss jumps from $11.09$ to $25.05$ on Step 2):** Confirms the Fan-In Step-Size Overshoot. Immediately engage learning rate scaling:
+    $$\eta_{\text{readout}} = \frac{\eta}{\sqrt{K}} = \frac{0.001}{512} \approx 2.0 \times 10^{-6}$$
+    or run with `--lr 0.00001`.
+* **Gate Pass Criteria:**
+  - Step 1: $\mathcal{L} \approx 11.09$
+  - Step 25: $\mathcal{L} < 5.0$
+  - Step 50: $\mathcal{L} < 1.0$
+  - Step 100: $\mathcal{L} \le 0.05$
+* **Gate Verdict:** Achieving $\mathcal{L} \to 0.00$ proves that the analytical gradient math, backward loss formulation ($\mathbf{p} - \mathbf{y}$), and optimizer state updates are correct.
+
+---
+
+### Gate 3: Full Transformer Block Verification (`enable_transformer = true`)
+Integrate the full attention and feed-forward block into the training loop.
+
+* **Execution:** Train for 100 steps on `sterile.txt` with `enable_transformer = true`.
+* **Verification Targets in `training.cpp` & `backward_pass.cu`:**
+  1. **Chain Order:** Readout backward pass executes first $\to$ generates upstream gradient `d_dx` $\to$ `transformer_backward_block` backpropagates through SwiGLU and Attention $\to$ `backward_scatter_embeddings` scatters into `d_table`.
+  2. **Gradient Projection:** Ensure `transformer_backward_block` backpropagates $\nabla Q, \nabla K, \nabla V$ through $W_Q^T, W_K^T, W_V^T$ and accumulates into `d_grad_mid_float` before writing to `grad_input`.
+  3. **AdamW State Separation:** Verify that all 7 transformer parameter matrices ($W_Q, W_K, W_V, W_{\text{out}}, W_{\text{gate}}, W_{\text{up}}, W_{\text{down}}$) update their own dedicated momentum ($\mathbf{m}$) and second-moment ($\mathbf{v}$) buffers.
+* **Gate Pass Criteria:**
+  - Loss converges smoothly toward $0.00$ on `sterile.txt`.
+  - Convergence rate is strictly faster than the 1-layer perceptron in Gate 2.
+
+---
+
+### Gate 4: Scaled Training & Multimodal Ingestion Protocol
+Once kernel convergence is verified on sterile text, transition to scaled training:
+
+1. **Text Scaling:**
+   - Ingest clean prose datasets separated via `pdf_separator.py` into `asset_sample/text/`.
+   - Re-enable data shuffling across context windows.
+   - Monitor bulk loss over 1,000+ steps to confirm stable learning dynamics.
+2. **Multimodal Expansion (Post-Text Mastery):**
+   - **Do not write C++ decoders for MP4, MP3, or JPEG.**
+   - Pre-process images in Python to raw normalized float arrays (`[C, H, W]` in $[-1.0, 1.0]$) and write to binary tensor files (`.axiom_tensor`).
+   - Pre-process audio in Python to 80-bin log-Mel spectrograms.
+   - Stream these pre-computed tensors directly into pinned host memory and project them via dedicated linear patch layers into the $1,024$-dim model space.
+
+---
+
+## 5. Immediate Action Item
+
+Execute **Gate 0** (clean `main.cpp` sample data) and run **Gate 1 / Gate 2** on `sterile.txt` to observe the loss trajectory across the first 100 steps.
