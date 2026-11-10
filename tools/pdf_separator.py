@@ -95,15 +95,28 @@ def main():
                         help="Base directory for separated asset folders")
     args = parser.parse_args()
 
-    input_path = Path(args.input_dir).resolve()
+    input_str = args.input_dir
+    if not Path(input_str).exists():
+        if input_str.startswith("core/") and Path(input_str[5:]).exists():
+            input_str = input_str[5:]
+        elif (Path("core") / input_str).exists():
+            input_str = str(Path("core") / input_str)
+
+    input_path = Path(input_str).resolve()
     if not input_path.exists():
-        # Fallback to local asset_sample if running from PROJECT-AXIOM root
         input_path = Path("asset_sample").resolve()
         if not input_path.exists():
             print(f"[!] Error: Input directory '{args.input_dir}' not found.")
             sys.exit(1)
 
-    output_base = Path(args.output_dir).resolve()
+    output_str = args.output_dir
+    if not Path(output_str).exists():
+        if output_str.startswith("core/") and Path(output_str[5:]).exists():
+            output_str = output_str[5:]
+        elif (Path("core") / output_str).exists():
+            output_str = str(Path("core") / output_str)
+
+    output_base = Path(output_str).resolve()
     text_dir = output_base / "text"
     symbols_dir = output_base / "symbols"
     images_dir = output_base / "images"
