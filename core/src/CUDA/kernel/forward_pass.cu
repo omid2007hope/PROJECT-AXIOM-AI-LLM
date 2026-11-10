@@ -578,7 +578,8 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 						      GpuActivations* gpu_activations,
 						      size_t input_dim,
 						      size_t output_dim,
-						      int buffer_index) {
+						      int buffer_index,
+						      bool gather_embeddings) {
 
 	// Safe Guard
 	if (!gpu_portion || !gpu_weights || !gpu_activations || !gpu_weights->d_weights ||
@@ -629,7 +630,7 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 
 	// Phase 4: Forward Gather Kernel & PCIe Bandwidth Optimization
 	// If token IDs and embedding table are provided, branchlessly gather tokens into d_context_window on the GPU
-	if (gpu_portion->token_ids_active[buffer_index] && gpu_embeddings &&
+	if (gather_embeddings && gpu_portion->token_ids_active[buffer_index] && gpu_embeddings &&
 	    gpu_embeddings->d_table) {
 		size_t emb_dim =
 			gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
@@ -835,7 +836,8 @@ extern "C" CUDA_API bool forward_pass(const GpuPortion* gpu_portion,
 					    gpu_activations,
 					    input_dim,
 					    output_dim,
-					    buffer_index);
+					    buffer_index,
+					    true);
 }
 
 extern "C" CUDA_API bool run_cutlass_saturation_benchmark(int M,

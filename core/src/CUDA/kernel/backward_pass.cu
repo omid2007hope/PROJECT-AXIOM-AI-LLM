@@ -437,7 +437,7 @@ extern "C" CUDA_API bool backward_scatter_embeddings(
 extern "C" CUDA_API bool backward_pass_with_embeddings(
 	const GpuPortion* gpu_portion, GpuEmbeddings* gpu_embeddings, GpuWeights* gpu_weights,
 	const GpuActivations* gpu_activations, size_t input_dim, size_t output_dim, float learning_rate,
-	int buffer_index, bool use_adamw) {
+	int buffer_index, bool use_adamw, bool scatter_embeddings) {
 
 	// Safe Guard
 	if (!gpu_portion || !gpu_weights || !gpu_activations || buffer_index < 0 || buffer_index >= 2 ||
@@ -565,7 +565,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 		return false;
 
 	// Phase 5: Output Head & Backward Scatter Kernel for learnable embedding matrix
-	if (has_embeddings) {
+	if (has_embeddings && scatter_embeddings) {
 		if (is_token_training && gpu_activations->d_probs && emb_dim == output_dim && vocab_sz > 0) {
 			int head_threads = 256;
 			int head_blocks = static_cast<int>(vocab_sz);
@@ -621,7 +621,8 @@ extern "C" CUDA_API bool backward_pass(const GpuPortion* gpu_portion, GpuWeights
 									   const GpuActivations* gpu_activations, size_t input_dim,
 									   size_t output_dim, float learning_rate, int buffer_index) {
 	return backward_pass_with_embeddings(gpu_portion, nullptr, gpu_weights, gpu_activations,
-										 input_dim, output_dim, learning_rate, buffer_index, false);
+										 input_dim, output_dim, learning_rate, buffer_index, false,
+										 true);
 }
 
 

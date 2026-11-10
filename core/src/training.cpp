@@ -104,28 +104,24 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 				return TrainStatus::Failed;
 			}
 
-			// Preserve transformed [S x D] activations during readout forward projection
-			gpu_portion.token_ids_active[buffer_index] = false;
+			// Readout forward projection: gather_embeddings is false because d_context_window has transformed states
 			const bool fwd_ok = forward_pass_with_embeddings(
 				&gpu_portion, &gpu_embeddings, &gpu_weights, &gpu_activations,
-				input_elements_x_total, target_elements_y_total, buffer_index);
+				input_elements_x_total, target_elements_y_total, buffer_index, false /* gather_embeddings */);
 			if (!fwd_ok) {
-				gpu_portion.token_ids_active[buffer_index] = true;
 				std::cerr << "[AI Brain] Forward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
 
 			// Readout loss, telemetry, and upstream gradient d_dx computation.
-			// token_ids_active is kept false so backward_pass_with_embeddings does NOT scatter prematurely into embedding table
+			// scatter_embeddings is false so backward_scatter_embeddings runs AFTER transformer_backward_block
 			if (!backward_pass_with_embeddings(&gpu_portion, &gpu_embeddings, &gpu_weights,
 											   &gpu_activations, input_elements_x_total,
 											   target_elements_y_total, learning_rate, buffer_index,
-											   true /* use_adamw */)) {
-				gpu_portion.token_ids_active[buffer_index] = true;
+											   true /* use_adamw */, false /* scatter_embeddings */)) {
 				std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
-			gpu_portion.token_ids_active[buffer_index] = true;
 
 			// Sequence-parallel Transformer Backward Block (M = S)
 			// Backpropagates d_dx (readout gradient) through SwiGLU and Attention into d_dx (input embedding gradient)
@@ -402,11 +398,9 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 				return false;
 			}
 
-			gpu_portion.token_ids_active[0] = false;
 			const bool fwd_ok = forward_pass_with_embeddings(
 				&gpu_portion, &gpu_embeddings, &gpu_weights, &gpu_activations,
-				input_elements_x_total, target_elements_y_total, 0);
-			gpu_portion.token_ids_active[0] = true;
+				input_elements_x_total, target_elements_y_total, 0, false /* gather_embeddings */);
 			if (!fwd_ok) {
 				return false;
 			}

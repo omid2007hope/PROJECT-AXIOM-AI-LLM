@@ -23,7 +23,8 @@ CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_portion,
 					    size_t output_dim,
 					    float learning_rate,
 					    int buffer_index,
-					    bool use_adamw);
+					    bool use_adamw,
+					    bool scatter_embeddings = true);
 
 CUDA_API bool backward_scatter_embeddings(const GpuPortion* gpu_portion,
 					  GpuEmbeddings* gpu_embeddings,

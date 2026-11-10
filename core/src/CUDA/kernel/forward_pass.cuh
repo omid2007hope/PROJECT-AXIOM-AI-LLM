@@ -23,7 +23,8 @@ CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_portion,
 					   GpuActivations* gpu_activations,
 					   size_t input_dim,
 					   size_t output_dim,
-					   int buffer_index);
+					   int buffer_index,
+					   bool gather_embeddings = true);
 
 CUDA_API bool run_cutlass_saturation_benchmark(int M,
 					       int N,
