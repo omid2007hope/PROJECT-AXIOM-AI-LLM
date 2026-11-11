@@ -36,9 +36,9 @@
     "AXIOM-CANARY-0x5445494D4F5259-2026-OMID-TEIMORY";
 
 AI::AI()
-    : input_elements_x_total(512), target_elements_y_total(4), weight_min(-0.1f), weight_max(0.1f) {
-	vocab_size = 151936;
-	embedding_dim = 1536;
+    : input_elements_x_total(axiom::FAN_IN_DIM), target_elements_y_total(axiom::TOKEN_DIM), weight_min(-0.1f), weight_max(0.1f) {
+	vocab_size = axiom::VOCAB_SIZE;
+	embedding_dim = axiom::TOKEN_DIM;
 	compute_stream_ = create_cuda_stream();
 }
 
@@ -52,22 +52,19 @@ AI::AI(size_t input_elements_x_total,
       target_elements_y_total(target_elements_y_total),
       weight_min(weight_min),
       weight_max(weight_max) {
-	// input_elements_x_total = token * dim = 512
-	// target_elements_y_total = target * dim = 4
+	// input_elements_x_total = token * dim = 262144
+	// target_elements_y_total = target * dim = 1024
 
-	// 512 * 4 = 2048
 	elements.weight_elements = input_elements_x_total * target_elements_y_total;
-
-	// target_elements_y_total = 4
 	elements.bias_elements = target_elements_y_total;
 
 	host_weights.resize(elements.weight_elements);
 	host_bias.resize(elements.bias_elements);
 
-	vocab_size = 65536;
+	vocab_size = axiom::VOCAB_SIZE;
 	embedding_dim = target_elements_y_total;
 	if (embedding_dim == 0)
-		embedding_dim = 4;
+		embedding_dim = axiom::TOKEN_DIM;
 
 	host_embeddings.resize(vocab_size * embedding_dim);
 

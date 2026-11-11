@@ -586,7 +586,7 @@ bool test_ai() {
 
 		// 11.4 Full Transformer Block Convergence (Gate 3 Verification)
 		AI xform_ai(in_dim, out_dim, w_min, w_max, e);
-		test_check(xform_ai.build_transformer_block(out_dim, 1, 16),
+		test_check(xform_ai.build_transformer_block(out_dim, axiom::NUM_HEADS, 16),
 				   "build_transformer_block initializes projection weights in VRAM", s_pass,
 				   s_fail);
 

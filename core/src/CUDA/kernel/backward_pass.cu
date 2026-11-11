@@ -991,10 +991,15 @@ extern "C" CUDA_API bool transformer_backward_block(
 	float* d_grad_gate_float = static_cast<float*>(allocate_vram(total_seq_ffn * sizeof(float), s));
 	float* d_grad_up_float = static_cast<float*>(allocate_vram(total_seq_ffn * sizeof(float), s));
 	float* d_grad_mid_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
+	float* d_grad_ffn_up_in = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
 	float* d_grad_attn_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
 	float* d_grad_q_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
 	float* d_grad_k_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
 	float* d_grad_v_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
+	float* d_grad_proj_q_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
+	float* d_grad_proj_k_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
+	float* d_grad_proj_v_float = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
+	float* d_grad_attn_accum = static_cast<float*>(allocate_vram(total_seq_dim * sizeof(float), s));
 
 	size_t max_temp_elems = (total_seq_ffn > total_seq_dim) ? total_seq_ffn : total_seq_dim;
 	__nv_bfloat16* d_grad_bf16_temp =
@@ -1002,8 +1007,9 @@ extern "C" CUDA_API bool transformer_backward_block(
 
 	if (!d_grad_down_W || !d_grad_gate_W || !d_grad_up_W || !d_grad_out_W || !d_grad_q_W ||
 		!d_grad_k_W || !d_grad_v_W || !d_grad_swiglu_float || !d_grad_gate_float ||
-		!d_grad_up_float || !d_grad_mid_float || !d_grad_attn_float || !d_grad_q_float ||
-		!d_grad_k_float || !d_grad_v_float || !d_grad_bf16_temp) {
+		!d_grad_up_float || !d_grad_mid_float || !d_grad_ffn_up_in || !d_grad_attn_float ||
+		!d_grad_q_float || !d_grad_k_float || !d_grad_v_float || !d_grad_proj_q_float ||
+		!d_grad_proj_k_float || !d_grad_proj_v_float || !d_grad_attn_accum || !d_grad_bf16_temp) {
 		free_vram(d_grad_down_W, s);
 		free_vram(d_grad_gate_W, s);
 		free_vram(d_grad_up_W, s);
@@ -1015,10 +1021,15 @@ extern "C" CUDA_API bool transformer_backward_block(
 		free_vram(d_grad_gate_float, s);
 		free_vram(d_grad_up_float, s);
 		free_vram(d_grad_mid_float, s);
+		free_vram(d_grad_ffn_up_in, s);
 		free_vram(d_grad_attn_float, s);
 		free_vram(d_grad_q_float, s);
 		free_vram(d_grad_k_float, s);
 		free_vram(d_grad_v_float, s);
+		free_vram(d_grad_proj_q_float, s);
+		free_vram(d_grad_proj_k_float, s);
+		free_vram(d_grad_proj_v_float, s);
+		free_vram(d_grad_attn_accum, s);
 		free_vram(d_grad_bf16_temp, s);
 		return false;
 	}
@@ -1066,12 +1077,12 @@ extern "C" CUDA_API bool transformer_backward_block(
 		d_grad_gate_float, static_cast<const float*>(gpu_weights->d_gate_master), d_grad_mid_float,
 		S, D, F);
 	batched_input_gradient_kernel<<<grid_mid, block_dim, 0, s>>>(
-		d_grad_up_float, static_cast<const float*>(gpu_weights->d_up_master), d_grad_attn_float, S,
+		d_grad_up_float, static_cast<const float*>(gpu_weights->d_up_master), d_grad_ffn_up_in, S,
 		D, F);
 	int res_threads = 256;
 	int res_blocks = static_cast<int>((total_seq_dim + res_threads - 1) / res_threads);
 	add_residual_gradient<<<res_blocks, res_threads, 0, s>>>(
-		d_grad_mid_float, d_grad_attn_float, total_seq_dim);
+		d_grad_mid_float, d_grad_ffn_up_in, total_seq_dim);
 
 	backward_rms_norm<<<1, 1024, 0, s>>>(
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_normalized_feedforward),
@@ -1098,9 +1109,32 @@ extern "C" CUDA_API bool transformer_backward_block(
 		d_grad_attn_float, d_grad_bf16_temp, total_seq_dim);
 
 	// 8. Fused Causal Attention backward -> d_grad_q, d_grad_k, d_grad_v
-	fused_causal_backward(d_grad_bf16_temp, gpu_activations->d_query, gpu_activations->d_key,
-						  gpu_activations->d_value, d_grad_q_float, d_grad_k_float, d_grad_v_float,
-						  sequence_length, embedding_dim, num_heads, s);
+	if (!fused_causal_backward(d_grad_bf16_temp, gpu_activations->d_query, gpu_activations->d_key,
+							  gpu_activations->d_value, d_grad_q_float, d_grad_k_float, d_grad_v_float,
+							  sequence_length, embedding_dim, num_heads, s)) {
+		free_vram(d_grad_down_W, s);
+		free_vram(d_grad_gate_W, s);
+		free_vram(d_grad_up_W, s);
+		free_vram(d_grad_out_W, s);
+		free_vram(d_grad_q_W, s);
+		free_vram(d_grad_k_W, s);
+		free_vram(d_grad_v_W, s);
+		free_vram(d_grad_swiglu_float, s);
+		free_vram(d_grad_gate_float, s);
+		free_vram(d_grad_up_float, s);
+		free_vram(d_grad_mid_float, s);
+		free_vram(d_grad_ffn_up_in, s);
+		free_vram(d_grad_attn_float, s);
+		free_vram(d_grad_q_float, s);
+		free_vram(d_grad_k_float, s);
+		free_vram(d_grad_v_float, s);
+		free_vram(d_grad_proj_q_float, s);
+		free_vram(d_grad_proj_k_float, s);
+		free_vram(d_grad_proj_v_float, s);
+		free_vram(d_grad_attn_accum, s);
+		free_vram(d_grad_bf16_temp, s);
+		return false;
+	}
 
 	// 9. Parameter gradients for W_Q, W_K, W_V: [D x D]
 	batched_weight_gradient_kernel<<<grid_d_d, block_dim, 0, s>>>(
@@ -1113,28 +1147,28 @@ extern "C" CUDA_API bool transformer_backward_block(
 		d_grad_v_float, static_cast<const __nv_bfloat16*>(gpu_activations->d_normalized_attention),
 		d_grad_v_W, S, D, D);
 
-	// Backpropagate dQ, dK, dV through W_Q^T, W_K^T, W_V^T and accumulate into residual highway
+	// Backpropagate dQ, dK, dV through W_Q^T, W_K^T, W_V^T into dedicated proj buffers
 	batched_input_gradient_kernel<<<grid_mid, block_dim, 0, s>>>(
 		d_grad_q_float, static_cast<const float*>(gpu_weights->d_query_master),
-		d_grad_attn_float, S, D, D);
+		d_grad_proj_q_float, S, D, D);
 	batched_input_gradient_kernel<<<grid_mid, block_dim, 0, s>>>(
 		d_grad_k_float, static_cast<const float*>(gpu_weights->d_key_master),
-		d_grad_q_float, S, D, D);
+		d_grad_proj_k_float, S, D, D);
 	batched_input_gradient_kernel<<<grid_mid, block_dim, 0, s>>>(
 		d_grad_v_float, static_cast<const float*>(gpu_weights->d_value_master),
-		d_grad_k_float, S, D, D);
+		d_grad_proj_v_float, S, D, D);
 
-	cudaMemsetAsync(d_grad_v_float, 0, total_seq_dim * sizeof(float), s);
+	cudaMemsetAsync(d_grad_attn_accum, 0, total_seq_dim * sizeof(float), s);
 	accumulate_attention_residual<<<res_blocks, res_threads, 0, s>>>(
-		d_grad_v_float, d_grad_attn_float, d_grad_q_float, d_grad_k_float, total_seq_dim);
+		d_grad_attn_accum, d_grad_proj_q_float, d_grad_proj_k_float, d_grad_proj_v_float, total_seq_dim);
 
 	backward_rms_norm<<<1, 1024, 0, s>>>(
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_normalized_attention),
 		static_cast<const float*>(gpu_activations->d_attention_scale),
-		d_grad_v_float, total_seq_dim);
+		d_grad_attn_accum, total_seq_dim);
 
 	add_residual_gradient<<<res_blocks, res_threads, 0, s>>>(
-		d_grad_mid_float, d_grad_v_float, total_seq_dim);
+		d_grad_mid_float, d_grad_attn_accum, total_seq_dim);
 
 	// 10. Update all 7 transformer parameter matrices using Fused AdamW
 	gpu_weights->step_count += 1;
@@ -1206,10 +1240,15 @@ extern "C" CUDA_API bool transformer_backward_block(
 	free_vram(d_grad_gate_float, s);
 	free_vram(d_grad_up_float, s);
 	free_vram(d_grad_mid_float, s);
+	free_vram(d_grad_ffn_up_in, s);
 	free_vram(d_grad_attn_float, s);
 	free_vram(d_grad_q_float, s);
 	free_vram(d_grad_k_float, s);
 	free_vram(d_grad_v_float, s);
+	free_vram(d_grad_proj_q_float, s);
+	free_vram(d_grad_proj_k_float, s);
+	free_vram(d_grad_proj_v_float, s);
+	free_vram(d_grad_attn_accum, s);
 	free_vram(d_grad_bf16_temp, s);
 
 	return CUDA_CHECK(cudaGetLastError());

@@ -1484,14 +1484,16 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			      s);
 
 	// 4. Fused Causal Attention
-	fused_causal_attention(gpu_activations->d_query,
-			       gpu_activations->d_key,
-			       gpu_activations->d_value,
-			       gpu_activations->d_attention_output,
-			       sequence_length,
-			       embedding_dim,
-			       num_heads,
-			       s);
+	if (!fused_causal_attention(gpu_activations->d_query,
+				    gpu_activations->d_key,
+				    gpu_activations->d_value,
+				    gpu_activations->d_attention_output,
+				    sequence_length,
+				    embedding_dim,
+				    num_heads,
+				    s)) {
+		return false;
+	}
 
 	// 5. Output projection: O * W_O -> d_ffn_output (temporary holder before residual add)
 	batched_gemm_multiply(gpu_activations->d_attention_output,

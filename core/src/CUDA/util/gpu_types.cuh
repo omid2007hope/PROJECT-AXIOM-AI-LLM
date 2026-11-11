@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "shared_params.h"
 #include "gpu_kernel.cuh"
 
 #ifdef __cplusplus
@@ -47,9 +48,9 @@ struct GpuPortion {
 	// true only while d_token_ids[i] holds the IDs of the step currently uploaded to buffer i
 	bool token_ids_active[2] = {false, false};
 
-	size_t token_count = 0;	     // total token count in context window (e.g. 128)
-	size_t context_elements = 0; // total bfloat16 elements in X
-	size_t target_elements = 0;  // total bfloat16 elements in Y
+	size_t token_count = axiom::CONTEXT_WINDOW;     // total token count in context window (e.g. 256)
+	size_t context_elements = axiom::FAN_IN_DIM; // total bfloat16 elements in X
+	size_t target_elements = axiom::TOKEN_DIM;  // total bfloat16 elements in Y
 
 	// Pre-allocated persistent device buffers & events per stream
 	void* d_hidden_state[2] = {nullptr, nullptr};
@@ -65,8 +66,8 @@ struct GpuPortion {
 struct GpuEmbeddings {
 	void* d_table = nullptr;	// device ptr to __nv_bfloat16 (vocab_size * embedding_dim)
 	void* d_table_master = nullptr; // device ptr to float (vocab_size * embedding_dim)
-	size_t vocab_size = 65536;
-	size_t embedding_dim = 32;
+	size_t vocab_size = axiom::VOCAB_SIZE;
+	size_t embedding_dim = axiom::TOKEN_DIM;
 	size_t active_vocab_size =
 		0; // Milestone 3: Dynamic bound for active vocabulary in tied logits/softmax
 
@@ -137,8 +138,8 @@ struct GpuWeights {
 	void* d_down_m = nullptr;
 	void* d_down_v = nullptr;
 
-	size_t transformer_dim = 0;
-	size_t transformer_ffn = 0;
+	size_t transformer_dim = axiom::TOKEN_DIM;
+	size_t transformer_ffn = axiom::FFN_DIM;
 
 	// Phase 6: Sparse Mixture of Experts (MoE) Weights
 	bool enable_moe = false;

@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "shared_params.h"
 
 #pragma pack(push, 1)
 
@@ -37,8 +38,8 @@ enum class AppMode { Chat, Use, Train, BulkTrain, Test, Benchmark, Server, Exit 
 
 struct Config {
 	static constexpr size_t ram_buffer_size = 4194304;
-	static constexpr size_t token_dim = 1024;
-	static constexpr size_t context_window_size = 256;
+	static constexpr size_t token_dim = axiom::TOKEN_DIM;
+	static constexpr size_t context_window_size = axiom::CONTEXT_WINDOW;
 	static constexpr float learning_rate = 0.001f;
 	static constexpr size_t loss_report_interval = 1000;
 
@@ -88,7 +89,7 @@ constexpr const char* vocab_file = Config::vocab_file;
 
 
 namespace vocab {
-constexpr uint32_t VOCAB_SIZE = 65536;
+constexpr uint32_t VOCAB_SIZE = axiom::VOCAB_SIZE;
 
 // Slots [0 .. 3]: Special reserved tokens
 constexpr uint32_t PAD = 0;
@@ -145,13 +146,13 @@ struct AxiomModelConfig {
 	uint32_t magic = 0x4D4F4958; // "XIOM"
 	uint32_t version = 2;
 	uint32_t num_layers = 28;
-	uint32_t hidden_dim = 1536;
-	uint32_t num_q_heads = 12;
-	uint32_t num_kv_heads = 2;
-	uint32_t head_dim = 128;
-	uint32_t feedforward_network_dimension = 8960;
-	uint32_t vocab_size = 151936;
-	uint32_t max_seq_len = 8192;
+	uint32_t hidden_dim = static_cast<uint32_t>(axiom::TOKEN_DIM);
+	uint32_t num_q_heads = static_cast<uint32_t>(axiom::NUM_HEADS);
+	uint32_t num_kv_heads = static_cast<uint32_t>(axiom::NUM_HEADS);
+	uint32_t head_dim = static_cast<uint32_t>(axiom::HEAD_DIM);
+	uint32_t feedforward_network_dimension = static_cast<uint32_t>(axiom::FFN_DIM);
+	uint32_t vocab_size = axiom::VOCAB_SIZE;
+	uint32_t max_seq_len = static_cast<uint32_t>(axiom::CONTEXT_WINDOW);
 	float rms_norm_eps = 1e-6f;
 	float rope_theta = 1000000.0f;
 };
