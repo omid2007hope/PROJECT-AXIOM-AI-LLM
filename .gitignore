@@ -19,6 +19,7 @@ core/asset_sample/symbols/
 *.pdf
 .aider*
 models/
+build/
 
 # Private & Confidential Knowledge (Strictly Excluded)
 We_Know/
