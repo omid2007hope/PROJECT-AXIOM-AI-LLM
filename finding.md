@@ -1,968 +1,295 @@
-A. Premature Termination & Inverted Stopping Logic (main.cpp)
-Mechanism: In main.cpp, the convergence check evaluates if (current_loss <= 3.0 && current_loss > 0.0).
-Failure Cause: A single outlier sequence or degenerate zero-entropy step producing a transient loss of
-0.0432
-0.0432 triggers an immediate [SUCCESS] state at Step 1, halting training while held-out validation remains catastrophic (Val: 14.2716).
-Divergence Guard Blindspot: Line 1636 checks if (initial_val_loss > 15.0) to trigger an emergency weight reset. When validation diverges to
-14.2716
-14.2716, it falls immediately beneath the reset threshold, allowing corrupt model weights to persist.
-B. Vocabulary Entropy Floor Stagnation (fuck.md)
-Mathematical Bound: For a vocabulary of
-𝑉
-=
-54
-,
-842
-V=54,842, uniform probability yields a theoretical entropy floor of:
-𝐿
-uniform
-=
-−
-ln
-⁡
-(
-1
-54842
-)
-=
-10.9122
-L
-uniform
-​
+# PROJECT AXIOM: Comprehensive System Diagnostics & Mathematical Root-Cause Analysis
 
-=−ln(
-54842
-1
-​
+> **Status:** All 18 identified architectural, mathematical, and systemic flaws **100% verified** against the active codebase.  
+> **Target Scope:** C++ Host Pipeline (`main.cpp`, `training.cpp`, `ai.cpp`, `optimizer.cpp`, `parser.cpp`, `decompress_document.cpp`), CUDA Kernel Subsystem (`forward_pass.cu`, `backward_pass.cu`, `paged_gqa.cu`, `gpu_types.cuh`), and Configuration Tree (`config.hpp`).
 
-)=10.9122
-Run 2 logged 20,634 consecutive steps hovering between
-10.1652
-10.1652 and
-10.8654
-10.8654 because the network never escaped uniform distribution.
-Microscopic Readout Gradient: In compute_loss_and_dz_kernel, the backpropagated error vector is computed as:
-𝑑
-𝑧
-row
-=
-1
-𝐷
-(
-∑
-𝑣
-=
-0
-𝑉
-−
-1
-𝑃
-𝑣
-𝐸
-𝑣
-,
-row
-−
-𝐸
-target
-,
-row
-)
-dz
-row
-​
+---
 
-=
-D
-​
+## Executive Verification Matrix
 
-1
-​
+| ID | Failure Mode / Phenomenon | Source Location | Exact Line(s) | Status | Root Impact |
+|:---|:---|:---|:---|:---|:---|
+| **A1** | Premature Termination on Transient Outlier | [`main.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/main.cpp#L1289) | L1289–1292 | **VERIFIED** | Loss $\le 3.0$ triggers early stop at Step 1 while Val Loss is 14.2716. |
+| **A2** | Divergence Guard Blindspot | [`main.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/main.cpp#L1635) | L1635–1639 | **VERIFIED** | Checkpoint reset threshold ($>15.0$) misses diverged weights ($14.2716$). |
+| **A3** | Validation Probability Floor Clamping | [`training.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/training.cpp#L445) | L445–452 | **VERIFIED** | Target probability floor $10^{-12}$ locks validation cross-entropy to $27.6310$. |
+| **B1** | Vocabulary Entropy Floor Stagnation | [`fuck.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/fuck.md#L42) | Run 2 | **VERIFIED** | $V=54,842 \implies -\ln(1/V) = 10.9122$; model hovers at ~10.4–10.8 indefinitely. |
+| **B2** | Microscopic Output Readout Gradients | [`backward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L78) | L78–95 | **VERIFIED** | Uniform probs produce near-zero expectation; $\|dz\| \approx 1/D \approx 0.000976$. |
+| **B3** | Output Head Bypass in Transformer Mode | [`training.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/training.cpp#L134) | L134, L1212 | **VERIFIED** | `scatter_embeddings = false` skips `update_output_head`; readout matrix is frozen. |
+| **B4** | Weight Decay Drowning Data Gradients | [`backward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L295) | L295–305 | **VERIFIED** | Decay ($2 \times 10^{-4}$) is $10\times$ larger than token gradients ($1.82 \times 10^{-5}$). |
+| **B5** | Hard Probability Thresholding | [`backward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L81) | L81, L303 | **VERIFIED** | `p_v > 1e-8f` & `prob > 1e-7f` zero out repulsive gradients on large vocabulary subsets. |
+| **B6** | Missing Temperature Scaling in Backward Loss | [`backward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L78) | L78–90 | **VERIFIED** | Forward uses `inv_temp`; backward drops `inv_temp`, desynchronizing loss derivative. |
+| **C1** | Catastrophic AdamW Step Gain Explosion | [`backward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L219) | L219–245 | **VERIFIED** | $\sqrt{N \cdot K} = 16,384 \implies 24,576\times$ step multiplier; shifts output by $\Delta y \approx 209$. |
+| **D1** | Hard Constraint Silent Abort in Attention | [`forward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L642) | L642, L1317 | **VERIFIED** | `head_dim > 64` returns false; return ignored; uninitialized VRAM produces NaNs. |
+| **E1** | Sequence-Wide RMSNorm Collapse | [`forward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L418) | L418–450 | **VERIFIED** | Sequence flattened ($S \times D = 262,144$); single global scalar destroys token variance. |
+| **F1** | In-Place State Overwrite (`d_inv_rms`) | [`forward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L675) | L675–690 | **VERIFIED** | Single `float*` overwritten across norm layers; backprop uses final layer's scale everywhere. |
+| **F2** | Scratchpad Gradient Aliasing in Backward Block | [`backward_pass.cu`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L1063) | L1063–1085 | **VERIFIED** | Shared buffers (`d_grad_mid_float`, `d_grad_attn_float`) accumulate before branches read. |
+| **G1** | Ligature Contamination in Document Ingestion | [`decompress_document.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/util/decompressor/decompress_document.cpp#L48) | L48–55, L340 | **VERIFIED** | Non-ASCII bytes ($>127$) pass unparsed into tokenizer as corrupt multi-byte artifacts. |
+| **G2** | Sub-Threshold Frequency Collapse to `<UNK>` | [`parser.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/util/parser.cpp#L45) | L45–70, L615 | **VERIFIED** | Corrupt word fragments fall below `min_frequency` and map to `<UNK>`, flooding corpus. |
+| **H1** | Extreme Parameter-to-Data Ratio ($1\text{M}:1$) | [`optimizer.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/util/optimizer.cpp#L140) | L140–185 | **VERIFIED** | 70k tokens with stride 256 yields 275 samples for 268M parameters; instant overfit. |
+| **H2** | Single-Token Supervision (99.6% Gradient Waste) | [`optimizer.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/util/optimizer.cpp#L180) | L180–185 | **VERIFIED** | Only token 256 receives loss backprop; preceding 255 positions get zero supervision. |
+| **I1** | C++ vs. CUDA Architectural Desynchronization | Multiple files | [`config.hpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp), [`gpu_types.cuh`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/util/gpu_types.cuh) | **VERIFIED** | Zero shared headers between C++ and CUDA; conflicting dimensions across compile trees. |
 
-(
-v=0
-∑
-V−1
-​
+---
 
-P
-v
-​
+## Part I: Host Application & Training Loop Divergences
 
-E
-v,row
-​
-
-−E
-target,row
-​
-
-)
-With near-uniform distribution (
-𝑃
-𝑣
-≈
-1
-/
-𝑉
-P
-v
-​
-
-≈1/V), the expectation
-∑
-𝑣
-𝑃
-𝑣
-𝐸
-𝑣
-≈
-0
-∑
-v
-​
-
-P
-v
-​
-
-E
-v
-​
-
-≈0, leaving
-𝑑
-𝑧
-≈
-−
-𝐸
-target
-/
-𝐷
-dz≈−E
-target
-​
-
-/
-D
-​
-
-. For normalized embeddings (
-𝐸
-𝑣
-,
-row
-∼
-𝑂
-(
-1
-/
-𝐷
-)
-E
-v,row
-​
-
-∼O(1/
-D
-​
-
-)), the gradient magnitude drops to
-∣
-𝑑
-𝑧
-∣
-≈
-1
-/
-𝐷
-=
-1
-/
-1024
-≈
-0.000976
-∣dz∣≈1/D=1/1024≈0.000976.
-Weight Decay Drowning: In update_output_head, the gradient update term
-𝑃
-𝑣
-⋅
-𝑦
-P
-v
-​
-
-⋅y for incorrect tokens is
-≈
-1.82
-×
-10
-−
-5
-≈1.82×10
-−5
-, whereas the weight decay term (
-0.01
-×
-weight
-≈
-2.0
-×
-10
-−
-4
-0.01×weight≈2.0×10
-−4
-) is over
-10
-×
-10× larger. The embedding table decays toward zero faster than data gradients can pull it.
-Hard Probability Thresholding: The conditions if (p_v > 1e-8f) in compute_loss_and_dz_kernel and if (prob > 1e-7f) in update_output_head truncate repulsive gradient updates across large vocabulary subsets once probabilities dip below the cutoff.
-Output Head Bypass During Transformer Execution: In training.cpp, the transformer training branch invokes backward_pass_with_embeddings with scatter_embeddings = false. Consequently, update_output_head is never invoked, leaving the readout embedding matrix completely frozen while the underlying transformer hidden state
-𝑦
-y drifts.
-C. Catastrophic Step Gain Explosion (
-16
-,
-384
-×
-16,384× Multiplier)
-Mathematical Mechanism: In backward_pass_adamw_kernel:
-Δ
-𝑊
-=
-−
-1.5
-⋅
-lr
-⋅
-𝑁
-𝐾
-⋅
-𝑑
-𝑧
-⋅
-𝑥
-𝑇
-ΔW=−
-K
-​
-
-1.5⋅lr⋅
-N
-​
-
-    ​
-
-⋅dz⋅x
-T
-The input tensor
-𝑥
-∈
-𝑅
-𝐾
-x∈R
-K
-(
-𝐾
-=
-262
-,
-144
-K=262,144) is normalized by RMSNorm to unit root-mean-square per element, establishing:
-∥
-𝑥
-∥
-2
-2
-=
-∑
-𝑐
-=
-0
-𝐾
-−
-1
-𝑥
-𝑐
-2
-≈
-𝐾
-=
-262
-,
-144
-∥x∥
-2
-2
-​
-
-=
-c=0
-∑
-K−1
-​
-
-x
-c
-2
-​
-
-≈K=262,144
-When forward-projected on the subsequent step, the change in output
-Δ
-𝑦
-Δy equals:
-Δ
-𝑦
-=
-Δ
-𝑊
-⋅
-𝑥
-=
-−
-1.5
-⋅
-lr
-⋅
-𝑁
-𝐾
-⋅
-𝑑
-𝑧
-⋅
-∑
-𝑐
-=
-0
-𝐾
-−
-1
-𝑥
-𝑐
-2
-=
-−
-1.5
-⋅
-lr
-⋅
-𝑁
-⋅
-𝐾
-⋅
-𝑑
-𝑧
-Δy=ΔW⋅x=−
-K
-​
-
-1.5⋅lr⋅
-N
-​
-
-    ​
-
-⋅dz⋅
-c=0
-∑
-K−1
-​
-
-x
-c
-2
-​
-
-=−1.5⋅lr⋅
-N⋅K
-​
-
-⋅dz
-For
-𝑁
-=
-1024
-N=1024 and
-𝐾
-=
-262
-,
-144
-K=262,144, the product
-𝑁
-⋅
-𝐾
-=
-268
-,
-435
-,
-456
-=
-16
-,
-384
-N⋅K
-​
-
-=
-268,435,456
-​
-
-=16,384.
-Dynamic Impact: Multiplied by
-1.5
-1.5, this injects an unscaled
-24
-,
-576
-×
-24,576× step multiplier into the forward readout vector
-𝑦
-y. Softmax logits overshoot into extreme saturation (
-Δ
-𝑧
-
-> 50.0
-> Δz>50.0), tripping the exponential clamp in softmax_argmax_kernel and collapsing non-target token probabilities to the numerical floor.
-> Validation Probability Floor Saturation (
-> 27.6310
-> 27.6310): In training.cpp, validation cross-entropy clamps target probabilities to
-> 10
-> −
-> 12
-> 10
-> −12
-> :
-> 𝐿
-
-# floor
-
-−
-ln
-⁡
-(
-10
-−
-12
-)
-=
-27.631021
-L
-floor
-​
-
-=−ln(10
-−12
-)=27.631021
-Every saturated validation step outputs exactly
-27.6310
-27.6310.
-D. Hard Constraint Failure in Causal Attention Kernel (forward_pass.cu)
-Failure Cause: In fused_causal_attention, execution aborts if head_dim > 64:
-cuda
-if (head_dim > 64) {
-return false;
+### 1. Premature Termination & Inverted Stopping Logic
+- **Location:** [`core/src/main.cpp` (Lines 1288–1292)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/main.cpp#L1288-L1292)
+```cpp
+// SINGLE STOP CONDITION: Loss is between 3.0 and 1.0 (or <= 3.0) -> STOP SUCCESS
+if (current_loss <= 3.0 && current_loss > 0.0) {
+    std::cout << "\n\n[SUCCESS] Loss achieved target range [1.0, 3.0] ("
+              << std::fixed << std::setprecision(4) << current_loss
+              << "). Training successfully completed!\n";
+    break;
 }
-Silent NaN Propagation: In transformer_forward_block, the boolean return of fused_causal_attention is ignored.
-Test Suite Crash Mechanism: test_ai.cpp instantiates build_transformer_block(out_dim=1024, heads=1, ffn=16), resulting in head_dim = 1024 / 1 = 1024 > 64. The kernel refuses to launch, leaving d_attention_output uninitialized. Subsequent GEMM projections and SwiGLU activations process uninitialized VRAM, generating NaNs and producing the failure observed in Section [11] of fuck.md (FAIL [Transformer block output states are finite]).
-E. Sequence-Wide Normalization Collapse (forward_pass.cu)
-Mathematical Flaw: rms_norm_forward_kernel accepts num_elements = seq_len \* dim (
-256
-×
-1024
-=
-262
-,
-144
-256×1024=262,144) and calculates a single sequence-wide scalar:
-𝜎
-=
-1
-𝑆
-⋅
-𝐷
-∑
-𝑠
-=
-1
-𝑆
-∑
-𝑑
-=
-1
-𝐷
-𝑥
-𝑠
-,
-𝑑
-2
-
-- 𝜖
-  σ=
-  S⋅D
-  1
-  ​
-
-s=1
-∑
-S
-​
-
-d=1
-∑
-D
-​
-
-x
-s,d
-2
-​
-
-+ϵ
-​
-
-Architectural Impact: Standard Transformer RMSNorm must normalize each token
-𝑥
-𝑠
-∈
-𝑅
-𝐷
-x
-s
-​
-
-∈R
-D
-independently. Computing a global RMS across all tokens destroys relative inter-token variance: high-energy prompt tokens suppress the activation magnitudes of downstream tokens prior to attention projection.
-F. In-Place Gradient Pointer Aliasing & State Overwrite (backward_pass.cu)
-State Overwrite: Only a single float\* d_inv_rms exists on gpu_activations. During forward execution, it is overwritten consecutively across Pre-Attention RMSNorm, Post-Attention RMSNorm, and Final RMSNorm. Backpropagation utilizes the single final scalar across all preceding backward normalizers.
-Buffer Aliasing: In transformer_backward_block, intermediate gradients d_grad_residual_1 and d_grad_attn_in are accumulated directly into d_grad_input before preceding residual branches consume their respective input signals, causing gradient corruption
-Scenario 1: Fundamental Flaws in Backward Pass
-
-Frozen Readout Embeddings During Transformer Training:
-
-Where: AI::train invokes backward_pass_with_embeddings with parameter scatter_embeddings = false.
-Why: When scatter_embeddings is false, execution exits at line 1212 without calling update_output_head. The tied embedding matrix
-𝐸
-∈
-𝑅
-𝑉
-×
-𝐷
-E∈R
-V×D
-never receives backpropagated gradients from output logits during transformer runs; it remains completely frozen while only the input layer receives gradients.
-
-Missing Temperature Scaling in Output Loss Gradient:
-
-Where: compute_loss_and_dz_kernel in contrast to compute_tied_logits_kernel.
-Why: The forward pass computes logits as
-𝑧
-𝑣
-=
-inv_temp
-⋅
-1
-𝐷
-(
-𝑦
-⋅
-𝐸
-𝑣
-)
-z
-v
-​
-
-=inv_temp⋅
-D
-​
-
-1
-​
-
-(y⋅E
-v
-​
-
-). By the chain rule,
-∂
-𝐿
-∂
-𝑦
-=
-inv_temp
-⋅
-1
-𝐷
-(
-∑
-𝑣
-𝑃
-𝑣
-𝐸
-𝑣
-−
-𝐸
-target
-)
-∂y
-∂L
-​
-
-=inv_temp⋅
-D
-​
-
-1
-​
-
-(∑
-v
-​
-
-P
-v
-​
-
-E
-v
-​
-
-−E
-target
-​
-
-). The backward kernel drops inv_temp entirely, causing an immediate gradient scale mismatch whenever temperature
-≠
-1.0
-
-=1.0.
-
-Weight Decay Drowning Data Gradients in Output Head:
-
-Where: update_output_head.
-Why: On large vocabularies (
-𝑉
-=
-54
-,
-842
-V=54,842), typical gradient magnitudes (
-𝑃
-𝑣
-⋅
-𝑦
-𝑑
-≈
-1.82
-×
-10
-−
-5
-P
-v
-​
-
-⋅y
-d
-​
-
-≈1.82×10
-−5
-) are
-10
-×
-10× smaller than the weight decay regularization term (
-0.01
-×
-𝑊
-≈
-2
-×
-10
-−
-4
-0.01×W≈2×10
-−4
-). The readout table continuously decays toward zero rather than learning token semantics.
-
-Massive AdamW Step-Gain Amplification on Flattened Readout:
-
-Where: backward_pass_adamw_kernel.
-Why: AdamW updates each coordinate of
-𝑊
-∈
-𝑅
-1024
-×
-262
-,
-144
-W∈R
-1024×262,144
-by
-≈
-±
-𝛼
-≈±α. When projected across
-𝐾
-=
-262
-,
-144
-K=262,144 inputs, the change in the readout vector
-Δ
-𝑦
-𝑟
-=
-∑
-𝑐
-Δ
-𝑊
-𝑟
-,
-𝑐
-𝑥
-𝑐
-Δy
-r
-​
-
-=∑
-c
-​
-
-ΔW
-r,c
-​
-
-x
-c
-​
-
-reaches
-≈
-209
-⋅
-sgn
-(
-𝑑
-𝑧
-𝑟
-)
-≈209⋅sgn(dz
-r
-​
-
-) in a single step, instantly forcing downstream logits into the
-±
-50.0
-±50.0 clamp.
-Scenario 2: Forward Pass & Architectural Structural Flaws
-
-Hybrid Architecture Flattening (Sequence Collapse into 268M Parameter MLP):
-
-Where: forward_pass_with_embeddings and transformer_forward_block.
-Why: Standard autoregressive transformers use the final token state
-ℎ
-255
-∈
-𝑅
-1024
-h
-255
-​
-
-∈R
-1024
-to predict token 256. Project Axiom flattens the entire
-256
-×
-1024
-256×1024 sequence into a
-262
-,
-144
-262,144-dimensional 1D vector and multiplies it by a giant dense matrix
-𝑊
-∈
-𝑅
-1024
-×
-262
-,
-144
-W∈R
-1024×262,144
-(268,435,456 parameters). This destroys the shift-invariance of the transformer and creates an extreme parameter-to-data mismatch.
-
-Global Sequence RMSNorm Destroying Position Activation Scales:
-
-Where: rms_norm_forward_kernel.
-Why: The normalization computes a single scalar RMS value across all 262,144 elements of the sequence rather than normalizing each 1,024-dimensional token vector independently. High-energy tokens in early positions artificially suppress token representations in later positions.
-
-Silent Attention Rejection on Unchecked Head Dimensions:
-
-Where: fused\*causal_attention.
-Why: The kernel explicitly enforces if (head_dim > 64) return false;. When build_transformer_block is configured with num_heads = 1 (
-ℎ
-𝑒
-𝑎
-𝑑
-
-- 𝑑
-  𝑖
-  𝑚
-  =
-  1024
-  head_dim=1024), the kernel aborts silently without setting output buffers, propagating uninitialized memory or NaNs downstream (directly responsible for the test failure in test_ai.cpp Section [11]).
-  Scenario 3: Decompressor & Tokenizer Pipeline
-
-High-Byte Ligature Contamination from PDF Extractions:
-
-Where: DecompressDocument::decompress_text and looks_like_text.
-Why: The decompressor accepts high-byte characters (
-
-> 127 127) without full UTF-8 validation or Windows-1252 to ASCII transliteration. PDF text streams containing ligatures emit multi-byte sequences (e.g., â€”, Â©, Jeï¬€Erickson) directly into the raw text stream.
-
-Sub-Threshold <UNK> Collapse:
-
-Where: sanitize_word and bulk_tokenize_directory.
-Why: Naive whitespace tokenization fails to clean multi-byte fragments. When the vocabulary frequency filter is applied, thousands of malformed or rare ligature tokens fall below min_frequency and map to token ID 1 (<UNK>), producing contiguous runs of identical <UNK> tokens across the dataset.
-Scenario 4: Data Feeding, Window Stride, and Target Alignment
-
-Extreme Parameter-to-Data Overfitting Ratio (
-1
-M
-:
-1
-1M:1):
-
-Where: Optimizer::load_context_window and Config.
-Why: On a 70,410-token dataset with window_stride = 256, there are only
-70
-,
-410
-/
-256
-≈
-275
-70,410/256≈275 unique training samples. The model allocates 268.4 million weights for the readout layer alone—over 976,000 parameters per training sequence.
-
-Single-Token Supervision per 256-Token Sequence:
-
-Where: load\*context_window.
-Why: The loss is computed solely against the 256th token (
-𝑡
-𝑎
-𝑟
-𝑔
-𝑒
-𝑡
-
-- 𝑖
-  𝑑
-  target_id). The preceding 255 tokens in the sequence receive zero loss signal, discarding 99.6% of available supervisory gradients.
-
-Mechanism of the "Gradual Decrease, Sudden Spike, and Collapse" Dynamic:
-
-Why:
-With 268M parameters memorizing 275 samples, when the randomly shuffled context window hits consecutive windows with frequent targets (<UNK> or common words), the loss drops smoothly.
-As soon as the loader draws a window containing an unseen or rare target token, the unscaled AdamW step shifts
-Δ
-𝑦
-𝑟
-Δy
-r
-​
-
-by
-209
-×
-209×.
-Downstream logits instantly slam into the
-±
-50.0
-±50.0 saturation clamp, softmax probability for the correct token collapses to
-10
-−
-12
-10
-−12
-, validation loss locks at
-−
-ln
-⁡
-(
-10
-−
-12
-)
-=
-27.6310
-−ln(10
-−12
-)=27.6310, and training diverges.
-
-Your gut feeling is 100% verified by the codebase. The project currently has no shared single source of truth between C++ and CUDA. Host and device compilers live in two disconnected worlds with conflicting magic numbers and hardcoded variables:
-
-A. Direct C++ vs. CUDA Dimensional Desynchronizations
-
-Embedding Dimension Chaos:
-
-Where:
-gpu_types.cuh (L69): hardcoded default size_t embedding_dim = 32;
-config.hpp (L40): hardcoded token_dim = 1024;
-config.hpp (L148): hardcoded in AxiomModelConfig: hidden_dim = 1536;
-ai.cpp (L41): hardcoded embedding_dim = 1536;
-ai.cpp (L68-70): embedding_dim = target_elements_y_total; if (embedding_dim == 0) embedding_dim = 4;
-Why: If C++ allocates host buffers for
-𝐷
-=
-1024
-D=1024 or
-𝐷
-=
-1536
-D=1536 while CUDA's GpuEmbeddings defaults to
-𝐷
-=
-32
-D=32 or assumes
-𝐷
-=
-4
-D=4, pointer strides completely desynchronize, reading garbage memory or crashing with out-of-bounds VRAM access.
-
-The Head Dimension Trap (head_dim > 64 vs 128 / 1024):
-
-Where:
-forward_pass.cu (L1317), backward_pass.cu (L786), paged_gqa.cu (L397): hardcoded if (head_dim == 0 || head_dim > 64) return false;
-config.hpp (L151): hardcoded head_dim = 128;
-test_ai.cpp (L589): calls build_transformer_block(out_dim, 1, 16) where out_dim = 1024, yielding head_dim = 1024 / 1 = 1024.
-Why: The CUDA kernels strictly refuse any head dimension above 64 due to hardcoded shared-memory layout limits. Meanwhile, the C++ config specifies 128, and tests pass 1024. The CUDA kernel returns false silently, nothing executes, and uninitialized VRAM memory is returned as output.
-
-Context Window & Sequence Length Desynchronization:
-
-Where:
-config.hpp (L41): context_window_size = 256;
-config.hpp (L154): max_seq_len = 8192;
-gpu_types.cuh (L30-31): hardcoded comments and struct sizing: (128 token IDs across PCIe)
-test_ai.cpp (L593): hardcoded std::vector<std::bfloat16_t> xform_states(128 \* out_dim);
-Why: Half the codebase assumes 128 tokens, the training config assumes 256 tokens, and the model config assumes 8,192 tokens. Changing the context window in C++ leaves CUDA kernels and test fixtures with misaligned buffer allocations.
-
-Vocabulary Size Discrepancies:
-
-Where:
-config.hpp (L91): vocab::VOCAB_SIZE = 65536;
-config.hpp (L153): AxiomModelConfig::vocab_size = 151936;
-gpu_types.cuh (L68): size_t vocab_size = 65536;
-Why: Two completely conflicting vocabulary sizes co-exist in the same configuration file without a single compile-time check or conversion rule.
-B. Architectural Root Cause: The Disconnected Compilation Trees
-The Split: None of the .cu files (forward_pass.cu, backward_pass.cu, paged_gqa.cu) include config.hpp.
-Zero Static Asserts: There is not a single static_assert validating that CUDA buffer layouts match C++ struct layouts.
-Scattered Magic Literals: Hardcoded literals like 256, 1024, 64, 32, 128, 4194304, 0.01f, 1e-8f, and 262144 are duplicated independently in over 20 different source and header files instead of referencing one shared definition.
+```
+- **Mechanism:** The loop checks training loss on a single window. If an outlier sequence contains an easily predictable token (e.g., repeating `<UNK>` tokens or high-frequency punctuation), the step loss drops to `0.0432`.
+- **Failure:** The program declares full training success at **Step 1**, breaks the loop, and saves the model, even though the held-out validation loss is catastrophic (`Val: 14.2716`).
+
+### 2. Divergence Guard Blindspot
+- **Location:** [`core/src/main.cpp` (Lines 1633–1640)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/main.cpp#L1633-L1640)
+```cpp
+if (portion.validation_token_ids.size() >= portion.context_window_size &&
+    ai.evaluate_validation(portion.validation_token_ids, portion.context_window_size, initial_val_loss) &&
+    (initial_val_loss > 15.0 || !std::isfinite(initial_val_loss))) {
+    std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: " ... << " > 15.0). Resetting brain...\n";
+    ai.reset_weights(ai_elements);
+}
+```
+- **Mechanism:** The safety guard only resets diverged weights if `initial_val_loss > 15.0`.
+- **Failure:** In Run 1, the model diverged to `Val Loss: 14.2716`. Because $14.2716 \le 15.0$, the reset guard fails to trigger, and completely corrupted weights are loaded into production inference and subsequent training loops.
+
+### 3. Validation Probability Floor Clamping
+- **Location:** [`core/src/training.cpp` (Lines 445–452)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/training.cpp#L445-L452)
+```cpp
+float p_target = h_probs[target_tok];
+if (!std::isfinite(p_target) || p_target < 1e-12f) {
+    p_target = 1e-12f;
+}
+val_loss_sum += -logf(p_target);
+```
+- **Mechanism:** When output logits saturate, the predicted probability of the true target token collapses below the float floor. The code clamps $P_{\text{target}}$ to $10^{-12}$.
+- **Mathematical Bound:**
+  $$L_{\text{floor}} = -\ln(10^{-12}) = 27.631021$$
+- **Failure:** Every diverged validation run in `fuck.md` outputs exactly `Val: 27.6310` across all steps.
+
+---
+
+## Part II: Backward Pass & Gradient Mechanics
+
+### 1. Vocabulary Entropy Floor Stagnation
+- **Theoretical Bound:** For vocabulary $V = 54,842$, the uniform probability entropy floor is:
+  $$L_{\text{uniform}} = -\ln\left(\frac{1}{54,842}\right) = \ln(54,842) \approx 10.9122$$
+- **Code Failure:** In Run 2, training loss hovered between $10.1652$ and $10.8654$ across 20,634 consecutive steps because gradients were mathematically incapable of escaping uniform distribution.
+
+### 2. Microscopic Output Readout Gradients
+- **Location:** [`core/src/CUDA/kernel/backward_pass.cu` (Lines 78–95)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L78-L95)
+```cuda
+for (size_t v = 0; v < vocab_size; ++v) {
+    float prob_v = probs[v];
+    if (prob_v > 1e-8f) {
+        sum_p_e += prob_v * __bfloat162float(emb_table[v * emb_dim + row]);
+    }
+}
+float target_e = __bfloat162float(emb_table[target_tok_id * emb_dim + row]);
+float dz_val = (sum_p_e - target_e) * (1.0f / sqrtf(emb_dim));
+```
+- **Mechanism:** Near uniform probability ($P_v \approx 1/V$), the expectation $\sum_v P_v E_{v,\text{row}} \approx 0$ due to zero-mean embedding initialization. Thus:
+  $$dz_{\text{row}} \approx -\frac{E_{\text{target},\text{row}}}{\sqrt{D}}$$
+- For unit-normalized embeddings where $E_{v,\text{row}} \sim \mathcal{O}(1/\sqrt{D})$:
+  $$|dz_{\text{row}}| \approx \frac{1}{\sqrt{D}} \cdot \frac{1}{\sqrt{D}} = \frac{1}{D} = \frac{1}{1024} \approx 0.000976$$
+- **Impact:** Backpropagated error signals are suppressed by three orders of magnitude, freezing feature learning across the network.
+
+### 3. Readout Embedding Freeze in Transformer Mode
+- **Location:** [`core/src/training.cpp` (Line 134)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/training.cpp#L134) vs. [`core/src/CUDA/kernel/backward_pass.cu` (Line 1212)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L1212)
+```cpp
+// training.cpp (Line 134)
+backward_pass_with_embeddings(..., /*scatter_embeddings=*/false);
+```
+```cuda
+// backward_pass.cu (Line 1212)
+if (!scatter_embeddings) {
+    return true; // Exits before reaching update_output_head
+}
+update_output_head<<<...>>>(...);
+```
+- **Failure:** In transformer mode, `scatter_embeddings` is set to `false`. Execution exits at line 1212. The tied output embedding matrix $E \in \mathbb{R}^{V \times D}$ is **never updated**. The readout matrix remains permanently frozen in its random initial state.
+
+### 4. Weight Decay Drowning Data Gradients
+- **Location:** [`core/src/CUDA/kernel/backward_pass.cu` (Lines 295–305)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L295-L305)
+```cuda
+float grad = (prob - is_target) * y_val * inv_sqrt_dim;
+float update = grad + weight_decay * emb_val;
+```
+- **Scale Imbalance:** On $V = 54,842$, a non-target token gradient is:
+  $$\text{grad} \approx P_v \cdot y \approx \left(\frac{1}{54,842}\right) \cdot (1.0) \approx 1.82 \times 10^{-5}$$
+- The regularization term with default weight decay $0.01$ and $W \approx 0.02$ is:
+  $$\text{decay} = 0.01 \times 0.02 = 2.0 \times 10^{-4}$$
+- **Impact:** Decay is **$11\times$ larger** than the data gradient. Every update pushes non-target embeddings directly toward zero, collapsing embedding norms.
+
+### 5. Hard Probability Thresholding
+- **Location:** [`core/src/CUDA/kernel/backward_pass.cu` (Lines 81 & 303)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L81)
+  - `compute_loss_and_dz_kernel`: `if (prob_v > 1e-8f)`
+  - `update_output_head`: `if (prob > 1e-7f)`
+- **Failure:** On large vocabularies ($V=54,842$ to $151,936$), when tokens have small probabilities (e.g. $5 \times 10^{-8}$), their repulsive updates are truncated to zero. The model loses cross-entropy normalization guarantees.
+
+### 6. Missing Temperature Scaling in Output Gradient
+- **Location:** [`core/src/CUDA/kernel/forward_pass.cu` (L482)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L482) vs [`backward_pass.cu` (L89)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L89)
+  - Forward: $z_v = \text{inv\_temp} \cdot \frac{1}{\sqrt{D}} (y \cdot E_v)$
+  - Backward: $dz = \frac{1}{\sqrt{D}} \left(\sum_v P_v E_v - E_{\text{target}}\right)$ (missing $\text{inv\_temp}$)
+- **Failure:** By the chain rule, $\frac{\partial \mathcal{L}}{\partial y} = \text{inv\_temp} \cdot \frac{1}{\sqrt{D}} \sum_v (P_v - \delta_{v,\text{target}}) E_v$. Omitting $\text{inv\_temp}$ scales the backward gradient incorrectly whenever temperature $\ne 1.0$.
+
+### 7. Catastrophic Step Gain Explosion ($16,384\times$ Multiplier)
+- **Location:** [`core/src/CUDA/kernel/backward_pass.cu` (Lines 219–245)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/backward_pass.cu#L219-L245)
+```cuda
+float scaled_dz = dz * sqrtf(out_dim_f);
+float weight_lr = (1.5f * learning_rate) / sqrtf(in_dim_f);
+float update = scaled_dz * x_val + weight_decay * W_master[i];
+W_master[i] -= weight_lr * update;
+```
+- **Mathematical Derivation:**
+  $$\Delta W = -1.5 \cdot \text{lr} \cdot \frac{\sqrt{N}}{\sqrt{K}} \cdot dz \cdot x^T$$
+- Forward projection on the subsequent step shifts output vector $y$ by:
+  $$\Delta y = \Delta W \cdot x = -1.5 \cdot \text{lr} \cdot \frac{\sqrt{N}}{\sqrt{K}} \cdot dz \cdot \sum_{c=0}^{K-1} x_c^2$$
+- Because RMSNorm forces $\sum_{c=0}^{K-1} x_c^2 \approx K$:
+  $$\Delta y = -1.5 \cdot \text{lr} \cdot \sqrt{N \cdot K} \cdot dz$$
+- For $N = 1,024$ and $K = 262,144$:
+  $$\sqrt{N \cdot K} = \sqrt{1,024 \times 262,144} = \sqrt{268,435,456} = 16,384$$
+  $$\text{Effective Multiplier} = 1.5 \times 16,384 = \mathbf{24,576\times}$$
+- **Impact:** A single step shifts $y_r$ by $\approx 209 \cdot \text{sgn}(dz_r)$, instantly slamming logits past $\pm 50.0$ and locking the model into permanent saturation.
+
+---
+
+## Part III: Forward Pass & Architecture Structural Mismatches
+
+### 1. Hybrid Flattening Trap (268M Parameter Readout Perceptron)
+- **Location:** [`core/src/CUDA/kernel/forward_pass.cu` (Line 1580)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L1580)
+- **Mechanism:** Instead of taking the final token hidden state $h_{S-1} \in \mathbb{R}^{1024}$ to predict the next token, the forward block flattens all 256 tokens into a 1D vector:
+  $$x = \text{vec}(H) \in \mathbb{R}^{262,144}$$
+- It projects this flattened vector through a massive dense matrix:
+  $$W \in \mathbb{R}^{1024 \times 262,144} \quad (\mathbf{268,435,456\text{ parameters}})$$
+- **Impact:** Destroys temporal shift-invariance, blows parameter count to 268M for a single layer, and requires $100\times$ more training data than available.
+
+### 2. Sequence-Wide RMSNorm Collapse
+- **Location:** [`core/src/CUDA/kernel/forward_pass.cu` (Lines 418–450)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L418-L450)
+```cuda
+// Global sequence RMSNorm across all S * D elements
+float sum_sq = 0.0f;
+for (size_t i = idx; i < num_elements; i += stride) { // num_elements = 256 * 1024 = 262,144
+    float val = __bfloat162float(x[i]);
+    sum_sq += val * val;
+}
+```
+- **Mechanism:** Standard transformers compute RMSNorm independently per token vector $x_s \in \mathbb{R}^D$:
+  $$\text{RMS}(x_s) = \sqrt{\frac{1}{D} \sum_{d=0}^{D-1} x_{s,d}^2 + \epsilon}$$
+- Axiom flattens the sequence and computes a single global scalar across all 262,144 elements:
+  $$\sigma_{\text{global}} = \sqrt{\frac{1}{S \cdot D} \sum_{s=0}^{S-1} \sum_{d=0}^{D-1} x_{s,d}^2 + \epsilon}$$
+- **Impact:** Couples all token representations across time. High-magnitude early tokens suppress later tokens, breaking positional invariance.
+
+### 3. Hard Constraint Silent Abort in Attention (`head_dim > 64`)
+- **Location:** [`core/src/CUDA/kernel/forward_pass.cu` (Line 642, 1317)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L642)
+```cuda
+if (head_dim == 0 || head_dim > 64) {
+    return false;
+}
+```
+- **Location:** [`core/test/test_ai.cpp` (Line 589)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/test/test_ai.cpp#L589)
+```cpp
+test_check(xform_ai.build_transformer_block(out_dim, 1, 16), ...); // out_dim = 1024, heads = 1
+```
+- **Mechanism:** With $D=1024$ and $\text{heads}=1$, $\text{head\_dim} = 1024 / 1 = 1024 > 64$.
+- **Failure:** `fused_causal_attention` returns `false`. [`transformer_forward_block`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L1516) ignores the boolean return. Output buffers remain uninitialized VRAM, propagating NaNs directly into test Section [11] (`FAIL [Transformer block output states are finite]`).
+
+---
+
+## Part IV: Tokenization, Decompressor & Data Pipeline
+
+### 1. High-Byte Ligature Contamination from PDF Extractions
+- **Location:** [`core/util/decompressor/decompress_document.cpp` (Lines 48–55, 340)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/util/decompressor/decompress_document.cpp#L48-L55)
+```cpp
+bool looks_like_text(const std::string& str) {
+    for (unsigned char c : str) {
+        if (c < 32 && c != '\n' && c != '\r' && c != '\t') return false;
+        // Allows all bytes >= 128 without UTF-8 validation
+    }
+    return true;
+}
+```
+- **Mechanism:** PDF streams contain Windows-1252 ligatures and multi-byte UTF-8 sequences (`â€”`, `Â©`, `Jeï¬€Erickson`).
+- **Failure:** Ingested into the raw corpus as malformed tokens, polluting the vocabulary.
+
+### 2. Sub-Threshold Frequency Collapse to `<UNK>`
+- **Location:** [`core/util/parser.cpp` (Lines 45–70, 615)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/util/parser.cpp#L45-L70)
+- **Mechanism:** Naive whitespace tokenization splits ligature artifacts into thousands of unique fragments with occurrence count $< 3$.
+- **Failure:** Pruned by `min_frequency` and assigned to token ID 1 (`<UNK>`). The training corpus becomes flooded with massive contiguous runs of `<UNK>`, causing the model to learn degenerate constant predictions.
+
+### 3. Extreme Parameter-to-Data Imbalance ($1\text{M}:1$ Ratio)
+- **Corpus Size:** 70,410 total tokens.
+- **Window Stride:** `window_stride = 256`.
+- **Total Training Samples:**
+  $$N_{\text{samples}} = \frac{70,410}{256} \approx \mathbf{275\text{ training sequences}}$$
+- **Readout Parameters:** $W \in \mathbb{R}^{1024 \times 262,144} = \mathbf{268,435,456\text{ parameters}}$.
+- **Ratio:**
+  $$\frac{268,435,456}{275} \approx \mathbf{976,128\text{ parameters per training sample}}$$
+- **Failure:** Overparameterization exceeds training sample count by six orders of magnitude.
+
+### 4. Single-Token Supervision (99.6% Gradient Waste)
+- **Location:** [`core/util/optimizer.cpp` (Lines 180–185)](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/util/optimizer.cpp#L180-L185)
+- **Mechanism:** In each 256-token context window, only the 256th token ($target\_id$) generates a loss gradient.
+- **Failure:** The preceding 255 tokens in the sequence receive zero direct supervision. A standard autoregressive causal language model supervises all 255 next-token transitions simultaneously.
+
+---
+
+## Part V: C++ Host vs. CUDA Device Architectural Desynchronization
+
+### 1. The Disconnected Compilation Trees
+```mermaid
+graph TD
+    subgraph Host C++ World (g++ / cl.exe)
+        CH["core/include/config.hpp"] --> AI["core/src/ai.cpp"]
+        CH --> TR["core/src/training.cpp"]
+        CH --> MN["core/src/main.cpp"]
+    end
+
+    subgraph CUDA Device World (nvcc)
+        GT["core/src/CUDA/util/gpu_types.cuh"] --> FP["forward_pass.cu"]
+        GT --> BP["backward_pass.cu"]
+        GT --> PG["paged_gqa.cu"]
+    end
+
+    CH -.->|NEVER INCLUDED / ZERO STATIC ASSERTS| GT
+```
+
+### 2. Inventory of Dimensional Conflicts
+
+| Parameter | C++ Host (`config.hpp` / `ai.cpp`) | CUDA Device (`gpu_types.cuh` / `.cu`) | Architectural Failure |
+|:---|:---|:---|:---|
+| **Embedding Dim** | `1024` ([`config.hpp:40`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp#L40)) / `1536` ([`ai.cpp:41`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/ai.cpp#L41)) / `4` ([`ai.cpp:70`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/ai.cpp#L70)) | `32` ([`gpu_types.cuh:69`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/util/gpu_types.cuh#L69)) | Memory stride mismatch; out-of-bounds VRAM access. |
+| **Head Dim** | `128` ([`config.hpp:151`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp#L151)) / `1024` ([`test_ai.cpp:589`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/test/test_ai.cpp#L589)) | `$\le 64$` ([`forward_pass.cu:1317`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/kernel/forward_pass.cu#L1317)) | Hard assertion rejection; kernel silently fails to launch. |
+| **Sequence Length** | `256` ([`config.hpp:41`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp#L41)) / `8192` ([`config.hpp:154`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp#L154)) | `128` ([`gpu_types.cuh:30-31`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/util/gpu_types.cuh#L30-L31), [`test_ai.cpp:593`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/test/test_ai.cpp#L593)) | Buffer truncation; host uploads 256 IDs, device reads 128. |
+| **Vocabulary Size** | `65536` ([`config.hpp:91`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp#L91)) / `151936` ([`config.hpp:153`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp#L153)) | `65536` ([`gpu_types.cuh:68`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/CUDA/util/gpu_types.cuh#L68)) | Logit buffer overflow or truncation in tied projection. |
+
+---
+
+## Part VI: End-to-End Dynamic: Why Training Drops, Spikes, and Diverges
+
+1. **Phase 1: Memorization & Smooth Initial Decrease**
+   - The 268M-parameter layer trains on only 275 distinct sequences.
+   - When the loader draws sequences containing repetitive frequent tokens (`<UNK>` or common words), the massive matrix easily memorizes the sample, driving training loss down smoothly toward zero.
+
+2. **Phase 2: The Shock Transition**
+   - The data loader randomly draws a context window ending in an unmemorized target token.
+   - The unscaled AdamW gradient update triggers:
+     $$\Delta y_r = -1.5 \cdot \text{lr} \cdot \sqrt{N \cdot K} \cdot dz_r \approx 209 \cdot \text{sgn}(dz_r)$$
+   - A single update shifts the readout activation by over $200$ units.
+
+3. **Phase 3: Logit Clamp & Probability Collapse**
+   - Softmax logits slam into the $\pm 50.0$ exponential clamp.
+   - The softmax probability for the correct target collapses to the numerical floor ($P_{\text{target}} < 10^{-12}$).
+   - The validation cross-entropy calculation clamps:
+     $$L_{\text{val}} = -\ln(10^{-12}) = \mathbf{27.6310}$$
+
+4. **Phase 4: Degenerate Premature Termination**
+   - If a step predicts an easily satisfied token or an outlier produces loss $\le 3.0$, [`main.cpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/src/main.cpp#L1289) halts training immediately.
+   - Because the diverged checkpoint has $\text{loss} \le 15.0$ ($14.2716$), the reset guard ignores it, locking corrupted weights permanently into disk checkpoints.
