@@ -1,3 +1,8 @@
+/*
+ * Project Axiom — Built from scratch. Engineered for the future.
+ * Copyright (c) 2026 Omid Teimory. All rights reserved.
+ */
+
 import { useState } from 'react'
 import heroImg from './assets/hero.png'
 import reactLogo from './assets/react.svg'

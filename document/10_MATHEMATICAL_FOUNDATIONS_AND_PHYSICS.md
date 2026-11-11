@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 10. Mathematical Foundations and Physics
 
 At its deepest foundation, Project Axiom is an exploration of the interface between pure mathematics, statistical learning, and physical hardware determinism.

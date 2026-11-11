@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # Deep Learning, CUDA Architecture & High-Performance Engineering Guide
 
 A comprehensive, ground-up engineering reference covering fundamental neural network mechanics, memory representations, CUDA execution hierarchy, and low-level systems programming in C++ and CUDA.

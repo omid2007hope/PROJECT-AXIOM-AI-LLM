@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 02. System Architecture and Pipeline
 
 The primary architectural challenge in high-throughput machine learning systems is **data starvation**. A graphics card equipped with thousands of computing cores can perform trillions of floating-point operations per second. If the host subsystem cannot deliver input tokens across the system buses quickly enough, the graphics processor stalls, dropping arithmetic efficiency to near zero.

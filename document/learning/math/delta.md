@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 In code and math, **Delta ($\Delta$ or $\delta$) just means "difference" or "change in a variable."**
 
 If you have ever calculated elapsed time in a game loop, you already know Delta:

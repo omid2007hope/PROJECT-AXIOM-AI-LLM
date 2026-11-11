@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 03. Memory Hierarchy and PCIe DMA
 
 Achieving maximum compute throughput on modern graphics hardware requires an intimate understanding of physical memory topologies, cache architectures, and bus interfaces. Compute cores are capable of consuming data far faster than traditional memory interconnects can supply it. 

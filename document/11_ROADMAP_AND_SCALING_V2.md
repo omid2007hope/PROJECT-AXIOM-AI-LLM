@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 11. Roadmap and Scaling Blueprint (Version 2.0)
 
 With the completion of **Phases 0 through 6**, Project Axiom has achieved foundational silicon sovereignty: bare-metal C++23/CUDA execution, 100% Tensor Core saturation via CUTLASS v4.8.0 EVT, atomic binary weight persistence (`weights.axiom` and `optimizer.axiom`), real-time offline inference, a userspace Best-Fit with Coalescing (BFC) allocator, PagedAttention KV-caching with COW prefix sharing, CUDA Graphs DAG execution, a modular ATen Dispatcher with Autograd Tape, a Sparse Mixture of Experts (MoE) Top-2 routing engine, multimodal output codecs (`CompressImage` and `CompressAudio`), and a **429-test verification harness with 100% passing results and zero VRAM leaks**.

@@ -1,3 +1,8 @@
+/*
+ * Project Axiom — Built from scratch. Engineered for the future.
+ * Copyright (c) 2026 Omid Teimory. All rights reserved.
+ */
+
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'

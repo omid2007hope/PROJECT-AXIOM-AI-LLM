@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # PROJECT AXIOM — AI Context Injection & System Primer
 
 > **Usage:** Copy and paste the entire content of this document into the first message of any new chat session with an AI coding assistant (Claude, GPT, Gemini, Cursor, etc.). It instantly grounds the assistant in the complete architectural, mathematical, hardware, and codebase reality of Project Axiom.

@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # Strategic Technical Review and Scaling Roadmap: Native C++/CUDA AI Engine
 (Archived Prior to 19 October 2026 Milestone Review)
 

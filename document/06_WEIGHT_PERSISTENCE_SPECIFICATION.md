@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 06. Weight Persistence Specification
 
 An artificial intelligence model that exists only in volatile VRAM suffers from complete amnesia: the instant the process terminates, the adjusted parameters are lost. To establish permanent model memory across reboots and facilitate open-source distribution, Project Axiom implements a strict binary file format: **`weights.axiom`**.

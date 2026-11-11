@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # PROJECT-AXIOM: Master Systems Architecture & Numerical Stability Protocol
 
 This document establishes the formal, end-to-end engineering specification, mathematical analysis, and 4-gate diagnostic plan for Project Axiom.

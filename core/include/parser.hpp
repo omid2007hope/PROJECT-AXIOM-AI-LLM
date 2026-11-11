@@ -1,3 +1,8 @@
+/*
+ * Project Axiom — Built from scratch. Engineered for the future.
+ * Copyright (c) 2026 Omid Teimory. All rights reserved.
+ */
+
 #ifndef include_parser
 #define include_parser
 

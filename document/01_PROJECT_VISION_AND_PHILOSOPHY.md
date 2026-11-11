@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 01. Project Vision and Philosophy
 
 > _"An idiot admires complexity; a genius admires simplicity."_ — Terry A. Davis

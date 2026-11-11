@@ -1,3 +1,8 @@
+/*
+ * Project Axiom — Built from scratch. Engineered for the future.
+ * Copyright (c) 2026 Omid Teimory. All rights reserved.
+ */
+
 #ifndef CUDA_GRAPH_CAPTURE_CUH
 #define CUDA_GRAPH_CAPTURE_CUH
 

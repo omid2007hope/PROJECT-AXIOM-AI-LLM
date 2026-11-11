@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # Project Axiom: Master Engineering Evaluation & Strategic Scaling Plan (v2.0)
 **Document Path:** `document/plan/Project_Axiom_Plan.md`  
 **Target Architecture:** NVIDIA Ada Lovelace (`sm_89` / RTX 4080 Laptop GPU) & Native C++23 / CUDA 13.3  

@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 05. Training Optimizer and Backpropagation
 
 A neural network without backpropagation is a static mathematical transformation. Learning occurs when the engine computes the error between its predictions and ground truth, propagates that signal backwards through the layer topology, and adjusts weight values to minimize loss.

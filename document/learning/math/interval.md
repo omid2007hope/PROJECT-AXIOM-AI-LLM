@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 In math, an **interval** is simply a continuous set of numbers between two endpoints. In code, it is just a `range`, a slice, or a clamped bounding box between a minimum and maximum value.
 
 The only confusing part about intervals in math literature is the bracket notation, which strictly defines whether the endpoints are included or excluded.

@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 Strategic Technical Review and Scaling Roadmap for the Native C++/CUDA AI Engine
 Executive Summary
 The transition from a high-level orchestration environment to a native C++23 and NVIDIA CUDA ecosystem for artificial intelligence model inference and training represents a monumental leap in computational complexity, memory management, and performance potential. An exhaustive review of the current multimodal deep learning project reveals a system transitioning from its nascent, sequential CPU origins into the demanding reality of massively parallel hardware acceleration. The codebase demonstrates a highly advanced understanding of memory hierarchies, deterministic tensor initialization, and fundamental systems architecture, particularly in its handling of data tokenization and precision refactoring.

@@ -1,3 +1,8 @@
+/*
+ * Project Axiom — Built from scratch. Engineered for the future.
+ * Copyright (c) 2026 Omid Teimory. All rights reserved.
+ */
+
 #ifndef GPU_KERNEL_CUH
 #define GPU_KERNEL_CUH
 

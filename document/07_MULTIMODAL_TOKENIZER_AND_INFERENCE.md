@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 07. Multimodal Tokenizer and Inference Engine
 
 In traditional artificial intelligence architectures, different modalities (text, vision, audio) are processed by separate, disjoint tokenizers and encoder stacks (e.g., BPE for text, ViT patches for vision, Mel-spectrogram convolutions for audio). These pipelines introduce severe software complexity and impedance mismatches when modalities interact.

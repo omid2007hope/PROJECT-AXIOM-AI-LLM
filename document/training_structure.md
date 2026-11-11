@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # Domain-Specific Expert Training Architecture & Execution Blueprint
 
 This document specifies the operational blueprint for curating high-signal training datasets and executing multi-epoch expert model training on a single **NVIDIA GeForce RTX 4080** (16 GB VRAM ceiling) within **Project Axiom**.

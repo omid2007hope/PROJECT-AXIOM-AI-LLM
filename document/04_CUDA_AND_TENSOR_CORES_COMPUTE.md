@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # 04. CUDA and Tensor Cores Compute
 
 Graphics processing units derive their computational power not from raw single-thread clock speed, but from massive, highly organized parallelism. To harness this silicon, software must be structured around the physical execution topology of NVIDIA hardware and the specialized matrix multiplication pipelines of **Tensor Cores**.

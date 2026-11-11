@@ -1,3 +1,6 @@
+# Project Axiom — Built from scratch. Engineered for the future.
+# Copyright (c) 2026 Omid Teimory. All rights reserved.
+
 mkdir test_dir\src
 mkdir test_dir\include
 echo #pragma once > test_dir\include\hdr.hpp

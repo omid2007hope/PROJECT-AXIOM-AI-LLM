@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # Project Axiom: Master Technical Documentation Suite
 
 Welcome to the definitive engineering documentation for **Project Axiom** 🌌 — a silicon-native, zero-overhead multimodal AI engine built from scratch in bare-metal **C++23** and **NVIDIA CUDA**.

@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 # Roadmap to First Training Phase: The Assembly God Blueprint
 
 This document specifies the technical implementation sequence, engineering prerequisites, and compute budget required to transition **Project Axiom** from its current single-layer perceptron into a domain-specific **Bare-Metal x86_64 Assembly Model** running on a single **NVIDIA GeForce RTX 4080 Laptop GPU** (12 GB VRAM).

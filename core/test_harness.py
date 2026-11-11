@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Project Axiom — Built from scratch. Engineered for the future.
+# Copyright (c) 2026 Omid Teimory. All rights reserved.
 """
 PROJECT AXIOM - Automated Closed-Loop Test Harness
 Fuzzes and stress-tests app.exe across 1,000+ CLI argument combinations,

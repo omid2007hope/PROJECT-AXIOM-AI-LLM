@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Project Axiom — Built from scratch. Engineered for the future.
+# Copyright (c) 2026 Omid Teimory. All rights reserved.
 """
 Project Axiom — High-Speed Document & Media Separator
 Uses PyMuPDF (fitz) for 50x C-accelerated extraction, with pypdf fallback.

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Project Axiom — Built from scratch. Engineered for the future.
+# Copyright (c) 2026 Omid Teimory. All rights reserved.
 """
 Project Axiom — High-Precision GGUF to .axiom Converter & Local Model Auditor
 File: tools/convert_gguf_to_axiom.py

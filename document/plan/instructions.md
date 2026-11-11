@@ -1,3 +1,8 @@
+<!--
+Project Axiom — Built from scratch. Engineered for the future.
+Copyright (c) 2026 Omid Teimory. All rights reserved.
+-->
+
 Running Qwen inference directly on Project Axiom requires upgrading your single-layer execution loop into a stacked 28-layer Grouped Query Attention (GQA) pipeline, preserving code punctuation in the tokenizer, streaming the converted `.safetensors` weights into VRAM via Win32 memory mapping, and exposing a local OpenAI-compatible `/v1/chat/completions` endpoint.
 
 ## Master Execution Order
