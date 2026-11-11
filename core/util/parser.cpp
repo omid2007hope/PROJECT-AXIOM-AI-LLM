@@ -44,24 +44,69 @@ Now isolated from the neural network entirely.
 // Tokenization phase
 // *************
 
-// Cleans raw token strings: lowercases ASCII and strips leading/trailing punctuation
+static std::string normalize_ligatures(const std::string& text) {
+	std::string result;
+	result.reserve(text.size());
+	for (size_t i = 0; i < text.size();) {
+		unsigned char c = static_cast<unsigned char>(text[i]);
+		if (c == 0xEF && i + 2 < text.size()) {
+			unsigned char c1 = static_cast<unsigned char>(text[i + 1]);
+			unsigned char c2 = static_cast<unsigned char>(text[i + 2]);
+			if (c1 == 0xAC) {
+				if (c2 == 0x80) { result += "ff"; i += 3; continue; }
+				if (c2 == 0x81) { result += "fi"; i += 3; continue; }
+				if (c2 == 0x82) { result += "fl"; i += 3; continue; }
+				if (c2 == 0x83) { result += "ffi"; i += 3; continue; }
+				if (c2 == 0x84) { result += "ffl"; i += 3; continue; }
+				if (c2 == 0x85) { result += "ft"; i += 3; continue; }
+				if (c2 == 0x86) { result += "st"; i += 3; continue; }
+			}
+		}
+		if (c == 0xE2 && i + 2 < text.size()) {
+			unsigned char c1 = static_cast<unsigned char>(text[i + 1]);
+			unsigned char c2 = static_cast<unsigned char>(text[i + 2]);
+			if (c1 == 0x80) {
+				if (c2 >= 0x98 && c2 <= 0x9B) { result += '\''; i += 3; continue; }
+				if (c2 >= 0x9C && c2 <= 0x9F) { result += '"'; i += 3; continue; }
+				if (c2 >= 0x90 && c2 <= 0x95) { result += '-'; i += 3; continue; }
+				if (c2 >= 0x80 && c2 <= 0x8B) { result += ' '; i += 3; continue; }
+				if (c2 == 0xA6) { result += "..."; i += 3; continue; }
+			}
+		}
+		if (c == 0xC2 && i + 1 < text.size()) {
+			unsigned char c1 = static_cast<unsigned char>(text[i + 1]);
+			if (c1 == 0xA0) { result += ' '; i += 2; continue; }
+		}
+		if (c == 0x91 || c == 0x92) { result += '\''; ++i; continue; }
+		if (c == 0x93 || c == 0x94) { result += '"'; ++i; continue; }
+		if (c == 0x96 || c == 0x97 || c == 0xAD) { result += '-'; ++i; continue; }
+		if (c == 0xA0) { result += ' '; ++i; continue; }
+		if (c == 0x85) { result += "..."; ++i; continue; }
+		result += static_cast<char>(c);
+		++i;
+	}
+	return result;
+}
+
+// Cleans raw token strings: normalizes ligatures, lowercases ASCII and strips leading/trailing punctuation
 static std::string sanitize_word(const std::string& raw) {
 	if (raw.empty())
 		return "";
 	if (raw.size() >= 3 && raw.front() == '<' && raw.back() == '>') {
 		return raw;
 	}
+	std::string normalized = normalize_ligatures(raw);
 	size_t start = 0;
-	while (start < raw.size() && (std::ispunct(static_cast<unsigned char>(raw[start])))) {
+	while (start < normalized.size() && (std::ispunct(static_cast<unsigned char>(normalized[start])))) {
 		++start;
 	}
-	size_t end = raw.size();
-	while (end > start && (std::ispunct(static_cast<unsigned char>(raw[end - 1])))) {
+	size_t end = normalized.size();
+	while (end > start && (std::ispunct(static_cast<unsigned char>(normalized[end - 1])))) {
 		--end;
 	}
 	if (start >= end)
 		return "";
-	std::string clean = raw.substr(start, end - start);
+	std::string clean = normalized.substr(start, end - start);
 	for (char& c : clean) {
 		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 	}

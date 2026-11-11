@@ -151,7 +151,7 @@ __global__ static void backward_pass_kernel(
 		}
 
 		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
-		float weight_lr = learning_rate / sqrtf(in_dim_f);
+		float weight_lr = learning_rate;
 
 		float w_val = W_master[i] - weight_lr * dz * x_val;
 		if (isfinite(w_val)) {
@@ -627,7 +627,10 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 		}
 		if (!CUDA_CHECK(cudaGetLastError()))
 			return false;
+	}
 
+	// Phase 4: Fused AdamW weight and bias update
+	if (!is_transformer_readout && output_dim > 0 && input_dim > 0) {
 		Grid grid(input_dim * output_dim);
 
 		if (use_adamw && gpu_weights->d_bias_m && gpu_weights->d_bias_v) {

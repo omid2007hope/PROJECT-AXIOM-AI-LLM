@@ -166,25 +166,58 @@ static std::string read_pdf_literal(const std::string& raw, size_t& position, si
 		++position;
 	}
 
-	// Map Windows-1252 punctuation to ASCII and drop other high bytes so that raw
-	// font-encoded bytes never reach the tokenizer as invalid UTF-8
+	// Map Windows-1252 punctuation & UTF-8 ligatures to ASCII and drop raw binary bytes
 	std::string normalized;
 	normalized.reserve(literal.size());
-	for (unsigned char byte : literal) {
+	for (size_t i = 0; i < literal.size();) {
+		unsigned char byte = static_cast<unsigned char>(literal[i]);
+		// Handle UTF-8 multi-byte ligatures if present in literal
+		if (byte == 0xEF && i + 2 < literal.size()) {
+			unsigned char c1 = static_cast<unsigned char>(literal[i + 1]);
+			unsigned char c2 = static_cast<unsigned char>(literal[i + 2]);
+			if (c1 == 0xAC) {
+				if (c2 == 0x80) { normalized += "ff"; i += 3; continue; }
+				if (c2 == 0x81) { normalized += "fi"; i += 3; continue; }
+				if (c2 == 0x82) { normalized += "fl"; i += 3; continue; }
+				if (c2 == 0x83) { normalized += "ffi"; i += 3; continue; }
+				if (c2 == 0x84) { normalized += "ffl"; i += 3; continue; }
+				if (c2 == 0x85) { normalized += "ft"; i += 3; continue; }
+				if (c2 == 0x86) { normalized += "st"; i += 3; continue; }
+			}
+		}
+		if (byte == 0xE2 && i + 2 < literal.size()) {
+			unsigned char c1 = static_cast<unsigned char>(literal[i + 1]);
+			unsigned char c2 = static_cast<unsigned char>(literal[i + 2]);
+			if (c1 == 0x80) {
+				if (c2 >= 0x98 && c2 <= 0x9B) { normalized += '\''; i += 3; continue; }
+				if (c2 >= 0x9C && c2 <= 0x9F) { normalized += '"'; i += 3; continue; }
+				if (c2 >= 0x90 && c2 <= 0x95) { normalized += '-'; i += 3; continue; }
+				if (c2 == 0xA6) { normalized += "..."; i += 3; continue; }
+			}
+		}
 		if (byte < 128) {
 			normalized += static_cast<char>(byte);
+			++i;
 		} else if (byte == 0x91 || byte == 0x92) {
 			normalized += '\'';
+			++i;
 		} else if (byte == 0x93 || byte == 0x94) {
 			normalized += '"';
+			++i;
 		} else if (byte == 0x96 || byte == 0x97 || byte == 0xAD) {
 			normalized += '-';
+			++i;
 		} else if (byte == 0x95) {
 			normalized += '*';
+			++i;
 		} else if (byte == 0x85) {
 			normalized += "...";
+			++i;
 		} else if (byte == 0xA0) {
 			normalized += ' ';
+			++i;
+		} else {
+			++i; // drop unknown binary byte
 		}
 	}
 	return normalized;

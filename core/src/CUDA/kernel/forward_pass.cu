@@ -729,7 +729,10 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			return false;
 	}
 
-	if (!gather_embeddings && input_dim > output_dim) {
+	bool is_transformer_readout =
+		(gpu_weights->d_query_weights != nullptr && input_dim > output_dim);
+
+	if (is_transformer_readout) {
 		// Transformer hidden state token readout: copy final token h_{S-1} directly to d_output
 		size_t final_token_offset = input_dim - output_dim;
 		cudaMemcpyAsync(
