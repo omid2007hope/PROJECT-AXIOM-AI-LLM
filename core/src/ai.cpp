@@ -277,17 +277,18 @@ bool AI::load_weights(const std::string& path) {
 		return false;
 	}
 
-	host_weights.resize(header.weight_count);
-	host_bias.resize(header.bias_count);
+	std::vector<float> loaded_weights(header.weight_count);
+	std::vector<float> loaded_bias(header.bias_count);
+	std::vector<float> loaded_embeddings;
 
-	in.read(reinterpret_cast<char*>(host_weights.data()),
+	in.read(reinterpret_cast<char*>(loaded_weights.data()),
 		header.weight_count * sizeof(float));
 	if (in.gcount() != static_cast<std::streamsize>(header.weight_count * sizeof(float))) {
 		std::cerr << "[AI Brain] Incomplete weight data in " << path << "\n";
 		return false;
 	}
 
-	in.read(reinterpret_cast<char*>(host_bias.data()), header.bias_count * sizeof(float));
+	in.read(reinterpret_cast<char*>(loaded_bias.data()), header.bias_count * sizeof(float));
 	if (in.gcount() != static_cast<std::streamsize>(header.bias_count * sizeof(float))) {
 		std::cerr << "[AI Brain] Incomplete bias data in " << path << "\n";
 		return false;
@@ -295,37 +296,44 @@ bool AI::load_weights(const std::string& path) {
 
 	if (header.vocab_size > 0 && header.embedding_dim > 0) {
 		size_t embedding_count = header.vocab_size * header.embedding_dim;
-		host_embeddings.resize(embedding_count);
-		in.read(reinterpret_cast<char*>(host_embeddings.data()),
+		loaded_embeddings.resize(embedding_count);
+		in.read(reinterpret_cast<char*>(loaded_embeddings.data()),
 			embedding_count * sizeof(float));
 		if (in.gcount() != static_cast<std::streamsize>(embedding_count * sizeof(float))) {
 			std::cerr << "[AI Brain] Incomplete embedding data in " << path << "\n";
 			return false;
 		}
-		vocab_size = header.vocab_size;
-		embedding_dim = header.embedding_dim;
 	}
 
-	for (float w : host_weights) {
+	for (float w : loaded_weights) {
 		if (!std::isfinite(w)) {
 			std::cerr << "[AI Brain] Corrupt weights in " << path
 				  << ": contains NaN or Inf. Rejecting load.\n";
 			return false;
 		}
 	}
-	for (float b : host_bias) {
+	for (float b : loaded_bias) {
 		if (!std::isfinite(b)) {
 			std::cerr << "[AI Brain] Corrupt biases in " << path
 				  << ": contains NaN or Inf. Rejecting load.\n";
 			return false;
 		}
 	}
-	for (float e_val : host_embeddings) {
+	for (float e_val : loaded_embeddings) {
 		if (!std::isfinite(e_val)) {
 			std::cerr << "[AI Brain] Corrupt embeddings in " << path
 				  << ": contains NaN or Inf. Rejecting load.\n";
 			return false;
 		}
+	}
+
+	// Atomic update of host parameters
+	host_weights = std::move(loaded_weights);
+	host_bias = std::move(loaded_bias);
+	if (!loaded_embeddings.empty()) {
+		vocab_size = header.vocab_size;
+		embedding_dim = header.embedding_dim;
+		host_embeddings = std::move(loaded_embeddings);
 	}
 
 	// Synchronize and push directly to GPU VRAM
