@@ -212,6 +212,10 @@ struct GpuActivations {
 	void* d_ffn_output = nullptr;	// device ptr to __nv_bfloat16 (seq * dim)
 	void* d_residual_mid = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
 	void* d_residual_out = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_normalized_attention = nullptr;   // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_normalized_feedforward = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_attention_scale = nullptr;	  // device ptr to float (RMS normalization factor)
+	void* d_feedforward_scale = nullptr;	  // device ptr to float (RMS normalization factor)
 	size_t xform_seq_elements = 0;
 	size_t xform_ffn_elements = 0;
 

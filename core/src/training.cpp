@@ -371,6 +371,37 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 
 	gpu_embeddings.active_vocab_size = active_vocab_size;
 
+	if (enable_transformer) {
+		const size_t model_dim = embedding_dim > 0 ? embedding_dim : target_elements_y_total;
+		size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
+		if (model_dim / heads > 64 && model_dim % 64 == 0) {
+			heads = model_dim / 64;
+		}
+		const size_t feedforward_network_dimension =
+			(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim) ? ffn_dimension
+																			: (model_dim * 4);
+
+		if (gpu_weights.d_query_weights == nullptr || gpu_weights.transformer_dim != model_dim ||
+			gpu_weights.transformer_ffn != feedforward_network_dimension) {
+			if (!build_transformer_block(model_dim, heads, feedforward_network_dimension)) {
+				return false;
+			}
+		}
+
+		if (gpu_portion.d_context_window[0] == nullptr ||
+			gpu_portion.context_elements != input_elements_x_total) {
+			if (gpu_portion.d_context_window[0]) {
+				free_vram(gpu_portion.d_context_window[0], gpu_portion.stream[0]);
+			}
+			gpu_portion.d_context_window[0] = allocate_vram(
+				input_elements_x_total * sizeof(std::bfloat16_t), gpu_portion.stream[0]);
+			if (!gpu_portion.d_context_window[0]) {
+				return false;
+			}
+			gpu_portion.context_elements = input_elements_x_total;
+		}
+	}
+
 	for (size_t idx = 0; idx < max_windows; ++idx) {
 		const size_t start = idx * stride;
 		if (start + window_size >= validation_tokens.size()) {

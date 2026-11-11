@@ -239,6 +239,8 @@ extern "C" CUDA_API bool upload_embeddings(const float* h_embeddings, GpuEmbeddi
 		return false;
 
 	size_t total_elements = gpu_emb->vocab_size * gpu_emb->embedding_dim;
+	if (total_elements == 0)
+		return true;
 	if (!CUDA_CHECK(cudaMemcpy(gpu_emb->d_table_master,
 				   h_embeddings,
 				   total_elements * sizeof(float),
@@ -313,6 +315,10 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 			       &gpu->d_ffn_output,
 			       &gpu->d_residual_mid,
 			       &gpu->d_residual_out,
+			       &gpu->d_normalized_attention,
+			       &gpu->d_normalized_feedforward,
+			       &gpu->d_attention_scale,
+			       &gpu->d_feedforward_scale,
 			       &gpu->d_router_logits,
 			       &gpu->d_expert_first,
 			       &gpu->d_expert_second,

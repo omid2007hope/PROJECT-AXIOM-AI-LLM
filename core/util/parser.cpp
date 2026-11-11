@@ -245,7 +245,7 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 							bar += ' ';
 					}
 					bar += "]";
-					std::cout << "\r  [..] Synthesizing continuous embeddings "
+					std::cout << "\r\033[K  [..] Synthesizing continuous embeddings "
 						  << bar << " " << pct << "% ("
 						  << input.tokens_written << "/"
 						  << input.tokenized_data.size() << " tokens)"
@@ -267,8 +267,7 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 		const uintmax_t bytes =
 			input.tokenized_data.size() * input.embedding_dim * sizeof(std::bfloat16_t);
 		std::cout
-			<< "\r                                                                                \r"
-			<< "  [OK] Continuous embeddings synthesized: "
+			<< "\r\033[K  [OK] Continuous embeddings synthesized: "
 			<< input.tokenized_data.size() << " tokens (" << format_file_size(bytes)
 			<< ") streamed to disk.\n"
 			<< std::flush;
@@ -559,7 +558,7 @@ static void print_progress_bar(const std::string& filename,
 	}
 	bar += "]";
 
-	std::cout << "\r  [..] " << action << " " << filename << " " << bar << " " << std::fixed
+	std::cout << "\r\033[K  [..] " << action << " " << filename << " " << bar << " " << std::fixed
 		  << std::setprecision(1) << pct << "% (" << format_file_size(current_bytes)
 		  << " / " << format_file_size(total_bytes) << ")" << std::flush;
 }
@@ -728,7 +727,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			if (fname.size() > 20)
 				fname = fname.substr(0, 17) + "...";
 
-			std::cout << "\r  [..] Ingesting assets " << bar << " " << std::fixed
+			std::cout << "\r\033[K  [..] Ingesting assets " << bar << " " << std::fixed
 				  << std::setprecision(1) << pct << "% (" << files_processed << "/"
 				  << total_files << " files | " << input.tokenized_data.size()
 				  << " tokens | " << fname << ")   " << std::flush;
@@ -840,8 +839,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			if (show_progress) {
-				std::cout
-					<< "\r                                                                                \r";
+				std::cout << "\r\033[K";
 			}
 			report_file_done(fpath, fsize, "Image", added);
 		} else if (is_video) {
@@ -878,8 +876,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			if (show_progress) {
-				std::cout
-					<< "\r                                                                                \r";
+				std::cout << "\r\033[K";
 			}
 			report_file_done(fpath, fsize, "Video", added);
 		} else if (is_audio) {
@@ -916,8 +913,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;
 			if (show_progress) {
-				std::cout
-					<< "\r                                                                                \r";
+				std::cout << "\r\033[K";
 			}
 			report_file_done(fpath, fsize, "Voice/Audio", added);
 		} else {
@@ -927,9 +923,9 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 	}
 
 	if (!developer_mode && files_processed > 0) {
-		std::cout << "\r  [OK] Ingesting assets [========================] 100.0% ("
+		std::cout << "\r\033[K  [OK] Ingesting assets [========================] 100.0% ("
 			  << files_processed << "/" << total_files << " files | "
-			  << input.tokenized_data.size() << " tokens)            \n"
+			  << input.tokenized_data.size() << " tokens)\n"
 			  << std::flush;
 	}
 

@@ -1265,7 +1265,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 							? static_cast<uint64_t>(remaining_steps / steps_per_second)
 							: 0;
 
-					std::cout << "\r  [..] Learning " << bar << " " << std::fixed
+					std::cout << "\r\033[K  [..] Learning " << bar << " " << std::fixed
 							  << std::setprecision(1) << pct << "% | Step " << step << "/"
 							  << target_steps << " | ETA: " << format_duration(eta_seconds) << " ("
 							  << std::setprecision(1) << steps_per_second << " stp/s)"
@@ -1299,7 +1299,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 			}
 
 			if (step >= target_steps) {
-				std::cout << "\r  [OK] Learning [========================] 100.0% | Step " << step
+				std::cout << "\r\033[K  [OK] Learning [========================] 100.0% | Step " << step
 						  << "/" << target_steps << " | Loss: " << std::fixed
 						  << std::setprecision(4) << current_loss;
 				if (first_loss && *first_loss > 0.0) {

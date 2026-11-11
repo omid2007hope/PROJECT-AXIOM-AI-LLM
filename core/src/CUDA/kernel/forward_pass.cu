@@ -471,7 +471,8 @@ __global__ static void compute_tied_logits_kernel(const __nv_bfloat16* __restric
 			dot += __bfloat162float(y[d]) * __bfloat162float(emb_row[d]);
 		}
 
-		logits[v] = dot * inv_temp;
+		float inverse_scale = 1.0f / sqrtf(static_cast<float>(emb_dim > 0 ? emb_dim : 1));
+		logits[v] = dot * inv_temp * inverse_scale;
 	}
 }
 
@@ -1377,7 +1378,11 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 				       &gpu_activations->d_intermediate_swiglu,
 				       &gpu_activations->d_ffn_output,
 				       &gpu_activations->d_residual_mid,
-				       &gpu_activations->d_residual_out};
+				       &gpu_activations->d_residual_out,
+				       &gpu_activations->d_normalized_attention,
+				       &gpu_activations->d_normalized_feedforward,
+				       &gpu_activations->d_attention_scale,
+				       &gpu_activations->d_feedforward_scale};
 		for (void** ptr : xform_acts) {
 			if (*ptr) {
 				free_vram(*ptr, s);
@@ -1402,6 +1407,12 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
 		gpu_activations->d_residual_out =
 			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
+		gpu_activations->d_normalized_attention =
+			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
+		gpu_activations->d_normalized_feedforward =
+			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
+		gpu_activations->d_attention_scale = allocate_vram(sizeof(float), s);
+		gpu_activations->d_feedforward_scale = allocate_vram(sizeof(float), s);
 		gpu_activations->xform_seq_elements = total_seq_dim;
 		gpu_activations->xform_ffn_elements = total_seq_ffn;
 	}
@@ -1410,25 +1421,29 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 	    !gpu_activations->d_attention_output || !gpu_activations->d_intermediate_gate ||
 	    !gpu_activations->d_intermediate_up || !gpu_activations->d_intermediate_swiglu ||
 	    !gpu_activations->d_ffn_output || !gpu_activations->d_residual_mid ||
-	    !gpu_activations->d_residual_out) {
+	    !gpu_activations->d_residual_out || !gpu_activations->d_normalized_attention ||
+	    !gpu_activations->d_normalized_feedforward || !gpu_activations->d_attention_scale ||
+	    !gpu_activations->d_feedforward_scale) {
 		return false;
 	}
 
-	// 1. Save residual copy of X
+	// 1. Save residual copy of X and copy into normalized_attention buffer
 	cudaMemcpyAsync(gpu_activations->d_residual_mid,
 			hidden_states,
 			total_seq_dim * sizeof(__nv_bfloat16),
 			cudaMemcpyDeviceToDevice,
 			s);
+	cudaMemcpyAsync(gpu_activations->d_normalized_attention,
+			hidden_states,
+			total_seq_dim * sizeof(__nv_bfloat16),
+			cudaMemcpyDeviceToDevice,
+			s);
 
-	// 2. Pre-Norm: RMSNorm on X
-	if (!gpu_activations->d_inv_rms) {
-		gpu_activations->d_inv_rms = allocate_vram(sizeof(float), s);
-	}
-	if (gpu_activations->d_inv_rms) {
+	// 2. Pre-Norm: RMSNorm on X into normalized_attention buffer
+	if (gpu_activations->d_attention_scale) {
 		rms_norm_forward_kernel<<<1, 1024, 0, s>>>(
-			static_cast<__nv_bfloat16*>(hidden_states),
-			static_cast<float*>(gpu_activations->d_inv_rms),
+			static_cast<__nv_bfloat16*>(gpu_activations->d_normalized_attention),
+			static_cast<float*>(gpu_activations->d_attention_scale),
 			total_seq_dim,
 			1e-5f);
 	}
@@ -1438,7 +1453,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 	int D = static_cast<int>(embedding_dim);
 	int F = static_cast<int>(feedforward_network_dimension);
 
-	batched_gemm_multiply(hidden_states,
+	batched_gemm_multiply(gpu_activations->d_normalized_attention,
 			      gpu_weights->d_query_weights,
 			      gpu_activations->d_query,
 			      S,
@@ -1447,7 +1462,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			      false,
 			      false,
 			      s);
-	batched_gemm_multiply(hidden_states,
+	batched_gemm_multiply(gpu_activations->d_normalized_attention,
 			      gpu_weights->d_key_weights,
 			      gpu_activations->d_key,
 			      S,
@@ -1456,7 +1471,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			      false,
 			      false,
 			      s);
-	batched_gemm_multiply(hidden_states,
+	batched_gemm_multiply(gpu_activations->d_normalized_attention,
 			      gpu_weights->d_value_weights,
 			      gpu_activations->d_value,
 			      S,
@@ -1495,7 +1510,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_ffn_output),
 		total_seq_dim);
 
-	// Copy X_mid back into hidden_states and into d_residual_out for FFN residual
+	// Copy X_mid back into hidden_states, into d_residual_out for FFN residual, and into normalized_feedforward
 	cudaMemcpyAsync(hidden_states,
 			gpu_activations->d_residual_mid,
 			total_seq_dim * sizeof(__nv_bfloat16),
@@ -1506,19 +1521,24 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			total_seq_dim * sizeof(__nv_bfloat16),
 			cudaMemcpyDeviceToDevice,
 			s);
+	cudaMemcpyAsync(gpu_activations->d_normalized_feedforward,
+			gpu_activations->d_residual_mid,
+			total_seq_dim * sizeof(__nv_bfloat16),
+			cudaMemcpyDeviceToDevice,
+			s);
 
-	// 7. Pre-Norm for FFN: RMSNorm(X_mid)
-	if (gpu_activations->d_inv_rms) {
+	// 7. Pre-Norm for FFN: RMSNorm(X_mid) into normalized_feedforward buffer
+	if (gpu_activations->d_feedforward_scale) {
 		rms_norm_forward_kernel<<<1, 1024, 0, s>>>(
-			static_cast<__nv_bfloat16*>(hidden_states),
-			static_cast<float*>(gpu_activations->d_inv_rms),
+			static_cast<__nv_bfloat16*>(gpu_activations->d_normalized_feedforward),
+			static_cast<float*>(gpu_activations->d_feedforward_scale),
 			total_seq_dim,
 			1e-5f);
 	}
 
 	// 8. FFN Branch: Sparse Mixture of Experts or Dense SwiGLU
 	if (gpu_weights->enable_moe && gpu_weights->d_router_weights) {
-		forward_mixture_experts(hidden_states,
+		forward_mixture_experts(gpu_activations->d_normalized_feedforward,
 					gpu_weights,
 					gpu_activations,
 					sequence_length,
@@ -1527,7 +1547,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 					s);
 	} else {
 		// FFN Projections: G = X_norm2 * W_gate, U = X_norm2 * W_up
-		batched_gemm_multiply(hidden_states,
+		batched_gemm_multiply(gpu_activations->d_normalized_feedforward,
 				      gpu_weights->d_gate_weights,
 				      gpu_activations->d_intermediate_gate,
 				      S,
@@ -1536,7 +1556,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 				      false,
 				      false,
 				      s);
-		batched_gemm_multiply(hidden_states,
+		batched_gemm_multiply(gpu_activations->d_normalized_feedforward,
 				      gpu_weights->d_up_weights,
 				      gpu_activations->d_intermediate_up,
 				      S,
