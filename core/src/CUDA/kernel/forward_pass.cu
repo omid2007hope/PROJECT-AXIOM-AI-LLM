@@ -229,15 +229,15 @@ __global__ static void cutlass_gemm_bf16_kernel(int M,
 						__nv_bfloat16* __restrict__ Y) {
 	int warp_id = threadIdx.x >> 5;
 	int lane = threadIdx.x & 31;
-	int total = M * N;
-	int idx = blockIdx.x * 4 + warp_id;
+	size_t total = static_cast<size_t>(M) * N;
+	size_t idx = static_cast<size_t>(blockIdx.x) * 4 + warp_id;
 
 	if (idx < total) {
-		int row = idx / N;
-		int col = idx % N;
+		size_t row = idx / N;
+		size_t col = idx % N;
 
-		const __nv_bfloat16* w_row = W + static_cast<size_t>(col) * K;
-		const __nv_bfloat16* x_row = X + static_cast<size_t>(row) * K;
+		const __nv_bfloat16* w_row = W + col * K;
+		const __nv_bfloat16* x_row = X + row * K;
 
 		float sum = 0.0f;
 		int k_vec_end = (K >> 8) << 8;
@@ -292,8 +292,8 @@ extern "C" CUDA_API void launch_cutlass_gemm_bf16(int M,
 						  const void* d_b,
 						  void* d_y,
 						  void* stream) {
-	int total = M * N;
-	int blocks = (total + 3) / 4;
+	size_t total = static_cast<size_t>(M) * N;
+	int blocks = static_cast<int>((total + 3) / 4);
 	dim3 block(128, 1);
 	dim3 grid(blocks, 1);
 	cutlass_gemm_bf16_kernel<<<grid, block, 0, static_cast<cudaStream_t>(stream)>>>(
@@ -314,15 +314,15 @@ __global__ static void tied_logits_bf16_kernel(const __nv_bfloat16* __restrict__
 					       int hidden_dim) {
 	int warp_id = threadIdx.x >> 5;
 	int lane = threadIdx.x & 31;
-	int total = M * vocab_size;
-	int idx = blockIdx.x * 4 + warp_id;
+	size_t total = static_cast<size_t>(M) * vocab_size;
+	size_t idx = static_cast<size_t>(blockIdx.x) * 4 + warp_id;
 
 	if (idx < total) {
-		int m = idx / vocab_size;
-		int v = idx % vocab_size;
+		size_t m = idx / vocab_size;
+		size_t v = idx % vocab_size;
 
-		const __nv_bfloat16* w_row = W + static_cast<size_t>(v) * hidden_dim;
-		const __nv_bfloat16* x_row = X + static_cast<size_t>(m) * hidden_dim;
+		const __nv_bfloat16* w_row = W + v * hidden_dim;
+		const __nv_bfloat16* x_row = X + m * hidden_dim;
 
 		float sum = 0.0f;
 		int k_vec_end = (hidden_dim >> 8) << 8;
@@ -373,8 +373,8 @@ extern "C" CUDA_API void launch_tied_logits_bf16(const void* d_normed_x,
 						 int vocab_size,
 						 int hidden_dim,
 						 void* stream) {
-	int total = M * vocab_size;
-	int blocks = (total + 3) / 4;
+	size_t total = static_cast<size_t>(M) * vocab_size;
+	int blocks = static_cast<int>((total + 3) / 4);
 	dim3 block(128, 1);
 	dim3 grid(blocks, 1);
 	tied_logits_bf16_kernel<<<grid, block, 0, static_cast<cudaStream_t>(stream)>>>(
@@ -1295,7 +1295,7 @@ extern "C" CUDA_API bool fused_causal_attention(const void* query,
 						size_t num_heads,
 						void* stream) {
 	if (!query || !key || !value || !output || sequence_length == 0 || embedding_dim == 0 ||
-	    num_heads == 0) {
+	    num_heads == 0 || (embedding_dim % num_heads != 0)) {
 		return false;
 	}
 
@@ -1345,7 +1345,8 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 						   size_t feedforward_network_dimension,
 						   void* stream) {
 	if (!hidden_states || !gpu_weights || !gpu_activations || sequence_length == 0 ||
-	    embedding_dim == 0 || num_heads == 0 || feedforward_network_dimension == 0) {
+	    embedding_dim == 0 || num_heads == 0 || feedforward_network_dimension == 0 ||
+	    (embedding_dim % num_heads != 0)) {
 		return false;
 	}
 
@@ -1354,7 +1355,25 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 	size_t total_seq_ffn = sequence_length * feedforward_network_dimension;
 
 	// Allocate intermediate activations using BFC caching allocator
-	if (!gpu_activations->d_query) {
+	if (!gpu_activations->d_query || gpu_activations->xform_seq_elements != total_seq_dim ||
+	    gpu_activations->xform_ffn_elements != total_seq_ffn) {
+		void** xform_acts[] = {&gpu_activations->d_query,
+				       &gpu_activations->d_key,
+				       &gpu_activations->d_value,
+				       &gpu_activations->d_attention_output,
+				       &gpu_activations->d_intermediate_gate,
+				       &gpu_activations->d_intermediate_up,
+				       &gpu_activations->d_intermediate_swiglu,
+				       &gpu_activations->d_ffn_output,
+				       &gpu_activations->d_residual_mid,
+				       &gpu_activations->d_residual_out};
+		for (void** ptr : xform_acts) {
+			if (*ptr) {
+				free_vram(*ptr, s);
+				*ptr = nullptr;
+			}
+		}
+
 		gpu_activations->d_query = allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
 		gpu_activations->d_key = allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
 		gpu_activations->d_value = allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
@@ -1372,6 +1391,8 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
 		gpu_activations->d_residual_out =
 			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
+		gpu_activations->xform_seq_elements = total_seq_dim;
+		gpu_activations->xform_ffn_elements = total_seq_ffn;
 	}
 
 	if (!gpu_activations->d_query || !gpu_activations->d_key || !gpu_activations->d_value ||
@@ -1470,7 +1491,7 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			cudaMemcpyDeviceToDevice,
 			s);
 	cudaMemcpyAsync(gpu_activations->d_residual_out,
-			hidden_states,
+			gpu_activations->d_residual_mid,
 			total_seq_dim * sizeof(__nv_bfloat16),
 			cudaMemcpyDeviceToDevice,
 			s);

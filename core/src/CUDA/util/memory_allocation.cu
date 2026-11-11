@@ -318,6 +318,8 @@ extern "C" CUDA_API void free_gpu_activations(GpuActivations* gpu) {
 	gpu->loss_pending = false;
 	gpu->output_elements = 0;
 	gpu->vocab_elements = 0;
+	gpu->xform_seq_elements = 0;
+	gpu->xform_ffn_elements = 0;
 }
 
 extern "C" CUDA_API void* pinned_alloc(size_t bytes) {

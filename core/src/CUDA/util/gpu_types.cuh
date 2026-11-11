@@ -201,6 +201,8 @@ struct GpuActivations {
 	void* d_ffn_output = nullptr;	// device ptr to __nv_bfloat16 (seq * dim)
 	void* d_residual_mid = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
 	void* d_residual_out = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
+	size_t xform_seq_elements = 0;
+	size_t xform_ffn_elements = 0;
 
 	// Phase 6: Sparse Mixture of Experts Routing State
 	void* d_router_logits = nullptr; // device ptr to float (seq_len * expert_count)
