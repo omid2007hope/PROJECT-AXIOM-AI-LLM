@@ -39,7 +39,9 @@ DLL_SRCS         = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp src/cuda_grap
 DLL_OBJS         = $(DLL_SRCS:.cpp=.o)
 
 # ─── Default: compile everything ──────────────────────────────────────────────
-all: $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET)
+.PHONY: all clean dll test test_loss
+
+all: $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET) dll
 
 CUDA_OBJS    = $(CUDA_SRCS:.cu=.cu.obj)
 
@@ -81,7 +83,7 @@ $(TEST_LOSS_TARGET): $(TEST_LOSS_SRC) $(CUDA_DLL)
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 clean:
-	-rm -f $(APP_TARGET) $(TEST_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp build/*.o build/*.dll $(ALL_OBJS) $(CUDA_OBJS) src/CUDA/*/*.cu.obj
+	-rm -f $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp $(DLL_TARGET) ../build/axiom_core.dll *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp build/*.o build/*.dll $(ALL_OBJS) $(CUDA_OBJS) src/CUDA/*/*.cu.obj
 
 # ─── Run tests ────────────────────────────────────────────────────────────────
 test: $(TEST_TARGET)
