@@ -57,11 +57,12 @@ __global__ static void compute_loss_and_dz_kernel(
 			float dz_val = 0.0f;
 			if (emb_table != nullptr && emb_dim == out_dim) {
 				for (size_t v = 0; v < vocab_size; ++v) {
-					float p = probs[v];
-					if (p > 1e-7f || v == target_tok_id) {
-						float grad_logit = p - (v == target_tok_id ? 1.0f : 0.0f);
+					if (v == target_tok_id) {
+						float p = probs[v];
+						float grad_logit = p - 1.0f;
 						float e_val = __bfloat162float(emb_table[v * emb_dim + row]);
 						dz_val += grad_logit * e_val;
+						break;
 					}
 				}
 			} else {
