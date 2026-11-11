@@ -1135,6 +1135,8 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
 	std::optional<double> first_loss;
+	double rolling_loss = 0.0;
+	bool has_rolling_loss = false;
 	auto session_start_time = std::chrono::steady_clock::now();
 	bool checkpoint_saved = false;
 
@@ -1228,11 +1230,38 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 						first_loss = current_loss;
 					}
 
+					if (!has_rolling_loss) {
+						rolling_loss = current_loss;
+						has_rolling_loss = true;
+					} else {
+						rolling_loss = 0.95 * rolling_loss + 0.05 * current_loss;
+					}
+
 					double validation_loss = 0.0;
 					const bool has_validation =
 						!portion.validation_token_ids.empty() &&
 						ai.evaluate_validation(portion.validation_token_ids,
 											   portion.context_window_size, validation_loss);
+
+					// Divergence guard during training: check non-finite or loss exceeding 10.0 after initial steps
+					if (!std::isfinite(current_loss) ||
+						(has_validation && !std::isfinite(validation_loss)) ||
+						(step > 20 && (current_loss > 10.0 || (has_validation && validation_loss > 10.0)))) {
+						std::cout << "\n[!] Divergence detected at Step " << step
+								  << " (Loss: " << current_loss
+								  << (has_validation ? ", Val: " + std::to_string(validation_loss) : "")
+								  << "). Resetting brain to fresh state...\n"
+								  << std::flush;
+						ai.reset_weights(elements, true);
+						if (ai.upload_weights()) {
+							step = 0;
+							first_loss.reset();
+							has_rolling_loss = false;
+							rolling_loss = 0.0;
+							session_start_time = std::chrono::steady_clock::now();
+						}
+						continue;
+					}
 
 					const double pct =
 						(target_steps > 0)
@@ -1285,10 +1314,14 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 					}
 					std::cout << "   " << std::flush;
 
-					// SINGLE STOP CONDITION: Loss is between 3.0 and 1.0 (or <= 3.0) -> STOP SUCCESS
-					if (current_loss <= 3.0 && current_loss > 0.0) {
-						std::cout << "\n\n[SUCCESS] Loss achieved target range [1.0, 3.0] ("
-								  << std::fixed << std::setprecision(4) << current_loss
+					// Stabilized stop condition: Halt training only when rolling average stabilizes below target
+					const double effective_target = (target_stop_loss > 0.0) ? target_stop_loss : 3.0;
+					if (step >= 100 && rolling_loss <= effective_target && current_loss <= effective_target &&
+						(!has_validation || validation_loss <= (effective_target + 0.5))) {
+						std::cout << "\n\n[SUCCESS] Rolling loss stabilized at "
+								  << std::fixed << std::setprecision(4) << rolling_loss
+								  << " (Current: " << current_loss
+								  << ", Target <= " << effective_target
 								  << "). Training successfully completed!\n";
 						ai.save_weights(weights_path.string());
 						parser.save_vocabulary(vocab_path, input);
@@ -1632,10 +1665,10 @@ bool execute_training_session(
 		if (!portion.validation_token_ids.empty() &&
 			ai.evaluate_validation(portion.validation_token_ids, portion.context_window_size,
 								   initial_val_loss) &&
-			(initial_val_loss > 15.0 || !std::isfinite(initial_val_loss))) {
+			(initial_val_loss > 10.0 || !std::isfinite(initial_val_loss))) {
 			std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: " << std::fixed
 					  << std::setprecision(4) << initial_val_loss
-					  << " > 15.0). Resetting brain to fresh state...\n"
+					  << " > 10.0). Resetting brain to fresh state...\n"
 					  << std::flush;
 			ai.reset_weights(ai_elements);
 			ai.upload_weights();

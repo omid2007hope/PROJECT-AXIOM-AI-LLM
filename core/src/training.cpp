@@ -461,7 +461,7 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 		}
 
 		const uint32_t safe_target = (target_id < vocab_bound) ? target_id : 0U;
-		const float target_prob = std::max(probabilities[safe_target], 1e-12f);
+		const float target_prob = std::max(probabilities[safe_target], 1e-35f);
 		total_loss += static_cast<double>(-std::log(target_prob));
 		++evaluated;
 	}

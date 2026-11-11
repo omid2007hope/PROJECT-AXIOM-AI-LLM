@@ -33,7 +33,8 @@ __global__ static void compute_loss_and_dz_kernel(
 	const __nv_bfloat16* __restrict__ target, const __nv_bfloat16* __restrict__ emb_table,
 	float* __restrict__ dz,
 	float* __restrict__ loss, // telemetry block, see TelemetrySlot
-	size_t out_dim, size_t vocab_size, size_t emb_dim, bool is_token_training) {
+	size_t out_dim, size_t vocab_size, size_t emb_dim, bool is_token_training,
+	float inv_temp = 1.0f) {
 
 	size_t row = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
 
@@ -64,7 +65,7 @@ __global__ static void compute_loss_and_dz_kernel(
 
 		if (row == 0) {
 			float p_target = probs[target_tok_id];
-			float ce_loss = -logf(fmaxf(p_target, 1e-12f));
+			float ce_loss = -logf(fmaxf(p_target, 1e-35f));
 			if (isfinite(ce_loss)) {
 				atomicAdd(&loss[telemetry_loss], ce_loss);
 			} else {
@@ -78,16 +79,14 @@ __global__ static void compute_loss_and_dz_kernel(
 				float expected_embedding = 0.0f;
 				for (size_t v = 0; v < vocab_size; ++v) {
 					float prob_v = probs[v];
-					if (prob_v > 1e-8f) {
-						expected_embedding +=
-							prob_v * __bfloat162float(emb_table[v * emb_dim + row]);
-					}
+					expected_embedding +=
+						prob_v * __bfloat162float(emb_table[v * emb_dim + row]);
 				}
 				float target_embedding =
 					__bfloat162float(emb_table[target_tok_id * emb_dim + row]);
 				float inverse_scale =
 					1.0f / sqrtf(static_cast<float>(emb_dim > 0 ? emb_dim : 1));
-				dz_val = (expected_embedding - target_embedding) * inverse_scale;
+				dz_val = inv_temp * (expected_embedding - target_embedding) * inverse_scale;
 			} else {
 				if (row < vocab_size) {
 					dz_val = probs[row] - (row == target_tok_id ? 1.0f : 0.0f);
@@ -151,7 +150,10 @@ __global__ static void backward_pass_kernel(
 			x_val = 0.0f;
 		}
 
-		float w_val = W_master[i] - learning_rate * dz * x_val;
+		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
+		float weight_lr = learning_rate / in_dim_f;
+
+		float w_val = W_master[i] - weight_lr * dz * x_val;
 		if (isfinite(w_val)) {
 			w_val = fmaxf(-10.0f, fminf(10.0f, w_val));
 			W_master[i] = w_val;
@@ -190,6 +192,9 @@ __global__ static void backward_pass_adamw_kernel(
 			x_val = 0.0f;
 		}
 
+		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
+		float weight_lr = learning_rate / in_dim_f;
+
 		if (W_m != nullptr && W_v != nullptr) {
 			float weight_grad = dz * x_val;
 			if (!isfinite(weight_grad))
@@ -208,7 +213,7 @@ __global__ static void backward_pass_adamw_kernel(
 			float var_hat = var / (bc2 > 1e-7f ? bc2 : 1.0f);
 
 			float update = mom_hat / (sqrtf(var_hat) + eps) + weight_decay * W_master[i];
-			float w_val = W_master[i] - learning_rate * update;
+			float w_val = W_master[i] - weight_lr * update;
 
 			if (isfinite(w_val)) {
 				w_val = fmaxf(-10.0f, fminf(10.0f, w_val));
@@ -216,8 +221,6 @@ __global__ static void backward_pass_adamw_kernel(
 				W[i] = __float2bfloat16(w_val);
 			}
 		} else {
-			float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
-			float weight_lr = learning_rate / in_dim_f;
 			float update = dz * x_val + weight_decay * W_master[i];
 			float w_val = W_master[i] - weight_lr * update;
 
@@ -336,7 +339,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 	}
 
 	float p = probs[v];
-	if (p <= 1e-7f && v != target_tok_id) {
+	if (p <= 1e-35f && v != target_tok_id) {
 		return;
 	}
 
@@ -376,6 +379,8 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 	__syncthreads();
 	float rms_y = s_y_sq[0];
 
+	float token_weight_decay = 0.01f / static_cast<float>(vocab_size > 0 ? vocab_size : 1);
+
 	for (size_t d = threadIdx.x; d < emb_dim; d += blockDim.x) {
 		float y_val = __bfloat162float(y[d]);
 		if (isfinite(y_val)) {
@@ -383,7 +388,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 			float grad_e = fmaxf(-10.0f, fminf(10.0f, grad_logit * norm_y));
 			size_t table_idx = row_offset + d;
 			float cur_val = table_master[table_idx];
-			float new_val = cur_val - head_lr * (grad_e + 0.01f * cur_val);
+			float new_val = cur_val - head_lr * (grad_e + token_weight_decay * cur_val);
 			if (isfinite(new_val)) {
 				new_val = fmaxf(-bound_limit, fminf(bound_limit, new_val));
 				table_master[table_idx] = new_val;
@@ -547,6 +552,10 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 									   ? static_cast<const __nv_bfloat16*>(gpu_embeddings->d_table)
 									   : nullptr;
 
+	float inv_temp = (gpu_embeddings && gpu_embeddings->temperature > 1e-4f)
+						 ? (1.0f / gpu_embeddings->temperature)
+						 : 1.0f;
+
 	int dz_threads = 256;
 	int dz_blocks = static_cast<int>((output_dim + dz_threads - 1) / dz_threads);
 	compute_loss_and_dz_kernel<<<dz_blocks, dz_threads, 0, stream>>>(
@@ -554,7 +563,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
 		static_cast<const __nv_bfloat16*>(gpu_portion->d_target[buffer_index]), emb_tbl,
 		static_cast<float*>(non_const_act->d_dz), static_cast<float*>(non_const_act->d_loss),
-		output_dim, vocab_sz, emb_dim, is_token_training);
+		output_dim, vocab_sz, emb_dim, is_token_training, inv_temp);
 
 	if (!CUDA_CHECK(cudaGetLastError()))
 		return false;
@@ -628,7 +637,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 		return false;
 
 	// Phase 5: Output Head & Backward Scatter Kernel for learnable embedding matrix
-	if (has_embeddings && scatter_embeddings) {
+	if (has_embeddings) {
 		if (is_token_training && gpu_activations->d_probs && emb_dim == output_dim && vocab_sz > 0) {
 			int head_threads = 256;
 			int head_blocks = static_cast<int>(vocab_sz);
@@ -640,6 +649,8 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 				static_cast<__nv_bfloat16*>(gpu_embeddings->d_table), vocab_sz, emb_dim,
 				learning_rate);
 		}
+
+		if (scatter_embeddings) {
 
 		size_t num_tok =
 			gpu_portion->token_count > 0 ? gpu_portion->token_count : (input_dim / emb_dim);
@@ -661,6 +672,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 
 		if (!CUDA_CHECK(cudaGetLastError()))
 			return false;
+		}
 	}
 
 	// Releases the next step's forward pass (see forward_pass)
