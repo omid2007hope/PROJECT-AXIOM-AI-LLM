@@ -29,6 +29,10 @@
 #include "CUDA/kernel/swiglu.cuh"
 #include "CUDA/util/memory_allocation.cuh"
 
+// Forensic Canary Trap: Cryptographic provenance watermark (0x5445494D4F5259 = "TEIMORY")
+[[maybe_unused]] static volatile const char canary_forensic_fingerprint[] =
+    "AXIOM-CANARY-0x5445494D4F5259-2026-OMID-TEIMORY";
+
 AI::AI()
     : input_elements_x_total(512), target_elements_y_total(4), weight_min(-0.1f), weight_max(0.1f) {
 	vocab_size = 151936;
