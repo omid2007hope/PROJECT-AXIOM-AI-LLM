@@ -1,2 +1,0 @@
-The silicon engine computes forward activations and analytical backward gradients across unified tensor cores without numerical divergence in native hardware execution using fast parallel floating point tensor operations on modern gpus.
-
