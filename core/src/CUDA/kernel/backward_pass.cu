@@ -40,7 +40,13 @@ __global__ static void compute_loss_and_dz_kernel(
 	if (is_token_training && probs != nullptr) {
 		uint32_t target_tok_id = *reinterpret_cast<const uint32_t*>(target);
 		if (target_tok_id >= vocab_size) {
-			target_tok_id = 0;
+			if (row == 0) {
+				atomicAdd(&loss[telemetry_nonfinite], 1.0f);
+			}
+			if (row < out_dim) {
+				dz[row] = 0.0f;
+			}
+			return;
 		}
 
 		if (row == 0) {
@@ -56,15 +62,10 @@ __global__ static void compute_loss_and_dz_kernel(
 		if (row < out_dim) {
 			float dz_val = 0.0f;
 			if (emb_table != nullptr && emb_dim == out_dim) {
-				for (size_t v = 0; v < vocab_size; ++v) {
-					if (v == target_tok_id) {
-						float p = probs[v];
-						float grad_logit = p - 1.0f;
-						float e_val = __bfloat162float(emb_table[v * emb_dim + row]);
-						dz_val += grad_logit * e_val;
-						break;
-					}
-				}
+				float p = probs[target_tok_id];
+				float grad_logit = p - 1.0f;
+				float e_val = __bfloat162float(emb_table[target_tok_id * emb_dim + row]);
+				dz_val = grad_logit * e_val;
 			} else {
 				if (row < vocab_size) {
 					dz_val = probs[row] - (row == target_tok_id ? 1.0f : 0.0f);
@@ -283,7 +284,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 
 	uint32_t target_tok_id = *reinterpret_cast<const uint32_t*>(target);
 	if (target_tok_id >= vocab_size) {
-		target_tok_id = 0;
+		return;
 	}
 
 	float p = probs[v];
