@@ -399,23 +399,29 @@ extern "C" CUDA_API void launch_tied_logits_bf16(const void* d_normed_x,
 		hidden_dim);
 }
 
-// Milestone 3: RMSNorm Forward Kernel (in-place normalization before Tensor Cores)
+// Milestone 3: RMSNorm Forward Kernel (per-token normalization across S blocks)
 __global__ static void rms_norm_forward_kernel(__nv_bfloat16* __restrict__ x,
 					       float* __restrict__ inv_rms_out,
-					       size_t n,
+					       size_t S,
+					       size_t D,
 					       float eps) {
+	size_t s = blockIdx.x;
+	if (s >= S)
+		return;
+
+	size_t offset = s * D;
 	__shared__ float s_sum[32];
 	float sum_sq = 0.0f;
 
-	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
-		float val = __bfloat162float(x[i]);
+	for (size_t i = threadIdx.x; i < D; i += blockDim.x) {
+		float val = __bfloat162float(x[offset + i]);
 		if (isfinite(val)) {
 			sum_sq += val * val;
 		}
 	}
 
-	for (int offset = 16; offset > 0; offset /= 2) {
-		sum_sq += __shfl_down_sync(0xffffffff, sum_sq, offset);
+	for (int shift = 16; shift > 0; shift /= 2) {
+		sum_sq += __shfl_down_sync(0xffffffff, sum_sq, shift);
 	}
 
 	int lane = threadIdx.x % 32;
@@ -427,29 +433,29 @@ __global__ static void rms_norm_forward_kernel(__nv_bfloat16* __restrict__ x,
 
 	if (wid == 0) {
 		float warp_sum = (lane < (blockDim.x / 32)) ? s_sum[lane] : 0.0f;
-		for (int offset = 16; offset > 0; offset /= 2) {
-			warp_sum += __shfl_down_sync(0xffffffff, warp_sum, offset);
+		for (int shift = 16; shift > 0; shift /= 2) {
+			warp_sum += __shfl_down_sync(0xffffffff, warp_sum, shift);
 		}
 		if (lane == 0) {
-			float mean_sq = warp_sum / static_cast<float>(n > 0 ? n : 1);
+			float mean_sq = warp_sum / static_cast<float>(D > 0 ? D : 1);
 			float inv_rms = rsqrtf(mean_sq + eps);
 			if (!isfinite(inv_rms) || isinf(inv_rms)) {
 				inv_rms = 1.0f;
 			}
 			s_sum[0] = inv_rms;
 			if (inv_rms_out) {
-				*inv_rms_out = inv_rms;
+				inv_rms_out[s] = inv_rms;
 			}
 		}
 	}
 	__syncthreads();
 
 	float inv_rms = s_sum[0];
-	for (size_t i = threadIdx.x; i < n; i += blockDim.x) {
-		float val = __bfloat162float(x[i]);
+	for (size_t i = threadIdx.x; i < D; i += blockDim.x) {
+		float val = __bfloat162float(x[offset + i]);
 		float norm_val = val * inv_rms;
 		norm_val = fmaxf(-30.0f, fminf(30.0f, norm_val));
-		x[i] = __float2bfloat16(norm_val);
+		x[offset + i] = __float2bfloat16(norm_val);
 	}
 }
 
@@ -669,19 +675,24 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 		return false;
 	}
 
-	// Milestone 3: RMSNorm Forward Pass (Normalizes variance of flattened input to 1.0)
+	// Milestone 3: RMSNorm Forward Pass (Normalizes variance per token vector)
 	// Applied only when embeddings are active to protect large context windows from variance explosion
 	if (gpu_embeddings && gpu_embeddings->d_table) {
+		size_t emb_dim =
+			gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
+							      : (input_dim / emb_dim);
 		if (!gpu_activations->d_inv_rms) {
-			gpu_activations->d_inv_rms = allocate_vram(sizeof(float), stream);
+			gpu_activations->d_inv_rms = allocate_vram(num_tok * sizeof(float), stream);
 			if (!gpu_activations->d_inv_rms)
 				return false;
 		}
-		int norm_threads = 1024;
-		rms_norm_forward_kernel<<<1, norm_threads, 0, stream>>>(
+		int norm_threads = static_cast<int>(std::min<size_t>(1024, emb_dim));
+		rms_norm_forward_kernel<<<static_cast<int>(num_tok), norm_threads, 0, stream>>>(
 			static_cast<__nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
 			static_cast<float*>(gpu_activations->d_inv_rms),
-			input_dim,
+			num_tok,
+			emb_dim,
 			1e-5f);
 		if (!CUDA_CHECK(cudaGetLastError()))
 			return false;
@@ -718,67 +729,78 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			return false;
 	}
 
-	using cute::_0;
-	using cute::_1;
+	if (!gather_embeddings && input_dim > output_dim) {
+		// Transformer hidden state token readout: copy final token h_{S-1} directly to d_output
+		size_t final_token_offset = input_dim - output_dim;
+		cudaMemcpyAsync(
+			gpu_activations->d_output,
+			static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]) + final_token_offset,
+			output_dim * sizeof(__nv_bfloat16),
+			cudaMemcpyDeviceToDevice,
+			stream);
+	} else {
+		using cute::_0;
+		using cute::_1;
 
-	const int M = 1;
-	const int N = static_cast<int>(output_dim);
-	const int K = static_cast<int>(input_dim);
+		const int M = 1;
+		const int N = static_cast<int>(output_dim);
+		const int K = static_cast<int>(input_dim);
 
-	// Visitor arguments are listed children first, then the node itself
-	typename EvtStore::Arguments callback_args {
-		{
-			{}, // Accum
-			{static_cast<const ElementIn*>(gpu_weights->d_bias),
-			 ElementIn(0),
-			 {_0 {}, _1 {}, int32_t(N)}}, // Bias
-			{}			      // AddBias
-		},				      // EvtAddBias
-		{static_cast<ElementIn*>(gpu_activations->d_output),
-		 {int64_t(N), _1 {}, int64_t(M) * N}} // Store
-	};
+		// Visitor arguments are listed children first, then the node itself
+		typename EvtStore::Arguments callback_args {
+			{
+				{}, // Accum
+				{static_cast<const ElementIn*>(gpu_weights->d_bias),
+				 ElementIn(0),
+				 {_0 {}, _1 {}, int32_t(N)}}, // Bias
+				{}			      // AddBias
+			},				      // EvtAddBias
+			{static_cast<ElementIn*>(gpu_activations->d_output),
+			 {int64_t(N), _1 {}, int64_t(M) * N}} // Store
+		};
 
-	typename Gemm::Arguments arguments(cutlass::gemm::GemmUniversalMode::kGemm,
-					   cutlass::gemm::GemmCoord(M, N, K),
-					   1, // batch_count
-					   callback_args,
-					   gpu_portion->d_context_window[buffer_index], // ptr_A: x
-					   gpu_weights->d_weights,			// ptr_B: W
-					   nullptr,	// ptr_C (the EVT does the store)
-					   nullptr,	// ptr_D
-					   int64_t(0),	// batch_stride_A
-					   int64_t(0),	// batch_stride_B
-					   int64_t(0),	// batch_stride_C
-					   int64_t(0),	// batch_stride_D
-					   int64_t(K),	// lda
-					   int64_t(K),	// ldb
-					   int64_t(0),	// ldc
-					   int64_t(0)); // ldd
+		typename Gemm::Arguments arguments(cutlass::gemm::GemmUniversalMode::kGemm,
+						   cutlass::gemm::GemmCoord(M, N, K),
+						   1, // batch_count
+						   callback_args,
+						   gpu_portion->d_context_window[buffer_index], // ptr_A: x
+						   gpu_weights->d_weights,			// ptr_B: W
+						   nullptr,	// ptr_C (the EVT does the store)
+						   nullptr,	// ptr_D
+						   int64_t(0),	// batch_stride_A
+						   int64_t(0),	// batch_stride_B
+						   int64_t(0),	// batch_stride_C
+						   int64_t(0),	// batch_stride_D
+						   int64_t(K),	// lda
+						   int64_t(K),	// ldb
+						   int64_t(0),	// ldc
+						   int64_t(0)); // ldd
 
-	Gemm gemm_op;
+		Gemm gemm_op;
 
-	cutlass::Status status = gemm_op.can_implement(arguments);
-	if (status != cutlass::Status::kSuccess) {
-		fprintf(stderr,
-			"[CUTLASS] forward_pass unsupported (in_dim=%zu must be a multiple of %d): %s\n",
-			input_dim,
-			AlignmentIn,
-			cutlass::cutlassGetStatusString(status));
-		return false;
-	}
+		cutlass::Status status = gemm_op.can_implement(arguments);
+		if (status != cutlass::Status::kSuccess) {
+			fprintf(stderr,
+				"[CUTLASS] forward_pass unsupported (in_dim=%zu must be a multiple of %d): %s\n",
+				input_dim,
+				AlignmentIn,
+				cutlass::cutlassGetStatusString(status));
+			return false;
+		}
 
-	// A single-slice GEMM needs no workspace
-	if (Gemm::get_workspace_size(arguments) != 0) {
-		fprintf(stderr, "[CUTLASS] forward_pass unexpectedly needs a workspace\n");
-		return false;
-	}
+		// A single-slice GEMM needs no workspace
+		if (Gemm::get_workspace_size(arguments) != 0) {
+			fprintf(stderr, "[CUTLASS] forward_pass unexpectedly needs a workspace\n");
+			return false;
+		}
 
-	status = gemm_op(arguments, nullptr, stream);
-	if (status != cutlass::Status::kSuccess) {
-		fprintf(stderr,
-			"[CUTLASS] forward_pass failed: %s\n",
-			cutlass::cutlassGetStatusString(status));
-		return false;
+		status = gemm_op(arguments, nullptr, stream);
+		if (status != cutlass::Status::kSuccess) {
+			fprintf(stderr,
+				"[CUTLASS] forward_pass failed: %s\n",
+				cutlass::cutlassGetStatusString(status));
+			return false;
+		}
 	}
 
 	// Milestone 3: Discrete Autoregressive Token Classification
@@ -1413,8 +1435,8 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
 		gpu_activations->d_normalized_feedforward =
 			allocate_vram(total_seq_dim * sizeof(__nv_bfloat16), s);
-		gpu_activations->d_attention_scale = allocate_vram(sizeof(float), s);
-		gpu_activations->d_feedforward_scale = allocate_vram(sizeof(float), s);
+		gpu_activations->d_attention_scale = allocate_vram(sequence_length * sizeof(float), s);
+		gpu_activations->d_feedforward_scale = allocate_vram(sequence_length * sizeof(float), s);
 		gpu_activations->xform_seq_elements = total_seq_dim;
 		gpu_activations->xform_ffn_elements = total_seq_ffn;
 	}
@@ -1428,6 +1450,10 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 	    !gpu_activations->d_feedforward_scale) {
 		return false;
 	}
+
+	int S = static_cast<int>(sequence_length);
+	int D = static_cast<int>(embedding_dim);
+	int F = static_cast<int>(feedforward_network_dimension);
 
 	// 1. Save residual copy of X and copy into normalized_attention buffer
 	cudaMemcpyAsync(gpu_activations->d_residual_mid,
@@ -1443,17 +1469,15 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 
 	// 2. Pre-Norm: RMSNorm on X into normalized_attention buffer
 	if (gpu_activations->d_attention_scale) {
-		rms_norm_forward_kernel<<<1, 1024, 0, s>>>(
+		rms_norm_forward_kernel<<<S, 1024, 0, s>>>(
 			static_cast<__nv_bfloat16*>(gpu_activations->d_normalized_attention),
 			static_cast<float*>(gpu_activations->d_attention_scale),
-			total_seq_dim,
+			S,
+			D,
 			1e-5f);
 	}
 
 	// 3. Q, K, V projections: [S x D] * [D x D] -> [S x D]
-	int S = static_cast<int>(sequence_length);
-	int D = static_cast<int>(embedding_dim);
-	int F = static_cast<int>(feedforward_network_dimension);
 
 	batched_gemm_multiply(gpu_activations->d_normalized_attention,
 			      gpu_weights->d_query_weights,
@@ -1533,10 +1557,11 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 
 	// 7. Pre-Norm for FFN: RMSNorm(X_mid) into normalized_feedforward buffer
 	if (gpu_activations->d_feedforward_scale) {
-		rms_norm_forward_kernel<<<1, 1024, 0, s>>>(
+		rms_norm_forward_kernel<<<S, 1024, 0, s>>>(
 			static_cast<__nv_bfloat16*>(gpu_activations->d_normalized_feedforward),
 			static_cast<float*>(gpu_activations->d_feedforward_scale),
-			total_seq_dim,
+			S,
+			D,
 			1e-5f);
 	}
 

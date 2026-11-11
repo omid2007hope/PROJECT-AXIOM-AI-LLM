@@ -127,11 +127,11 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 			}
 
 			// Readout loss, telemetry, and upstream gradient d_dx computation.
-			// scatter_embeddings is false so backward_scatter_embeddings runs AFTER transformer_backward_block
+			// scatter_embeddings is set to true so output head updates and embedding matrix learns
 			if (!backward_pass_with_embeddings(&gpu_portion, &gpu_embeddings, &gpu_weights,
 											   &gpu_activations, input_elements_x_total,
 											   target_elements_y_total, learning_rate, buffer_index,
-											   true /* use_adamw */, false /* scatter_embeddings */)) {
+											   true /* use_adamw */, true /* scatter_embeddings */)) {
 				std::cerr << "[AI Brain] Backward pass with embeddings failed.\n";
 				return TrainStatus::Failed;
 			}

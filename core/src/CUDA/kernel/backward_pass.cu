@@ -151,7 +151,7 @@ __global__ static void backward_pass_kernel(
 		}
 
 		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
-		float weight_lr = learning_rate / in_dim_f;
+		float weight_lr = learning_rate / sqrtf(in_dim_f);
 
 		float w_val = W_master[i] - weight_lr * dz * x_val;
 		if (isfinite(w_val)) {
@@ -193,7 +193,7 @@ __global__ static void backward_pass_adamw_kernel(
 		}
 
 		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
-		float weight_lr = learning_rate / in_dim_f;
+		float weight_lr = learning_rate / sqrtf(in_dim_f);
 
 		if (W_m != nullptr && W_v != nullptr) {
 			float weight_grad = dz * x_val;
@@ -276,20 +276,27 @@ __global__ static void compute_input_gradient(const float* __restrict__ W_master
 
 __global__ static void backward_rms_norm(const __nv_bfloat16* __restrict__ x_hat,
 										 const float* __restrict__ inv_rms_ptr,
-										 float* __restrict__ dx_inout, size_t n) {
+										 float* __restrict__ dx_inout,
+										 size_t S,
+										 size_t D) {
+	size_t s = blockIdx.x;
+	if (s >= S)
+		return;
+
+	size_t offset = s * D;
 	__shared__ float s_sum[32];
 	float dot_sum = 0.0f;
 
-	for (size_t k = threadIdx.x; k < n; k += blockDim.x) {
-		float g_k = dx_inout[k];
-		float x_k = __bfloat162float(x_hat[k]);
+	for (size_t k = threadIdx.x; k < D; k += blockDim.x) {
+		float g_k = dx_inout[offset + k];
+		float x_k = __bfloat162float(x_hat[offset + k]);
 		if (isfinite(g_k) && isfinite(x_k)) {
 			dot_sum += g_k * x_k;
 		}
 	}
 
-	for (int offset = 16; offset > 0; offset /= 2) {
-		dot_sum += __shfl_down_sync(0xffffffff, dot_sum, offset);
+	for (int shift = 16; shift > 0; shift /= 2) {
+		dot_sum += __shfl_down_sync(0xffffffff, dot_sum, shift);
 	}
 
 	int lane = threadIdx.x % 32;
@@ -301,24 +308,24 @@ __global__ static void backward_rms_norm(const __nv_bfloat16* __restrict__ x_hat
 
 	if (wid == 0) {
 		float warp_sum = (lane < (blockDim.x / 32)) ? s_sum[lane] : 0.0f;
-		for (int offset = 16; offset > 0; offset /= 2) {
-			warp_sum += __shfl_down_sync(0xffffffff, warp_sum, offset);
+		for (int shift = 16; shift > 0; shift /= 2) {
+			warp_sum += __shfl_down_sync(0xffffffff, warp_sum, shift);
 		}
 		if (lane == 0) {
-			s_sum[0] = warp_sum / static_cast<float>(n > 0 ? n : 1);
+			s_sum[0] = warp_sum / static_cast<float>(D > 0 ? D : 1);
 		}
 	}
 	__syncthreads();
 
 	float mean_dot = s_sum[0];
-	float inv_rms = (inv_rms_ptr && isfinite(*inv_rms_ptr)) ? *inv_rms_ptr : 1.0f;
+	float inv_rms = (inv_rms_ptr && isfinite(inv_rms_ptr[s])) ? inv_rms_ptr[s] : 1.0f;
 
-	for (size_t j = threadIdx.x; j < n; j += blockDim.x) {
-		float g_j = dx_inout[j];
-		float x_j = __bfloat162float(x_hat[j]);
+	for (size_t j = threadIdx.x; j < D; j += blockDim.x) {
+		float g_j = dx_inout[offset + j];
+		float x_j = __bfloat162float(x_hat[offset + j]);
 		float dx_j = inv_rms * (g_j - x_j * mean_dot);
 		dx_j = isfinite(dx_j) ? fmaxf(-10.0f, fminf(10.0f, dx_j)) : 0.0f;
-		dx_inout[j] = dx_j;
+		dx_inout[offset + j] = dx_j;
 	}
 }
 
@@ -379,7 +386,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 	__syncthreads();
 	float rms_y = s_y_sq[0];
 
-	float token_weight_decay = 0.01f / static_cast<float>(vocab_size > 0 ? vocab_size : 1);
+	float token_weight_decay = 1e-5f / static_cast<float>(vocab_size > 0 ? vocab_size : 1);
 
 	for (size_t d = threadIdx.x; d < emb_dim; d += blockDim.x) {
 		float y_val = __bfloat162float(y[d]);
@@ -581,7 +588,20 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 	GpuPortion* non_const_gpu = const_cast<GpuPortion*>(gpu_portion);
 	bool has_embeddings = gpu_portion->token_ids_active[buffer_index] && gpu_embeddings &&
 						  gpu_embeddings->d_table_master && gpu_embeddings->d_table;
-	if (has_embeddings || non_const_gpu->d_dx[buffer_index]) {
+	bool is_transformer_readout = (gpu_weights->d_query_weights != nullptr && input_dim > output_dim);
+
+	if (is_transformer_readout) {
+		if (!non_const_gpu->d_dx[buffer_index]) {
+			non_const_gpu->d_dx[buffer_index] = allocate_vram(input_dim * sizeof(float), stream);
+			if (!non_const_gpu->d_dx[buffer_index])
+				return false;
+		}
+		size_t final_token_offset = input_dim - output_dim;
+		cudaMemsetAsync(non_const_gpu->d_dx[buffer_index], 0, input_dim * sizeof(float), stream);
+		cudaMemcpyAsync(static_cast<float*>(non_const_gpu->d_dx[buffer_index]) + final_token_offset,
+						non_const_act->d_dz, output_dim * sizeof(float),
+						cudaMemcpyDeviceToDevice, stream);
+	} else if (has_embeddings || non_const_gpu->d_dx[buffer_index]) {
 		if (!non_const_gpu->d_dx[buffer_index]) {
 			non_const_gpu->d_dx[buffer_index] = allocate_vram(input_dim * sizeof(float), stream);
 			if (!non_const_gpu->d_dx[buffer_index])
@@ -595,46 +615,51 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 			static_cast<float*>(non_const_gpu->d_dx[buffer_index]), input_dim, output_dim);
 
 		if (gpu_embeddings && gpu_embeddings->d_table) {
-			backward_rms_norm<<<1, 1024, 0, stream>>>(
+			size_t emb_dim =
+				gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+			size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
+														  : (input_dim / emb_dim);
+			int norm_threads = static_cast<int>(std::min<size_t>(1024, emb_dim));
+			backward_rms_norm<<<static_cast<int>(num_tok), norm_threads, 0, stream>>>(
 				static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
 				static_cast<const float*>(gpu_activations->d_inv_rms),
-				static_cast<float*>(non_const_gpu->d_dx[buffer_index]), input_dim);
+				static_cast<float*>(non_const_gpu->d_dx[buffer_index]), num_tok, emb_dim);
 		}
 		if (!CUDA_CHECK(cudaGetLastError()))
 			return false;
+
+		Grid grid(input_dim * output_dim);
+
+		if (use_adamw && gpu_weights->d_bias_m && gpu_weights->d_bias_v) {
+			constexpr float beta1 = 0.9f;
+			constexpr float beta2 = 0.999f;
+			constexpr float eps = 1e-8f;
+			constexpr float weight_decay = 1e-5f;
+
+			backward_pass_adamw_kernel<<<grid.block, grid.thread, grid.index, stream>>>(
+				static_cast<float*>(gpu_weights->d_weights_master),
+				static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
+				static_cast<float*>(gpu_weights->d_weights_m),
+				static_cast<float*>(gpu_weights->d_weights_v),
+				static_cast<float*>(gpu_weights->d_bias_master),
+				static_cast<__nv_bfloat16*>(gpu_weights->d_bias),
+				static_cast<float*>(gpu_weights->d_bias_m), static_cast<float*>(gpu_weights->d_bias_v),
+				static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+				static_cast<const float*>(non_const_act->d_dz), input_dim, output_dim, learning_rate,
+				gpu_weights->step_count, beta1, beta2, eps, weight_decay);
+		} else {
+			backward_pass_kernel<<<grid.block, grid.thread, grid.index, stream>>>(
+				static_cast<float*>(gpu_weights->d_weights_master),
+				static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
+				static_cast<float*>(gpu_weights->d_bias_master),
+				static_cast<__nv_bfloat16*>(gpu_weights->d_bias),
+				static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+				static_cast<const float*>(non_const_act->d_dz), input_dim, output_dim, learning_rate);
+		}
+
+		if (!CUDA_CHECK(cudaGetLastError()))
+			return false;
 	}
-
-	Grid grid(input_dim * output_dim);
-
-	if (use_adamw && gpu_weights->d_bias_m && gpu_weights->d_bias_v) {
-		constexpr float beta1 = 0.9f;
-		constexpr float beta2 = 0.999f;
-		constexpr float eps = 1e-8f;
-		constexpr float weight_decay = 0.01f;
-
-		backward_pass_adamw_kernel<<<grid.block, grid.thread, grid.index, stream>>>(
-			static_cast<float*>(gpu_weights->d_weights_master),
-			static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
-			static_cast<float*>(gpu_weights->d_weights_m),
-			static_cast<float*>(gpu_weights->d_weights_v),
-			static_cast<float*>(gpu_weights->d_bias_master),
-			static_cast<__nv_bfloat16*>(gpu_weights->d_bias),
-			static_cast<float*>(gpu_weights->d_bias_m), static_cast<float*>(gpu_weights->d_bias_v),
-			static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
-			static_cast<const float*>(non_const_act->d_dz), input_dim, output_dim, learning_rate,
-			gpu_weights->step_count, beta1, beta2, eps, weight_decay);
-	} else {
-		backward_pass_kernel<<<grid.block, grid.thread, grid.index, stream>>>(
-			static_cast<float*>(gpu_weights->d_weights_master),
-			static_cast<__nv_bfloat16*>(gpu_weights->d_weights),
-			static_cast<float*>(gpu_weights->d_bias_master),
-			static_cast<__nv_bfloat16*>(gpu_weights->d_bias),
-			static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
-			static_cast<const float*>(non_const_act->d_dz), input_dim, output_dim, learning_rate);
-	}
-
-	if (!CUDA_CHECK(cudaGetLastError()))
-		return false;
 
 	// Phase 5: Output Head & Backward Scatter Kernel for learnable embedding matrix
 	if (has_embeddings) {
@@ -1096,10 +1121,10 @@ extern "C" CUDA_API bool transformer_backward_block(
 	add_residual_gradient<<<res_blocks, res_threads, 0, s>>>(
 		d_grad_mid_float, d_grad_ffn_up_in, total_seq_dim);
 
-	backward_rms_norm<<<1, 1024, 0, s>>>(
+	backward_rms_norm<<<S, 1024, 0, s>>>(
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_normalized_feedforward),
 		static_cast<const float*>(gpu_activations->d_feedforward_scale),
-		d_grad_mid_float, total_seq_dim);
+		d_grad_mid_float, S, D);
 
 	add_residual_gradient<<<res_blocks, res_threads, 0, s>>>(
 		d_grad_mid_float, static_cast<const float*>(grad_output), total_seq_dim);
@@ -1174,10 +1199,10 @@ extern "C" CUDA_API bool transformer_backward_block(
 	accumulate_attention_residual<<<res_blocks, res_threads, 0, s>>>(
 		d_grad_attn_accum, d_grad_proj_q_float, d_grad_proj_k_float, d_grad_proj_v_float, total_seq_dim);
 
-	backward_rms_norm<<<1, 1024, 0, s>>>(
+	backward_rms_norm<<<S, 1024, 0, s>>>(
 		static_cast<const __nv_bfloat16*>(gpu_activations->d_normalized_attention),
 		static_cast<const float*>(gpu_activations->d_attention_scale),
-		d_grad_attn_accum, total_seq_dim);
+		d_grad_attn_accum, S, D);
 
 	add_residual_gradient<<<res_blocks, res_threads, 0, s>>>(
 		d_grad_mid_float, d_grad_attn_accum, total_seq_dim);
@@ -1188,7 +1213,7 @@ extern "C" CUDA_API bool transformer_backward_block(
 	constexpr float beta1 = 0.9f;
 	constexpr float beta2 = 0.999f;
 	constexpr float eps = 1e-8f;
-	constexpr float weight_decay = 0.01f;
+	constexpr float weight_decay = 1e-5f;
 
 	auto apply_adamw = [&](float* master, __nv_bfloat16* bf16_w, float* m, float* v, const float* g,
 						   size_t elements) {
