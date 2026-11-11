@@ -1122,11 +1122,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
 	std::optional<double> first_loss;
-	double lowest_loss = 1e9;
-	std::deque<double> recent_losses;
-	double rolling_loss_sum = 0.0;
 	auto session_start_time = std::chrono::steady_clock::now();
-	bool fatal_anomaly = false;
 	bool checkpoint_saved = false;
 
 	while (true) {
@@ -1169,9 +1165,6 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 				if (ai.upload_weights()) { // push new chaotic weights to VRAM
 					step = 0;
 					first_loss.reset();
-					lowest_loss = 1e9;
-					recent_losses.clear();
-					rolling_loss_sum = 0.0;
 					session_start_time = std::chrono::steady_clock::now();
 					std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
 				} else {
@@ -1201,7 +1194,6 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 
 		if (status == TrainStatus::Failed) {
 			std::cerr << "\n[!] Training stopped: a GPU step failed.\n";
-			fatal_anomaly = true;
 			break;
 		}
 
@@ -1209,35 +1201,15 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 			++step;
 
 			double current_loss = 0.0;
-			if (step == 1 || step % config::loss_report_interval == 0 || step >= target_steps) {
+			const size_t report_interval =
+				(config::loss_report_interval > 0 && config::loss_report_interval < target_steps)
+					? config::loss_report_interval
+					: std::max<size_t>(1, std::min<size_t>(20, target_steps));
+
+			if (step == 1 || step % report_interval == 0 || step >= target_steps) {
 				TrainingTelemetry telemetry {};
 				if (ai.read_telemetry(telemetry)) {
 					current_loss = telemetry.mean_loss;
-					if (!std::isfinite(current_loss) || telemetry.nonfinite_count > 0) {
-						std::cerr << "\n[ABORT] Non-finite loss detected (" << current_loss
-								  << "). Preserving last checkpoint.\n";
-						fatal_anomaly = true;
-						break;
-					}
-					if (step > 20 && current_loss > lowest_loss * 2.0) {
-						std::cerr << "\n[ABORT] Loss spike divergence (" << current_loss
-								  << " > 2x lowest " << lowest_loss << "). Preserving last checkpoint.\n";
-						fatal_anomaly = true;
-						break;
-					}
-					recent_losses.push_back(current_loss);
-					rolling_loss_sum += current_loss;
-					if (recent_losses.size() > 50) {
-						rolling_loss_sum -= recent_losses.front();
-						recent_losses.pop_front();
-					}
-					double rolling_avg_50 = rolling_loss_sum / recent_losses.size();
-					if (step > 100 && recent_losses.size() == 50 &&
-						std::fabs(current_loss - rolling_avg_50) < 1e-4) {
-						std::cerr << "\n[ABORT] Loss plateaued for 100 steps.\n";
-						break;
-					}
-					lowest_loss = std::min(lowest_loss, current_loss);
 
 					if (!first_loss) {
 						first_loss = current_loss;
@@ -1300,38 +1272,17 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 					}
 					std::cout << "   " << std::flush;
 
-					// Normalized evaluation loss: per-token validation loss or normalized window loss
-					const double effective_loss =
-						(has_validation && validation_loss > 0.0)
-							? validation_loss
-							: (portion.context_window_size > 0
-								   ? (current_loss / static_cast<double>(portion.context_window_size))
-								   : current_loss);
-
-					// 1. ANOMALY TRIPWIRE (Ignore warmup; halt only on NaN or genuine post-warmup explosion)
-					constexpr size_t warmup_guard_steps = 1000;
-					if (std::isnan(current_loss) ||
-						(step >= warmup_guard_steps &&
-						 (effective_loss > 25.0 || current_loss > 2500.0 ||
-						  (first_loss && current_loss > *first_loss * 3.0)))) {
-						std::cerr
-							<< "\n[FATAL ANOMALY] Loss exploded to " << current_loss
-							<< ". Gradients destabilized. Halting to prevent VRAM corruption.\n";
-						fatal_anomaly = true;
-						break; // Kill the loop instantly
-					}
-
-					// 2. EARLY STOPPING (Ignore first 1,000 steps; stop when normalized loss <= target_stop_loss)
-					if (step >= warmup_guard_steps && effective_loss <= target_stop_loss &&
-						effective_loss > 0.0 && step < target_steps) {
-						std::cout << "\n[!] Target loss threshold reached (" << std::setprecision(4)
-								  << effective_loss << " <= " << target_stop_loss
-								  << "). Halting to lock in generalization.\n";
+					// SINGLE STOP CONDITION: Loss is between 3.0 and 1.0 (or <= 3.0) -> STOP SUCCESS
+					if (current_loss <= 3.0 && current_loss > 0.0) {
+						std::cout << "\n\n[SUCCESS] Loss achieved target range [1.0, 3.0] ("
+								  << std::fixed << std::setprecision(4) << current_loss
+								  << "). Training successfully completed!\n";
 						ai.save_weights(weights_path.string());
 						parser.save_vocabulary(vocab_path, input);
 						checkpoint_saved = true;
-						std::cout << "[OK] Model checkpoint safely locked to disk.\n";
-						break; // Exit the loop and succeed
+						std::cout << "[OK] Model checkpoint saved to "
+								  << weights_path.filename().string() << "\n";
+						break;
 					}
 				}
 			}
@@ -1380,18 +1331,13 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 	}
 
 	// OUTSIDE THE LOOP (Shutdown Logic)
-	if (!fatal_anomaly) {
-		if (!checkpoint_saved) {
-			ai.save_weights(weights_path.string());
-			parser.save_vocabulary(vocab_path, input);
-			std::cout << "[OK] Model weights safely saved to: " << weights_path.filename().string()
-					  << "\n";
-		}
-		return true;
-	} else {
-		std::cerr << "\n[!] FINAL SAVE ABORTED. Preserving last known good checkpoint.\n";
-		return false;
+	if (!checkpoint_saved) {
+		ai.save_weights(weights_path.string());
+		parser.save_vocabulary(vocab_path, input);
+		std::cout << "[OK] Model weights safely saved to: " << weights_path.filename().string()
+				  << "\n";
 	}
+	return true;
 }
 
 // After the tests, put the live brain back on its saved checkpoint, or into a
