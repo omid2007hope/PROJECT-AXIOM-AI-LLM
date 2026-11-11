@@ -111,7 +111,7 @@ def process_file(source_path: Path, output_dir: Path) -> bool:
     if not text:
         return False
 
-    out_file = output_dir / f"{source_path.stem}.txt"
+    out_file = output_dir / f"{source_path.stem}.md"
     out_file.write_text(text, encoding="utf-8")
     print(f"[OK] Extracted {source_path.name} -> {out_file.name} ({len(text)} chars)")
     return True

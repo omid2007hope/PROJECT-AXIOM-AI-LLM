@@ -14,19 +14,30 @@
 
 """
 Project Axiom — High-Speed Document & Media Separator
-Uses PyMuPDF (fitz) for 50x C-accelerated extraction, with pypdf fallback.
-Splits raw mixed-media PDFs into:
-  - asset_sample/text/    (Clean prose for language training)
-  - asset_sample/symbols/ (Math, tables, datasheets, code)
-  - asset_sample/images/  (Extracted raster diagrams & figures)
+Extracts structured multimodal documents into STRICTLY .md and .png formats:
+  - asset_sample/text/    (*_text.md: Clean normalized prose in Markdown)
+  - asset_sample/symbols/ (*_symbols.md: Math, tables, code in Markdown)
+  - asset_sample/images/  (*.png: High-resolution diagrams & figures converted to PNG)
+
+Only .md and .png output formats are allowed.
 """
 
 import sys
 import os
+import io
+import re
+import unicodedata
 import argparse
 from pathlib import Path
 
-# Try high-speed PyMuPDF first, fallback to pypdf
+# Optional PIL for strict PNG encoding/conversion
+try:
+    from PIL import Image
+    HAVE_PIL = True
+except ImportError:
+    HAVE_PIL = False
+
+# High-speed PyMuPDF first, fallback to pypdf
 try:
     import pymupdf as fitz
     HAVE_FITZ = True
@@ -36,7 +47,40 @@ except ImportError:
         HAVE_FITZ = True
     except ImportError:
         HAVE_FITZ = False
-        from pypdf import PdfReader
+
+LIGATURE_MAP = {
+    "\ufb00": "ff",
+    "\ufb01": "fi",
+    "\ufb02": "fl",
+    "\ufb03": "ffi",
+    "\ufb04": "ffl",
+    "\ufb05": "ft",
+    "\ufb06": "st",
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201a": "'",
+    "\u201b": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u201e": '"',
+    "\u201f": '"',
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2015": "-",
+    "\u00a0": " ",
+    "\u2026": "...",
+}
+
+
+def clean_line_text(line: str) -> str:
+    """Normalizes Unicode text to clean ASCII/UTF-8 compatible strings."""
+    line = unicodedata.normalize("NFKD", line)
+    for lig, rep in LIGATURE_MAP.items():
+        line = line.replace(lig, rep)
+    # Filter non-printable control characters except tab and newline
+    clean_chars = [c for c in line if ord(c) in (9, 10, 13) or (32 <= ord(c) < 127) or (ord(c) >= 160)]
+    cleaned = "".join(clean_chars)
+    return " ".join(cleaned.split())
 
 
 def is_symbol_heavy(text: str) -> bool:
@@ -48,6 +92,23 @@ def is_symbol_heavy(text: str) -> bool:
     if alphanumeric == 0:
         return True
     return (symbols / max(alphanumeric, 1)) > 0.15
+
+
+def save_image_as_png(raw_bytes: bytes, dest_path: Path) -> bool:
+    """Converts any extracted image format to strictly PNG."""
+    if HAVE_PIL:
+        try:
+            with Image.open(io.BytesIO(raw_bytes)) as img:
+                w, h = img.size
+                if w < 100 or h < 100:
+                    return False
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGBA" if "A" in img.mode else "RGB")
+                img.save(dest_path.with_suffix(".png"), format="PNG", optimize=True)
+                return True
+        except Exception:
+            return False
+    return False
 
 
 def separate_with_fitz(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: Path, extract_images: bool = False):
@@ -66,16 +127,16 @@ def separate_with_fitz(pdf_path: Path, text_dir: Path, symbols_dir: Path, images
         try:
             page = doc[page_idx]
             text = page.get_text("text") or ""
-            for line in text.splitlines():
-                clean_line = " ".join(line.split())
-                if not clean_line:
+            for raw_line in text.splitlines():
+                line = clean_line_text(raw_line)
+                if not line:
                     continue
-                if is_symbol_heavy(clean_line):
-                    symbol_lines.append(clean_line)
+                if is_symbol_heavy(line):
+                    symbol_lines.append(line)
                 else:
-                    prose_lines.append(clean_line)
+                    prose_lines.append(line)
 
-            # Rapid image extraction (deduplicated by XREF & filtered for genuine diagrams)
+            # Strict PNG image extraction
             if extract_images:
                 for img_info in page.get_images(full=True):
                     xref = img_info[0]
@@ -83,20 +144,31 @@ def separate_with_fitz(pdf_path: Path, text_dir: Path, symbols_dir: Path, images
                         continue
                     seen_xrefs.add(xref)
                     try:
-                        base_image = doc.extract_image(xref)
-                        w = base_image.get("width", 0)
-                        h = base_image.get("height", 0)
-                        if w < 100 or h < 100:
-                            continue  # Skip decorative bullets, 1px rules, and tiny icons
-                        img_bytes = base_image.get("image")
-                        ext = base_image.get("ext", "png")
-                        if img_bytes:
-                            img_filename = f"{stem}_xref{xref}.{ext}"
-                            with open(images_dir / img_filename, "wb") as f_img:
-                                f_img.write(img_bytes)
-                            image_count += 1
+                        pix = fitz.Pixmap(doc, xref)
+                        if pix.width < 100 or pix.height < 100:
+                            pix = None
+                            continue
+                        # Ensure valid RGB/RGBA for PNG
+                        if pix.n >= 5:
+                            pix_rgb = fitz.Pixmap(fitz.csRGB, pix)
+                            pix = None
+                            pix = pix_rgb
+
+                        png_dest = images_dir / f"{stem}_xref{xref}.png"
+                        pix.save(str(png_dest))
+                        pix = None
+                        image_count += 1
                     except Exception:
-                        pass
+                        # Fallback via raw bytes + PIL
+                        try:
+                            base_img = doc.extract_image(xref)
+                            b_bytes = base_img.get("image")
+                            if b_bytes:
+                                png_dest = images_dir / f"{stem}_xref{xref}.png"
+                                if save_image_as_png(b_bytes, png_dest):
+                                    image_count += 1
+                        except Exception:
+                            pass
         except Exception:
             continue
 
@@ -104,21 +176,25 @@ def separate_with_fitz(pdf_path: Path, text_dir: Path, symbols_dir: Path, images
 
     words_text = 0
     if prose_lines:
-        with open(text_dir / f"{stem}_text.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(prose_lines) + "\n")
+        md_text_path = text_dir / f"{stem}_text.md"
+        with open(md_text_path, "w", encoding="utf-8") as f:
+            f.write(f"# {stem} — Prose Corpus\n\n")
+            f.write("\n\n".join(prose_lines) + "\n")
         words_text = sum(len(line.split()) for line in prose_lines)
 
     words_symbols = 0
     if symbol_lines:
-        with open(symbols_dir / f"{stem}_symbols.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(symbol_lines) + "\n")
+        md_symbols_path = symbols_dir / f"{stem}_symbols.md"
+        with open(md_symbols_path, "w", encoding="utf-8") as f:
+            f.write(f"# {stem} — Mathematical & Structural Symbols\n\n")
+            f.write("```axiom\n" + "\n".join(symbol_lines) + "\n```\n")
         words_symbols = sum(len(line.split()) for line in symbol_lines)
 
-    print(f"  [OK] Extracted: {words_text:,} prose words | {words_symbols:,} symbols | {image_count} images")
+    print(f"  [OK] Extracted: {words_text:,} prose words (.md) | {words_symbols:,} symbols (.md) | {image_count} images (.png)")
     return words_text, words_symbols, image_count
 
 
-def separate_with_pypdf(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: Path):
+def separate_with_pypdf(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: Path, extract_images: bool = False):
     from pypdf import PdfReader
     stem = pdf_path.stem
     try:
@@ -133,30 +209,43 @@ def separate_with_pypdf(pdf_path: Path, text_dir: Path, symbols_dir: Path, image
     for page_idx, page in enumerate(reader.pages):
         try:
             page_text = page.extract_text() or ""
-            for line in page_text.splitlines():
-                clean_line = " ".join(line.split())
-                if not clean_line:
+            for raw_line in page_text.splitlines():
+                line = clean_line_text(raw_line)
+                if not line:
                     continue
-                if is_symbol_heavy(clean_line):
-                    symbol_lines.append(clean_line)
+                if is_symbol_heavy(line):
+                    symbol_lines.append(line)
                 else:
-                    prose_lines.append(clean_line)
+                    prose_lines.append(line)
+
+            if extract_images and hasattr(page, "images"):
+                for img_idx, img_file in enumerate(page.images):
+                    try:
+                        png_dest = images_dir / f"{stem}_p{page_idx}_img{img_idx}.png"
+                        if save_image_as_png(img_file.data, png_dest):
+                            image_count += 1
+                    except Exception:
+                        pass
         except Exception:
             continue
 
     words_text = 0
     if prose_lines:
-        with open(text_dir / f"{stem}_text.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(prose_lines) + "\n")
+        md_text_path = text_dir / f"{stem}_text.md"
+        with open(md_text_path, "w", encoding="utf-8") as f:
+            f.write(f"# {stem} — Prose Corpus\n\n")
+            f.write("\n\n".join(prose_lines) + "\n")
         words_text = sum(len(line.split()) for line in prose_lines)
 
     words_symbols = 0
     if symbol_lines:
-        with open(symbols_dir / f"{stem}_symbols.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(symbol_lines) + "\n")
+        md_symbols_path = symbols_dir / f"{stem}_symbols.md"
+        with open(md_symbols_path, "w", encoding="utf-8") as f:
+            f.write(f"# {stem} — Mathematical & Structural Symbols\n\n")
+            f.write("```axiom\n" + "\n".join(symbol_lines) + "\n```\n")
         words_symbols = sum(len(line.split()) for line in symbol_lines)
 
-    print(f"  [OK] Extracted: {words_text:,} prose words | {words_symbols:,} symbols | {image_count} images")
+    print(f"  [OK] Extracted: {words_text:,} prose words (.md) | {words_symbols:,} symbols (.md) | {image_count} images (.png)")
     return words_text, words_symbols, image_count
 
 
@@ -165,15 +254,15 @@ def separate_pdf(pdf_path: Path, text_dir: Path, symbols_dir: Path, images_dir: 
     if HAVE_FITZ:
         return separate_with_fitz(pdf_path, text_dir, symbols_dir, images_dir, extract_images)
     else:
-        return separate_with_pypdf(pdf_path, text_dir, symbols_dir, images_dir)
+        return separate_with_pypdf(pdf_path, text_dir, symbols_dir, images_dir, extract_images)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Axiom Multimodal High-Speed PDF Separator")
+    parser = argparse.ArgumentParser(description="Axiom Multimodal High-Speed PDF Separator (.md & .png strictly)")
     parser.add_argument("--input-dir", type=str, default="asset_sample")
     parser.add_argument("--output-dir", type=str, default="asset_sample")
     parser.add_argument("--extract-images", action="store_true", default=False,
-                        help="Extract embedded diagrams & figures (default: False for maximum text extraction speed)")
+                        help="Extract embedded diagrams & figures strictly as PNG (default: False)")
     args = parser.parse_args()
 
     input_str = args.input_dir
@@ -210,9 +299,10 @@ def main():
         print(f"[!] No PDF files found in {input_path}")
         sys.exit(0)
 
-    engine_name = "PyMuPDF (High-Speed C Engine)" if HAVE_FITZ else "pypdf"
+    engine_name = "PyMuPDF (Strict .md & .png Engine)" if HAVE_FITZ else "pypdf (.md & .png Engine)"
     print(f"[+] Found {len(pdf_files)} PDF file(s) in {input_path}")
     print(f"  -> Extraction Engine:   {engine_name}")
+    print(f"  -> Output Format:       Strictly .md (Markdown text & symbols) and .png (Images)")
     print(f"  -> Text destination:    {text_dir}")
     print(f"  -> Symbols destination: {symbols_dir}")
     print(f"  -> Images destination:  {images_dir}")
@@ -229,10 +319,10 @@ def main():
         total_images += imgs
 
     print("=" * 60)
-    print(f"[OK] Ingestion Pipeline Ready:")
-    print(f"     Total Prose Words:   {total_prose:,}")
-    print(f"     Total Symbol Words:  {total_symbols:,}")
-    print(f"     Total Extracted PNG: {total_images:,}")
+    print(f"[OK] Ingestion Pipeline Ready (.md & .png only):")
+    print(f"     Total Prose Words (.md):   {total_prose:,}")
+    print(f"     Total Symbol Words (.md):  {total_symbols:,}")
+    print(f"     Total Extracted PNG:       {total_images:,}")
 
 
 if __name__ == "__main__":
