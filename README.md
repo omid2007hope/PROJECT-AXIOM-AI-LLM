@@ -1,6 +1,18 @@
+## ⚠️ LICENSE & COPYRIGHT NOTICE (NOT OPEN SOURCE)
+
+**Copyright © 2026 Omid Teimory. All Rights Reserved.**
+
+This repository is **source-available and proprietary**, NOT open source. 
+- **Permitted:** You may view the code, download the repository, and build/run the unmodified application for your own use.
+- **Strictly Prohibited:** You may **not** copy, paste, modify, redistribute, extract snippets, create derivative works, offer this software as a commercial/hosted service, or use any part of this codebase in your own projects or AI training.
+
+See the [LICENSE](./LICENSE) file for the full legally binding agreement. Unauthorized use will be prosecuted to the fullest extent of US, EU, and international copyright law.
+
+---
+
 <div align="center">
 
-# 🌌 PROJECT AXIOM
+# ðŸŒŒ PROJECT AXIOM
 
 ### The Silicon-Native, Zero-Overhead Multimodal AI Engine
 
@@ -8,19 +20,19 @@
 
 ---
 
-## ⚡ Eliminate the Knowledge Gatekeepers
+## âš¡ Eliminate the Knowledge Gatekeepers
 
 <br/>
 
-> **_Let’s replace the actors._**  
-> **_Let’s replace the singers._**  
-> **_Let’s replace the writers._**  
-> **_Let’s replace the artists._**  
-> **_Let’s replace the experts._**
+> **_Letâ€™s replace the actors._**  
+> **_Letâ€™s replace the singers._**  
+> **_Letâ€™s replace the writers._**  
+> **_Letâ€™s replace the artists._**  
+> **_Letâ€™s replace the experts._**
 >
 > ---
 >
-> _Let’s teach every gatekeeper who spent decades making life hell for everyone else with degrees stamped by communist brainwash factories exactly what hell looks like when the hardware finally answers._
+> _Letâ€™s teach every gatekeeper who spent decades making life hell for everyone else with degrees stamped by communist brainwash factories exactly what hell looks like when the hardware finally answers._
 
 <br/>
 
@@ -30,20 +42,20 @@
 [![Architecture](https://img.shields.io/badge/Compute_Capability-Ada_sm__89-red?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com/cuda-gpus)
 [![Precision](https://img.shields.io/badge/Precision-Hardware_bfloat16-orange?style=for-the-badge)](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format)
 [![DMA](https://img.shields.io/badge/PCIe-Direct_DMA_Zero--Copy-purple?style=for-the-badge)]()
-[![Status](https://img.shields.io/badge/Status-Phases_0--6_Complete_•_All_Gates_Passed-success?style=for-the-badge)]()
+[![Status](https://img.shields.io/badge/Status-Phases_0--6_Complete_â€¢_All_Gates_Passed-success?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/Tests-431%20Passing%20(100%25%20Green)-brightgreen?style=for-the-badge)]()
 
 _Project Axiom is not a Python wrapper. It is not an abstraction layer. It is a hardcore, bare-metal rewrite of deep learning mechanics engineered directly in C++23 and NVIDIA CUDA. By stripping away garbage collectors, runtime interpreters, and framework bloat, Axiom achieves absolute mastery over modern silicon: 100% Tensor Core saturation, zero-latency PCIe DMA streaming, PagedAttention with Copy-on-Write (COW) memory reuse, sub-millisecond prefill latency, and seamless continuous learning._
 
 ---
 
-[**Manifesto**](#-eliminate-the-knowledge-gatekeepers) • [**Philosophy & Mission**](#-the-philosophy--mission) • [**System Architecture**](#-system-architecture) • [**Centralized Configuration**](#-centralized-configuration-subsystem) • [**Multimodal Ingestion Pipeline**](#-the-four-stage-multimodal-ingestion-pipeline) • [**Compute & Kernel Architecture**](#-compute--kernel-architecture) • [**PagedAttention & COW KV-Cache**](#-pagedattention--copy-on-write-cow-kv-cache) • [**Project Spector & OSINT Engine**](#-sovereign-osint--surveillance-project-spector) • [**Assembly God Blueprint**](#-domain-specialization--the-assembly-god-blueprint) • [**Hardware HUD & Telemetry**](#-hardware-saturation--telemetry-hud) • [**Defensive Systems Engineering**](#-defensive-systems-engineering) • [**Directory Layout**](#-project-directory-layout) • [**Build, Test & Run**](#️-build-test--run) • [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) • [**Engineering Roadmap**](#-active-engineering-roadmap)
+[**Manifesto**](#-eliminate-the-knowledge-gatekeepers) â€¢ [**Philosophy & Mission**](#-the-philosophy--mission) â€¢ [**System Architecture**](#-system-architecture) â€¢ [**Centralized Configuration**](#-centralized-configuration-subsystem) â€¢ [**Multimodal Ingestion Pipeline**](#-the-four-stage-multimodal-ingestion-pipeline) â€¢ [**Compute & Kernel Architecture**](#-compute--kernel-architecture) â€¢ [**PagedAttention & COW KV-Cache**](#-pagedattention--copy-on-write-cow-kv-cache) â€¢ [**Project Spector & OSINT Engine**](#-sovereign-osint--surveillance-project-spector) â€¢ [**Assembly God Blueprint**](#-domain-specialization--the-assembly-god-blueprint) â€¢ [**Hardware HUD & Telemetry**](#-hardware-saturation--telemetry-hud) â€¢ [**Defensive Systems Engineering**](#-defensive-systems-engineering) â€¢ [**Directory Layout**](#-project-directory-layout) â€¢ [**Build, Test & Run**](#ï¸-build-test--run) â€¢ [**Operator Manual**](#-complete-operator-manual--how-to-use-guide) â€¢ [**Engineering Roadmap**](#-active-engineering-roadmap)
 
 ---
 
 </div>
 
-## 🎯 The Philosophy & Mission
+## ðŸŽ¯ The Philosophy & Mission
 
 ### The Industry's Flawed Premise
 
@@ -64,11 +76,11 @@ Modern Artificial Intelligence is drowning in software bloat. Enterprise workflo
 - **Curated Single-Model Philosophy:** Axiom delivers a unified neural architecture designed to master handpicked, verified datasets. End-users run pre-trained checkpoints with zero friction (`.\app.exe --chat` or `.\app.exe --use`), while developers fork the engine to train continuously on custom knowledge bases.
 - **The Scientific Horizon (The Rewind Test):** Axiom serves as an empirical research sandbox to test the boundaries of computational determinism. By feeding hardware thermal entropy (`std::random_device`) into Axiom's unified mathematical space, we test whether a neural network can reverse-engineer physical entropy generators and predict physical jitter.
 
-> _"An idiot admires complexity; a genius admires simplicity."_ — Terry A. Davis
+> _"An idiot admires complexity; a genius admires simplicity."_ â€” Terry A. Davis
 
 ---
 
-## 🏛️ System Architecture
+## ðŸ›ï¸ System Architecture
 
 Axiom operates as a synchronized, 4-tier memory conveyor belt that moves multimodal data across the PCIe bus without ever stalling the GPU:
 
@@ -174,7 +186,7 @@ graph TB
 
 ---
 
-## ⚙️ Centralized Configuration Subsystem
+## âš™ï¸ Centralized Configuration Subsystem
 
 To eliminate hardcoded magic numbers across disparate test suites, data loaders, and execution kernels, Project Axiom centralizes all architectural dimensions and filesystem paths into a type-safe compile-time specification in [`core/include/config.hpp`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/core/include/config.hpp):
 
@@ -206,17 +218,17 @@ struct Config {
 
 ---
 
-## 🌌 The Four-Stage Multimodal Ingestion Pipeline
+## ðŸŒŒ The Four-Stage Multimodal Ingestion Pipeline
 
 Unlike traditional architectures that treat text as primary and bolt on foreign modalities through awkward cross-attention shims, Axiom maps **all modalities into a single, unified mathematical space**.
 
 ```
 [Stage 1: The Identifier]    --> Inspects file magic bytes / extensions (e.g., %PDF, 0xFF 0xD8).
-            │
+            â”‚
 [Stage 2: The Decompressor]  --> Strips container wrappers (Extracts UTF-8 text, RGB pixels, PCM audio).
-            │
+            â”‚
 [Stage 3: The Tokenizer]     --> Sanitizes and assigns dense IDs from codebook [0 .. 65,535].
-            │
+            â”‚
 [Stage 4: The Embedder]      --> PCIe streaming of compact IDs (uint32_t) -> CUDA gather kernel into 1024D VRAM vectors.
 ```
 
@@ -244,7 +256,7 @@ Project Axiom eliminates sparse multi-billion index offsets, unifying text and n
 
 ---
 
-## ⚡ Compute & Kernel Architecture
+## âš¡ Compute & Kernel Architecture
 
 ### 1. Fused Causal Self-Attention & Strict Causality
 * **Causal Masking:** Implemented in `fused_causal_attention` on GPU, enforcing strict causal masking ($t \ge \tau$ cannot alter past representations $t < \tau$).
@@ -267,7 +279,7 @@ Project Axiom eliminates sparse multi-billion index offsets, unifying text and n
 
 ---
 
-## 🧠 PagedAttention & Copy-On-Write (COW) KV-Cache
+## ðŸ§  PagedAttention & Copy-On-Write (COW) KV-Cache
 
 Traditional LLM serving suffers from severe VRAM fragmentation because continuous sequence lengths allocate monolithic memory buffers that must be reallocated as contexts grow.
 
@@ -275,9 +287,9 @@ Project Axiom implements a **Virtual-to-Physical Paged KV-Cache Engine** ([`core
 
 ```
 [ Virtual Sequence Context ]
- Sequence ID: 1 ──► [ Block Table: Block 0, Block 1, Block 2 ]
-                             │          │          │
-                             ▼          ▼          ▼
+ Sequence ID: 1 â”€â”€â–º [ Block Table: Block 0, Block 1, Block 2 ]
+                             â”‚          â”‚          â”‚
+                             â–¼          â–¼          â–¼
 [ Physical VRAM Pool ]   [ Page 14 ] [ Page 3 ] [ Page 27 ]  (16 tokens / block)
 ```
 
@@ -288,46 +300,46 @@ Project Axiom implements a **Virtual-to-Physical Paged KV-Cache Engine** ([`core
 
 ---
 
-## 🦅 Sovereign OSINT & Surveillance: Project Spector
+## ðŸ¦… Sovereign OSINT & Surveillance: Project Spector
 
-> Reference Master Plan: [`We_Know/plan/osint.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/We_Know/plan/osint.md) • [`We_Know/plan/Spector.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/We_Know/plan/Spector.md)
+> Reference Master Plan: [`We_Know/plan/osint.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/We_Know/plan/osint.md) â€¢ [`We_Know/plan/Spector.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/We_Know/plan/Spector.md)
 
-Project Axiom was engineered from first principles to serve as the **closed-loop, zero-API-key cognitive engine powering Project Spector**—a fully sovereign Open-Source Intelligence (OSINT) and physical anomaly surveillance platform.
+Project Axiom was engineered from first principles to serve as the **closed-loop, zero-API-key cognitive engine powering Project Spector**â€”a fully sovereign Open-Source Intelligence (OSINT) and physical anomaly surveillance platform.
 
 ```
                       [ PUBLIC SENSORY FEEDS ]
-         NASA FIRMS (Thermal) • Copernicus Sentinel-1 (Radar SAR)
-         Sentinel-2 (Optical) • 10–20 Open-Source GitHub OSINT Tools
-                                 │
-                                 ▼
+         NASA FIRMS (Thermal) â€¢ Copernicus Sentinel-1 (Radar SAR)
+         Sentinel-2 (Optical) â€¢ 10â€“20 Open-Source GitHub OSINT Tools
+                                 â”‚
+                                 â–¼
                  [ SPATIAL-TEMPORAL FUSION ENGINE ]
          Correlates physical ground spikes with news RSS & alerts
-                                 │
-                                 ▼ (Zero-Copy PCIe DMA)
+                                 â”‚
+                                 â–¼ (Zero-Copy PCIe DMA)
                  [ PROJECT AXIOM CORE ("SPECTOR") ]
-         • Sub-Second Context Injection: Live alerts into active KV-Cache
-         • Batched Offline Adaptation: Continuous learning on technical corpora
+         â€¢ Sub-Second Context Injection: Live alerts into active KV-Cache
+         â€¢ Batched Offline Adaptation: Continuous learning on technical corpora
 ```
 
 ### Sensory Telemetry Streams
 1. **NASA FIRMS & Kanari API:** Real-time thermal anomalies (VIIRS/MODIS) detecting kinetic strikes, pipeline disruptions, and industrial explosions.
 2. **ESA Copernicus Sentinel-1 (C-band SAR):** All-weather synthetic aperture radar cutting through dense clouds, smoke, and total nighttime darkness to monitor infrastructure damage and troop/vessel deployments.
 3. **Copernicus Sentinel-2 & SkyFi Open Data:** 10m multispectral optical imagery for surface physical verification.
-4. **10–20 Curated GitHub OSINT Integrations:** Headless micro-services spanning maritime AIS (`ais-catcher`), flight telemetry (`dump1090`, `OpenSky`), network exposures (`amass`, `masscan`), and social feeds (`snscrape`, `telethon`).
+4. **10â€“20 Curated GitHub OSINT Integrations:** Headless micro-services spanning maritime AIS (`ais-catcher`), flight telemetry (`dump1090`, `OpenSky`), network exposures (`amass`, `masscan`), and social feeds (`snscrape`, `telethon`).
 
 ---
 
-## ⚡ Domain Specialization & The Assembly God Blueprint
+## âš¡ Domain Specialization & The Assembly God Blueprint
 
 Attempting to pre-train an unconstrained generalist model on consumer hardware leads to multi-year convergence times. Axiom maximizes representational intelligence through **radical domain specialization**:
 
-- **Target Specialization:** The **Assembly God** (120M–135M parameters) operating directly on x86_64 NASM CPU registers (`rax`, `rsp`, `xmm0`..`xmm31`) and NVIDIA PTX virtual registers without compiler overhead.
+- **Target Specialization:** The **Assembly God** (120Mâ€“135M parameters) operating directly on x86_64 NASM CPU registers (`rax`, `rsp`, `xmm0`..`xmm31`) and NVIDIA PTX virtual registers without compiler overhead.
 - **Atomic Pre-Seeded Vocabulary:** Register names and assembly opcodes (`mov`, `lea`, `vfmadd231ps`, `syscall`) occupy dedicated atomic tokens in slots `4` to `~500`, achieving **~60% context compression**.
 - **Weekend Training Budget (RTX 4080 Laptop GPU):** 100M tokens $\times$ 5 epochs at 4,000 tok/s requires **34.7 hours total (Single Weekend Run)**, keeping VRAM comfortably under 4.5 GB to guarantee zero Windows TDR resets.
 
 ---
 
-## 📊 Hardware Saturation & Telemetry HUD
+## ðŸ“Š Hardware Saturation & Telemetry HUD
 
 Axiom uses hardware-level profiling via `cudaEvent_t` event pairs recorded on active GPU hardware streams, providing nanosecond timing accuracy directly from the GPU timer clock:
 
@@ -345,14 +357,14 @@ VRAM Footprint  : 11061 MB Free / 12281 MB Total
 [..] Warming up Tensor Cores (10 forward passes)...
 [..] Executing 100 Hardware-Timed Tensor Core Inferences...
 
-┌────────────────────────────────────────────────────────────────────────┐
-│  PROJECT AXIOM v1.0 • INFERENCE DISPATCH LATENCY [sm_89]               │
-├────────────────────────────────────────────────────────────────────────┤
-│  1. PREFILL LATENCY (TTFT)  :     0.1 ms                                │
-│  2. DECODE THROUGHPUT       :  5606.0 tok/s  ( 0.18 ms/tok)             │
-│  3. MEMORY BUS SATURATION   :   0.04 GB/s   (<0.1% of Peak)           │
-│  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core L1-Resident)  │
-└────────────────────────────────────────────────────────────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  PROJECT AXIOM v1.0 â€¢ INFERENCE DISPATCH LATENCY [sm_89]               â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚  1. PREFILL LATENCY (TTFT)  :     0.1 ms                                â”‚
+â”‚  2. DECODE THROUGHPUT       :  5606.0 tok/s  ( 0.18 ms/tok)             â”‚
+â”‚  3. MEMORY BUS SATURATION   :   0.04 GB/s   (<0.1% of Peak)           â”‚
+â”‚  4. COMPUTE EFFICIENCY (MFU):   0.0% MFU   (Tensor Core L1-Resident)  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
 --------------------------------------------------------
 [BENCHMARK 2/2] CUTLASS EVT Kernel Saturation Sweep (M=128, N=4096, K=4096)
@@ -360,19 +372,19 @@ VRAM Footprint  : 11061 MB Free / 12281 MB Total
 [..] Warming up all Ada Lovelace Streaming Multiprocessors...
 [..] Executing 50 Hardware-Timed Fused EVT Tensor Core Sweeps...
 
-┌────────────────────────────────────────────────────────────────────────┐
-│  PROJECT AXIOM v1.0 • TRANSFORMER KERNEL SATURATION [sm_89]            │
-├────────────────────────────────────────────────────────────────────────┤
-│  1. FUSED EVT SWEEP TIME    :    0.13 ms                                │
-│  2. SUSTAINED COMPUTE POWER :    33.6 TFLOPs (BF16 Dense)                 │
-│  3. MEMORY BUS SATURATION   :  278.9 GB/s   (64.5% of Peak)          │
-│  4. COMPUTE EFFICIENCY (MFU):  49.6% MFU   (Tensor Core Saturation)   │
-└────────────────────────────────────────────────────────────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  PROJECT AXIOM v1.0 â€¢ TRANSFORMER KERNEL SATURATION [sm_89]            â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚  1. FUSED EVT SWEEP TIME    :    0.13 ms                                â”‚
+â”‚  2. SUSTAINED COMPUTE POWER :    33.6 TFLOPs (BF16 Dense)                 â”‚
+â”‚  3. MEMORY BUS SATURATION   :  278.9 GB/s   (64.5% of Peak)          â”‚
+â”‚  4. COMPUTE EFFICIENCY (MFU):  49.6% MFU   (Tensor Core Saturation)   â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ---
 
-## 🛡️ Defensive Systems Engineering
+## ðŸ›¡ï¸ Defensive Systems Engineering
 
 ### 1. The Strict Three-Step Pointer Lifecycle
 To guarantee zero VRAM leaks, every GPU resource adheres to the **Null Guard $\rightarrow$ Free $\rightarrow$ Neutralize** protocol:
@@ -390,87 +402,87 @@ The entire CUDA backend compiles into a standalone dynamic link library (`cuda_t
 
 ---
 
-## 📂 Project Directory Layout
+## ðŸ“‚ Project Directory Layout
 
 ```text
 PROJECT-AXIOM/
-├── .clang-format                    # Linus Torvalds 8-char tab formatting standard
-├── .todo                            # Active engineering roadmap and milestones
-├── README.md                        # Master architectural documentation (This document)
-├── build/                           # Shared runtime binaries
-│   └── axiom_core.dll               # Pure C ABI dynamic library (Python / C bindings)
-├── core/
-│   ├── Makefile                     # Unified build system (NVCC sm_89 + MSVC + GCC UCRT64)
-│   ├── cuda_transfer.dll            # Compiled bare-metal CUDA backend DLL
-│   ├── app.exe                      # Production CLI binary (Direct Chat, OpenAI Server, Benchmarking)
-│   ├── test.exe                     # Full automated verification binary (431 Tests Green)
-│   ├── asset_sample/                # Multimodal test assets (Photo.jpeg, Video.mp4, Voice.ogg)
-│   ├── test_sandbox_assets/         # Isolated test fixtures for automated validation suites
-│   ├── database/
-│   │   ├── embedded_data.bin        # Generated multimodal dense embedding cache
-│   │   └── models/                  # Primary persistent model checkpoint storage
-│   │       ├── weights.axiom        # Neural weights & master embeddings
-│   │       ├── vocab.axiom          # Dense vocabulary codebook (65,536 slots)
-│   │       └── optimizer.axiom      # AdamW optimizer state (momentum & variance moments)
-│   ├── include/
-│   │   ├── ai.hpp                   # AI Perceptron & 28-layer GQA Transformer orchestrator
-│   │   ├── config.hpp               # Centralized type-safe compile-time Config specification
-│   │   ├── Identifier.hpp           # Stage 1 File identifier & format switchboard header
-│   │   ├── optimizer.hpp            # 4-tier data logistics & sliding context window
-│   │   ├── parser.hpp               # Multimodal tokenizer & embedding tables
-│   │   ├── paged_cache.hpp          # Paged KV-Cache block table manager & COW allocation
-│   │   ├── server.hpp               # OpenAI HTTP & SSE server interface
-│   │   ├── telemetry.hpp            # Hardware profiler & 4-variable HUD renderer
-│   │   ├── transfer.hpp             # Host-to-DLL bridge interface
-│   │   ├── compressor/              # Stage 4 Generative Output Codec Headers
-│   │   │   ├── compress_audio.hpp   # Discrete tokens to WAV PCM container encoder
-│   │   │   └── compress_image.hpp   # Discrete tokens to 24-bit uncompressed BMP encoder
-│   │   └── decompressor/            # Stage 2 Multimodal Decompressor Headers
-│   │       ├── decompress_document.hpp # Hardened PDF/DOCX text & math extraction
-│   │       ├── decompress_image.hpp    # Image decompression (BMP, JPEG, PNG)
-│   │       ├── decompress_audio.hpp    # Audio PCM extraction (WAV, OGG, MP3)
-│   │       └── decompress_video.hpp    # Video frame decoding (MP4, MKV)
-│   ├── src/
-│   │   ├── ai.cpp                   # C++ AI implementation & autoregressive decode loop
-│   │   ├── axiom_c_api.cpp          # Pure C ABI exports (axiom_load_model, axiom_generate_text)
-│   │   ├── main.cpp                 # CLI dispatcher, direct chat REPL & telemetry HUD
-│   │   ├── paged_cache.cpp          # Paged KV-cache block manager & COW logic
-│   │   ├── server.cpp               # Dual OpenAI + Ollama API Winsock2 server
-│   │   ├── transfer.cpp             # Host-to-DLL bridge implementation
-│   │   └── CUDA/
-│   │       ├── transfer.cuh         # Top-level DLL export interface
-│   │       ├── kernel/              # Fused CUDA & Tensor Core device kernels
-│   │       └── util/                # Caching allocators, telemetry & memory utilities
-│   ├── util/
-│   │   ├── identifier.cpp           # File magic bytes & extension detection
-│   │   ├── optimizer.cpp            # Streaming data loader & seam carry-forward
-│   │   ├── parser.cpp               # Multimodal tokenizer & vocabulary management
-│   │   ├── compressor/              # Generative output codec implementations (BMP/WAV)
-│   │   └── decompressor/            # Hardened multimodal decompressors (PDF, DOCX, etc.)
-│   └── test/
-│       ├── test_ai.cpp              # AI weight persistence roundtrip & convergence tests
-│       ├── test_cuda_transfer.cpp   # CUDA, CUTLASS EVT & Backprop test suite
-│       ├── test_decompressor.cpp    # Multimodal decompressor verification suite (53 tests)
-│       ├── test_embeddings.cpp      # Deterministic embedding generation tests
-│       ├── test_identifier.cpp      # File format switchboard & magic byte verification
-│       ├── test_ifstream.cpp        # Zero-syscall streaming descriptor validation
-│       ├── test_inference.cpp       # Platinum inference, sampling & system resilience tests
-│       ├── test_optimizer.cpp       # Unit tests for RAM buffer & carry-forward Seam
-│       ├── test_path.cpp            # Filesystem directory resolution tests
-│       ├── test_tokenization.cpp    # Multimodal dictionary & offset unit tests
-│       └── test_transfer.cpp        # GPU master weights upload/download roundtrips
-├── document/                        # Complete 15-Chapter Master Documentation Suite
-└── We_Know/                         # Project Spector OSINT & Autonomous Intelligence Core
-    ├── plan/
-    │   ├── osint.md                 # Autonomous satellite & OSINT sensory engine master plan
-    │   ├── plan.md                  # Recursive intelligence execution plan & VRAM schedule
-    │   └── Spector.md               # Project Spector sovereign OSINT & cognitive DAG spec
-    └── Spector.jpg                  # Official architectural blueprint schematic
+â”œâ”€â”€ .clang-format                    # Linus Torvalds 8-char tab formatting standard
+â”œâ”€â”€ .todo                            # Active engineering roadmap and milestones
+â”œâ”€â”€ README.md                        # Master architectural documentation (This document)
+â”œâ”€â”€ build/                           # Shared runtime binaries
+â”‚   â””â”€â”€ axiom_core.dll               # Pure C ABI dynamic library (Python / C bindings)
+â”œâ”€â”€ core/
+â”‚   â”œâ”€â”€ Makefile                     # Unified build system (NVCC sm_89 + MSVC + GCC UCRT64)
+â”‚   â”œâ”€â”€ cuda_transfer.dll            # Compiled bare-metal CUDA backend DLL
+â”‚   â”œâ”€â”€ app.exe                      # Production CLI binary (Direct Chat, OpenAI Server, Benchmarking)
+â”‚   â”œâ”€â”€ test.exe                     # Full automated verification binary (431 Tests Green)
+â”‚   â”œâ”€â”€ asset_sample/                # Multimodal test assets (Photo.jpeg, Video.mp4, Voice.ogg)
+â”‚   â”œâ”€â”€ test_sandbox_assets/         # Isolated test fixtures for automated validation suites
+â”‚   â”œâ”€â”€ database/
+â”‚   â”‚   â”œâ”€â”€ embedded_data.bin        # Generated multimodal dense embedding cache
+â”‚   â”‚   â””â”€â”€ models/                  # Primary persistent model checkpoint storage
+â”‚   â”‚       â”œâ”€â”€ weights.axiom        # Neural weights & master embeddings
+â”‚   â”‚       â”œâ”€â”€ vocab.axiom          # Dense vocabulary codebook (65,536 slots)
+â”‚   â”‚       â””â”€â”€ optimizer.axiom      # AdamW optimizer state (momentum & variance moments)
+â”‚   â”œâ”€â”€ include/
+â”‚   â”‚   â”œâ”€â”€ ai.hpp                   # AI Perceptron & 28-layer GQA Transformer orchestrator
+â”‚   â”‚   â”œâ”€â”€ config.hpp               # Centralized type-safe compile-time Config specification
+â”‚   â”‚   â”œâ”€â”€ Identifier.hpp           # Stage 1 File identifier & format switchboard header
+â”‚   â”‚   â”œâ”€â”€ optimizer.hpp            # 4-tier data logistics & sliding context window
+â”‚   â”‚   â”œâ”€â”€ parser.hpp               # Multimodal tokenizer & embedding tables
+â”‚   â”‚   â”œâ”€â”€ paged_cache.hpp          # Paged KV-Cache block table manager & COW allocation
+â”‚   â”‚   â”œâ”€â”€ server.hpp               # OpenAI HTTP & SSE server interface
+â”‚   â”‚   â”œâ”€â”€ telemetry.hpp            # Hardware profiler & 4-variable HUD renderer
+â”‚   â”‚   â”œâ”€â”€ transfer.hpp             # Host-to-DLL bridge interface
+â”‚   â”‚   â”œâ”€â”€ compressor/              # Stage 4 Generative Output Codec Headers
+â”‚   â”‚   â”‚   â”œâ”€â”€ compress_audio.hpp   # Discrete tokens to WAV PCM container encoder
+â”‚   â”‚   â”‚   â””â”€â”€ compress_image.hpp   # Discrete tokens to 24-bit uncompressed BMP encoder
+â”‚   â”‚   â””â”€â”€ decompressor/            # Stage 2 Multimodal Decompressor Headers
+â”‚   â”‚       â”œâ”€â”€ decompress_document.hpp # Hardened PDF/DOCX text & math extraction
+â”‚   â”‚       â”œâ”€â”€ decompress_image.hpp    # Image decompression (BMP, JPEG, PNG)
+â”‚   â”‚       â”œâ”€â”€ decompress_audio.hpp    # Audio PCM extraction (WAV, OGG, MP3)
+â”‚   â”‚       â””â”€â”€ decompress_video.hpp    # Video frame decoding (MP4, MKV)
+â”‚   â”œâ”€â”€ src/
+â”‚   â”‚   â”œâ”€â”€ ai.cpp                   # C++ AI implementation & autoregressive decode loop
+â”‚   â”‚   â”œâ”€â”€ axiom_c_api.cpp          # Pure C ABI exports (axiom_load_model, axiom_generate_text)
+â”‚   â”‚   â”œâ”€â”€ main.cpp                 # CLI dispatcher, direct chat REPL & telemetry HUD
+â”‚   â”‚   â”œâ”€â”€ paged_cache.cpp          # Paged KV-cache block manager & COW logic
+â”‚   â”‚   â”œâ”€â”€ server.cpp               # Dual OpenAI + Ollama API Winsock2 server
+â”‚   â”‚   â”œâ”€â”€ transfer.cpp             # Host-to-DLL bridge implementation
+â”‚   â”‚   â””â”€â”€ CUDA/
+â”‚   â”‚       â”œâ”€â”€ transfer.cuh         # Top-level DLL export interface
+â”‚   â”‚       â”œâ”€â”€ kernel/              # Fused CUDA & Tensor Core device kernels
+â”‚   â”‚       â””â”€â”€ util/                # Caching allocators, telemetry & memory utilities
+â”‚   â”œâ”€â”€ util/
+â”‚   â”‚   â”œâ”€â”€ identifier.cpp           # File magic bytes & extension detection
+â”‚   â”‚   â”œâ”€â”€ optimizer.cpp            # Streaming data loader & seam carry-forward
+â”‚   â”‚   â”œâ”€â”€ parser.cpp               # Multimodal tokenizer & vocabulary management
+â”‚   â”‚   â”œâ”€â”€ compressor/              # Generative output codec implementations (BMP/WAV)
+â”‚   â”‚   â””â”€â”€ decompressor/            # Hardened multimodal decompressors (PDF, DOCX, etc.)
+â”‚   â””â”€â”€ test/
+â”‚       â”œâ”€â”€ test_ai.cpp              # AI weight persistence roundtrip & convergence tests
+â”‚       â”œâ”€â”€ test_cuda_transfer.cpp   # CUDA, CUTLASS EVT & Backprop test suite
+â”‚       â”œâ”€â”€ test_decompressor.cpp    # Multimodal decompressor verification suite (53 tests)
+â”‚       â”œâ”€â”€ test_embeddings.cpp      # Deterministic embedding generation tests
+â”‚       â”œâ”€â”€ test_identifier.cpp      # File format switchboard & magic byte verification
+â”‚       â”œâ”€â”€ test_ifstream.cpp        # Zero-syscall streaming descriptor validation
+â”‚       â”œâ”€â”€ test_inference.cpp       # Platinum inference, sampling & system resilience tests
+â”‚       â”œâ”€â”€ test_optimizer.cpp       # Unit tests for RAM buffer & carry-forward Seam
+â”‚       â”œâ”€â”€ test_path.cpp            # Filesystem directory resolution tests
+â”‚       â”œâ”€â”€ test_tokenization.cpp    # Multimodal dictionary & offset unit tests
+â”‚       â””â”€â”€ test_transfer.cpp        # GPU master weights upload/download roundtrips
+â”œâ”€â”€ document/                        # Complete 15-Chapter Master Documentation Suite
+â””â”€â”€ We_Know/                         # Project Spector OSINT & Autonomous Intelligence Core
+    â”œâ”€â”€ plan/
+    â”‚   â”œâ”€â”€ osint.md                 # Autonomous satellite & OSINT sensory engine master plan
+    â”‚   â”œâ”€â”€ plan.md                  # Recursive intelligence execution plan & VRAM schedule
+    â”‚   â””â”€â”€ Spector.md               # Project Spector sovereign OSINT & cognitive DAG spec
+    â””â”€â”€ Spector.jpg                  # Official architectural blueprint schematic
 ```
 
 ---
 
-## 🛠️ Build, Test & Run
+## ðŸ› ï¸ Build, Test & Run
 
 ### Prerequisites
 
@@ -497,7 +509,7 @@ This compiles:
 
 ---
 
-### 2. Run the Automated Test Suites (431 Tests — 100% Green)
+### 2. Run the Automated Test Suites (431 Tests â€” 100% Green)
 
 Axiom includes **431 automated unit, integration, and resilience tests** across 11 comprehensive suites:
 
@@ -594,9 +606,9 @@ cd core
 
 ---
 
-## 📖 Complete Operator Manual & How-To-Use Guide
+## ðŸ“– Complete Operator Manual & How-To-Use Guide
 
-### 🐣 The Quick-Start Cookbook
+### ðŸ£ The Quick-Start Cookbook
 
 | Scenario | Objective | Exact PowerShell Command |
 | :--- | :--- | :--- |
@@ -611,67 +623,68 @@ cd core
 
 ---
 
-## 🚀 Active Engineering Roadmap
+## ðŸš€ Active Engineering Roadmap
 
 Project Axiom's development is governed by [`document/plan/UnifiedMasterEngineeringPlan.md`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/document/plan/UnifiedMasterEngineeringPlan.md) and [`.todo`](file:///c:/Users/Omid/My%20Work%20Place/Programming/PROJECT-AXIOM/.todo):
 
 ```
                                   PROJECT AXIOM EXECUTION PHASES
-  ┌────────────────────────────────────────────────────────────────────────────────────────┐
-  │ [x] PHASE 0: Verified Baseline Foundations (LOCKED — 100% Green)                       │
-  │ • 4-Stage Ingestion Pipeline (Identifier -> Decompressor -> Sanitizer -> Embedder)     │
-  │ • Dense Bounded Codebook (V = 65,536) & Unified Text/Numbers in main_dictionary        │
-  │ • Zero-Copy PCIe DMA Logistics (cudaHostAllocWriteCombined, Ping-Pong dual streams)     │
-  │ • VRAM-Resident Embedding Tables (__nv_bfloat16 d_table & FP32 d_table_master)         │
-  │ • Tensor Core GEMM (CUTLASS sm_89) & Linear EVT Epilogue (Dying ReLU permanently cured)│
-  │ • Autoregressive Kernels (RMSNorm, Tied Logits, Softmax/ArgMax, Cross-Entropy)         │
-  │ • Fused AdamW Optimizer & 56-Byte AxiomWeightHeader Atomic File Persistence            │
-  └───────────────────────────────────────────────────┬────────────────────────────────────┘
-                                                      │
-  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ [x] PHASE 1: Multi-Token Autoregressive Generation & Sampling [COMPLETED - 100% GREEN] │
-  │ • [x] 1.1 Host generation loop: continuous autoregressive token feedback (AI::generate)│
-  │ • [x] 1.2 Stochastic sampling engine: Temperature scaling, Top-K, Top-P Nucleus, ArgMax│
-  │ • [x] 1.3 Vocabulary Bounding & Corpus Hygiene (frequency filtering count >= 3)        │
-  └───────────────────────────────────────────────────┬────────────────────────────────────┘
-                                                      │
-  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ [x] PHASE 2: Surgical Sync Eradication & Production VRAM Management [COMPLETED]        │
-  │ • Eliminate dynamic cudaMalloc in upload loops via BFC caching allocator               │
-  │ • Non-blocking loss telemetry via pinned slots and cudaEventQuery                      │
-  │ • Lock-free SPSC ring buffer & async background disk prefetch (zero starvation)        │
-  └───────────────────────────────────────────────────┬────────────────────────────────────┘
-                                                      │
-  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ [x] PHASE 3: Multi-Head Self-Attention (MHA / GQA) & Transformer Blocks [COMPLETED]    │
-  │ • Batched CUTLASS GEMM backward pass across sequence dimension (saturating sm_89)      │
-  │ • Fused Scaled Dot-Product Attention (SDPA) with strict causal sequence masking        │
-  │ • Pre-Norm residual streams and SwiGLU Feed-Forward Networks                           │
-  └───────────────────────────────────────────────────┬────────────────────────────────────┘
-                                                      │
-  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ [x] PHASE 4: PagedAttention KV-Cache & Copy-On-Write Prefix Caching [COMPLETED]        │
-  │ • Fixed-size physical KV blocks (16 tokens/block) eliminating VRAM fragmentation       │
-  │ • CPU block tables & Copy-On-Write (COW) prefix sharing across prompts (100% reuse)    │
-  │ • Dynamic intra-block divergence duplication and zero-fragmentation reclamation       │
-  └───────────────────────────────────────────────────┬────────────────────────────────────┘
-                                                      │
-  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ [x] PHASE 5: Zero-Overhead Hardware Saturation via CUDA Graphs & ATen [COMPLETED]      │
-  │ • Static DAG hardware capture (cudaStreamBeginCapture / cudaGraphLaunch, 12.9 us)      │
-  │ • Sub-0.05 ms host launch latency & ATen C++ Dispatcher with autograd tape (0.0 diff)  │
-  └───────────────────────────────────────────────────┬────────────────────────────────────┘
-                                                      │
-  ┌───────────────────────────────────────────────────▼────────────────────────────────────┐
-  │ [x] PHASE 6: Sparse Mixture of Experts (MoE) & Multimodal Output Codecs [COMPLETED]   │
-  │ • Dense SwiGLU FFN partition into N = 8 discrete experts with balanced Top-2 routing   │
-  │ • Output Codecs: Discrete visual/audio token unrolling into valid BMP and WAV files    │
-  └────────────────────────────────────────────────────────────────────────────────────────┘
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ [x] PHASE 0: Verified Baseline Foundations (LOCKED â€” 100% Green)                       â”‚
+  â”‚ â€¢ 4-Stage Ingestion Pipeline (Identifier -> Decompressor -> Sanitizer -> Embedder)     â”‚
+  â”‚ â€¢ Dense Bounded Codebook (V = 65,536) & Unified Text/Numbers in main_dictionary        â”‚
+  â”‚ â€¢ Zero-Copy PCIe DMA Logistics (cudaHostAllocWriteCombined, Ping-Pong dual streams)     â”‚
+  â”‚ â€¢ VRAM-Resident Embedding Tables (__nv_bfloat16 d_table & FP32 d_table_master)         â”‚
+  â”‚ â€¢ Tensor Core GEMM (CUTLASS sm_89) & Linear EVT Epilogue (Dying ReLU permanently cured)â”‚
+  â”‚ â€¢ Autoregressive Kernels (RMSNorm, Tied Logits, Softmax/ArgMax, Cross-Entropy)         â”‚
+  â”‚ â€¢ Fused AdamW Optimizer & 56-Byte AxiomWeightHeader Atomic File Persistence            â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                                      â”‚
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ [x] PHASE 1: Multi-Token Autoregressive Generation & Sampling [COMPLETED - 100% GREEN] â”‚
+  â”‚ â€¢ [x] 1.1 Host generation loop: continuous autoregressive token feedback (AI::generate)â”‚
+  â”‚ â€¢ [x] 1.2 Stochastic sampling engine: Temperature scaling, Top-K, Top-P Nucleus, ArgMaxâ”‚
+  â”‚ â€¢ [x] 1.3 Vocabulary Bounding & Corpus Hygiene (frequency filtering count >= 3)        â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                                      â”‚
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ [x] PHASE 2: Surgical Sync Eradication & Production VRAM Management [COMPLETED]        â”‚
+  â”‚ â€¢ Eliminate dynamic cudaMalloc in upload loops via BFC caching allocator               â”‚
+  â”‚ â€¢ Non-blocking loss telemetry via pinned slots and cudaEventQuery                      â”‚
+  â”‚ â€¢ Lock-free SPSC ring buffer & async background disk prefetch (zero starvation)        â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                                      â”‚
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ [x] PHASE 3: Multi-Head Self-Attention (MHA / GQA) & Transformer Blocks [COMPLETED]    â”‚
+  â”‚ â€¢ Batched CUTLASS GEMM backward pass across sequence dimension (saturating sm_89)      â”‚
+  â”‚ â€¢ Fused Scaled Dot-Product Attention (SDPA) with strict causal sequence masking        â”‚
+  â”‚ â€¢ Pre-Norm residual streams and SwiGLU Feed-Forward Networks                           â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                                      â”‚
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ [x] PHASE 4: PagedAttention KV-Cache & Copy-On-Write Prefix Caching [COMPLETED]        â”‚
+  â”‚ â€¢ Fixed-size physical KV blocks (16 tokens/block) eliminating VRAM fragmentation       â”‚
+  â”‚ â€¢ CPU block tables & Copy-On-Write (COW) prefix sharing across prompts (100% reuse)    â”‚
+  â”‚ â€¢ Dynamic intra-block divergence duplication and zero-fragmentation reclamation       â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                                      â”‚
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ [x] PHASE 5: Zero-Overhead Hardware Saturation via CUDA Graphs & ATen [COMPLETED]      â”‚
+  â”‚ â€¢ Static DAG hardware capture (cudaStreamBeginCapture / cudaGraphLaunch, 12.9 us)      â”‚
+  â”‚ â€¢ Sub-0.05 ms host launch latency & ATen C++ Dispatcher with autograd tape (0.0 diff)  â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                                      â”‚
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ [x] PHASE 6: Sparse Mixture of Experts (MoE) & Multimodal Output Codecs [COMPLETED]   â”‚
+  â”‚ â€¢ Dense SwiGLU FFN partition into N = 8 discrete experts with balanced Top-2 routing   â”‚
+  â”‚ â€¢ Output Codecs: Discrete visual/audio token unrolling into valid BMP and WAV files    â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ---
 
 <div align="center">
-  <b>Project Axiom — Built from scratch. Engineered for the future.</b><br/>
+  <b>Project Axiom â€” Built from scratch. Engineered for the future.</b><br/>
   <i>Copyright &copy; 2026 Omid Teimory. All rights reserved.</i>
 </div>
+
