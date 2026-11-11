@@ -1,23 +1,23 @@
 {
-  "license": "LicenseRef-Proprietary",
+  "license": "LicenseRef-Axiom-Proprietary",
   "name": "my-project",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-  "license": "LicenseRef-Proprietary",
+  "license": "LicenseRef-Axiom-Proprietary",
   "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-  "license": "LicenseRef-Proprietary",
+  "license": "LicenseRef-Axiom-Proprietary",
   "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-  "license": "LicenseRef-Proprietary",
+  "license": "LicenseRef-Axiom-Proprietary",
   "@eslint/js": "^10.0.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: LicenseRef-Axiom-Proprietary
 /*
  * Copyright (c) 2026 Omid Teimory. All Rights Reserved.
  *
- * NOTICE: This file contains proprietary source code licensed exclusively under the
- * terms of the LICENSE file in the root directory of this repository.
- * You may view, download, and compile this code solely to run the unmodified product.
- * Copying, pasting, modifying, redistributing, creating derivative works, or using
- * this code in any other project or AI training system is strictly prohibited.
- * Removal or alteration of this notice is a violation of 17 U.S.C. § 1202 and EU law.
+ * PROPRIETARY SOURCE-AVAILABLE SOFTWARE — NOT OPEN SOURCE.
+ * Permission to view, clone, or compile this file is granted strictly on the
+ * condition precedent of full compliance with the root ./LICENSE file.
+ * Copying snippets, modifying, creating derivative works, redistributing,
+ * commercial/SaaS use, and AI/ML training (reserved under EU Directive
+ * 2019/790 Art. 4(3) and § 42h(6) Austrian UrhG) are strictly prohibited.
+ * Removal or alteration of this notice violates 17 U.S.C. § 1202 and § 90c UrhG.
  */
 
 #include <cuda_bf16.h>
@@ -231,6 +233,7 @@ __global__ static void backward_pass_adamw_kernel(
 			float step_f = static_cast<float>(step);
 			float bc1 = 1.0f - powf(eff_beta1, step_f);
 			float bc2 = 1.0f - powf(beta2, step_f);
+			float out_dim_f = static_cast<float>(out_dim > 0 ? out_dim : 1);
 			float rms_floor = 1.0f / sqrtf(out_dim_f);
 			float bg = dz;
 			float bm = eff_beta1 * b_m[row] + (1.0f - eff_beta1) * bg;
