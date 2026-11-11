@@ -244,6 +244,13 @@ bool test_ai() {
 			   "VRAM verified: embeddings downloaded from GPU match saved bit-for-bit", s_pass,
 			   s_fail);
 
+	saved_weights.clear();
+	saved_weights.shrink_to_fit();
+	saved_bias.clear();
+	saved_bias.shrink_to_fit();
+	saved_embeddings.clear();
+	saved_embeddings.shrink_to_fit();
+
 	// Test error cases: non-existent file and invalid magic header
 	test_check(!ai.load_weights("non_existent_file.axiom"),
 			   "load_weights() fails on non-existent file", s_pass, s_fail);

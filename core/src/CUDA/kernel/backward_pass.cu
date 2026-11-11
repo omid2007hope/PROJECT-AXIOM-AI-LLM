@@ -17,6 +17,7 @@
 #include "../util/caching_allocator.cuh"
 #include "../util/cuda_utils.cuh"
 #include "backward_pass.cuh"
+#include "forward_pass.cuh"
 #include "swiglu.cuh"
 
 // =============================================================================
@@ -129,6 +130,146 @@ __global__ static void compute_loss_and_dz_kernel(
 				atomicAdd(&loss[telemetry_loss], mse_loss);
 			}
 		}
+	}
+}
+
+__global__ static void compute_cross_entropy_and_dz_kernel(
+	__nv_bfloat16* __restrict__ logits_and_grad,
+	const uint32_t* __restrict__ token_ids,
+	const __nv_bfloat16* __restrict__ target,
+	float* __restrict__ loss,
+	size_t S,
+	size_t vocab_size,
+	float inv_temp) {
+
+	size_t s = blockIdx.x;
+	if (s >= S)
+		return;
+
+	uint32_t target_tok_id = (s + 1 < S && token_ids != nullptr)
+								 ? token_ids[s + 1]
+								 : (target ? *reinterpret_cast<const uint32_t*>(target) : 0);
+	if (target_tok_id >= vocab_size)
+		target_tok_id = 0;
+
+	size_t row_offset = s * vocab_size;
+	__nv_bfloat16* row = logits_and_grad + row_offset;
+
+	__shared__ float s_max[32];
+	__shared__ float s_sum[32];
+
+	float local_max = -1e30f;
+	for (size_t v = threadIdx.x; v < vocab_size; v += blockDim.x) {
+		float val = __bfloat162float(row[v]);
+		if (isfinite(val) && val > local_max) {
+			local_max = val;
+		}
+	}
+
+	for (int offset = 16; offset > 0; offset /= 2) {
+		local_max = fmaxf(local_max, __shfl_down_sync(0xffffffff, local_max, offset));
+	}
+
+	int lane = threadIdx.x % 32;
+	int wid = threadIdx.x / 32;
+	if (lane == 0) {
+		s_max[wid] = local_max;
+	}
+	__syncthreads();
+
+	if (wid == 0) {
+		float warp_max = (lane < (blockDim.x / 32)) ? s_max[lane] : -1e30f;
+		for (int offset = 16; offset > 0; offset /= 2) {
+			warp_max = fmaxf(warp_max, __shfl_down_sync(0xffffffff, warp_max, offset));
+		}
+		if (lane == 0) {
+			s_max[0] = warp_max;
+		}
+	}
+	__syncthreads();
+
+	float global_max = s_max[0];
+
+	float local_sum = 0.0f;
+	for (size_t v = threadIdx.x; v < vocab_size; v += blockDim.x) {
+		float val = __bfloat162float(row[v]);
+		float exp_val = expf(fmaxf(-50.0f, fminf(50.0f, (val - global_max) * inv_temp)));
+		local_sum += exp_val;
+	}
+
+	for (int offset = 16; offset > 0; offset /= 2) {
+		local_sum += __shfl_down_sync(0xffffffff, local_sum, offset);
+	}
+	if (lane == 0) {
+		s_sum[wid] = local_sum;
+	}
+	__syncthreads();
+
+	if (wid == 0) {
+		float warp_sum = (lane < (blockDim.x / 32)) ? s_sum[lane] : 0.0f;
+		for (int offset = 16; offset > 0; offset /= 2) {
+			warp_sum += __shfl_down_sync(0xffffffff, warp_sum, offset);
+		}
+		if (lane == 0) {
+			s_sum[0] = warp_sum > 1e-12f ? warp_sum : 1.0f;
+		}
+	}
+	__syncthreads();
+
+	float inv_sum = 1.0f / s_sum[0];
+	float seq_scale = 1.0f / static_cast<float>(S > 0 ? S : 1);
+
+	for (size_t v = threadIdx.x; v < vocab_size; v += blockDim.x) {
+		float val = __bfloat162float(row[v]);
+		float exp_val = expf(fmaxf(-50.0f, fminf(50.0f, (val - global_max) * inv_temp)));
+		float prob = exp_val * inv_sum;
+
+		if (v == target_tok_id) {
+			float ce_loss = -logf(fmaxf(prob, 1e-35f));
+			if (isfinite(ce_loss)) {
+				atomicAdd(&loss[telemetry_loss], ce_loss * seq_scale);
+			} else {
+				atomicAdd(&loss[telemetry_nonfinite], 1.0f);
+			}
+		}
+
+		float target_indicator = (v == target_tok_id) ? 1.0f : 0.0f;
+		float dz = seq_scale * inv_temp * (prob - target_indicator);
+		dz = fmaxf(-10.0f, fminf(10.0f, dz));
+		row[v] = __float2bfloat16(dz);
+		local_sum += dz * dz;
+	}
+
+	for (int offset = 16; offset > 0; offset /= 2) {
+		local_sum += __shfl_down_sync(0xffffffff, local_sum, offset);
+	}
+	if (lane == 0) {
+		s_sum[wid] = local_sum;
+	}
+	__syncthreads();
+
+	if (wid == 0) {
+		float warp_sq = (lane < (blockDim.x / 32)) ? s_sum[lane] : 0.0f;
+		for (int offset = 16; offset > 0; offset /= 2) {
+			warp_sq += __shfl_down_sync(0xffffffff, warp_sq, offset);
+		}
+		if (lane == 0 && loss) {
+			atomicAdd(&loss[telemetry_gradient_square], warp_sq);
+		}
+	}
+}
+
+__global__ static void scale_dh_to_dx_kernel(
+	const __nv_bfloat16* __restrict__ dh,
+	float* __restrict__ dx,
+	size_t total_elements,
+	float scale = 1.0f) {
+
+	size_t i = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+	if (i < total_elements) {
+		float val = __bfloat162float(dh[i]) * scale;
+		val = isfinite(val) ? fmaxf(-10.0f, fminf(10.0f, val)) : 0.0f;
+		dx[i] = val;
 	}
 }
 
@@ -563,70 +704,146 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 						 ? (1.0f / gpu_embeddings->temperature)
 						 : 1.0f;
 
-	int dz_threads = 256;
-	int dz_blocks = static_cast<int>((output_dim + dz_threads - 1) / dz_threads);
-	compute_loss_and_dz_kernel<<<dz_blocks, dz_threads, 0, stream>>>(
-		static_cast<const float*>(gpu_activations->d_probs),
-		static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
-		static_cast<const __nv_bfloat16*>(gpu_portion->d_target[buffer_index]), emb_tbl,
-		static_cast<float*>(non_const_act->d_dz), static_cast<float*>(non_const_act->d_loss),
-		output_dim, vocab_sz, emb_dim, is_token_training, inv_temp);
-
-	if (!CUDA_CHECK(cudaGetLastError()))
-		return false;
-
-	GpuActivations* non_const_act_event = const_cast<GpuActivations*>(gpu_activations);
-	if (!non_const_act_event->loss_event) {
-		cudaEventCreateWithFlags((cudaEvent_t*)&non_const_act_event->loss_event,
-								 cudaEventDisableTiming);
-	}
-	if (non_const_act_event->loss_event) {
-		cudaEventRecord((cudaEvent_t)non_const_act_event->loss_event, stream);
-	}
-
-	// Compute exact input gradient dL/dx before weights W_master are mutated by optimizer
 	GpuPortion* non_const_gpu = const_cast<GpuPortion*>(gpu_portion);
 	bool has_embeddings = gpu_portion->token_ids_active[buffer_index] && gpu_embeddings &&
 						  gpu_embeddings->d_table_master && gpu_embeddings->d_table;
 	bool is_transformer_readout = (gpu_weights->d_query_weights != nullptr && input_dim > output_dim);
 
-	if (is_transformer_readout) {
-		if (!non_const_gpu->d_dx[buffer_index]) {
-			non_const_gpu->d_dx[buffer_index] = allocate_vram(input_dim * sizeof(float), stream);
-			if (!non_const_gpu->d_dx[buffer_index])
-				return false;
-		}
-		size_t final_token_offset = input_dim - output_dim;
-		cudaMemsetAsync(non_const_gpu->d_dx[buffer_index], 0, input_dim * sizeof(float), stream);
-		cudaMemcpyAsync(static_cast<float*>(non_const_gpu->d_dx[buffer_index]) + final_token_offset,
-						non_const_act->d_dz, output_dim * sizeof(float),
-						cudaMemcpyDeviceToDevice, stream);
-	} else if (has_embeddings || non_const_gpu->d_dx[buffer_index]) {
-		if (!non_const_gpu->d_dx[buffer_index]) {
-			non_const_gpu->d_dx[buffer_index] = allocate_vram(input_dim * sizeof(float), stream);
-			if (!non_const_gpu->d_dx[buffer_index])
-				return false;
-		}
-		int dx_threads = 256;
-		int dx_blocks = static_cast<int>((input_dim + dx_threads - 1) / dx_threads);
-		compute_input_gradient<<<dx_blocks, dx_threads, 0, stream>>>(
-			static_cast<const float*>(gpu_weights->d_weights_master),
-			static_cast<const float*>(non_const_act->d_dz),
-			static_cast<float*>(non_const_gpu->d_dx[buffer_index]), input_dim, output_dim);
+	if (is_transformer_readout && is_token_training && emb_tbl != nullptr) {
+		size_t sequence_length =
+			gpu_portion->token_count > 0 ? gpu_portion->token_count : (input_dim / emb_dim);
+		size_t logits_count = sequence_length * vocab_sz;
 
-		if (gpu_embeddings && gpu_embeddings->d_table) {
-			size_t emb_dim =
-				gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
-			size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
-														  : (input_dim / emb_dim);
-			int norm_threads = static_cast<int>(std::min<size_t>(1024, emb_dim));
-			backward_rms_norm<<<static_cast<int>(num_tok), norm_threads, 0, stream>>>(
-				static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
-				static_cast<const float*>(gpu_activations->d_inv_rms),
-				static_cast<float*>(non_const_gpu->d_dx[buffer_index]), num_tok, emb_dim);
+		if (!non_const_gpu->d_dx[buffer_index]) {
+			non_const_gpu->d_dx[buffer_index] = allocate_vram(input_dim * sizeof(float), stream);
+			if (!non_const_gpu->d_dx[buffer_index])
+				return false;
 		}
+
+		void* d_seq_logits = allocate_vram(logits_count * sizeof(__nv_bfloat16), stream);
+		if (!d_seq_logits)
+			return false;
+
+		if (!batched_gemm_multiply(
+				gpu_portion->d_context_window[buffer_index], emb_tbl, d_seq_logits,
+				static_cast<int>(sequence_length), static_cast<int>(vocab_sz),
+				static_cast<int>(emb_dim), false, true, stream)) {
+			free_vram(d_seq_logits, stream);
+			return false;
+		}
+
+		float logit_scale = inv_temp / sqrtf(static_cast<float>(emb_dim > 0 ? emb_dim : 1));
+		int grid_s = static_cast<int>(sequence_length);
+		int threads_v = 1024;
+		compute_cross_entropy_and_dz_kernel<<<grid_s, threads_v, 0, stream>>>(
+			static_cast<__nv_bfloat16*>(d_seq_logits),
+			static_cast<const uint32_t*>(gpu_portion->d_token_ids[buffer_index]),
+			static_cast<const __nv_bfloat16*>(gpu_portion->d_target[buffer_index]),
+			static_cast<float*>(non_const_act->d_loss), sequence_length, vocab_sz, logit_scale);
+
+		if (!CUDA_CHECK(cudaGetLastError())) {
+			free_vram(d_seq_logits, stream);
+			return false;
+		}
+
+		size_t dh_elements = sequence_length * emb_dim;
+		void* d_dh_bf16 = allocate_vram(dh_elements * sizeof(__nv_bfloat16), stream);
+		if (!d_dh_bf16) {
+			free_vram(d_seq_logits, stream);
+			return false;
+		}
+
+		if (!batched_gemm_multiply(
+				d_seq_logits, emb_tbl, d_dh_bf16, static_cast<int>(sequence_length),
+				static_cast<int>(emb_dim), static_cast<int>(vocab_sz), false, false, stream)) {
+			free_vram(d_dh_bf16, stream);
+			free_vram(d_seq_logits, stream);
+			return false;
+		}
+
+		free_vram(d_seq_logits, stream);
+
+		int dx_threads = 256;
+		int dx_blocks = static_cast<int>((dh_elements + dx_threads - 1) / dx_threads);
+		scale_dh_to_dx_kernel<<<dx_blocks, dx_threads, 0, stream>>>(
+			static_cast<const __nv_bfloat16*>(d_dh_bf16),
+			static_cast<float*>(non_const_gpu->d_dx[buffer_index]), dh_elements, 1.0f);
+
+		size_t final_token_offset = (sequence_length > 0 ? sequence_length - 1 : 0) * emb_dim;
+		cudaMemcpyAsync(non_const_act->d_dz,
+						static_cast<float*>(non_const_gpu->d_dx[buffer_index]) + final_token_offset,
+						output_dim * sizeof(float), cudaMemcpyDeviceToDevice, stream);
+
+		free_vram(d_dh_bf16, stream);
+
+		GpuActivations* non_const_act_event = const_cast<GpuActivations*>(gpu_activations);
+		if (!non_const_act_event->loss_event) {
+			cudaEventCreateWithFlags((cudaEvent_t*)&non_const_act_event->loss_event,
+									 cudaEventDisableTiming);
+		}
+		if (non_const_act_event->loss_event) {
+			cudaEventRecord((cudaEvent_t)non_const_act_event->loss_event, stream);
+		}
+	} else {
+		int dz_threads = 256;
+		int dz_blocks = static_cast<int>((output_dim + dz_threads - 1) / dz_threads);
+		compute_loss_and_dz_kernel<<<dz_blocks, dz_threads, 0, stream>>>(
+			static_cast<const float*>(gpu_activations->d_probs),
+			static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
+			static_cast<const __nv_bfloat16*>(gpu_portion->d_target[buffer_index]), emb_tbl,
+			static_cast<float*>(non_const_act->d_dz), static_cast<float*>(non_const_act->d_loss),
+			output_dim, vocab_sz, emb_dim, is_token_training, inv_temp);
+
 		if (!CUDA_CHECK(cudaGetLastError()))
 			return false;
+
+		GpuActivations* non_const_act_event = const_cast<GpuActivations*>(gpu_activations);
+		if (!non_const_act_event->loss_event) {
+			cudaEventCreateWithFlags((cudaEvent_t*)&non_const_act_event->loss_event,
+									 cudaEventDisableTiming);
+		}
+		if (non_const_act_event->loss_event) {
+			cudaEventRecord((cudaEvent_t)non_const_act_event->loss_event, stream);
+		}
+
+		if (is_transformer_readout) {
+			if (!non_const_gpu->d_dx[buffer_index]) {
+				non_const_gpu->d_dx[buffer_index] = allocate_vram(input_dim * sizeof(float), stream);
+				if (!non_const_gpu->d_dx[buffer_index])
+					return false;
+			}
+			size_t final_token_offset = input_dim - output_dim;
+			cudaMemsetAsync(non_const_gpu->d_dx[buffer_index], 0, input_dim * sizeof(float), stream);
+			cudaMemcpyAsync(static_cast<float*>(non_const_gpu->d_dx[buffer_index]) + final_token_offset,
+							non_const_act->d_dz, output_dim * sizeof(float),
+							cudaMemcpyDeviceToDevice, stream);
+		} else if (has_embeddings || non_const_gpu->d_dx[buffer_index]) {
+			if (!non_const_gpu->d_dx[buffer_index]) {
+				non_const_gpu->d_dx[buffer_index] = allocate_vram(input_dim * sizeof(float), stream);
+				if (!non_const_gpu->d_dx[buffer_index])
+					return false;
+			}
+			int dx_threads = 256;
+			int dx_blocks = static_cast<int>((input_dim + dx_threads - 1) / dx_threads);
+			compute_input_gradient<<<dx_blocks, dx_threads, 0, stream>>>(
+				static_cast<const float*>(gpu_weights->d_weights_master),
+				static_cast<const float*>(non_const_act->d_dz),
+				static_cast<float*>(non_const_gpu->d_dx[buffer_index]), input_dim, output_dim);
+
+			if (gpu_embeddings && gpu_embeddings->d_table) {
+				size_t emb_dim_sz =
+					gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+				size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
+															  : (input_dim / emb_dim_sz);
+				int norm_threads = static_cast<int>(std::min<size_t>(1024, emb_dim_sz));
+				backward_rms_norm<<<static_cast<int>(num_tok), norm_threads, 0, stream>>>(
+					static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+					static_cast<const float*>(gpu_activations->d_inv_rms),
+					static_cast<float*>(non_const_gpu->d_dx[buffer_index]), num_tok, emb_dim_sz);
+			}
+			if (!CUDA_CHECK(cudaGetLastError()))
+				return false;
+		}
 	}
 
 	// Phase 4: Fused AdamW weight and bias update
@@ -678,7 +895,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 				learning_rate);
 		}
 
-		if (scatter_embeddings) {
+		if (scatter_embeddings && !is_transformer_readout) {
 
 		size_t num_tok =
 			gpu_portion->token_count > 0 ? gpu_portion->token_count : (input_dim / emb_dim);

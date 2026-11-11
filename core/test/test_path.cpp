@@ -27,10 +27,18 @@ bool test_path() {
 	std::filesystem::path asset_dir = core_dir / c.asset_folder;
 	test_check(std::filesystem::exists(asset_dir), (std::string(c.asset_folder) + " folder exists").c_str(), s_pass, s_fail);
 
-	std::filesystem::path models_dir = std::filesystem::exists(c.models_folder) ? std::filesystem::path(c.models_folder) : core_dir.parent_path() / c.models_folder;
+	std::filesystem::path models_dir = std::filesystem::exists(core_dir / c.models_folder)
+										   ? (core_dir / c.models_folder)
+										   : (std::filesystem::exists(c.models_folder)
+												  ? std::filesystem::path(c.models_folder)
+												  : core_dir.parent_path() / c.models_folder);
 	test_check(std::filesystem::exists(models_dir), (std::string(c.models_folder) + " folder exists").c_str(), s_pass, s_fail);
 
-	std::filesystem::path training_dir = std::filesystem::exists(c.training_folder) ? std::filesystem::path(c.training_folder) : core_dir.parent_path() / c.training_folder;
+	std::filesystem::path training_dir = std::filesystem::exists(core_dir / c.training_folder)
+											 ? (core_dir / c.training_folder)
+											 : (std::filesystem::exists(c.training_folder)
+													? std::filesystem::path(c.training_folder)
+													: core_dir.parent_path() / c.training_folder);
 	test_check(std::filesystem::exists(training_dir), (std::string(c.training_folder) + " folder exists").c_str(), s_pass, s_fail);
 
 	std::cout << "=== Path Resolution Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
