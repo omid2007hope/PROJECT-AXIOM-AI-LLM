@@ -1538,3 +1538,565 @@ PASS [Batched GEMM matches expected dot-product accumulation (0.64)]
 PASS [build_transformer_block initializes projection weights in VRAM]
 PASS [forward_transformer runs Pre-Norm Attention + SwiGLU Block]
 FAIL [Transformer block output states are finite]
+
+Has to be solved but does not have anything to do with the problem:
+
+A. Premature Termination & Inverted Stopping Logic (main.cpp)
+Mechanism: In main.cpp, the convergence check evaluates if (current_loss <= 3.0 && current_loss > 0.0).
+Failure Cause: A single outlier sequence or degenerate zero-entropy step producing a transient loss of
+0.0432
+0.0432 triggers an immediate [SUCCESS] state at Step 1, halting training while held-out validation remains catastrophic (Val: 14.2716).
+Divergence Guard Blindspot: Line 1636 checks if (initial_val_loss > 15.0) to trigger an emergency weight reset. When validation diverges to
+14.2716
+14.2716, it falls immediately beneath the reset threshold, allowing corrupt model weights to persist.
+
+Critical needs fix:
+Output Head Bypass During Transformer Execution: In training.cpp, the transformer training branch invokes backward_pass_with_embeddings with scatter_embeddings = false. Consequently, update_output_head is never invoked, leaving the readout embedding matrix completely frozen while the underlying transformer hidden state
+𝑦
+y drifts.
+
+Enchanment:
+Note, there is a critical problem with the architecture of the project. There are just so many hardcoded values, not only but whatever that determines a hardcoded amount. Unit 32, unit 46, just so many hardcoded variables. Is that a bad thing? That is actually necessary, but what makes it a horrible thing is that these hardcoded variables have to be centralized in config.hpp. The other problem is that the kernel is in CUDA, the app is in C++. Those are two separated things and there are synchronization problems between these two. Why am I saying that? Just like we got a bunch of hardcoded variables in CPPs, we got a bunch of hardcoded variables in CUs. So the problem persists both between C++ and CUDA. Now imagine even we have our separated include CUH config in CUDA, there is a still a problem. Why? Because what we're witnessing is something just fucking hilarious that for instance, embedding dimension in C++ is 256, in kernel CUDA it's 64, so they are out of sync. Mathematically, logically, it will blow up the project if you do it that way. What we got to do is that one config includes CUH, we got to have in kernel one config you know, we got to have in C++ centralized, all variables are in there, so they can be dynamically changed. We shouldn't have to go ahead and read every single line of code and look at all these hardcoded variables and blow up. No, just go in there and then there has to be a mechanism, a system, or a separated include file that syncs the kernel include config with the app include config. And that's it. That's the problem that we have.
+
+A. Premature Termination & Inverted Stopping Logic (main.cpp)
+Mechanism: In main.cpp, the convergence check evaluates if (current_loss <= 3.0 && current_loss > 0.0).
+Failure Cause: A single outlier sequence or degenerate zero-entropy step producing a transient loss of
+0.0432
+0.0432 triggers an immediate [SUCCESS] state at Step 1, halting training while held-out validation remains catastrophic (Val: 14.2716).
+Divergence Guard Blindspot: Line 1636 checks if (initial_val_loss > 15.0) to trigger an emergency weight reset. When validation diverges to
+14.2716
+14.2716, it falls immediately beneath the reset threshold, allowing corrupt model weights to persist.
+B. Vocabulary Entropy Floor Stagnation (fuck.md)
+Mathematical Bound: For a vocabulary of
+𝑉
+=
+54
+,
+842
+V=54,842, uniform probability yields a theoretical entropy floor of:
+𝐿
+uniform
+=
+−
+ln
+⁡
+(
+1
+54842
+)
+=
+10.9122
+L
+uniform
+​
+
+=−ln(
+54842
+1
+​
+
+)=10.9122
+Run 2 logged 20,634 consecutive steps hovering between
+10.1652
+10.1652 and
+10.8654
+10.8654 because the network never escaped uniform distribution.
+Microscopic Readout Gradient: In compute_loss_and_dz_kernel, the backpropagated error vector is computed as:
+𝑑
+𝑧
+row
+=
+1
+𝐷
+(
+∑
+𝑣
+=
+0
+𝑉
+−
+1
+𝑃
+𝑣
+𝐸
+𝑣
+,
+row
+−
+𝐸
+target
+,
+row
+)
+dz
+row
+​
+
+=
+D
+​
+
+1
+​
+
+(
+v=0
+∑
+V−1
+​
+
+P
+v
+​
+
+E
+v,row
+​
+
+−E
+target,row
+​
+
+)
+With near-uniform distribution (
+𝑃
+𝑣
+≈
+1
+/
+𝑉
+P
+v
+​
+
+≈1/V), the expectation
+∑
+𝑣
+𝑃
+𝑣
+𝐸
+𝑣
+≈
+0
+∑
+v
+​
+
+P
+v
+​
+
+E
+v
+​
+
+≈0, leaving
+𝑑
+𝑧
+≈
+−
+𝐸
+target
+/
+𝐷
+dz≈−E
+target
+​
+
+/
+D
+​
+
+. For normalized embeddings (
+𝐸
+𝑣
+,
+row
+∼
+𝑂
+(
+1
+/
+𝐷
+)
+E
+v,row
+​
+
+∼O(1/
+D
+​
+
+)), the gradient magnitude drops to
+∣
+𝑑
+𝑧
+∣
+≈
+1
+/
+𝐷
+=
+1
+/
+1024
+≈
+0.000976
+∣dz∣≈1/D=1/1024≈0.000976.
+Weight Decay Drowning: In update_output_head, the gradient update term
+𝑃
+𝑣
+⋅
+𝑦
+P
+v
+​
+
+⋅y for incorrect tokens is
+≈
+1.82
+×
+10
+−
+5
+≈1.82×10
+−5
+, whereas the weight decay term (
+0.01
+×
+weight
+≈
+2.0
+×
+10
+−
+4
+0.01×weight≈2.0×10
+−4
+) is over
+10
+×
+10× larger. The embedding table decays toward zero faster than data gradients can pull it.
+Hard Probability Thresholding: The conditions if (p_v > 1e-8f) in compute_loss_and_dz_kernel and if (prob > 1e-7f) in update_output_head truncate repulsive gradient updates across large vocabulary subsets once probabilities dip below the cutoff.
+Output Head Bypass During Transformer Execution: In training.cpp, the transformer training branch invokes backward_pass_with_embeddings with scatter_embeddings = false. Consequently, update_output_head is never invoked, leaving the readout embedding matrix completely frozen while the underlying transformer hidden state
+𝑦
+y drifts.
+C. Catastrophic Step Gain Explosion (
+16
+,
+384
+×
+16,384× Multiplier)
+Mathematical Mechanism: In backward_pass_adamw_kernel:
+Δ
+𝑊
+=
+−
+1.5
+⋅
+lr
+⋅
+𝑁
+𝐾
+⋅
+𝑑
+𝑧
+⋅
+𝑥
+𝑇
+ΔW=−
+K
+​
+
+1.5⋅lr⋅
+N
+​
+
+    ​
+
+⋅dz⋅x
+T
+The input tensor
+𝑥
+∈
+𝑅
+𝐾
+x∈R
+K
+(
+𝐾
+=
+262
+,
+144
+K=262,144) is normalized by RMSNorm to unit root-mean-square per element, establishing:
+∥
+𝑥
+∥
+2
+2
+=
+∑
+𝑐
+=
+0
+𝐾
+−
+1
+𝑥
+𝑐
+2
+≈
+𝐾
+=
+262
+,
+144
+∥x∥
+2
+2
+​
+
+=
+c=0
+∑
+K−1
+​
+
+x
+c
+2
+​
+
+≈K=262,144
+When forward-projected on the subsequent step, the change in output
+Δ
+𝑦
+Δy equals:
+Δ
+𝑦
+=
+Δ
+𝑊
+⋅
+𝑥
+=
+−
+1.5
+⋅
+lr
+⋅
+𝑁
+𝐾
+⋅
+𝑑
+𝑧
+⋅
+∑
+𝑐
+=
+0
+𝐾
+−
+1
+𝑥
+𝑐
+2
+=
+−
+1.5
+⋅
+lr
+⋅
+𝑁
+⋅
+𝐾
+⋅
+𝑑
+𝑧
+Δy=ΔW⋅x=−
+K
+​
+
+1.5⋅lr⋅
+N
+​
+
+    ​
+
+⋅dz⋅
+c=0
+∑
+K−1
+​
+
+x
+c
+2
+​
+
+=−1.5⋅lr⋅
+N⋅K
+​
+
+⋅dz
+For
+𝑁
+=
+1024
+N=1024 and
+𝐾
+=
+262
+,
+144
+K=262,144, the product
+𝑁
+⋅
+𝐾
+=
+268
+,
+435
+,
+456
+=
+16
+,
+384
+N⋅K
+​
+
+=
+268,435,456
+​
+
+=16,384.
+Dynamic Impact: Multiplied by
+1.5
+1.5, this injects an unscaled
+24
+,
+576
+×
+24,576× step multiplier into the forward readout vector
+𝑦
+y. Softmax logits overshoot into extreme saturation (
+Δ
+𝑧
+
+> 50.0
+> Δz>50.0), tripping the exponential clamp in softmax_argmax_kernel and collapsing non-target token probabilities to the numerical floor.
+> Validation Probability Floor Saturation (
+> 27.6310
+> 27.6310): In training.cpp, validation cross-entropy clamps target probabilities to
+> 10
+> −
+> 12
+> 10
+> −12
+> :
+> 𝐿
+
+# floor
+
+−
+ln
+⁡
+(
+10
+−
+12
+)
+=
+27.631021
+L
+floor
+​
+
+=−ln(10
+−12
+)=27.631021
+Every saturated validation step outputs exactly
+27.6310
+27.6310.
+D. Hard Constraint Failure in Causal Attention Kernel (forward_pass.cu)
+Failure Cause: In fused_causal_attention, execution aborts if head_dim > 64:
+cuda
+if (head_dim > 64) {
+return false;
+}
+Silent NaN Propagation: In transformer_forward_block, the boolean return of fused_causal_attention is ignored.
+Test Suite Crash Mechanism: test_ai.cpp instantiates build_transformer_block(out_dim=1024, heads=1, ffn=16), resulting in head_dim = 1024 / 1 = 1024 > 64. The kernel refuses to launch, leaving d_attention_output uninitialized. Subsequent GEMM projections and SwiGLU activations process uninitialized VRAM, generating NaNs and producing the failure observed in Section [11] of fuck.md (FAIL [Transformer block output states are finite]).
+E. Sequence-Wide Normalization Collapse (forward_pass.cu)
+Mathematical Flaw: rms_norm_forward_kernel accepts num_elements = seq_len \* dim (
+256
+×
+1024
+=
+262
+,
+144
+256×1024=262,144) and calculates a single sequence-wide scalar:
+𝜎
+=
+1
+𝑆
+⋅
+𝐷
+∑
+𝑠
+=
+1
+𝑆
+∑
+𝑑
+=
+1
+𝐷
+𝑥
+𝑠
+,
+𝑑
+2
+
+- 𝜖
+  σ=
+  S⋅D
+  1
+  ​
+
+s=1
+∑
+S
+​
+
+d=1
+∑
+D
+​
+
+x
+s,d
+2
+​
+
++ϵ
+​
+
+Architectural Impact: Standard Transformer RMSNorm must normalize each token
+𝑥
+𝑠
+∈
+𝑅
+𝐷
+x
+s
+​
+
+∈R
+D
+independently. Computing a global RMS across all tokens destroys relative inter-token variance: high-energy prompt tokens suppress the activation magnitudes of downstream tokens prior to attention projection.
+F. In-Place Gradient Pointer Aliasing & State Overwrite (backward_pass.cu)
+State Overwrite: Only a single float\* d_inv_rms exists on gpu_activations. During forward execution, it is overwritten consecutively across Pre-Attention RMSNorm, Post-Attention RMSNorm, and Final RMSNorm. Backpropagation utilizes the single final scalar across all preceding backward normalizers.
+Buffer Aliasing: In transformer_backward_block, intermediate gradients d_grad_residual_1 and d_grad_attn_in are accumulated directly into d_grad_input before preceding residual branches consume their respective input signals, causing gradient corruption.
