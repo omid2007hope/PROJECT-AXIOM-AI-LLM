@@ -274,7 +274,8 @@ extern "C" CUDA_API bool allocate_paged_cache(
 	if (!CUDA_CHECK(cudaMalloc(&cache->d_value_blocks, buffer_bytes)))
 		return false;
 
-	size_t table_bytes = 1024 * sizeof(int);
+	size_t max_blocks = total_blocks > 0 ? total_blocks : (AXIOM_CONTEXT_WINDOW / 16);
+	size_t table_bytes = max_blocks * sizeof(int);
 	if (!CUDA_CHECK(cudaMalloc(&cache->d_block_table, table_bytes)))
 		return false;
 

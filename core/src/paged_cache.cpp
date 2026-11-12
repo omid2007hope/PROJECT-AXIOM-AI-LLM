@@ -21,12 +21,13 @@
 
 bool AI::build_paged_cache(size_t total_blocks, size_t block_size) {
 	free_paged_cache_memory();
-	size_t hidden_dim = embedding_dim;
-	if (hidden_dim == 0)
-		hidden_dim = 32;
+	size_t hidden_dim = embedding_dim > 0 ? embedding_dim : axiom::TOKEN_DIM;
+	size_t heads = (num_heads > 0 && hidden_dim % num_heads == 0)
+			       ? num_heads
+			       : ((hidden_dim % axiom::NUM_HEADS == 0) ? axiom::NUM_HEADS : 1);
 
 	bool ok = allocate_paged_cache(
-		&gpu_paged_cache, total_blocks, block_size, hidden_dim, num_heads);
+		&gpu_paged_cache, total_blocks, block_size, hidden_dim, heads);
 	if (!ok)
 		return false;
 

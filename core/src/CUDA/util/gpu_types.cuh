@@ -241,8 +241,8 @@ struct GpuPagedCache {
 	void* d_block_table = nullptr; // device ptr to int (staged sequence block table)
 	size_t total_blocks = 0;
 	size_t block_size = 16;
-	size_t hidden_dimension = 32;
-	size_t num_heads = 4;
+	size_t hidden_dimension = axiom::TOKEN_DIM;
+	size_t num_heads = axiom::NUM_HEADS;
 };
 
 // Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs

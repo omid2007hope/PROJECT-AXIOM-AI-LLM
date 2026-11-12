@@ -53,8 +53,8 @@ public:
 
 	AI& operator=(const AI&) = delete;
 
-	size_t vocab_size = 65536;
-	size_t embedding_dim = 4;
+	size_t vocab_size = axiom::VOCAB_SIZE;
+	size_t embedding_dim = axiom::TOKEN_DIM;
 	size_t active_vocab_size = 0;
 	uint32_t random_seed = 1337U;
 
@@ -63,8 +63,8 @@ public:
 
 	// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN
 	bool enable_transformer = false;
-	size_t num_heads = 4;
-	size_t ffn_dimension = 64;
+	size_t num_heads = axiom::NUM_HEADS;
+	size_t ffn_dimension = axiom::FFN_DIM;
 
 	// CPU Memory (High precision float for initialization and updates)
 	std::vector<float> host_weights;

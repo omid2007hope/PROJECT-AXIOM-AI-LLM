@@ -653,7 +653,7 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 	if (gather_embeddings && gpu_portion->token_ids_active[buffer_index] && gpu_embeddings &&
 	    gpu_embeddings->d_table) {
 		size_t emb_dim =
-			gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+			gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : AXIOM_TOKEN_DIM;
 		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
 							      : (input_dim / emb_dim);
 		int threads = 256;
@@ -679,7 +679,7 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 	// Applied only when embeddings are active to protect large context windows from variance explosion
 	if (gpu_embeddings && gpu_embeddings->d_table) {
 		size_t emb_dim =
-			gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+			gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : AXIOM_TOKEN_DIM;
 		size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
 							      : (input_dim / emb_dim);
 		if (!gpu_activations->d_inv_rms) {

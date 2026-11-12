@@ -44,6 +44,8 @@ AI::AI()
     : input_elements_x_total(axiom::FAN_IN_DIM), target_elements_y_total(axiom::TOKEN_DIM), weight_min(-0.1f), weight_max(0.1f) {
 	vocab_size = axiom::VOCAB_SIZE;
 	embedding_dim = axiom::TOKEN_DIM;
+	num_heads = axiom::NUM_HEADS;
+	ffn_dimension = axiom::FFN_DIM;
 	compute_stream_ = create_cuda_stream();
 }
 
@@ -70,6 +72,8 @@ AI::AI(size_t input_elements_x_total,
 	embedding_dim = target_elements_y_total;
 	if (embedding_dim == 0)
 		embedding_dim = axiom::TOKEN_DIM;
+	num_heads = axiom::NUM_HEADS;
+	ffn_dimension = axiom::FFN_DIM;
 
 	host_embeddings.resize(vocab_size * embedding_dim);
 

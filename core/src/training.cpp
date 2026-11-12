@@ -51,14 +51,14 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 		if (enable_transformer) {
 			synchronize_stream(&gpu_portion, 1 - buffer_index);
 
-			const size_t model_dim = embedding_dim > 0 ? embedding_dim : target_elements_y_total;
-			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
-			if (model_dim / heads > 64 && model_dim % 64 == 0) {
-				heads = model_dim / 64;
+			const size_t model_dim = (embedding_dim > 0) ? embedding_dim : ((target_elements_y_total > 0) ? target_elements_y_total : axiom::TOKEN_DIM);
+			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : axiom::NUM_HEADS;
+			if (model_dim / heads > axiom::MAX_HEAD_DIM && model_dim % axiom::MAX_HEAD_DIM == 0) {
+				heads = model_dim / axiom::MAX_HEAD_DIM;
 			}
 			const size_t feedforward_network_dimension =
 				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim) ? ffn_dimension
-																				: (model_dim * 4);
+																				: axiom::FFN_DIM;
 
 			if (gpu_weights.d_query_weights == nullptr ||
 				gpu_weights.transformer_dim != model_dim) {
@@ -421,14 +421,14 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 
 		if (enable_transformer && gpu_weights.d_query_weights != nullptr &&
 			gpu_portion.d_context_window[0] != nullptr) {
-			const size_t model_dim = embedding_dim > 0 ? embedding_dim : target_elements_y_total;
-			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
-			if (model_dim / heads > 64 && model_dim % 64 == 0) {
-				heads = model_dim / 64;
+			const size_t model_dim = (embedding_dim > 0) ? embedding_dim : ((target_elements_y_total > 0) ? target_elements_y_total : axiom::TOKEN_DIM);
+			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : axiom::NUM_HEADS;
+			if (model_dim / heads > axiom::MAX_HEAD_DIM && model_dim % axiom::MAX_HEAD_DIM == 0) {
+				heads = model_dim / axiom::MAX_HEAD_DIM;
 			}
 			const size_t feedforward_network_dimension =
 				(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim) ? ffn_dimension
-																				: (model_dim * 4);
+																				: axiom::FFN_DIM;
 
 			launch_gather_embeddings_batched(
 				static_cast<const uint32_t*>(gpu_portion.d_token_ids[0]), gpu_embeddings.d_table,

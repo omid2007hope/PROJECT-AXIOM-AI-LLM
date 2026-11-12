@@ -291,7 +291,6 @@ __global__ static void backward_pass_kernel(
 			x_val = 0.0f;
 		}
 
-		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
 		float weight_lr = learning_rate;
 
 		float w_val = W_master[i] - weight_lr * dz * x_val;
@@ -832,7 +831,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 
 			if (gpu_embeddings && gpu_embeddings->d_table) {
 				size_t emb_dim_sz =
-					gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : 32;
+					gpu_embeddings->embedding_dim > 0 ? gpu_embeddings->embedding_dim : AXIOM_TOKEN_DIM;
 				size_t num_tok = gpu_portion->token_count > 0 ? gpu_portion->token_count
 															  : (input_dim / emb_dim_sz);
 				int norm_threads = static_cast<int>(std::min<size_t>(1024, emb_dim_sz));
