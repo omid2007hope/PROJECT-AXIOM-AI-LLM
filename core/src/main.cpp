@@ -27,13 +27,11 @@
 
 #include <chrono>
 #include <cmath>
-#include <conio.h> // For _kbhit() and _getch()
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <filesystem>
-#include <io.h> // For _isatty() and _fileno()
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -44,11 +42,21 @@
 #include <type_traits>
 #include <vector>
 
+#ifdef _WIN32
+#include <conio.h> // For _kbhit() and _getch()
+#include <io.h> // For _isatty() and _fileno()
 // psapi.h needs the types from windows.h, so this order must not be re-sorted
 // clang-format off
 #include <windows.h>
 #include <psapi.h>
 // clang-format on
+#else
+#include <unistd.h>
+inline int _kbhit() { return 0; }
+inline int _getch() { return getchar(); }
+inline int _isatty(int fd) { return isatty(fd); }
+inline int _fileno(FILE* stream) { return fileno(stream); }
+#endif
 
 #include "../include/ai.hpp"
 #include "../include/config.hpp"
@@ -460,12 +468,21 @@ AppMode collect_user_input(Input& input) {
 // Live hardware telemetry
 // *****************************************************************************
 void print_hardware_telemetry(const Portion& portion) {
+	double process_ram_mb = 0.0;
+	double sys_avail_gb = 0.0;
+	double sys_total_gb = 0.0;
+
+#ifdef _WIN32
 	PROCESS_MEMORY_COUNTERS pmc {};
 	GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
+	process_ram_mb = pmc.WorkingSetSize / 1024.0 / 1024.0;
 
 	MEMORYSTATUSEX memInfo {};
 	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
 	GlobalMemoryStatusEx(&memInfo);
+	sys_avail_gb = memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0;
+	sys_total_gb = memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0;
+#endif
 
 	size_t gpu_free = 0, gpu_total = 0;
 	get_gpu_telemetry(&gpu_free, &gpu_total);
@@ -482,9 +499,9 @@ void print_hardware_telemetry(const Portion& portion) {
 			  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
 			  << "[RAM] Engine Stream : "
 			  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0) << " MB\n"
-			  << "[RAM] Process Usage : " << (pmc.WorkingSetSize / 1024.0 / 1024.0) << " MB\n"
-			  << "[RAM] System Avail  : " << (memInfo.ullAvailPhys / 1024.0 / 1024.0 / 1024.0)
-			  << " GB / " << (memInfo.ullTotalPhys / 1024.0 / 1024.0 / 1024.0) << " GB\n"
+			  << "[RAM] Process Usage : " << process_ram_mb << " MB\n"
+			  << "[RAM] System Avail  : " << sys_avail_gb
+			  << " GB / " << sys_total_gb << " GB\n"
 			  << "[GPU] Context Window: "
 			  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
 			  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
@@ -1243,14 +1260,14 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 						ai.evaluate_validation(portion.validation_token_ids,
 											   portion.context_window_size, validation_loss);
 
-					// Divergence guard during training: check non-finite or loss exceeding 10.0 after initial steps
+					// Divergence guard during training: check non-finite or loss exceeding 16.0 after initial steps
 					if (!std::isfinite(current_loss) ||
 						(has_validation && !std::isfinite(validation_loss)) ||
-						(step > 20 && (current_loss > 10.0 || (has_validation && validation_loss > 10.0)))) {
+						(step > 20 && (current_loss > 16.0 || (has_validation && validation_loss > 16.0)))) {
 						std::cout << "\n[!] Divergence detected at Step " << step
 								  << " (Loss: " << current_loss
 								  << (has_validation ? ", Val: " + std::to_string(validation_loss) : "")
-								  << "). Resetting brain to fresh state...\n"
+								  << " > 16.0). Resetting brain to fresh state...\n"
 								  << std::flush;
 						ai.reset_weights(elements, true);
 						if (ai.upload_weights()) {
@@ -1665,10 +1682,10 @@ bool execute_training_session(
 		if (!portion.validation_token_ids.empty() &&
 			ai.evaluate_validation(portion.validation_token_ids, portion.context_window_size,
 								   initial_val_loss) &&
-			(initial_val_loss > 10.0 || !std::isfinite(initial_val_loss))) {
+			(initial_val_loss > 16.0 || !std::isfinite(initial_val_loss))) {
 			std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: " << std::fixed
 					  << std::setprecision(4) << initial_val_loss
-					  << " > 10.0). Resetting brain to fresh state...\n"
+					  << " > 16.0). Resetting brain to fresh state...\n"
 					  << std::flush;
 			ai.reset_weights(ai_elements);
 			ai.upload_weights();

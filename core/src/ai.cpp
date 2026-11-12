@@ -20,7 +20,12 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
+#endif
 
 #include "../include/parser.hpp"
 #include "../include/transfer.hpp"
