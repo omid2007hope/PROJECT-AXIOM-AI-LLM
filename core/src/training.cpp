@@ -109,6 +109,26 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 				static_cast<uint32_t>(sequence_length), static_cast<uint32_t>(model_dim),
 				static_cast<uint32_t>(vocab_size), stream);
 
+			static bool probed_protocol_1 = false;
+			if (!probed_protocol_1) {
+				probed_protocol_1 = true;
+				std::cout << "\n========================================================"
+						  << "\n  PROTOCOL 1: PIPELINE AUDIT (Step 1)"
+						  << "\n========================================================\n";
+				const uint32_t* host_tokens = portion.context_token_ids[buffer_index];
+				std::cout << "Context Window (First 8 tokens): ";
+				for (size_t i = 0; i < 8 && i < sequence_length; ++i) {
+					std::cout << host_tokens[i] << " ";
+				}
+				std::cout << "\nContext Window (Last 8 tokens):  ";
+				for (size_t i = (sequence_length > 8 ? sequence_length - 8 : 0); i < sequence_length; ++i) {
+					std::cout << host_tokens[i] << " ";
+				}
+				uint32_t target_tok = *reinterpret_cast<const uint32_t*>(portion.target_tokens[buffer_index]);
+				std::cout << "\nTarget Token Y (Sequence + 1):   " << target_tok << "\n";
+				std::cout << "========================================================\n" << std::flush;
+			}
+
 			// Sequence-parallel Transformer Forward Block (M = S)
 			if (!transformer_forward_block(gpu_portion.d_context_window[buffer_index], &gpu_weights,
 										   &gpu_activations, sequence_length, model_dim, heads,
@@ -363,10 +383,19 @@ bool AI::save_weights(const std::string& path) {
 		}
 	}
 
-	std::cout << "[AI Brain] Saved " << header.weight_count << " weights, " << header.bias_count
-			  << " biases, and " << (header.vocab_size * header.embedding_dim) << " embeddings to "
-			  << path << "\n"
-			  << std::flush;
+	if (has_transformer) {
+		const size_t xform_total = 4 * (gpu_weights.transformer_dim * gpu_weights.transformer_dim) +
+								   3 * (gpu_weights.transformer_dim * gpu_weights.transformer_ffn);
+		std::cout << "[AI Brain] Saved " << header.weight_count << " weights, " << header.bias_count
+				  << " biases, " << (header.vocab_size * header.embedding_dim) << " embeddings, and "
+				  << xform_total << " transformer weights to " << path << "\n"
+				  << std::flush;
+	} else {
+		std::cout << "[AI Brain] Saved " << header.weight_count << " weights, " << header.bias_count
+				  << " biases, and " << (header.vocab_size * header.embedding_dim) << " embeddings to "
+				  << path << "\n"
+				  << std::flush;
+	}
 	return true;
 }
 

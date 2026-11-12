@@ -218,6 +218,7 @@ __global__ static void compute_cross_entropy_and_dz_kernel(
 
 	float inv_sum = 1.0f / s_sum[0];
 	float seq_scale = 1.0f / static_cast<float>(S > 0 ? S : 1);
+	float local_dz_sq = 0.0f;
 
 	for (size_t v = threadIdx.x; v < vocab_size; v += blockDim.x) {
 		float val = __bfloat162float(row[v]);
@@ -237,14 +238,14 @@ __global__ static void compute_cross_entropy_and_dz_kernel(
 		float dz = seq_scale * inv_temp * (prob - target_indicator);
 		dz = fmaxf(-10.0f, fminf(10.0f, dz));
 		row[v] = __float2bfloat16(dz);
-		local_sum += dz * dz;
+		local_dz_sq += dz * dz;
 	}
 
 	for (int offset = 16; offset > 0; offset /= 2) {
-		local_sum += __shfl_down_sync(0xffffffff, local_sum, offset);
+		local_dz_sq += __shfl_down_sync(0xffffffff, local_dz_sq, offset);
 	}
 	if (lane == 0) {
-		s_sum[wid] = local_sum;
+		s_sum[wid] = local_dz_sq;
 	}
 	__syncthreads();
 
@@ -474,7 +475,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 										  const __nv_bfloat16* __restrict__ target,
 										  float* __restrict__ table_master,
 										  __nv_bfloat16* __restrict__ table, size_t vocab_size,
-										  size_t emb_dim, float learning_rate) {
+										  size_t emb_dim, float learning_rate, float seq_scale = 1.0f) {
 	size_t v = blockIdx.x;
 	if (v == 0 || v >= vocab_size) {
 		return;
@@ -490,9 +491,9 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 		return;
 	}
 
-	float grad_logit = p - (v == target_tok_id ? 1.0f : 0.0f);
+	float grad_logit = (p - (v == target_tok_id ? 1.0f : 0.0f)) * seq_scale;
 	float emb_dim_f = static_cast<float>(emb_dim > 0 ? emb_dim : 1);
-	float head_lr = (4.0f * learning_rate) / sqrtf(emb_dim_f);
+	float head_lr = learning_rate / sqrtf(emb_dim_f);
 	float bound_limit = 4.0f / sqrtf(emb_dim_f);
 	size_t row_offset = v * emb_dim;
 
@@ -526,7 +527,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 	__syncthreads();
 	float rms_y = s_y_sq[0];
 
-	float token_weight_decay = 1e-5f / static_cast<float>(vocab_size > 0 ? vocab_size : 1);
+	constexpr float token_weight_decay = 0.01f;
 
 	for (size_t d = threadIdx.x; d < emb_dim; d += blockDim.x) {
 		float y_val = __bfloat162float(y[d]);
@@ -885,13 +886,18 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 		if (is_token_training && gpu_activations->d_probs && emb_dim == output_dim && vocab_sz > 0) {
 			int head_threads = 256;
 			int head_blocks = static_cast<int>(vocab_sz);
+			float seq_scale = is_transformer_readout
+								  ? (1.0f / static_cast<float>(gpu_portion->token_count > 0
+																   ? gpu_portion->token_count
+																   : (input_dim / emb_dim)))
+								  : 1.0f;
 			update_output_head<<<head_blocks, head_threads, 0, stream>>>(
 				static_cast<const float*>(gpu_activations->d_probs),
 				static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
 				static_cast<const __nv_bfloat16*>(gpu_portion->d_target[buffer_index]),
 				static_cast<float*>(gpu_embeddings->d_table_master),
 				static_cast<__nv_bfloat16*>(gpu_embeddings->d_table), vocab_sz, emb_dim,
-				learning_rate);
+				learning_rate, seq_scale);
 		}
 
 		if (scatter_embeddings && !is_transformer_readout) {
@@ -1176,14 +1182,15 @@ __global__ static void batched_input_gradient_kernel(const float* __restrict__ g
 __global__ static void fused_matrix_adamw_kernel(
 	float* __restrict__ W_master, __nv_bfloat16* __restrict__ W, float* __restrict__ W_m,
 	float* __restrict__ W_v, const float* __restrict__ grad_W, size_t total_elements,
-	float learning_rate, uint64_t step, float beta1, float beta2, float eps, float weight_decay) {
+	size_t in_dim, float learning_rate, uint64_t step, float beta1, float beta2, float eps,
+	float weight_decay) {
 
 	size_t idx = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
 	if (idx < total_elements) {
 		float g = grad_W[idx];
 		if (!isfinite(g))
 			g = 0.0f;
-		g = fmaxf(-1.0f, fminf(1.0f, g));
+		g = fmaxf(-100.0f, fminf(100.0f, g));
 
 		float m = beta1 * W_m[idx] + (1.0f - beta1) * g;
 		float v = beta2 * W_v[idx] + (1.0f - beta2) * g * g;
@@ -1196,11 +1203,14 @@ __global__ static void fused_matrix_adamw_kernel(
 		float m_hat = m / (bc1 > 1e-7f ? bc1 : 1.0f);
 		float v_hat = v / (bc2 > 1e-7f ? bc2 : 1.0f);
 
-		float update = m_hat / (sqrtf(v_hat) + eps) + weight_decay * W_master[idx];
-		float w_val = W_master[idx] - learning_rate * update;
+		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
+		float eff_lr = learning_rate * rsqrtf(in_dim_f);
+
+		float update = m_hat / (sqrtf(v_hat) + eps);
+		float w_val = W_master[idx] - eff_lr * (update + weight_decay * W_master[idx]);
 
 		if (isfinite(w_val)) {
-			w_val = fmaxf(-10.0f, fminf(10.0f, w_val));
+			w_val = fmaxf(-2.0f, fminf(2.0f, w_val));
 			W_master[idx] = w_val;
 			W[idx] = __float2bfloat16(w_val);
 		}
@@ -1215,6 +1225,34 @@ __global__ static void float_to_bf16_grad_kernel(const float* __restrict__ src,
 	if (idx < total_elements) {
 		dst[idx] = __float2bfloat16(src[idx]);
 	}
+}
+
+__global__ static void probe_l1_kernel(const float* __restrict__ data, size_t n, float* __restrict__ out) {
+	size_t idx = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+	float local_sum = 0.0f;
+	for (size_t i = idx; i < n; i += (size_t)gridDim.x * blockDim.x) {
+		float val = data[i];
+		if (isfinite(val)) local_sum += fabsf(val);
+	}
+	for (int offset = 16; offset > 0; offset /= 2) {
+		local_sum += __shfl_down_sync(0xffffffff, local_sum, offset);
+	}
+	if ((threadIdx.x % 32) == 0 && local_sum > 0.0f) {
+		atomicAdd(out, local_sum);
+	}
+}
+
+static float calc_l1_norm(const float* d_data, size_t n, cudaStream_t s) {
+	if (!d_data || n == 0) return 0.0f;
+	float* d_res = nullptr;
+	if (cudaMalloc(&d_res, sizeof(float)) != cudaSuccess) return 0.0f;
+	cudaMemsetAsync(d_res, 0, sizeof(float), s);
+	probe_l1_kernel<<<64, 256, 0, s>>>(d_data, n, d_res);
+	float h_res = 0.0f;
+	cudaMemcpyAsync(&h_res, d_res, sizeof(float), cudaMemcpyDeviceToHost, s);
+	cudaStreamSynchronize(s);
+	cudaFree(d_res);
+	return h_res;
 }
 
 extern "C" CUDA_API bool transformer_backward_block(
@@ -1426,57 +1464,101 @@ extern "C" CUDA_API bool transformer_backward_block(
 	add_residual_gradient<<<res_blocks, res_threads, 0, s>>>(
 		d_grad_mid_float, d_grad_attn_accum, total_seq_dim);
 
+	static bool probed_protocol_3 = false;
+	if (!probed_protocol_3) {
+		probed_protocol_3 = true;
+		cudaStreamSynchronize(s);
+		float norm_grad_out = calc_l1_norm(static_cast<const float*>(grad_output), total_seq_dim, s);
+		float norm_down_w = calc_l1_norm(d_grad_down_W, D * F, s);
+		float norm_swiglu = calc_l1_norm(d_grad_swiglu_float, total_seq_ffn, s);
+		float norm_gate_w = calc_l1_norm(d_grad_gate_W, F * D, s);
+		float norm_up_w = calc_l1_norm(d_grad_up_W, F * D, s);
+		float norm_mid = calc_l1_norm(d_grad_mid_float, total_seq_dim, s);
+		float norm_out_w = calc_l1_norm(d_grad_out_W, D * D, s);
+		float norm_attn_in = calc_l1_norm(d_grad_attn_float, total_seq_dim, s);
+		float norm_q_grad = calc_l1_norm(d_grad_q_float, total_seq_dim, s);
+		float norm_k_grad = calc_l1_norm(d_grad_k_float, total_seq_dim, s);
+		float norm_v_grad = calc_l1_norm(d_grad_v_float, total_seq_dim, s);
+		float norm_q_w = calc_l1_norm(d_grad_q_W, D * D, s);
+		float norm_k_w = calc_l1_norm(d_grad_k_W, D * D, s);
+		float norm_v_w = calc_l1_norm(d_grad_v_W, D * D, s);
+
+		printf("\n========================================================"
+			   "\n  PROTOCOL 3: GRADIENT FLOW AUDIT (Step 1)"
+			   "\n========================================================\n"
+			   "  Readout Gradient (grad_output):  %f\n"
+			   "  FFN Down Grad (d_grad_down_W):   %f\n"
+			   "  SwiGLU In Grad (d_grad_swiglu):  %f\n"
+			   "  FFN Gate Grad (d_grad_gate_W):   %f\n"
+			   "  FFN Up Grad (d_grad_up_W):       %f\n"
+			   "  Mid Residual (d_grad_mid):       %f\n"
+			   "  Attn Out Grad (d_grad_out_W):    %f\n"
+			   "  Attn Output (d_grad_attn_float): %f\n"
+			   "  Causal dQ (d_grad_q_float):      %f\n"
+			   "  Causal dK (d_grad_k_float):      %f\n"
+			   "  Causal dV (d_grad_v_float):      %f\n"
+			   "  Attn W_Q Grad (d_grad_q_W):      %f\n"
+			   "  Attn W_K Grad (d_grad_k_W):      %f\n"
+			   "  Attn W_V Grad (d_grad_v_W):      %f\n"
+			   "========================================================\n",
+			   norm_grad_out, norm_down_w, norm_swiglu, norm_gate_w, norm_up_w, norm_mid,
+			   norm_out_w, norm_attn_in, norm_q_grad, norm_k_grad, norm_v_grad, norm_q_w,
+			   norm_k_w, norm_v_w);
+		fflush(stdout);
+	}
+
 	// 10. Update all 7 transformer parameter matrices using Fused AdamW
 	gpu_weights->step_count += 1;
 	uint64_t step = gpu_weights->step_count;
 	constexpr float beta1 = 0.9f;
 	constexpr float beta2 = 0.999f;
 	constexpr float eps = 1e-8f;
-	constexpr float weight_decay = 1e-5f;
+	constexpr float weight_decay = 0.01f;
 
 	auto apply_adamw = [&](float* master, __nv_bfloat16* bf16_w, float* m, float* v, const float* g,
-						   size_t elements) {
+						   size_t in_dim, size_t out_dim) {
+		size_t elements = in_dim * out_dim;
 		int threads = 256;
 		int blocks = static_cast<int>((elements + threads - 1) / threads);
 		fused_matrix_adamw_kernel<<<blocks, threads, 0, s>>>(master, bf16_w, m, v, g, elements,
-															 learning_rate, step, beta1, beta2, eps,
-															 weight_decay);
+															 in_dim, learning_rate, step, beta1,
+															 beta2, eps, weight_decay);
 	};
 
 	apply_adamw(static_cast<float*>(gpu_weights->d_down_master),
 				static_cast<__nv_bfloat16*>(gpu_weights->d_down_weights),
 				static_cast<float*>(gpu_weights->d_down_m),
-				static_cast<float*>(gpu_weights->d_down_v), d_grad_down_W, D * F);
+				static_cast<float*>(gpu_weights->d_down_v), d_grad_down_W, F, D);
 
 	apply_adamw(static_cast<float*>(gpu_weights->d_gate_master),
 				static_cast<__nv_bfloat16*>(gpu_weights->d_gate_weights),
 				static_cast<float*>(gpu_weights->d_gate_m),
-				static_cast<float*>(gpu_weights->d_gate_v), d_grad_gate_W, F * D);
+				static_cast<float*>(gpu_weights->d_gate_v), d_grad_gate_W, D, F);
 
 	apply_adamw(static_cast<float*>(gpu_weights->d_up_master),
 				static_cast<__nv_bfloat16*>(gpu_weights->d_up_weights),
 				static_cast<float*>(gpu_weights->d_up_m), static_cast<float*>(gpu_weights->d_up_v),
-				d_grad_up_W, F * D);
+				d_grad_up_W, D, F);
 
 	apply_adamw(static_cast<float*>(gpu_weights->d_output_master),
 				static_cast<__nv_bfloat16*>(gpu_weights->d_output_weights),
 				static_cast<float*>(gpu_weights->d_output_m),
-				static_cast<float*>(gpu_weights->d_output_v), d_grad_out_W, D * D);
+				static_cast<float*>(gpu_weights->d_output_v), d_grad_out_W, D, D);
 
 	apply_adamw(static_cast<float*>(gpu_weights->d_query_master),
 				static_cast<__nv_bfloat16*>(gpu_weights->d_query_weights),
 				static_cast<float*>(gpu_weights->d_query_m),
-				static_cast<float*>(gpu_weights->d_query_v), d_grad_q_W, D * D);
+				static_cast<float*>(gpu_weights->d_query_v), d_grad_q_W, D, D);
 
 	apply_adamw(static_cast<float*>(gpu_weights->d_key_master),
 				static_cast<__nv_bfloat16*>(gpu_weights->d_key_weights),
 				static_cast<float*>(gpu_weights->d_key_m),
-				static_cast<float*>(gpu_weights->d_key_v), d_grad_k_W, D * D);
+				static_cast<float*>(gpu_weights->d_key_v), d_grad_k_W, D, D);
 
 	apply_adamw(static_cast<float*>(gpu_weights->d_value_master),
 				static_cast<__nv_bfloat16*>(gpu_weights->d_value_weights),
 				static_cast<float*>(gpu_weights->d_value_m),
-				static_cast<float*>(gpu_weights->d_value_v), d_grad_v_W, D * D);
+				static_cast<float*>(gpu_weights->d_value_v), d_grad_v_W, D, D);
 
 	// 11. Accumulate input gradient into grad_input if requested
 	if (grad_input) {

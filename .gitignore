@@ -6,6 +6,8 @@
 weights.axiom
 vocab.axiom 
 *.axiom
+*.bak
+*.corrupted_bak
 *.bin
 test_artifacts/ 
  
