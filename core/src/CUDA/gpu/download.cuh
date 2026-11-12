@@ -56,6 +56,17 @@ CUDA_API bool download_probabilities(const GpuActivations* gpu_activations,
 				     float* h_probs,
 				     size_t count);
 
+CUDA_API bool download_transformer_weights(const GpuWeights* gpu,
+					   float* h_q,
+					   float* h_k,
+					   float* h_v,
+					   float* h_o,
+					   float* h_gate,
+					   float* h_up,
+					   float* h_down,
+					   size_t dim,
+					   size_t ffn);
+
 CUDA_API void enqueue_loss_download(GpuPortion* gpu, int stream_idx);
 CUDA_API bool poll_loss_nonblocking(GpuPortion* gpu, int stream_idx, float* out_loss);
 

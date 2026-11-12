@@ -284,6 +284,36 @@ bool test_ai() {
 		std::filesystem::remove_all("test_artifacts", rm_ec);
 	}
 
+	// Transformer attention & SwiGLU weights persistence test
+	{
+		const std::string xform_path = "test_artifacts/xform_weights.axiom";
+		const size_t test_dim = axiom::TOKEN_DIM;
+		const size_t test_heads = axiom::NUM_HEADS;
+		const size_t test_ffn = axiom::FFN_DIM;
+
+		test_check(ai.build_transformer_block(test_dim, test_heads, test_ffn),
+				   "build_transformer_block allocates GPU attention & FFN weights", s_pass, s_fail);
+		test_check(ai.save_weights(xform_path),
+				   "ai.save_weights() serializes model including transformer block", s_pass, s_fail);
+		test_check(std::filesystem::exists(xform_path),
+				   "Transformer weight file exists on disk", s_pass, s_fail);
+
+		const size_t expected_xform_file_size =
+			sizeof(AxiomWeightHeader) + (in_dim * out_dim * sizeof(float)) +
+			(out_dim * sizeof(float)) + (ai.vocab_size * ai.embedding_dim * sizeof(float)) +
+			(3 * sizeof(uint64_t)) +
+			((4 * test_dim * test_dim + 3 * test_dim * test_ffn) * sizeof(float));
+		test_check_eq(std::filesystem::file_size(xform_path), expected_xform_file_size,
+					  "Transformer weight file size matches exact extended binary format", s_pass,
+					  s_fail);
+
+		test_check(ai.load_weights(xform_path),
+				   "ai.load_weights() restores model and transformer block into VRAM", s_pass,
+				   s_fail);
+		std::error_code rm_ec;
+		std::filesystem::remove_all("test_artifacts", rm_ec);
+	}
+
 	// â”€â”€ [9] Forward Inference & Prediction Verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 	std::cout << "\n[9] Forward Inference & Prediction Verification\n";
 

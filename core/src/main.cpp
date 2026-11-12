@@ -1116,7 +1116,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 					   Parser& parser, const Input& input,
 					   const std::filesystem::path& weights_path,
 					   const std::filesystem::path& vocab_path, size_t max_steps = 0,
-					   double target_stop_loss = 2.8) {
+					   double target_stop_loss = 2.8, size_t epochs = 4) {
 	size_t total_dataset_tokens = portion.ram_buffer_token_ids.size();
 	std::error_code ec;
 	uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
@@ -1130,10 +1130,11 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 		(!portion.ram_buffer_token_ids.empty() && portion.context_window_size > 0)
 			? std::min<size_t>(portion.context_window_size, 2048)
 			: 1;
-	size_t total_dataset_steps =
+	const size_t steps_per_epoch =
 		(available_span > 0) ? ((available_span - 1) / window_stride + 1) : 0;
 
-	size_t target_steps = (max_steps > 0) ? max_steps : total_dataset_steps;
+	const size_t target_steps =
+		(max_steps > 0) ? max_steps : (steps_per_epoch * std::max<size_t>(1, epochs));
 
 	if (target_steps == 0) {
 		std::cerr << "[!] No training data available in " << optimizer.data_path.filename().string()
@@ -1141,13 +1142,23 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 		return false;
 	}
 
+	const size_t total_epochs_planned =
+		(steps_per_epoch > 0) ? ((target_steps + steps_per_epoch - 1) / steps_per_epoch) : 1;
+
 	std::cout << "Beginning training session (" << target_steps
-			  << " steps to 100% completion)...\n";
+			  << " steps across " << total_epochs_planned << " epoch(s) to 100% completion)...\n";
 	std::cout << "Controls:\n"
 			  << "  [S] Save current model weights to " << weights_path.filename().string() << "\n"
 			  << "  [R] Reset AI brain to chaotic state\n"
 			  << "  [Q] Save and quit training loop\n\n"
 			  << std::flush;
+
+	const float peak_learning_rate =
+		(optimizer.learning_rate > 0.0f) ? optimizer.learning_rate : 0.006f;
+	const float minimum_learning_rate = peak_learning_rate * 0.10f;
+	const float initial_learning_rate = peak_learning_rate * 0.10f;
+	const size_t warmup_steps =
+		(target_steps >= 100) ? (target_steps * 2 / 100) : (target_steps / 4);
 
 	// Steps trained since the start (or the last reset) and the first loss reported
 	size_t step = 0;
@@ -1216,6 +1227,26 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 				break;
 			}
 		}
+
+		// Compute dynamic learning rate (linear warmup + cosine decay)
+		float dynamic_learning_rate = peak_learning_rate;
+		if (step < warmup_steps) {
+			const float progress = (warmup_steps > 0)
+									   ? (static_cast<float>(step) / static_cast<float>(warmup_steps))
+									   : 1.0f;
+			dynamic_learning_rate =
+				initial_learning_rate + (peak_learning_rate - initial_learning_rate) * progress;
+		} else if (target_steps > warmup_steps) {
+			const float progress =
+				static_cast<float>(step - warmup_steps) / static_cast<float>(target_steps - warmup_steps);
+			constexpr float math_pi = 3.14159265358979323846f;
+			dynamic_learning_rate =
+				minimum_learning_rate +
+				0.5f * (peak_learning_rate - minimum_learning_rate) * (1.0f + std::cos(math_pi * progress));
+		} else {
+			dynamic_learning_rate = minimum_learning_rate;
+		}
+		optimizer.learning_rate = dynamic_learning_rate;
 
 		// Feed forward & backward pass
 		const TrainStatus status = ai.train(optimizer, portion);
@@ -1313,6 +1344,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 							  << std::setprecision(1) << pct << "% | Step " << step << "/"
 							  << target_steps << " | ETA: " << format_duration(eta_seconds) << " ("
 							  << std::setprecision(1) << steps_per_second << " stp/s)"
+							  << " | LR: " << std::setprecision(5) << dynamic_learning_rate
 							  << " | Loss: " << std::setprecision(4) << current_loss;
 					if (*first_loss > 0.0) {
 						double delta_pct = (current_loss - *first_loss) / *first_loss * 100.0;
@@ -1380,7 +1412,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 			}
 			optimizer.disk_to_ram(portion);
 			if (portion.ram_buffer_tokens.size() < portion.all_elements + portion.target_elements) {
-				if (step < target_steps && total_dataset_steps > 0) {
+				if (step < target_steps && steps_per_epoch > 0) {
 					optimizer.disk_to_ram(portion);
 					continue;
 				}
@@ -1504,7 +1536,7 @@ bool execute_training_session(
 	const std::filesystem::path& vocab_path, const std::filesystem::path& embedded_path,
 	const std::filesystem::path& asset_dir, const std::filesystem::path& core_dir, AppMode mode,
 	bool developer_mode, size_t max_steps, bool is_interactive, bool auto_archive, bool auto_purge,
-	uint32_t min_frequency = 3, double target_stop_loss = 2.8) {
+	uint32_t min_frequency = 3, double target_stop_loss = 2.8, size_t epochs = 4) {
 	parser.developer_mode = developer_mode;
 	ai.enable_transformer = true;
 
@@ -1692,7 +1724,7 @@ bool execute_training_session(
 
 	const bool training_ok =
 		run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path,
-						  vocab_path, max_steps, target_stop_loss);
+						  vocab_path, max_steps, target_stop_loss, epochs);
 
 	portion.free_pinned();
 	embedded_cleanup.run();
@@ -1859,6 +1891,7 @@ int main(int argc, char* argv[]) {
 	bool auto_archive = false;
 	bool auto_purge = false;
 	size_t max_steps = 0;
+	size_t training_epochs = 4;
 	uint32_t min_frequency = 3;
 	uint32_t random_seed = 1337U;
 	bool custom_seed_set = false;
@@ -1892,7 +1925,8 @@ int main(int argc, char* argv[]) {
 				<< "Configuration Flags:\n"
 				<< "  --weights <path>    Specify custom neural weights checkpoint (default: weights.axiom)\n"
 				<< "  --vocab <path>      Specify custom vocabulary dictionary (default: vocab.axiom)\n"
-				<< "  --lr <rate>         Set optimizer learning rate (default: 0.001)\n"
+				<< "  --lr <rate>         Set optimizer learning rate (default: 0.006)\n"
+				<< "  --epochs <N>        Set number of training epochs across corpus (default: 4)\n"
 				<< "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
 				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 3)\n"
 				<< "  --target-loss <L>   Set target stopping loss (default: 2.8, range: 1.5 - 3.0)\n"
@@ -2011,6 +2045,29 @@ int main(int argc, char* argv[]) {
 				target_stop_loss = std::stod(a.substr(14));
 			} catch (...) {
 				std::cerr << "Error: --target-loss requires a float value.\n";
+				return 1;
+			}
+		} else if (a == "--epochs" || a == "--epoch") {
+			if (i + 1 < argc) {
+				try {
+					training_epochs = std::stoull(argv[++i]);
+					if (training_epochs == 0)
+						training_epochs = 1;
+				} catch (...) {
+					std::cerr << "Error: --epochs requires an integer value.\n";
+					return 1;
+				}
+			} else {
+				std::cerr << "Error: --epochs requires an integer argument.\n";
+				return 1;
+			}
+		} else if (a.rfind("--epochs=", 0) == 0) {
+			try {
+				training_epochs = std::stoull(a.substr(9));
+				if (training_epochs == 0)
+					training_epochs = 1;
+			} catch (...) {
+				std::cerr << "Error: --epochs requires an integer value.\n";
 				return 1;
 			}
 		} else if (a == "--purge") {
@@ -2182,7 +2239,8 @@ int main(int argc, char* argv[]) {
 			const bool ok = execute_training_session(
 				ai, optimizer, portion, ai_elements, parser, input, test, training_weights_path,
 				training_vocab_path, embedded_path, asset_dir, core_dir, mode, developer_mode,
-				max_steps, false, auto_archive, auto_purge, min_frequency, target_stop_loss);
+				max_steps, false, auto_archive, auto_purge, min_frequency, target_stop_loss,
+				training_epochs);
 			return ok ? 0 : 1;
 		}
 		return 0;
@@ -2223,7 +2281,7 @@ int main(int argc, char* argv[]) {
 									 empty_test, training_weights_path, training_vocab_path,
 									 embedded_path, asset_dir, core_dir, selected_mode, false,
 									 max_steps, true, auto_archive, auto_purge, 3,
-									 target_stop_loss);
+									 target_stop_loss, training_epochs);
 			pause_menu();
 			continue;
 		}

@@ -351,6 +351,63 @@ bool AI::load_weights(const std::string& path) {
 		return false;
 	}
 
+	// Check for optional transformer block payload (0x5458464DU)
+	uint64_t xform_magic = 0;
+	if (in.read(reinterpret_cast<char*>(&xform_magic), sizeof(xform_magic)) &&
+	    xform_magic == 0x5458464DU) {
+		uint64_t xform_dim = 0;
+		uint64_t xform_ffn = 0;
+		if (in.read(reinterpret_cast<char*>(&xform_dim), sizeof(xform_dim)) &&
+		    in.read(reinterpret_cast<char*>(&xform_ffn), sizeof(xform_ffn))) {
+			const size_t dd_elements = xform_dim * xform_dim;
+			const size_t df_elements = xform_dim * xform_ffn;
+
+			std::vector<float> loaded_q(dd_elements);
+			std::vector<float> loaded_k(dd_elements);
+			std::vector<float> loaded_v(dd_elements);
+			std::vector<float> loaded_o(dd_elements);
+			std::vector<float> loaded_gate(df_elements);
+			std::vector<float> loaded_up(df_elements);
+			std::vector<float> loaded_down(df_elements);
+
+			in.read(reinterpret_cast<char*>(loaded_q.data()), dd_elements * sizeof(float));
+			in.read(reinterpret_cast<char*>(loaded_k.data()), dd_elements * sizeof(float));
+			in.read(reinterpret_cast<char*>(loaded_v.data()), dd_elements * sizeof(float));
+			in.read(reinterpret_cast<char*>(loaded_o.data()), dd_elements * sizeof(float));
+			in.read(reinterpret_cast<char*>(loaded_gate.data()), df_elements * sizeof(float));
+			in.read(reinterpret_cast<char*>(loaded_up.data()), df_elements * sizeof(float));
+			in.read(reinterpret_cast<char*>(loaded_down.data()), df_elements * sizeof(float));
+
+			auto check_finite = [](const std::vector<float>& vec) {
+				for (float val : vec) {
+					if (!std::isfinite(val)) return false;
+				}
+				return true;
+			};
+
+			if (check_finite(loaded_q) && check_finite(loaded_k) && check_finite(loaded_v) &&
+			    check_finite(loaded_o) && check_finite(loaded_gate) && check_finite(loaded_up) &&
+			    check_finite(loaded_down)) {
+				if (gpu_weights.d_query_weights == nullptr ||
+				    gpu_weights.transformer_dim != xform_dim ||
+				    gpu_weights.transformer_ffn != xform_ffn) {
+					build_transformer_block(xform_dim, num_heads, xform_ffn);
+				}
+				upload_transformer_weights(&gpu_weights,
+							   loaded_q.data(),
+							   loaded_k.data(),
+							   loaded_v.data(),
+							   loaded_o.data(),
+							   loaded_gate.data(),
+							   loaded_up.data(),
+							   loaded_down.data(),
+							   xform_dim,
+							   xform_ffn);
+				std::cout << "[AI Brain] Loaded transformer attention & SwiGLU weights from checkpoint.\n";
+			}
+		}
+	}
+
 	std::cout << "[AI Brain] Successfully loaded weights and embeddings from " << path
 		  << " and synced to GPU.\n"
 		  << std::flush;

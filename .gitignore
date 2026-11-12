@@ -5,6 +5,9 @@
 #Models 
 weights.axiom
 vocab.axiom 
+*.axiom
+*.bin
+test_artifacts/ 
  
 #Other Models 
 other_models

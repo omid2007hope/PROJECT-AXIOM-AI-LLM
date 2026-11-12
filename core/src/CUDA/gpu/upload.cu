@@ -260,6 +260,77 @@ extern "C" CUDA_API bool upload_ai_weights(const float* h_weights,
 	return CUDA_CHECK(cudaDeviceSynchronize());
 }
 
+extern "C" CUDA_API bool upload_transformer_weights(GpuWeights* gpu,
+													 const float* h_q,
+													 const float* h_k,
+													 const float* h_v,
+													 const float* h_o,
+													 const float* h_gate,
+													 const float* h_up,
+													 const float* h_down,
+													 size_t dim,
+													 size_t ffn) {
+	if (!gpu || !h_q || !h_k || !h_v || !h_o || !h_gate || !h_up || !h_down ||
+		!gpu->d_query_master || !gpu->d_key_master || !gpu->d_value_master ||
+		!gpu->d_output_master || !gpu->d_gate_master || !gpu->d_up_master ||
+		!gpu->d_down_master || gpu->transformer_dim != dim || gpu->transformer_ffn != ffn) {
+		return false;
+	}
+
+	const size_t dd_elements = dim * dim;
+	const size_t df_elements = dim * ffn;
+	const size_t dd_bytes = dd_elements * sizeof(float);
+	const size_t df_bytes = df_elements * sizeof(float);
+
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_query_master, h_q, dd_bytes, cudaMemcpyHostToDevice)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_key_master, h_k, dd_bytes, cudaMemcpyHostToDevice)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_value_master, h_v, dd_bytes, cudaMemcpyHostToDevice)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_output_master, h_o, dd_bytes, cudaMemcpyHostToDevice)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_gate_master, h_gate, df_bytes, cudaMemcpyHostToDevice)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_up_master, h_up, df_bytes, cudaMemcpyHostToDevice)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(gpu->d_down_master, h_down, df_bytes, cudaMemcpyHostToDevice)))
+		return false;
+
+	constexpr int threads = 256;
+	const int dd_blocks = static_cast<int>((dd_elements + threads - 1) / threads);
+	const int df_blocks = static_cast<int>((df_elements + threads - 1) / threads);
+
+	cudaGetLastError();
+	float_to_bf16_kernel<<<dd_blocks, threads>>>(static_cast<const float*>(gpu->d_query_master),
+												 static_cast<__nv_bfloat16*>(gpu->d_query_weights),
+												 dd_elements);
+	float_to_bf16_kernel<<<dd_blocks, threads>>>(static_cast<const float*>(gpu->d_key_master),
+												 static_cast<__nv_bfloat16*>(gpu->d_key_weights),
+												 dd_elements);
+	float_to_bf16_kernel<<<dd_blocks, threads>>>(static_cast<const float*>(gpu->d_value_master),
+												 static_cast<__nv_bfloat16*>(gpu->d_value_weights),
+												 dd_elements);
+	float_to_bf16_kernel<<<dd_blocks, threads>>>(static_cast<const float*>(gpu->d_output_master),
+												 static_cast<__nv_bfloat16*>(gpu->d_output_weights),
+												 dd_elements);
+
+	float_to_bf16_kernel<<<df_blocks, threads>>>(static_cast<const float*>(gpu->d_gate_master),
+												 static_cast<__nv_bfloat16*>(gpu->d_gate_weights),
+												 df_elements);
+	float_to_bf16_kernel<<<df_blocks, threads>>>(static_cast<const float*>(gpu->d_up_master),
+												 static_cast<__nv_bfloat16*>(gpu->d_up_weights),
+												 df_elements);
+	float_to_bf16_kernel<<<df_blocks, threads>>>(static_cast<const float*>(gpu->d_down_master),
+												 static_cast<__nv_bfloat16*>(gpu->d_down_weights),
+												 df_elements);
+
+	if (!CUDA_CHECK(cudaGetLastError()))
+		return false;
+
+	return CUDA_CHECK(cudaDeviceSynchronize());
+}
+
 extern "C" CUDA_API void synchronize_stream(GpuPortion* gpu, int buffer_index) {
 	if (gpu && buffer_index >= 0 && buffer_index < 2 && gpu->stream[buffer_index]) {
 		CUDA_CHECK(cudaStreamSynchronize((cudaStream_t)gpu->stream[buffer_index]));

@@ -40,7 +40,7 @@ struct Config {
 	static constexpr size_t ram_buffer_size = 4194304;
 	static constexpr size_t token_dim = axiom::TOKEN_DIM;
 	static constexpr size_t context_window_size = axiom::CONTEXT_WINDOW;
-	static constexpr float learning_rate = 0.001f;
+	static constexpr float learning_rate = 0.006f;
 	static constexpr size_t loss_report_interval = 1000;
 
 	static constexpr float weight_min = -0.0033854167f;

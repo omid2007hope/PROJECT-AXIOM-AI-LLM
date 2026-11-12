@@ -47,6 +47,17 @@ CUDA_API bool upload_ai_weights(const float* h_weights,
 				size_t bias_elements,
 				GpuWeights* gpu);
 
+CUDA_API bool upload_transformer_weights(GpuWeights* gpu,
+					 const float* h_q,
+					 const float* h_k,
+					 const float* h_v,
+					 const float* h_o,
+					 const float* h_gate,
+					 const float* h_up,
+					 const float* h_down,
+					 size_t dim,
+					 size_t ffn);
+
 #ifdef __cplusplus
 }
 #endif

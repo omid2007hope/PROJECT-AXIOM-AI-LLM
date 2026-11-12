@@ -202,6 +202,47 @@ extern "C" CUDA_API bool download_probabilities(const GpuActivations* gpu_activa
 								 cudaMemcpyDeviceToHost));
 }
 
+extern "C" CUDA_API bool download_transformer_weights(const GpuWeights* gpu,
+													   float* h_q,
+													   float* h_k,
+													   float* h_v,
+													   float* h_o,
+													   float* h_gate,
+													   float* h_up,
+													   float* h_down,
+													   size_t dim,
+													   size_t ffn) {
+	if (!gpu || !h_q || !h_k || !h_v || !h_o || !h_gate || !h_up || !h_down ||
+		!gpu->d_query_master || !gpu->d_key_master || !gpu->d_value_master ||
+		!gpu->d_output_master || !gpu->d_gate_master || !gpu->d_up_master ||
+		!gpu->d_down_master || gpu->transformer_dim != dim || gpu->transformer_ffn != ffn) {
+		return false;
+	}
+
+	if (!CUDA_CHECK(cudaDeviceSynchronize()))
+		return false;
+
+	const size_t dd_bytes = dim * dim * sizeof(float);
+	const size_t df_bytes = dim * ffn * sizeof(float);
+
+	if (!CUDA_CHECK(cudaMemcpy(h_q, gpu->d_query_master, dd_bytes, cudaMemcpyDeviceToHost)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(h_k, gpu->d_key_master, dd_bytes, cudaMemcpyDeviceToHost)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(h_v, gpu->d_value_master, dd_bytes, cudaMemcpyDeviceToHost)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(h_o, gpu->d_output_master, dd_bytes, cudaMemcpyDeviceToHost)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(h_gate, gpu->d_gate_master, df_bytes, cudaMemcpyDeviceToHost)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(h_up, gpu->d_up_master, df_bytes, cudaMemcpyDeviceToHost)))
+		return false;
+	if (!CUDA_CHECK(cudaMemcpy(h_down, gpu->d_down_master, df_bytes, cudaMemcpyDeviceToHost)))
+		return false;
+
+	return true;
+}
+
 extern "C" CUDA_API void enqueue_loss_download(GpuPortion* gpu, int stream_idx) {
 	if (!gpu || stream_idx < 0 || stream_idx >= 2 || !gpu->h_pinned_loss[stream_idx] ||
 		!gpu->d_loss_scalar[stream_idx] || !gpu->stream[stream_idx])

@@ -273,6 +273,68 @@ bool AI::save_weights(const std::string& path) {
 	out.write(reinterpret_cast<const char*>(host_embeddings.data()),
 			  header.vocab_size * header.embedding_dim * sizeof(float));
 
+	// If transformer block is allocated, serialize transformer attention & SwiGLU weights
+	const bool has_transformer = (enable_transformer && gpu_weights.d_query_weights != nullptr &&
+								  gpu_weights.transformer_dim > 0 && gpu_weights.transformer_ffn > 0);
+	if (has_transformer) {
+		const size_t xform_dim = gpu_weights.transformer_dim;
+		const size_t xform_ffn = gpu_weights.transformer_ffn;
+		const size_t dd_elements = xform_dim * xform_dim;
+		const size_t df_elements = xform_dim * xform_ffn;
+
+		std::vector<float> host_q(dd_elements);
+		std::vector<float> host_k(dd_elements);
+		std::vector<float> host_v(dd_elements);
+		std::vector<float> host_o(dd_elements);
+		std::vector<float> host_gate(df_elements);
+		std::vector<float> host_up(df_elements);
+		std::vector<float> host_down(df_elements);
+
+		if (!download_transformer_weights(&gpu_weights,
+										  host_q.data(), host_k.data(), host_v.data(), host_o.data(),
+										  host_gate.data(), host_up.data(), host_down.data(),
+										  xform_dim, xform_ffn)) {
+			std::cerr << "[AI Brain] Failed to download transformer weights from GPU.\n";
+			out.close();
+			std::error_code ec;
+			std::filesystem::remove(temp_path, ec);
+			return false;
+		}
+
+		auto check_finite = [](const std::vector<float>& vec) {
+			for (float val : vec) {
+				if (!std::isfinite(val)) return false;
+			}
+			return true;
+		};
+
+		if (!check_finite(host_q) || !check_finite(host_k) || !check_finite(host_v) ||
+			!check_finite(host_o) || !check_finite(host_gate) || !check_finite(host_up) ||
+			!check_finite(host_down)) {
+			std::cerr << "[AI Brain] Refusing to save corrupt checkpoint: transformer weights contain NaN or Inf.\n";
+			out.close();
+			std::error_code ec;
+			std::filesystem::remove(temp_path, ec);
+			return false;
+		}
+
+		const uint64_t xform_magic = 0x5458464DU;
+		const uint64_t xform_dim_u64 = xform_dim;
+		const uint64_t xform_ffn_u64 = xform_ffn;
+
+		out.write(reinterpret_cast<const char*>(&xform_magic), sizeof(xform_magic));
+		out.write(reinterpret_cast<const char*>(&xform_dim_u64), sizeof(xform_dim_u64));
+		out.write(reinterpret_cast<const char*>(&xform_ffn_u64), sizeof(xform_ffn_u64));
+
+		out.write(reinterpret_cast<const char*>(host_q.data()), dd_elements * sizeof(float));
+		out.write(reinterpret_cast<const char*>(host_k.data()), dd_elements * sizeof(float));
+		out.write(reinterpret_cast<const char*>(host_v.data()), dd_elements * sizeof(float));
+		out.write(reinterpret_cast<const char*>(host_o.data()), dd_elements * sizeof(float));
+		out.write(reinterpret_cast<const char*>(host_gate.data()), df_elements * sizeof(float));
+		out.write(reinterpret_cast<const char*>(host_up.data()), df_elements * sizeof(float));
+		out.write(reinterpret_cast<const char*>(host_down.data()), df_elements * sizeof(float));
+	}
+
 	out.flush();
 	if (!out.good()) {
 		std::cerr << "[AI Brain] Stream error while writing weights to: " << temp_path << "\n";
