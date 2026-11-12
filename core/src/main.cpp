@@ -1173,20 +1173,16 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 				}
 			}
 			if (ch == 0) {
+#ifdef _WIN32
 				HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
 				DWORD bytesAvail = 0;
-				if (PeekNamedPipe(hStdin, NULL, 0, NULL, &bytesAvail, NULL)) {
-					if (bytesAvail > 0) {
-						char c;
-						if (std::cin.get(c)) {
-							ch = c;
-						}
-					} else if (max_steps == 0 && step >= 20) {
-						ch = 'q';
+				if (PeekNamedPipe(hStdin, NULL, 0, NULL, &bytesAvail, NULL) && bytesAvail > 0) {
+					char c;
+					if (std::cin.get(c)) {
+						ch = c;
 					}
-				} else if (max_steps == 0 && step >= 20) {
-					ch = 'q';
 				}
+#endif
 			}
 		}
 
