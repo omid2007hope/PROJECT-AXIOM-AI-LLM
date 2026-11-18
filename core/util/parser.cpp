@@ -212,10 +212,12 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 		return {};
 	}
 
-	// If we are testing which means developer mode is on
-	// if token size is less than equal to ram's buffer size
+	// Keep embeddings in RAM only when within both token and byte budgets
+	const size_t total_embed_bytes =
+		input.tokenized_data.size() * config::token_dim * sizeof(std::bfloat16_t);
 	const bool keep_in_ram =
-		developer_mode == true || (input.tokenized_data.size() <= config::ram_buffer_size);
+		(input.tokenized_data.size() <= config::ram_buffer_size) &&
+		(total_embed_bytes <= config::mmap_chunk_bytes);
 
 	if (keep_in_ram == true) {
 		input.embedded_data.resize(input.tokenized_data.size() * config::token_dim);

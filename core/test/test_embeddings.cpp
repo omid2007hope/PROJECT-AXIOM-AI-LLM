@@ -79,8 +79,13 @@ bool test_embeddings() {
 	std::cout << "\n[2] Embedding size\n";
 	std::vector<std::bfloat16_t> emb = parser.embedding(input, test);
 	size_t expected_size = input.tokenized_data.size() * config::token_dim;
-	check_eq(emb.size(), expected_size, "embedded.size == tokens * token_dim");
-	check_eq(input.embedded_data.size(), expected_size, "input.embedded_data synced");
+	const bool in_ram = !emb.empty();
+	if (in_ram) {
+		check_eq(emb.size(), expected_size, "embedded.size == tokens * token_dim");
+		check_eq(input.embedded_data.size(), expected_size, "input.embedded_data synced");
+	} else {
+		check_eq(input.embedded_data.size(), size_t {0}, "streamed large embedding dataset without OOM");
+	}
 
 	std::cout << "\n=== Embedded Data Test Result ===\n";
 	std::cout << "Successfully generated " << input.embedded_data.size() << " elements!\n";
@@ -113,13 +118,27 @@ bool test_embeddings() {
 	// ── [4] BF16 precision: values are in [-1, 1] and non-zero ──────────────
 	std::cout << "\n[4] BF16 value range\n";
 	bool all_bounded = true, any_nonzero = false;
-	for (auto v : emb) {
-		double d = static_cast<double>(v);
-		if (d < -1.5 || d > 1.5) {
-			all_bounded = false;
+	if (in_ram) {
+		for (auto v : emb) {
+			double d = static_cast<double>(v);
+			if (d < -1.5 || d > 1.5) {
+				all_bounded = false;
+			}
+			if (d != 0.0) {
+				any_nonzero = true;
+			}
 		}
-		if (d != 0.0) {
-			any_nonzero = true;
+	} else {
+		for (const auto& [id, vec] : input.embedding_table) {
+			for (auto v : vec) {
+				double d = static_cast<double>(v);
+				if (d < -1.5 || d > 1.5) {
+					all_bounded = false;
+				}
+				if (d != 0.0) {
+					any_nonzero = true;
+				}
+			}
 		}
 	}
 	check(all_bounded, "all BF16 values in [-1.5, 1.5] (sin-based init)");
@@ -149,11 +168,21 @@ bool test_embeddings() {
 	parser2.tokenization(input2, test2);
 	std::vector<std::bfloat16_t> emb2 = parser2.embedding(input2, test2);
 	check_eq(emb2.size(), emb.size(), "second run produces same size");
-	bool same_values = (emb.size() == emb2.size());
+	bool same_values = (emb.size() == emb2.size()) &&
+			   (input.embedding_table.size() == input2.embedding_table.size());
 	for (size_t i = 0; i < std::min(emb.size(), emb2.size()); ++i) {
 		if (emb[i] != emb2[i]) {
 			same_values = false;
 			break;
+		}
+	}
+	if (same_values && !in_ram) {
+		for (const auto& [id, vec] : input.embedding_table) {
+			auto it = input2.embedding_table.find(id);
+			if (it == input2.embedding_table.end() || it->second != vec) {
+				same_values = false;
+				break;
+			}
 		}
 	}
 	check(same_values, "deterministic: same embedding values on re-run");
