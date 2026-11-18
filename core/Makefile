@@ -18,9 +18,9 @@ CUDA_LIB_DIR = $(CUDA_DIR)/lib/x64
 NVCC      = "$(CUDA_DIR)/bin/nvcc.exe"
 # sm_89 = RTX 4080 Laptop (Ada Lovelace, compute capability 8.9)
 # -ccbin points to MSVC compiler (cl.exe) which is strictly required by nvcc on Windows
-NVCCFLAGS = -arch=sm_89 --std=c++17 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64" \
+NVCCFLAGS = -arch=sm_89 --std=c++20 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64" \
             -I"$(CUDA_DIR)/include" -Ithird_party/cutlass/include -Iinclude --expt-relaxed-constexpr \
-            -Xcompiler "/Zc:preprocessor,/Zc:__cplusplus"
+            -Xcompiler "/Zc:preprocessor,/Zc:__cplusplus,/permissive"
 
 CUDA_SRC_DIR = src/CUDA
 CUDA_SRCS    = $(wildcard $(CUDA_SRC_DIR)/gpu/*.cu) \
@@ -46,14 +46,13 @@ TEST_TARGET      = test.exe
 TEST_LOSS_TARGET = test_loss.exe
 TEST_LOSS_SRC    = test/CUDA/test_loss.cu
 TEST_FORWARD_BACKWARD_ISOLATION_SRC = test/CUDA/isolation/test_forward_backward.cu
-TEST_FORWARD_BACKWARD_ISOLATION_TARGET = test_forward_backward.exe  
+TEST_FORWARD_BACKWARD_ISOLATION_TARGET = test_forward_backward.exe
+DLL_TARGET       = build/axiom_core.dll
 DLL_SRCS         = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp src/cuda_graph.cpp src/interface.cpp src/paged_cache.cpp src/training.cpp $(UTIL_SRCS)
 DLL_OBJS         = $(DLL_SRCS:.cpp=.o)
 
 # ─── Default: compile everything ──────────────────────────────────────────────
-.PHONY: all clean dll test test_loss
-
-.PHONY: all clean dll test test_forward_backward
+.PHONY: all clean dll test test_loss test_forward_backward
 
 all: $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET) dll
 
@@ -98,11 +97,12 @@ $(TEST_LOSS_TARGET): $(TEST_LOSS_SRC) $(CUDA_DLL)
 # --- CUDA Kernel Forward and Backward pass test in isolation ------------------
 test_forward_backward: $(TEST_FORWARD_BACKWARD_ISOLATION_TARGET)
 
-$(TEST_FORWARD_BACKWARD_ISOLATION_TARGET): $(TEST_FORWARD_BACKWARD_ISOLATION_SRC) $(CUDA_DLL) $(NVCC) $(NVCCFLAGS) -I$(SRC_DIR) $< $(if $(wildcard cuda_transfer.lib),cuda_transfer.lib,) -o $@
+$(TEST_FORWARD_BACKWARD_ISOLATION_TARGET): $(TEST_FORWARD_BACKWARD_ISOLATION_SRC) $(CUDA_DLL)
+	$(NVCC) $(NVCCFLAGS) -I$(SRC_DIR) $< $(if $(wildcard cuda_transfer.lib),cuda_transfer.lib,) -o $@
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 clean:
-	-rm -f $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp $(DLL_TARGET) ../build/axiom_core.dll *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp build/*.o build/*.dll $(ALL_OBJS) $(CUDA_OBJS) src/CUDA/*/*.cu.obj
+	-rm -f $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET) $(TEST_FORWARD_BACKWARD_ISOLATION_TARGET) $(CUDA_DLL) cuda_transfer.lib cuda_transfer.exp $(DLL_TARGET) ../build/axiom_core.dll *.o *.obj *.exp *.lib *.tmp test_*.exe test_*.axiom corrupt_*.axiom weights.axiom vocab.axiom database/*.bin database/*.axiom database/*.tmp database/models/*.axiom database/models/*.bin database/models/*.tmp ../database/*.bin ../database/*.axiom ../database/*.tmp ../database/models/*.axiom ../database/models/*.bin ../database/models/*.tmp build/*.o build/*.dll $(ALL_OBJS) $(CUDA_OBJS) src/CUDA/*/*.cu.obj
 
 # ─── Run tests ────────────────────────────────────────────────────────────────
 test: $(TEST_TARGET)
