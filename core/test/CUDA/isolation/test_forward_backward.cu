@@ -15,12 +15,14 @@
 Isolate the forward and backward pass - feed then fake false emmbeding data - check the out put live - loss drop per 1000 step - if drops - no abnormality - anomalies - pass green - then we find that forward pass and backward pass in isolation work perfectly which makes the question that why when compile the full app the loss is not okay!
 */
 
+#include <cmath>
 #include <cstring>
+#include <iostream>
 #include <vector>
 
 #include "../../../src/CUDA/kernel/backward_pass.cu"
 #include "../../../src/CUDA/kernel/forward_pass.cu"
-#include "../../src/CUDA/util/gpu_types.cuh"
+#include "../../../src/CUDA/util/gpu_types.cuh"
 
 
 
@@ -486,58 +488,82 @@ bool call_transformer_backward_block = true;
 
 static bool test_forward() {
 	if (call_forward_pass == true) {
-		forward_pass(reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
-					 reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
-					 reinterpret_cast<GpuActivations*>(
-						 const_cast<TestGpuActivations*>(&test_gpu_activations)),
-					 test_input_dim, test_output_dim, test_buffer_index);
-	};
-
+		if (!forward_pass(reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+						  reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+						  reinterpret_cast<GpuActivations*>(
+							  const_cast<TestGpuActivations*>(&test_gpu_activations)),
+						  test_input_dim, test_output_dim, test_buffer_index)) {
+			std::cerr << "[FAIL] forward_pass returned false\n";
+			return false;
+		}
+	}
 
 	if (call_forward_pass_with_embeddings == true) {
-		forward_pass_with_embeddings(
-			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
-			reinterpret_cast<const GpuEmbeddings*>(&test_gpu_embeddings),
-			reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
-			reinterpret_cast<GpuActivations*>(
-				const_cast<TestGpuActivations*>(&test_gpu_activations)),
-			test_input_dim, test_output_dim, test_buffer_index, test_gather_embeddings);
+		if (!forward_pass_with_embeddings(
+				reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+				reinterpret_cast<const GpuEmbeddings*>(&test_gpu_embeddings),
+				reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+				reinterpret_cast<GpuActivations*>(
+					const_cast<TestGpuActivations*>(&test_gpu_activations)),
+				test_input_dim, test_output_dim, test_buffer_index, test_gather_embeddings)) {
+			std::cerr << "[FAIL] forward_pass_with_embeddings returned false\n";
+			return false;
+		}
 	}
 
 	if (call_run_cutlass_saturation_benchmark == true) {
-		run_cutlass_saturation_benchmark(test_M, test_N, test_K, test_iterations, test_out_tflops,
-										 test_out_bandwidth_gb_s, test_out_avg_ms);
+		if (!run_cutlass_saturation_benchmark(test_M, test_N, test_K, test_iterations,
+											  test_out_tflops, test_out_bandwidth_gb_s,
+											  test_out_avg_ms)) {
+			std::cerr << "[FAIL] run_cutlass_saturation_benchmark returned false\n";
+			return false;
+		}
 	}
 
 	if (call_run_vram_saturation_benchmark == true) {
-		run_vram_saturation_benchmark(test_safety_headroom_bytes, test_out_allocated_bytes,
-									  test_out_bandwidth_gb_s, test_out_elapsed_ms);
+		if (!run_vram_saturation_benchmark(test_safety_headroom_bytes, test_out_allocated_bytes,
+										   test_out_bandwidth_gb_s, test_out_elapsed_ms)) {
+			std::cerr << "[FAIL] run_vram_saturation_benchmark returned false\n";
+			return false;
+		}
 	}
 
 	// Phase 3: Multi-Head Attention, SwiGLU & Transformer Forward Block
 	if (call_batched_gemm_multiply == true) {
-		batched_gemm_multiply(test_matrix_a, test_matrix_b, test_matrix_c, test_rows_a,
-							  test_cols_b, test_common_dim, test_transpose_a, test_transpose_b,
-							  test_stream);
+		if (!batched_gemm_multiply(test_matrix_a, test_matrix_b, test_matrix_c, test_rows_a,
+								   test_cols_b, test_common_dim, test_transpose_a, test_transpose_b,
+								   test_stream)) {
+			std::cerr << "[FAIL] batched_gemm_multiply returned false\n";
+			return false;
+		}
 	}
 
 	if (call_fused_causal_attention == true) {
-		fused_causal_attention(test_query, test_key, test_value, test_output,
-							   test_sequence_length, test_embedding_dim, test_num_heads,
-							   test_stream);
+		if (!fused_causal_attention(test_query, test_key, test_value, test_output,
+									test_sequence_length, test_embedding_dim, test_num_heads,
+									test_stream)) {
+			std::cerr << "[FAIL] fused_causal_attention returned false\n";
+			return false;
+		}
 	}
 
 	if (call_swiglu_forward == true) {
-		swiglu_forward(test_gate, test_up, test_output, test_total_elements, test_stream);
+		if (!swiglu_forward(test_gate, test_up, test_output, test_total_elements, test_stream)) {
+			std::cerr << "[FAIL] swiglu_forward returned false\n";
+			return false;
+		}
 	}
 
 	if (call_transformer_forward_block == true) {
-		transformer_forward_block(
-			test_hidden_states, reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
-			reinterpret_cast<GpuActivations*>(
-				const_cast<TestGpuActivations*>(&test_gpu_activations)),
-			test_sequence_length, test_embedding_dim, test_num_heads,
-			test_feedforward_network_dimension, test_stream);
+		if (!transformer_forward_block(
+				test_hidden_states, reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+				reinterpret_cast<GpuActivations*>(
+					const_cast<TestGpuActivations*>(&test_gpu_activations)),
+				test_sequence_length, test_embedding_dim, test_num_heads,
+				test_feedforward_network_dimension, test_stream)) {
+			std::cerr << "[FAIL] transformer_forward_block returned false\n";
+			return false;
+		}
 	}
 
 	if (call_launch_gather_embeddings_batched == true) {
@@ -566,52 +592,71 @@ static bool test_forward() {
 
 static bool test_backward() {
 	if (call_backward_pass == true) {
-		backward_pass(
-			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
-			reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
-			reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
-			test_output_dim, test_learning_rate, test_buffer_index);
+		if (!backward_pass(
+				reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+				reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
+				test_output_dim, test_learning_rate, test_buffer_index)) {
+			std::cerr << "[FAIL] backward_pass returned false\n";
+			return false;
+		}
 	}
 
 	if (call_backward_pass_with_embeddings == true) {
-		backward_pass_with_embeddings(
-			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
-			reinterpret_cast<GpuEmbeddings*>(
-				const_cast<TestGpuEmbeddings*>(&test_gpu_embeddings)),
-			reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
-			reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
-			test_output_dim, test_learning_rate, test_buffer_index, test_use_adamw,
-			test_scatter_embeddings);
+		if (!backward_pass_with_embeddings(
+				reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+				reinterpret_cast<GpuEmbeddings*>(
+					const_cast<TestGpuEmbeddings*>(&test_gpu_embeddings)),
+				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+				reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
+				test_output_dim, test_learning_rate, test_buffer_index, test_use_adamw,
+				test_scatter_embeddings)) {
+			std::cerr << "[FAIL] backward_pass_with_embeddings returned false\n";
+			return false;
+		}
 	}
 
 	if (call_backward_scatter_embeddings == true) {
-		backward_scatter_embeddings(
-			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
-			reinterpret_cast<GpuEmbeddings*>(
-				const_cast<TestGpuEmbeddings*>(&test_gpu_embeddings)),
-			test_d_dx, test_num_tokens, test_embedding_dim, test_learning_rate,
-			test_buffer_index, test_stream);
+		if (!backward_scatter_embeddings(
+				reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+				reinterpret_cast<GpuEmbeddings*>(
+					const_cast<TestGpuEmbeddings*>(&test_gpu_embeddings)),
+				test_d_dx, test_num_tokens, test_embedding_dim, test_learning_rate,
+				test_buffer_index, test_stream)) {
+			std::cerr << "[FAIL] backward_scatter_embeddings returned false\n";
+			return false;
+		}
 	}
 
 	// Phase 3: Multi-Head Attention, SwiGLU & Transformer Backward Block
 	if (call_fused_causal_backward == true) {
-		fused_causal_backward(test_grad_output, test_query, test_key, test_value, test_grad_query,
-							  test_grad_key, test_grad_value, test_sequence_length,
-							  test_embedding_dim, test_num_heads, test_stream);
+		if (!fused_causal_backward(test_grad_output, test_query, test_key, test_value,
+								   test_grad_query, test_grad_key, test_grad_value,
+								   test_sequence_length, test_embedding_dim, test_num_heads,
+								   test_stream)) {
+			std::cerr << "[FAIL] fused_causal_backward returned false\n";
+			return false;
+		}
 	}
 
 	if (call_swiglu_backward == true) {
-		swiglu_backward(test_grad_output, test_gate, test_up, test_grad_gate, test_grad_up,
-						test_total_elements, test_stream);
+		if (!swiglu_backward(test_grad_output, test_gate, test_up, test_grad_gate, test_grad_up,
+							 test_total_elements, test_stream)) {
+			std::cerr << "[FAIL] swiglu_backward returned false\n";
+			return false;
+		}
 	}
 
 	if (call_transformer_backward_block == true) {
-		transformer_backward_block(
-			test_grad_output, test_grad_input, test_hidden_states,
-			reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
-			reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_sequence_length,
-			test_embedding_dim, test_num_heads, test_feedforward_network_dimension,
-			test_learning_rate, test_stream);
+		if (!transformer_backward_block(
+				test_grad_output, test_grad_input, test_hidden_states,
+				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+				reinterpret_cast<const GpuActivations*>(&test_gpu_activations),
+				test_sequence_length, test_embedding_dim, test_num_heads,
+				test_feedforward_network_dimension, test_learning_rate, test_stream)) {
+			std::cerr << "[FAIL] transformer_backward_block returned false\n";
+			return false;
+		}
 	}
 
 	return true;
@@ -619,4 +664,84 @@ static bool test_backward() {
 
 static bool pass() {
 	return test_forward() && test_backward();
+}
+
+static bool read_and_reset_telemetry(float out_telemetry[telemetry_slot_count]) {
+	cudaError_t sync_err = cudaDeviceSynchronize();
+	if (sync_err != cudaSuccess) {
+		std::cerr << "[FAIL] cudaDeviceSynchronize: " << cudaGetErrorString(sync_err) << "\n";
+		return false;
+	}
+	const size_t bytes = telemetry_slot_count * sizeof(float);
+	if (cudaMemcpy(out_telemetry, test_gpu_activations.d_loss, bytes, cudaMemcpyDeviceToHost) !=
+		cudaSuccess) {
+		std::cerr << "[FAIL] cudaMemcpy telemetry failed\n";
+		return false;
+	}
+	cudaMemset(test_gpu_activations.d_loss, 0, bytes);
+	return true;
+}
+
+int main() {
+	constexpr int total_steps = 3000;
+	constexpr int report_interval = 100;
+	constexpr int checkpoint_interval = 1000;
+
+	float prev_checkpoint_loss = -1.0f;
+	bool all_healthy = true;
+
+	std::cout << "[ISOLATION] Starting closed-loop forward/backward test (" << total_steps
+			  << " steps)\n";
+
+	for (int step = 1; step <= total_steps; ++step) {
+		if (!pass()) {
+			std::cerr << "[FAIL] Execution failed at step " << step << "\n";
+			return 1;
+		}
+
+		if (step % report_interval == 0) {
+			float telemetry[telemetry_slot_count] = {0.0f};
+			if (!read_and_reset_telemetry(telemetry)) {
+				return 1;
+			}
+
+			const float avg_loss = telemetry[telemetry_loss] / static_cast<float>(report_interval);
+			const float grad_rms = std::sqrt(
+				telemetry[telemetry_gradient_square] /
+				static_cast<float>(report_interval * test_output_dim));
+			const float act_rms = std::sqrt(
+				telemetry[telemetry_activation_square] /
+				static_cast<float>(report_interval * test_output_dim));
+			const float dead_out = telemetry[telemetry_dead_output];
+			const float nonfinite = telemetry[telemetry_nonfinite];
+
+			std::cout << "[step " << step << "] avg_loss=" << avg_loss << " grad_rms=" << grad_rms
+					  << " act_rms=" << act_rms << " dead_out=" << dead_out
+					  << " nonfinite=" << nonfinite << "\n";
+
+			if (!std::isfinite(avg_loss) || !std::isfinite(grad_rms) || nonfinite > 0.0f) {
+				std::cerr << "[ANOMALY] Non-finite or invalid telemetry at step " << step << "\n";
+				all_healthy = false;
+				break;
+			}
+
+			if (step % checkpoint_interval == 0) {
+				if (prev_checkpoint_loss >= 0.0f && avg_loss >= prev_checkpoint_loss) {
+					std::cerr << "[ANOMALY] Loss did not drop at step " << step << " (prev="
+							  << prev_checkpoint_loss << ", curr=" << avg_loss << ")\n";
+					all_healthy = false;
+				} else {
+					std::cout << "[CHECKPOINT " << step << "] loss=" << avg_loss << " (OK)\n";
+				}
+				prev_checkpoint_loss = avg_loss;
+			}
+		}
+	}
+
+	if (all_healthy) {
+		std::cout << "[PASS GREEN] Closed-loop forward/backward passed without anomalies.\n";
+		return 0;
+	}
+	std::cout << "[FAIL RED] Anomaly detected in isolated forward/backward loop.\n";
+	return 1;
 }
