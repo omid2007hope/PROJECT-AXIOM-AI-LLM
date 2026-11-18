@@ -425,8 +425,30 @@ float* const test_out_avg_ms = &test_out_avg_ms_storage;
 size_t* const test_out_allocated_bytes = &test_out_allocated_bytes_storage;
 float* const test_out_elapsed_ms = &test_out_elapsed_ms_storage;
 
+// Switches: unfused core active by default (fused/block wrappers disabled for isolation)
+bool call_launch_gather_embeddings_batched = false;
+bool call_transformer_forward_block = false;
+bool call_forward_pass_with_embeddings = true;
+bool call_forward_pass = false;
+bool call_run_cutlass_saturation_benchmark = false;
+bool call_run_vram_saturation_benchmark = false;
+bool call_batched_gemm_multiply = false;
+bool call_fused_causal_attention = false;
+bool call_swiglu_forward = false;
+bool call_launch_cutlass_gemm_bf16 = false;
+bool call_launch_tied_logits_bf16 = false;
+bool call_launch_softmax_argmax = false;
+
+bool call_backward_pass_with_embeddings = true;
+bool call_transformer_backward_block = false;
+bool call_backward_scatter_embeddings = false;
+bool call_backward_pass = false;
+bool call_fused_causal_backward = false;
+bool call_swiglu_backward = false;
+
 // Control & optimizer flags / scalars
-const bool test_gather_embeddings = false;
+const bool test_gather_embeddings =
+	!(call_transformer_forward_block || call_launch_gather_embeddings_batched);
 const bool test_transpose_a = false;
 const bool test_transpose_b = false;
 const bool test_use_adamw = true;
@@ -468,28 +490,33 @@ static TestGpuWeights make_test_gpu_weights() {
 	w.weight_elements = w_elems;
 	w.bias_elements = b_elems;
 
-	test_alloc_paired_weights(qkv_elems, qkv_bound, 3001u, &w.d_query_weights, &w.d_query_master);
-	test_alloc_paired_weights(qkv_elems, qkv_bound, 3002u, &w.d_key_weights, &w.d_key_master);
-	test_alloc_paired_weights(qkv_elems, qkv_bound, 3003u, &w.d_value_weights, &w.d_value_master);
-	test_alloc_paired_weights(qkv_elems, qkv_bound, 3004u, &w.d_output_weights, &w.d_output_master);
-	test_alloc_paired_weights(ffn_elems, qkv_bound, 3005u, &w.d_gate_weights, &w.d_gate_master);
-	test_alloc_paired_weights(ffn_elems, qkv_bound, 3006u, &w.d_up_weights, &w.d_up_master);
-	test_alloc_paired_weights(ffn_elems, ffn_bound, 3007u, &w.d_down_weights, &w.d_down_master);
+	if (call_transformer_forward_block || call_transformer_backward_block) {
+		test_alloc_paired_weights(qkv_elems, qkv_bound, 3001u, &w.d_query_weights,
+								  &w.d_query_master);
+		test_alloc_paired_weights(qkv_elems, qkv_bound, 3002u, &w.d_key_weights, &w.d_key_master);
+		test_alloc_paired_weights(qkv_elems, qkv_bound, 3003u, &w.d_value_weights,
+								  &w.d_value_master);
+		test_alloc_paired_weights(qkv_elems, qkv_bound, 3004u, &w.d_output_weights,
+								  &w.d_output_master);
+		test_alloc_paired_weights(ffn_elems, qkv_bound, 3005u, &w.d_gate_weights, &w.d_gate_master);
+		test_alloc_paired_weights(ffn_elems, qkv_bound, 3006u, &w.d_up_weights, &w.d_up_master);
+		test_alloc_paired_weights(ffn_elems, ffn_bound, 3007u, &w.d_down_weights, &w.d_down_master);
 
-	w.d_query_m = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_query_v = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_key_m = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_key_v = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_value_m = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_value_v = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_output_m = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_output_v = test_alloc_zero(qkv_elems * sizeof(float));
-	w.d_gate_m = test_alloc_zero(ffn_elems * sizeof(float));
-	w.d_gate_v = test_alloc_zero(ffn_elems * sizeof(float));
-	w.d_up_m = test_alloc_zero(ffn_elems * sizeof(float));
-	w.d_up_v = test_alloc_zero(ffn_elems * sizeof(float));
-	w.d_down_m = test_alloc_zero(ffn_elems * sizeof(float));
-	w.d_down_v = test_alloc_zero(ffn_elems * sizeof(float));
+		w.d_query_m = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_query_v = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_key_m = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_key_v = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_value_m = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_value_v = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_output_m = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_output_v = test_alloc_zero(qkv_elems * sizeof(float));
+		w.d_gate_m = test_alloc_zero(ffn_elems * sizeof(float));
+		w.d_gate_v = test_alloc_zero(ffn_elems * sizeof(float));
+		w.d_up_m = test_alloc_zero(ffn_elems * sizeof(float));
+		w.d_up_v = test_alloc_zero(ffn_elems * sizeof(float));
+		w.d_down_m = test_alloc_zero(ffn_elems * sizeof(float));
+		w.d_down_v = test_alloc_zero(ffn_elems * sizeof(float));
+	}
 
 	w.transformer_dim = test_embedding_dim;
 	w.transformer_ffn = test_feedforward_network_dimension;
@@ -595,26 +622,7 @@ void* const test_grad_gate = test_alloc_zero(test_total_elements * sizeof(float)
 void* const test_grad_up = test_alloc_zero(test_total_elements * sizeof(float));
 void* const test_grad_input = test_gpu_portion.d_dx[test_buffer_index];
 
-// Switches: closed-loop Transformer + Embeddings pipeline active; standalone/legacy off by default
-bool call_launch_gather_embeddings_batched = true;
-bool call_transformer_forward_block = true;
-bool call_forward_pass_with_embeddings = true;
-bool call_forward_pass = false;
-bool call_run_cutlass_saturation_benchmark = false;
-bool call_run_vram_saturation_benchmark = false;
-bool call_batched_gemm_multiply = false;
-bool call_fused_causal_attention = false;
-bool call_swiglu_forward = false;
-bool call_launch_cutlass_gemm_bf16 = false;
-bool call_launch_tied_logits_bf16 = false;
-bool call_launch_softmax_argmax = false;
-
-bool call_backward_pass_with_embeddings = true;
-bool call_transformer_backward_block = true;
-bool call_backward_scatter_embeddings = true;
-bool call_backward_pass = false;
-bool call_fused_causal_backward = false;
-bool call_swiglu_backward = false;
+// Switch bindings moved above make_test_gpu_weights() so de-fused vs block mode configures automatically.
 
 static bool test_forward() {
 	if (call_launch_gather_embeddings_batched == true) {
@@ -841,29 +849,36 @@ int main() {
 	constexpr int total_steps = 3000;
 	constexpr int report_interval = 100;
 	constexpr int checkpoint_interval = 1000;
+	constexpr float sweet_spot_ceiling = 3.0f;
+	constexpr float min_1k_drop = 0.05f;
+	constexpr float spike_tolerance = 0.5f;
 
 	float step1_loss = -1.0f;
+	float prev_report_loss = -1.0f;
 	float prev_checkpoint_loss = -1.0f;
+	float prev_checkpoint_grad = -1.0f;
 	std::vector<std::pair<int, float>> checkpoint_losses;
 	bool all_healthy = true;
+	const char* red_flag_reason = nullptr;
 
 	size_t free_vram = 0;
 	size_t total_vram = 0;
 	cudaMemGetInfo(&free_vram, &total_vram);
 
 	std::cout << std::fixed << std::setprecision(6);
-	std::cout << "[ISOLATION] Profile=" << AXIOM_ISOLATION_PROFILE << " | steps=" << total_steps
-			  << " | vocab=" << test_vocab_size << " | seq=" << test_sequence_length
-			  << " | emb_dim=" << test_embedding_dim << " | heads=" << test_num_heads
-			  << " | ffn=" << test_feedforward_network_dimension
+	std::cout << "[ISOLATION] Profile=" << AXIOM_ISOLATION_PROFILE
+			  << " | mode=" << (call_transformer_forward_block ? "TRANSFORMER_BLOCK" : "UNFUSED_CORE")
+			  << " | steps=" << total_steps << " | vocab=" << test_vocab_size
+			  << " | seq=" << test_sequence_length << " | emb_dim=" << test_embedding_dim
+			  << " | heads=" << test_num_heads << " | ffn=" << test_feedforward_network_dimension
 			  << " | in_dim=" << test_input_dim << "\n";
-	std::cout << "[VRAM] Free: " << (free_vram / (1024ULL * 1024ULL)) << " MiB / Total: "
-			  << (total_vram / (1024ULL * 1024ULL)) << " MiB\n"
+	std::cout << "[VRAM] Free: " << (free_vram / (1024ULL * 1024ULL))
+			  << " MiB / Total: " << (total_vram / (1024ULL * 1024ULL)) << " MiB\n"
 			  << std::flush;
 
 	for (int step = 1; step <= total_steps; ++step) {
 		if (!pass()) {
-			std::cerr << "[FAIL] Execution failed at step " << step << "\n";
+			std::cerr << "[RED FLAG] CUDA kernel execution returned false at step " << step << "\n";
 			return 1;
 		}
 
@@ -873,7 +888,8 @@ int main() {
 				return 1;
 			}
 
-			const int window_steps = (step == 1) ? 1 : (step == report_interval ? report_interval - 1 : report_interval);
+			const int window_steps =
+				(step == 1) ? 1 : (step == report_interval ? report_interval - 1 : report_interval);
 			uint32_t pred_id = 0;
 			cudaMemcpy(&pred_id, test_gpu_activations.d_pred_id, sizeof(uint32_t),
 					   cudaMemcpyDeviceToHost);
@@ -881,9 +897,6 @@ int main() {
 			const float avg_loss = telemetry[telemetry_loss] / static_cast<float>(window_steps);
 			const float grad_l2 =
 				std::sqrt(telemetry[telemetry_gradient_square] / static_cast<float>(window_steps));
-			const float act_rms = std::sqrt(
-				telemetry[telemetry_activation_square] /
-				static_cast<float>(window_steps * test_output_dim));
 			const float dead_out = telemetry[telemetry_dead_output];
 			const float nonfinite = telemetry[telemetry_nonfinite];
 
@@ -897,33 +910,68 @@ int main() {
 					  << std::flush;
 
 			if (!std::isfinite(avg_loss) || !std::isfinite(grad_l2) || nonfinite > 0.0f ||
-				avg_loss <= 0.0f) {
-				std::cerr << "[ANOMALY] Non-finite or invalid telemetry at step " << step << "\n";
+				avg_loss <= 0.0f || grad_l2 <= 0.0f) {
+				red_flag_reason = "Non-finite, zero-loss, or zero-gradient telemetry detected";
+				std::cerr << "[RED FLAG] " << red_flag_reason << " at step " << step << "\n";
 				all_healthy = false;
 				break;
 			}
 
+			if (prev_report_loss > 0.0f && avg_loss > prev_report_loss + spike_tolerance) {
+				red_flag_reason = "Loss spiked upward (backward/forward CUDA math unstable)";
+				std::cerr << "[RED FLAG] " << red_flag_reason << " at step " << step << " ("
+						  << prev_report_loss << " -> " << avg_loss << ")\n";
+				all_healthy = false;
+				break;
+			}
+			prev_report_loss = avg_loss;
+
 			if (step % checkpoint_interval == 0) {
 				const float prev_ref =
 					(prev_checkpoint_loss < 0.0f) ? step1_loss : prev_checkpoint_loss;
-				if (prev_ref > 0.05f && avg_loss >= prev_ref) {
-					std::cerr << "[ANOMALY] Loss failed to drop at step " << step
-							  << " (prev=" << prev_ref << ", curr=" << avg_loss << ")\n";
-					all_healthy = false;
-				} else {
-					std::cout << "[CHECKPOINT " << step << "] live loss: " << avg_loss
-							  << " (delta=" << (avg_loss - prev_ref) << ") (OK)\n"
-							  << std::flush;
-				}
+				const float drop = prev_ref - avg_loss;
 				checkpoint_losses.push_back({step, avg_loss});
+
+				if (avg_loss >= prev_ref) {
+					red_flag_reason = "Loss increased or flatlined at 1000-step checkpoint";
+					std::cerr << "[RED FLAG] " << red_flag_reason << " (step " << step
+							  << ": prev=" << prev_ref << ", curr=" << avg_loss << ")\n";
+					all_healthy = false;
+					break;
+				}
+				if (avg_loss > sweet_spot_ceiling && drop < min_1k_drop) {
+					red_flag_reason = "Loss drop stalled above target sweet spot [1.0, 3.0]";
+					std::cerr << "[RED FLAG] " << red_flag_reason << " (step " << step
+							  << ": drop=" << drop << " < " << min_1k_drop << ", loss=" << avg_loss
+							  << ")\n";
+					all_healthy = false;
+					break;
+				}
+				if (prev_checkpoint_grad > 0.0f &&
+					std::abs(grad_l2 - prev_checkpoint_grad) < 1e-6f &&
+					avg_loss > sweet_spot_ceiling) {
+					red_flag_reason = "Gradient norm frozen across 1000 steps while loss > 3.0";
+					std::cerr << "[RED FLAG] " << red_flag_reason << " (step " << step
+							  << ": grad_l2=" << grad_l2 << ", loss=" << avg_loss << ")\n";
+					all_healthy = false;
+					break;
+				}
+
+				std::cout << "[CHECKPOINT " << step << "] live loss: " << avg_loss
+						  << " (delta=" << -drop << ") (OK)\n"
+						  << std::flush;
 				prev_checkpoint_loss = avg_loss;
+				prev_checkpoint_grad = grad_l2;
 			}
 		}
 	}
 
-	if (all_healthy && (prev_checkpoint_loss < 0.0f || prev_checkpoint_loss >= step1_loss)) {
-		std::cerr << "[ANOMALY] Overall loss did not drop from step 1 (" << step1_loss
-				  << " -> " << prev_checkpoint_loss << ")\n";
+	if (all_healthy &&
+		(checkpoint_losses.empty() || prev_checkpoint_loss > sweet_spot_ceiling)) {
+		red_flag_reason =
+			"Final loss failed to converge into sweet spot [1.0, 3.0] — backward/forward CUDA code has a math problem";
+		std::cerr << "[RED FLAG] " << red_flag_reason << " (final=" << prev_checkpoint_loss
+				  << ", sweet_spot<=" << sweet_spot_ceiling << ")\n";
 		all_healthy = false;
 	}
 
@@ -935,10 +983,13 @@ int main() {
 	}
 
 	if (all_healthy) {
-		std::cout << "[PASS GREEN] Closed-loop forward/backward dropped loss (" << step1_loss
-				  << " -> " << prev_checkpoint_loss << ") without anomalies.\n";
+		std::cout << "[PASS GREEN] Closed-loop forward/backward converged (" << step1_loss
+				  << " -> " << prev_checkpoint_loss << ") into sweet spot <= "
+				  << sweet_spot_ceiling << " without anomalies.\n";
 		return 0;
 	}
-	std::cout << "[FAIL RED] Anomaly detected in isolated forward/backward loop.\n";
+	std::cout << "[FAIL RED] RED FLAG: "
+			  << (red_flag_reason ? red_flag_reason : "Backward/forward CUDA code problem")
+			  << "\n";
 	return 1;
 }
