@@ -45,12 +45,15 @@ APP_TARGET       = app.exe
 TEST_TARGET      = test.exe
 TEST_LOSS_TARGET = test_loss.exe
 TEST_LOSS_SRC    = test/CUDA/test_loss.cu
-DLL_TARGET       = build/axiom_core.dll
+TEST_FORWARD_BACKWARD_ISOLATION_SRC = test/CUDA/isolation/test_forward_backward.cu
+TEST_FORWARD_BACKWARD_ISOLATION_TARGET = test_forward_backward.exe  
 DLL_SRCS         = src/axiom_c_api.cpp src/ai.cpp src/transfer.cpp src/cuda_graph.cpp src/interface.cpp src/paged_cache.cpp src/training.cpp $(UTIL_SRCS)
 DLL_OBJS         = $(DLL_SRCS:.cpp=.o)
 
 # ─── Default: compile everything ──────────────────────────────────────────────
 .PHONY: all clean dll test test_loss
+
+.PHONY: all clean dll test test_forward_backward
 
 all: $(APP_TARGET) $(TEST_TARGET) $(TEST_LOSS_TARGET) dll
 
@@ -91,6 +94,11 @@ test_loss: $(TEST_LOSS_TARGET)
 
 $(TEST_LOSS_TARGET): $(TEST_LOSS_SRC) $(CUDA_DLL)
 	$(NVCC) $(NVCCFLAGS) -I$(SRC_DIR) $< $(if $(wildcard cuda_transfer.lib),cuda_transfer.lib,) -o $@
+
+# --- CUDA Kernel Forward and Backward pass test in isolation ------------------
+test_forward_backward: $(TEST_FORWARD_BACKWARD_ISOLATION_TARGET)
+
+$(TEST_FORWARD_BACKWARD_ISOLATION_TARGET): $(TEST_FORWARD_BACKWARD_ISOLATION_SRC) $(CUDA_DLL) $(NVCC) $(NVCCFLAGS) -I$(SRC_DIR) $< $(if $(wildcard cuda_transfer.lib),cuda_transfer.lib,) -o $@
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 clean:
