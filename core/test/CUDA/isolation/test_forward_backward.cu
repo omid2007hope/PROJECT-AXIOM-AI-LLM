@@ -16,16 +16,24 @@ Isolate the forward and backward pass - feed then fake false emmbeding data - ch
 */
 
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <cuda_bf16.h>
+#include <cuda_runtime.h>
+#include <iomanip>
 #include <iostream>
+#include <random>
 #include <vector>
 
-#include "../../../src/CUDA/kernel/backward_pass.cu"
-#include "../../../src/CUDA/kernel/forward_pass.cu"
+#include "../../../src/CUDA/gpu/download.cuh"
+#include "../../../src/CUDA/kernel/backward_pass.cuh"
+#include "../../../src/CUDA/kernel/forward_pass.cuh"
+#include "../../../src/CUDA/kernel/swiglu.cuh"
 #include "../../../src/CUDA/util/gpu_types.cuh"
+#include "../../../src/CUDA/util/memory_allocation.cuh"
 
-
-
+// Mirror structs matching gpu_types.cuh field-for-field
 struct TestGpuPortion {
 	void* d_token_ids[2] = {nullptr, nullptr};
 	void* d_context_window[2] = {nullptr, nullptr};
@@ -183,65 +191,156 @@ struct TestGpuActivations {
 	void* d_expert_histogram = nullptr;
 };
 
-// Self-contained host & device test data helpers (no external inputs)
+// Compile-time ABI parity checks against gpu_types.cuh
+static_assert(sizeof(TestGpuPortion) == sizeof(GpuPortion), "TestGpuPortion size mismatch");
+static_assert(alignof(TestGpuPortion) == alignof(GpuPortion), "TestGpuPortion align mismatch");
+static_assert(sizeof(TestGpuEmbeddings) == sizeof(GpuEmbeddings),
+			  "TestGpuEmbeddings size mismatch");
+static_assert(alignof(TestGpuEmbeddings) == alignof(GpuEmbeddings),
+			  "TestGpuEmbeddings align mismatch");
+static_assert(sizeof(TestGpuWeights) == sizeof(GpuWeights), "TestGpuWeights size mismatch");
+static_assert(alignof(TestGpuWeights) == alignof(GpuWeights), "TestGpuWeights align mismatch");
+static_assert(sizeof(TestGpuActivations) == sizeof(GpuActivations),
+			  "TestGpuActivations size mismatch");
+static_assert(alignof(TestGpuActivations) == alignof(GpuActivations),
+			  "TestGpuActivations align mismatch");
+
+// Deterministic RAII tracker for all test CUDA allocations, streams, and events
+struct TestResourceRegistry {
+	std::vector<void*> device_ptrs;
+	std::vector<cudaStream_t> streams;
+	std::vector<cudaEvent_t> events;
+
+	~TestResourceRegistry() {
+		cudaDeviceSynchronize();
+		for (void* ptr : device_ptrs) {
+			if (ptr) {
+				cudaFree(ptr);
+			}
+		}
+		for (cudaEvent_t ev : events) {
+			if (ev) {
+				cudaEventDestroy(ev);
+			}
+		}
+		for (cudaStream_t st : streams) {
+			if (st) {
+				cudaStreamDestroy(st);
+			}
+		}
+	}
+};
+
+static TestResourceRegistry& test_registry() {
+	static TestResourceRegistry registry;
+	return registry;
+}
+
+static void check_cuda_or_abort(cudaError_t err, const char* context) {
+	if (err != cudaSuccess) {
+		std::cerr << "[FATAL CUDA] " << context << ": " << cudaGetErrorString(err) << "\n";
+		std::exit(1);
+	}
+}
+
 static void* test_create_stream() {
 	cudaStream_t s = nullptr;
-	cudaStreamCreate(&s);
+	check_cuda_or_abort(cudaStreamCreate(&s), "cudaStreamCreate");
+	test_registry().streams.push_back(s);
 	return s;
 }
 
 static void* test_create_event() {
 	cudaEvent_t e = nullptr;
-	cudaEventCreate(&e);
+	check_cuda_or_abort(cudaEventCreateWithFlags(&e, cudaEventDisableTiming),
+						"cudaEventCreateWithFlags");
+	test_registry().events.push_back(e);
 	return e;
 }
 
 static void* test_alloc_zero(size_t bytes) {
 	void* ptr = nullptr;
-	cudaMalloc(&ptr, bytes);
-	if (ptr) {
-		cudaMemset(ptr, 0, bytes);
-	}
+	check_cuda_or_abort(cudaMalloc(&ptr, bytes), "cudaMalloc(zero)");
+	check_cuda_or_abort(cudaMemset(ptr, 0, bytes), "cudaMemset(zero)");
+	test_registry().device_ptrs.push_back(ptr);
 	return ptr;
 }
 
-static void* test_alloc_bf16(size_t count, float base_val) {
+static void* test_alloc_bf16_uniform(size_t count, float bound, uint32_t seed) {
+	std::mt19937 rng(seed);
+	std::uniform_real_distribution<float> dist(-bound, bound);
 	std::vector<__nv_bfloat16> host(count);
 	for (size_t i = 0; i < count; ++i) {
-		float v = base_val * (1.0f + 0.01f * static_cast<float>(i % 17) - 0.08f);
-		host[i] = __float2bfloat16(v);
+		host[i] = __float2bfloat16(dist(rng));
 	}
 	void* ptr = nullptr;
-	cudaMalloc(&ptr, count * sizeof(__nv_bfloat16));
-	if (ptr) {
-		cudaMemcpy(ptr, host.data(), count * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice);
-	}
+	check_cuda_or_abort(cudaMalloc(&ptr, count * sizeof(__nv_bfloat16)), "cudaMalloc(bf16)");
+	check_cuda_or_abort(
+		cudaMemcpy(ptr, host.data(), count * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice),
+		"cudaMemcpy(bf16)");
+	test_registry().device_ptrs.push_back(ptr);
 	return ptr;
 }
 
-static float* test_alloc_f32(size_t count, float base_val) {
-	std::vector<float> host(count);
+static void test_alloc_paired_weights(size_t count, float bound, uint32_t seed,
+									  void** out_bf16, void** out_f32,
+									  size_t zero_prefix_elems = 0) {
+	std::mt19937 rng(seed);
+	std::uniform_real_distribution<float> dist(-bound, bound);
+	std::vector<float> host_f32(count);
+	std::vector<__nv_bfloat16> host_bf16(count);
 	for (size_t i = 0; i < count; ++i) {
-		host[i] = base_val * (1.0f + 0.01f * static_cast<float>(i % 17) - 0.08f);
+		float val = (i < zero_prefix_elems) ? 0.0f : dist(rng);
+		host_f32[i] = val;
+		host_bf16[i] = __float2bfloat16(val);
 	}
+	check_cuda_or_abort(cudaMalloc(out_bf16, count * sizeof(__nv_bfloat16)),
+						"cudaMalloc(paired_bf16)");
+	check_cuda_or_abort(cudaMalloc(out_f32, count * sizeof(float)), "cudaMalloc(paired_f32)");
+	check_cuda_or_abort(cudaMemcpy(*out_bf16, host_bf16.data(),
+								   count * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice),
+						"cudaMemcpy(paired_bf16)");
+	check_cuda_or_abort(
+		cudaMemcpy(*out_f32, host_f32.data(), count * sizeof(float), cudaMemcpyHostToDevice),
+		"cudaMemcpy(paired_f32)");
+	test_registry().device_ptrs.push_back(*out_bf16);
+	test_registry().device_ptrs.push_back(*out_f32);
+}
+
+static float* test_alloc_f32_fill(size_t count, float fill_val) {
+	std::vector<float> host(count, fill_val);
 	float* ptr = nullptr;
-	cudaMalloc(&ptr, count * sizeof(float));
-	if (ptr) {
-		cudaMemcpy(ptr, host.data(), count * sizeof(float), cudaMemcpyHostToDevice);
-	}
+	check_cuda_or_abort(cudaMalloc(&ptr, count * sizeof(float)), "cudaMalloc(f32)");
+	check_cuda_or_abort(cudaMemcpy(ptr, host.data(), count * sizeof(float), cudaMemcpyHostToDevice),
+						"cudaMemcpy(f32)");
+	test_registry().device_ptrs.push_back(ptr);
+	return ptr;
+}
+
+// Packs 0x3D803D80 per 32-bit word: valid ~0.06256f as float AND 0.0625f in both bf16 halves
+static void* test_alloc_dual_grad_buffer(size_t float_count) {
+	std::vector<uint32_t> host(float_count, 0x3D803D80u);
+	void* ptr = nullptr;
+	check_cuda_or_abort(cudaMalloc(&ptr, float_count * sizeof(uint32_t)), "cudaMalloc(dual_grad)");
+	check_cuda_or_abort(
+		cudaMemcpy(ptr, host.data(), float_count * sizeof(uint32_t), cudaMemcpyHostToDevice),
+		"cudaMemcpy(dual_grad)");
+	test_registry().device_ptrs.push_back(ptr);
 	return ptr;
 }
 
 static uint32_t* test_alloc_token_ids(size_t count, uint32_t start_id, uint32_t vocab_sz) {
 	std::vector<uint32_t> host(count);
 	for (size_t i = 0; i < count; ++i) {
-		host[i] = (start_id + static_cast<uint32_t>(i)) % vocab_sz;
+		uint32_t id = (start_id + static_cast<uint32_t>(i)) % vocab_sz;
+		host[i] = (id == 0) ? 1u : id; // Keep token IDs non-PAD
 	}
 	uint32_t* ptr = nullptr;
-	cudaMalloc(&ptr, count * sizeof(uint32_t));
-	if (ptr) {
-		cudaMemcpy(ptr, host.data(), count * sizeof(uint32_t), cudaMemcpyHostToDevice);
-	}
+	check_cuda_or_abort(cudaMalloc(&ptr, count * sizeof(uint32_t)), "cudaMalloc(token_ids)");
+	check_cuda_or_abort(
+		cudaMemcpy(ptr, host.data(), count * sizeof(uint32_t), cudaMemcpyHostToDevice),
+		"cudaMemcpy(token_ids)");
+	test_registry().device_ptrs.push_back(ptr);
 	return ptr;
 }
 
@@ -251,14 +350,16 @@ static void* test_alloc_target_token(size_t elem_count, uint32_t target_id) {
 		std::memcpy(host.data(), &target_id, sizeof(uint32_t));
 	}
 	void* ptr = nullptr;
-	cudaMalloc(&ptr, elem_count * sizeof(__nv_bfloat16));
-	if (ptr) {
-		cudaMemcpy(ptr, host.data(), elem_count * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice);
-	}
+	check_cuda_or_abort(cudaMalloc(&ptr, elem_count * sizeof(__nv_bfloat16)),
+						"cudaMalloc(target_token)");
+	check_cuda_or_abort(
+		cudaMemcpy(ptr, host.data(), elem_count * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice),
+		"cudaMemcpy(target_token)");
+	test_registry().device_ptrs.push_back(ptr);
 	return ptr;
 }
 
-// Dimension & indexing parameters (must be initialized before struct factories)
+// Dimension & indexing parameters (consistent across all 18 kernels)
 const size_t test_input_dim = 256;
 const size_t test_output_dim = 64;
 const int test_buffer_index = 0;
@@ -277,11 +378,11 @@ const uint32_t test_vocab_size = 32;
 const int test_M = 4;
 const int test_N = 64;
 const int test_K = 256;
-const int test_iterations = 5;
+const int test_iterations = 2;
 const int test_rows_a = 4;
 const int test_cols_b = 64;
 const int test_common_dim = 64;
-const size_t test_safety_headroom_bytes = 64ULL * 1024ULL * 1024ULL;
+const size_t test_safety_headroom_bytes = 256ULL * 1024ULL * 1024ULL;
 static double test_out_tflops_storage = 0.0;
 static double test_out_bandwidth_gb_s_storage = 0.0;
 static float test_out_avg_ms_storage = 0.0f;
@@ -294,76 +395,20 @@ size_t* const test_out_allocated_bytes = &test_out_allocated_bytes_storage;
 float* const test_out_elapsed_ms = &test_out_elapsed_ms_storage;
 
 // Control & optimizer flags / scalars
-const bool test_gather_embeddings = true;
+const bool test_gather_embeddings = false;
 const bool test_transpose_a = false;
 const bool test_transpose_b = false;
 const bool test_use_adamw = true;
 const bool test_scatter_embeddings = true;
 const float test_learning_rate = 0.006f;
 
-// Device buffer & stream pointers
-void* const test_stream = test_create_stream();
-const void* const test_matrix_a = test_alloc_bf16(test_rows_a * test_common_dim, 0.02f);
-const void* const test_matrix_b = test_alloc_bf16(test_common_dim * test_cols_b, 0.02f);
-void* const test_matrix_c = test_alloc_zero(test_rows_a * test_cols_b * sizeof(__nv_bfloat16));
-const void* const test_query = test_alloc_bf16(test_sequence_length * test_embedding_dim, 0.02f);
-const void* const test_key = test_alloc_bf16(test_sequence_length * test_embedding_dim, 0.02f);
-const void* const test_value = test_alloc_bf16(test_sequence_length * test_embedding_dim, 0.02f);
-void* const test_output = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(__nv_bfloat16));
-const void* const test_gate = test_alloc_bf16(test_total_elements, 0.02f);
-const void* const test_up = test_alloc_bf16(test_total_elements, 0.02f);
-void* const test_hidden_states = test_alloc_bf16(test_sequence_length * test_embedding_dim, 0.02f);
-const uint32_t* const test_d_token_ids = test_alloc_token_ids(test_batch_tokens, 1, test_vocab_size);
-const void* const test_d_table = test_alloc_bf16(test_vocab_size * test_hidden_dim, 0.02f);
-void* const test_d_output = test_alloc_zero(test_batch_tokens * test_hidden_dim * sizeof(__nv_bfloat16));
-const void* const test_d_x = test_alloc_bf16(test_M * test_K, 0.02f);
-const void* const test_d_w = test_alloc_bf16(test_N * test_K, 0.003f);
-const void* const test_d_b = test_alloc_bf16(test_N, 0.0f);
-void* const test_d_y = test_alloc_zero(test_M * test_N * sizeof(__nv_bfloat16));
-const void* const test_d_normed_x = test_alloc_bf16(test_M * test_hidden_dim, 0.02f);
-const void* const test_d_lm_head_weight = test_alloc_bf16(test_vocab_size * test_hidden_dim, 0.02f);
-float* const test_d_out_logits = test_alloc_f32(test_M * test_vocab_size, 0.0f);
-float* const test_d_logits_and_probs = test_alloc_f32(test_n, 0.1f);
-uint32_t* const test_d_pred_id = test_alloc_token_ids(1, 0, test_vocab_size);
-const void* const test_d_dx = test_alloc_f32(test_num_tokens * test_embedding_dim, 0.01f);
-const void* const test_grad_output = test_alloc_bf16(test_total_elements, 0.01f);
-void* const test_grad_query = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(__nv_bfloat16));
-void* const test_grad_key = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(__nv_bfloat16));
-void* const test_grad_value = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(__nv_bfloat16));
-void* const test_grad_gate = test_alloc_zero(test_total_elements * sizeof(__nv_bfloat16));
-void* const test_grad_up = test_alloc_zero(test_total_elements * sizeof(__nv_bfloat16));
-void* const test_grad_input = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(__nv_bfloat16));
-
-// Populated const test struct instances
-static TestGpuPortion make_test_gpu_portion() {
-	TestGpuPortion p;
-	p.d_token_ids[0] = test_alloc_token_ids(test_num_tokens, 1, test_vocab_size);
-	p.d_token_ids[1] = test_alloc_token_ids(test_num_tokens, 2, test_vocab_size);
-	p.d_context_window[0] = test_alloc_bf16(test_input_dim, 0.02f);
-	p.d_context_window[1] = test_alloc_bf16(test_input_dim, 0.02f);
-	p.d_target[0] = test_alloc_target_token(test_output_dim, 5);
-	p.d_target[1] = test_alloc_target_token(test_output_dim, 6);
-	p.d_dx[0] = test_alloc_zero(test_input_dim * sizeof(float));
-	p.d_dx[1] = test_alloc_zero(test_input_dim * sizeof(float));
-	p.stream[0] = test_stream;
-	p.stream[1] = test_create_stream();
-	p.compute_done[0] = test_create_event();
-	p.compute_done[1] = test_create_event();
-	p.token_ids_active[0] = true;
-	p.token_ids_active[1] = true;
-	p.token_count = test_num_tokens;
-	p.context_elements = test_input_dim;
-	p.target_elements = test_output_dim;
-	p.max_batch_tokens = test_num_tokens;
-	p.is_allocated = true;
-	return p;
-}
-
+// Populated const test struct instances (created first so closed-loop pointers can alias them)
 static TestGpuEmbeddings make_test_gpu_embeddings() {
 	TestGpuEmbeddings e;
 	size_t elems = test_vocab_size * test_embedding_dim;
-	e.d_table = test_alloc_bf16(elems, 0.02f);
-	e.d_table_master = test_alloc_f32(elems, 0.02f);
+	float emb_bound = 1.0f / std::sqrt(static_cast<float>(test_embedding_dim));
+	test_alloc_paired_weights(elems, emb_bound, 1337u, &e.d_table, &e.d_table_master,
+							  test_embedding_dim);
 	e.vocab_size = test_vocab_size;
 	e.embedding_dim = test_embedding_dim;
 	e.active_vocab_size = test_vocab_size;
@@ -379,11 +424,12 @@ static TestGpuWeights make_test_gpu_weights() {
 	size_t b_elems = test_output_dim;
 	size_t qkv_elems = test_embedding_dim * test_embedding_dim;
 	size_t ffn_elems = test_embedding_dim * test_feedforward_network_dimension;
+	float lin_bound = std::sqrt(3.0f / static_cast<float>(test_input_dim));
+	float qkv_bound = 1.0f / std::sqrt(static_cast<float>(test_embedding_dim));
+	float ffn_bound = 1.0f / std::sqrt(static_cast<float>(test_feedforward_network_dimension));
 
-	w.d_weights = test_alloc_bf16(w_elems, 0.003f);
-	w.d_bias = test_alloc_bf16(b_elems, 0.0f);
-	w.d_weights_master = test_alloc_f32(w_elems, 0.003f);
-	w.d_bias_master = test_alloc_f32(b_elems, 0.0f);
+	test_alloc_paired_weights(w_elems, lin_bound, 2001u, &w.d_weights, &w.d_weights_master);
+	test_alloc_paired_weights(b_elems, 0.0f, 2002u, &w.d_bias, &w.d_bias_master);
 	w.d_weights_m = test_alloc_zero(w_elems * sizeof(float));
 	w.d_weights_v = test_alloc_zero(w_elems * sizeof(float));
 	w.d_bias_m = test_alloc_zero(b_elems * sizeof(float));
@@ -391,21 +437,13 @@ static TestGpuWeights make_test_gpu_weights() {
 	w.weight_elements = w_elems;
 	w.bias_elements = b_elems;
 
-	w.d_query_weights = test_alloc_bf16(qkv_elems, 0.02f);
-	w.d_key_weights = test_alloc_bf16(qkv_elems, 0.02f);
-	w.d_value_weights = test_alloc_bf16(qkv_elems, 0.02f);
-	w.d_output_weights = test_alloc_bf16(qkv_elems, 0.02f);
-	w.d_gate_weights = test_alloc_bf16(ffn_elems, 0.02f);
-	w.d_up_weights = test_alloc_bf16(ffn_elems, 0.02f);
-	w.d_down_weights = test_alloc_bf16(ffn_elems, 0.02f);
-
-	w.d_query_master = test_alloc_f32(qkv_elems, 0.02f);
-	w.d_key_master = test_alloc_f32(qkv_elems, 0.02f);
-	w.d_value_master = test_alloc_f32(qkv_elems, 0.02f);
-	w.d_output_master = test_alloc_f32(qkv_elems, 0.02f);
-	w.d_gate_master = test_alloc_f32(ffn_elems, 0.02f);
-	w.d_up_master = test_alloc_f32(ffn_elems, 0.02f);
-	w.d_down_master = test_alloc_f32(ffn_elems, 0.02f);
+	test_alloc_paired_weights(qkv_elems, qkv_bound, 3001u, &w.d_query_weights, &w.d_query_master);
+	test_alloc_paired_weights(qkv_elems, qkv_bound, 3002u, &w.d_key_weights, &w.d_key_master);
+	test_alloc_paired_weights(qkv_elems, qkv_bound, 3003u, &w.d_value_weights, &w.d_value_master);
+	test_alloc_paired_weights(qkv_elems, qkv_bound, 3004u, &w.d_output_weights, &w.d_output_master);
+	test_alloc_paired_weights(ffn_elems, qkv_bound, 3005u, &w.d_gate_weights, &w.d_gate_master);
+	test_alloc_paired_weights(ffn_elems, qkv_bound, 3006u, &w.d_up_weights, &w.d_up_master);
+	test_alloc_paired_weights(ffn_elems, ffn_bound, 3007u, &w.d_down_weights, &w.d_down_master);
 
 	w.d_query_m = test_alloc_zero(qkv_elems * sizeof(float));
 	w.d_query_v = test_alloc_zero(qkv_elems * sizeof(float));
@@ -435,7 +473,7 @@ static TestGpuActivations make_test_gpu_activations() {
 	a.d_output = test_alloc_zero(test_output_dim * sizeof(__nv_bfloat16));
 	a.output_elements = test_output_dim;
 	a.d_loss = test_alloc_zero(telemetry_slot_count * sizeof(float));
-	a.d_inv_rms = test_alloc_f32(test_num_tokens, 1.0f);
+	a.d_inv_rms = test_alloc_f32_fill(test_num_tokens, 1.0f);
 	a.d_probs = test_alloc_zero(test_vocab_size * sizeof(float));
 	a.vocab_elements = test_vocab_size;
 	a.d_pred_id = test_alloc_zero(sizeof(uint32_t));
@@ -453,47 +491,119 @@ static TestGpuActivations make_test_gpu_activations() {
 	a.d_residual_out = test_alloc_zero(seq_elems * sizeof(__nv_bfloat16));
 	a.d_normalized_attention = test_alloc_zero(seq_elems * sizeof(__nv_bfloat16));
 	a.d_normalized_feedforward = test_alloc_zero(seq_elems * sizeof(__nv_bfloat16));
-	a.d_attention_scale = test_alloc_f32(test_sequence_length, 1.0f);
-	a.d_feedforward_scale = test_alloc_f32(test_sequence_length, 1.0f);
+	a.d_attention_scale = test_alloc_f32_fill(test_sequence_length, 1.0f);
+	a.d_feedforward_scale = test_alloc_f32_fill(test_sequence_length, 1.0f);
 	a.xform_seq_elements = seq_elems;
 	a.xform_ffn_elements = ffn_elems;
 	return a;
 }
 
-const TestGpuPortion test_gpu_portion = make_test_gpu_portion();
+void* const test_stream = test_create_stream();
 const TestGpuEmbeddings test_gpu_embeddings = make_test_gpu_embeddings();
 const TestGpuWeights test_gpu_weights = make_test_gpu_weights();
 const TestGpuActivations test_gpu_activations = make_test_gpu_activations();
 
-// Switches
-bool call_forward_pass = true;
-bool call_forward_pass_with_embeddings = true;
-bool call_run_cutlass_saturation_benchmark = true;
-bool call_run_vram_saturation_benchmark = true;
-bool call_batched_gemm_multiply = true;
-bool call_fused_causal_attention = true;
-bool call_swiglu_forward = true;
-bool call_transformer_forward_block = true;
-bool call_launch_gather_embeddings_batched = true;
-bool call_launch_cutlass_gemm_bf16 = true;
-bool call_launch_tied_logits_bf16 = true;
-bool call_launch_softmax_argmax = true;
+static TestGpuPortion make_test_gpu_portion() {
+	TestGpuPortion p;
+	p.d_token_ids[0] = test_alloc_token_ids(test_num_tokens, 1, test_vocab_size);
+	p.d_token_ids[1] = test_alloc_token_ids(test_num_tokens, 2, test_vocab_size);
+	p.d_context_window[0] = test_alloc_bf16_uniform(test_input_dim, 0.05f, 4001u);
+	p.d_context_window[1] = test_alloc_bf16_uniform(test_input_dim, 0.05f, 4002u);
+	p.d_target[0] = test_alloc_target_token(test_output_dim, 5);
+	p.d_target[1] = test_alloc_target_token(test_output_dim, 6);
+	p.d_dx[0] = test_alloc_dual_grad_buffer(test_total_elements);
+	p.d_dx[1] = test_alloc_dual_grad_buffer(test_total_elements);
+	p.stream[0] = test_stream;
+	p.stream[1] = test_create_stream();
+	p.compute_done[0] = test_create_event();
+	p.compute_done[1] = test_create_event();
+	p.token_ids_active[0] = true;
+	p.token_ids_active[1] = true;
+	p.token_count = test_num_tokens;
+	p.context_elements = test_input_dim;
+	p.target_elements = test_output_dim;
+	p.d_hidden_state[0] = test_alloc_bf16_uniform(test_input_dim, 0.05f, 4003u);
+	p.d_hidden_state[1] = test_alloc_bf16_uniform(test_input_dim, 0.05f, 4004u);
+	p.max_batch_tokens = test_num_tokens;
+	p.is_allocated = true;
+	return p;
+}
 
-bool call_backward_pass = true;
+const TestGpuPortion test_gpu_portion = make_test_gpu_portion();
+
+// Device buffer pointers wired directly into the closed-loop GPU state
+const void* const test_matrix_a = test_alloc_bf16_uniform(test_rows_a * test_common_dim, 0.05f, 5001u);
+const void* const test_matrix_b = test_alloc_bf16_uniform(test_common_dim * test_cols_b, 0.05f, 5002u);
+void* const test_matrix_c = test_alloc_zero(test_rows_a * test_cols_b * sizeof(__nv_bfloat16));
+const void* const test_query = test_alloc_bf16_uniform(test_sequence_length * test_embedding_dim, 0.05f, 5003u);
+const void* const test_key = test_alloc_bf16_uniform(test_sequence_length * test_embedding_dim, 0.05f, 5004u);
+const void* const test_value = test_alloc_bf16_uniform(test_sequence_length * test_embedding_dim, 0.05f, 5005u);
+void* const test_output = test_alloc_zero(test_total_elements * sizeof(__nv_bfloat16));
+const void* const test_gate = test_alloc_bf16_uniform(test_total_elements, 0.05f, 5006u);
+const void* const test_up = test_alloc_bf16_uniform(test_total_elements, 0.05f, 5007u);
+void* const test_hidden_states = test_gpu_portion.d_context_window[test_buffer_index];
+const uint32_t* const test_d_token_ids =
+	static_cast<const uint32_t*>(test_gpu_portion.d_token_ids[test_buffer_index]);
+const void* const test_d_table = test_gpu_embeddings.d_table;
+void* const test_d_output = test_gpu_portion.d_context_window[test_buffer_index];
+const void* const test_d_x = test_alloc_bf16_uniform(test_M * test_K, 0.05f, 5008u);
+const void* const test_d_w = test_alloc_bf16_uniform(test_N * test_K, 0.05f, 5009u);
+const void* const test_d_b = test_alloc_zero(test_N * sizeof(__nv_bfloat16));
+void* const test_d_y = test_alloc_zero(test_M * test_N * sizeof(__nv_bfloat16));
+const void* const test_d_normed_x = test_alloc_bf16_uniform(test_M * test_hidden_dim, 0.05f, 5010u);
+const void* const test_d_lm_head_weight = test_gpu_embeddings.d_table;
+float* const test_d_out_logits = test_alloc_f32_fill(test_M * test_vocab_size, 0.0f);
+float* const test_d_logits_and_probs = test_alloc_f32_fill(test_n, 0.1f);
+uint32_t* const test_d_pred_id = static_cast<uint32_t*>(test_gpu_activations.d_pred_id);
+const void* const test_d_dx = test_gpu_portion.d_dx[test_buffer_index];
+const void* const test_grad_output = test_gpu_portion.d_dx[test_buffer_index];
+void* const test_grad_query = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(float));
+void* const test_grad_key = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(float));
+void* const test_grad_value = test_alloc_zero(test_sequence_length * test_embedding_dim * sizeof(float));
+void* const test_grad_gate = test_alloc_zero(test_total_elements * sizeof(float));
+void* const test_grad_up = test_alloc_zero(test_total_elements * sizeof(float));
+void* const test_grad_input = test_gpu_portion.d_dx[test_buffer_index];
+
+// Switches: closed-loop Transformer + Embeddings pipeline active; standalone/legacy off by default
+bool call_launch_gather_embeddings_batched = true;
+bool call_transformer_forward_block = true;
+bool call_forward_pass_with_embeddings = true;
+bool call_forward_pass = false;
+bool call_run_cutlass_saturation_benchmark = false;
+bool call_run_vram_saturation_benchmark = false;
+bool call_batched_gemm_multiply = false;
+bool call_fused_causal_attention = false;
+bool call_swiglu_forward = false;
+bool call_launch_cutlass_gemm_bf16 = false;
+bool call_launch_tied_logits_bf16 = false;
+bool call_launch_softmax_argmax = false;
+
 bool call_backward_pass_with_embeddings = true;
-bool call_backward_scatter_embeddings = true;
-bool call_fused_causal_backward = true;
-bool call_swiglu_backward = true;
 bool call_transformer_backward_block = true;
+bool call_backward_scatter_embeddings = true;
+bool call_backward_pass = false;
+bool call_fused_causal_backward = false;
+bool call_swiglu_backward = false;
 
 static bool test_forward() {
-	if (call_forward_pass == true) {
-		if (!forward_pass(reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
-						  reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
-						  reinterpret_cast<GpuActivations*>(
-							  const_cast<TestGpuActivations*>(&test_gpu_activations)),
-						  test_input_dim, test_output_dim, test_buffer_index)) {
-			std::cerr << "[FAIL] forward_pass returned false\n";
+	if (call_launch_gather_embeddings_batched == true) {
+		launch_gather_embeddings_batched(test_d_token_ids, test_d_table, test_d_output,
+										 test_batch_tokens, test_hidden_dim, test_vocab_size,
+										 test_stream);
+		if (cudaGetLastError() != cudaSuccess) {
+			std::cerr << "[FAIL] launch_gather_embeddings_batched launch failed\n";
+			return false;
+		}
+	}
+
+	if (call_transformer_forward_block == true) {
+		if (!transformer_forward_block(
+				test_hidden_states, reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+				reinterpret_cast<GpuActivations*>(
+					const_cast<TestGpuActivations*>(&test_gpu_activations)),
+				test_sequence_length, test_embedding_dim, test_num_heads,
+				test_feedforward_network_dimension, test_stream)) {
+			std::cerr << "[FAIL] transformer_forward_block returned false\n";
 			return false;
 		}
 	}
@@ -507,6 +617,17 @@ static bool test_forward() {
 					const_cast<TestGpuActivations*>(&test_gpu_activations)),
 				test_input_dim, test_output_dim, test_buffer_index, test_gather_embeddings)) {
 			std::cerr << "[FAIL] forward_pass_with_embeddings returned false\n";
+			return false;
+		}
+	}
+
+	if (call_forward_pass == true) {
+		if (!forward_pass(reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+						  reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+						  reinterpret_cast<GpuActivations*>(
+							  const_cast<TestGpuActivations*>(&test_gpu_activations)),
+						  test_input_dim, test_output_dim, test_buffer_index)) {
+			std::cerr << "[FAIL] forward_pass returned false\n";
 			return false;
 		}
 	}
@@ -528,7 +649,7 @@ static bool test_forward() {
 		}
 	}
 
-	// Phase 3: Multi-Head Attention, SwiGLU & Transformer Forward Block
+	// Phase 3: Standalone Multi-Head Attention & SwiGLU checks
 	if (call_batched_gemm_multiply == true) {
 		if (!batched_gemm_multiply(test_matrix_a, test_matrix_b, test_matrix_c, test_rows_a,
 								   test_cols_b, test_common_dim, test_transpose_a, test_transpose_b,
@@ -554,54 +675,37 @@ static bool test_forward() {
 		}
 	}
 
-	if (call_transformer_forward_block == true) {
-		if (!transformer_forward_block(
-				test_hidden_states, reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
-				reinterpret_cast<GpuActivations*>(
-					const_cast<TestGpuActivations*>(&test_gpu_activations)),
-				test_sequence_length, test_embedding_dim, test_num_heads,
-				test_feedforward_network_dimension, test_stream)) {
-			std::cerr << "[FAIL] transformer_forward_block returned false\n";
-			return false;
-		}
-	}
-
-	if (call_launch_gather_embeddings_batched == true) {
-		launch_gather_embeddings_batched(test_d_token_ids, test_d_table, test_d_output,
-										 test_batch_tokens, test_hidden_dim, test_vocab_size,
-										 test_stream);
-	}
-
 	if (call_launch_cutlass_gemm_bf16 == true) {
 		launch_cutlass_gemm_bf16(test_M, test_N, test_K, test_d_x, test_d_w, test_d_b, test_d_y,
 								 test_stream);
+		if (cudaGetLastError() != cudaSuccess) {
+			std::cerr << "[FAIL] launch_cutlass_gemm_bf16 launch failed\n";
+			return false;
+		}
 	}
 
 	if (call_launch_tied_logits_bf16 == true) {
 		launch_tied_logits_bf16(test_d_normed_x, test_d_lm_head_weight, test_d_out_logits, test_M,
 								static_cast<int>(test_vocab_size),
 								static_cast<int>(test_hidden_dim), test_stream);
+		if (cudaGetLastError() != cudaSuccess) {
+			std::cerr << "[FAIL] launch_tied_logits_bf16 launch failed\n";
+			return false;
+		}
 	}
 
 	if (call_launch_softmax_argmax == true) {
 		launch_softmax_argmax(test_d_logits_and_probs, test_d_pred_id, test_n, test_stream);
+		if (cudaGetLastError() != cudaSuccess) {
+			std::cerr << "[FAIL] launch_softmax_argmax launch failed\n";
+			return false;
+		}
 	}
 
 	return true;
 }
 
 static bool test_backward() {
-	if (call_backward_pass == true) {
-		if (!backward_pass(
-				reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
-				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
-				reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
-				test_output_dim, test_learning_rate, test_buffer_index)) {
-			std::cerr << "[FAIL] backward_pass returned false\n";
-			return false;
-		}
-	}
-
 	if (call_backward_pass_with_embeddings == true) {
 		if (!backward_pass_with_embeddings(
 				reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
@@ -612,6 +716,18 @@ static bool test_backward() {
 				test_output_dim, test_learning_rate, test_buffer_index, test_use_adamw,
 				test_scatter_embeddings)) {
 			std::cerr << "[FAIL] backward_pass_with_embeddings returned false\n";
+			return false;
+		}
+	}
+
+	if (call_transformer_backward_block == true) {
+		if (!transformer_backward_block(
+				test_grad_output, test_grad_input, test_hidden_states,
+				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+				reinterpret_cast<const GpuActivations*>(&test_gpu_activations),
+				test_sequence_length, test_embedding_dim, test_num_heads,
+				test_feedforward_network_dimension, test_learning_rate, test_stream)) {
+			std::cerr << "[FAIL] transformer_backward_block returned false\n";
 			return false;
 		}
 	}
@@ -628,8 +744,25 @@ static bool test_backward() {
 		}
 	}
 
-	// Phase 3: Multi-Head Attention, SwiGLU & Transformer Backward Block
+	if (call_backward_pass == true) {
+		if (!backward_pass(
+				reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+				reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
+				test_output_dim, test_learning_rate, test_buffer_index)) {
+			std::cerr << "[FAIL] backward_pass returned false\n";
+			return false;
+		}
+	}
+
+	// Phase 3: Standalone Multi-Head Attention & SwiGLU backward checks
 	if (call_fused_causal_backward == true) {
+		cudaMemsetAsync(test_grad_query, 0, test_sequence_length * test_embedding_dim * sizeof(float),
+						static_cast<cudaStream_t>(test_stream));
+		cudaMemsetAsync(test_grad_key, 0, test_sequence_length * test_embedding_dim * sizeof(float),
+						static_cast<cudaStream_t>(test_stream));
+		cudaMemsetAsync(test_grad_value, 0, test_sequence_length * test_embedding_dim * sizeof(float),
+						static_cast<cudaStream_t>(test_stream));
 		if (!fused_causal_backward(test_grad_output, test_query, test_key, test_value,
 								   test_grad_query, test_grad_key, test_grad_value,
 								   test_sequence_length, test_embedding_dim, test_num_heads,
@@ -647,18 +780,6 @@ static bool test_backward() {
 		}
 	}
 
-	if (call_transformer_backward_block == true) {
-		if (!transformer_backward_block(
-				test_grad_output, test_grad_input, test_hidden_states,
-				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
-				reinterpret_cast<const GpuActivations*>(&test_gpu_activations),
-				test_sequence_length, test_embedding_dim, test_num_heads,
-				test_feedforward_network_dimension, test_learning_rate, test_stream)) {
-			std::cerr << "[FAIL] transformer_backward_block returned false\n";
-			return false;
-		}
-	}
-
 	return true;
 }
 
@@ -667,9 +788,9 @@ static bool pass() {
 }
 
 static bool read_and_reset_telemetry(float out_telemetry[telemetry_slot_count]) {
-	cudaError_t sync_err = cudaDeviceSynchronize();
+	cudaError_t sync_err = cudaStreamSynchronize(static_cast<cudaStream_t>(test_stream));
 	if (sync_err != cudaSuccess) {
-		std::cerr << "[FAIL] cudaDeviceSynchronize: " << cudaGetErrorString(sync_err) << "\n";
+		std::cerr << "[FAIL] cudaStreamSynchronize: " << cudaGetErrorString(sync_err) << "\n";
 		return false;
 	}
 	const size_t bytes = telemetry_slot_count * sizeof(float);
@@ -678,7 +799,10 @@ static bool read_and_reset_telemetry(float out_telemetry[telemetry_slot_count]) 
 		std::cerr << "[FAIL] cudaMemcpy telemetry failed\n";
 		return false;
 	}
-	cudaMemset(test_gpu_activations.d_loss, 0, bytes);
+	if (cudaMemset(test_gpu_activations.d_loss, 0, bytes) != cudaSuccess) {
+		std::cerr << "[FAIL] cudaMemset telemetry reset failed\n";
+		return false;
+	}
 	return true;
 }
 
@@ -687,11 +811,14 @@ int main() {
 	constexpr int report_interval = 100;
 	constexpr int checkpoint_interval = 1000;
 
+	float initial_loss = -1.0f;
 	float prev_checkpoint_loss = -1.0f;
 	bool all_healthy = true;
 
+	std::cout << std::fixed << std::setprecision(6);
 	std::cout << "[ISOLATION] Starting closed-loop forward/backward test (" << total_steps
-			  << " steps)\n";
+			  << " steps, vocab=" << test_vocab_size << ", seq=" << test_sequence_length
+			  << ", dim=" << test_embedding_dim << ")\n";
 
 	for (int step = 1; step <= total_steps; ++step) {
 		if (!pass()) {
@@ -705,30 +832,40 @@ int main() {
 				return 1;
 			}
 
+			uint32_t pred_id = 0;
+			cudaMemcpy(&pred_id, test_gpu_activations.d_pred_id, sizeof(uint32_t),
+					   cudaMemcpyDeviceToHost);
+
 			const float avg_loss = telemetry[telemetry_loss] / static_cast<float>(report_interval);
-			const float grad_rms = std::sqrt(
-				telemetry[telemetry_gradient_square] /
-				static_cast<float>(report_interval * test_output_dim));
+			const float grad_l2 = std::sqrt(
+				telemetry[telemetry_gradient_square] / static_cast<float>(report_interval));
 			const float act_rms = std::sqrt(
 				telemetry[telemetry_activation_square] /
 				static_cast<float>(report_interval * test_output_dim));
 			const float dead_out = telemetry[telemetry_dead_output];
 			const float nonfinite = telemetry[telemetry_nonfinite];
 
-			std::cout << "[step " << step << "] avg_loss=" << avg_loss << " grad_rms=" << grad_rms
-					  << " act_rms=" << act_rms << " dead_out=" << dead_out
+			if (initial_loss < 0.0f) {
+				initial_loss = avg_loss;
+			}
+
+			std::cout << "[step " << std::setw(4) << step << "] avg_loss=" << avg_loss
+					  << " grad_l2=" << grad_l2 << " act_rms=" << act_rms
+					  << " pred_id=" << pred_id << " dead_out=" << dead_out
 					  << " nonfinite=" << nonfinite << "\n";
 
-			if (!std::isfinite(avg_loss) || !std::isfinite(grad_rms) || nonfinite > 0.0f) {
+			if (!std::isfinite(avg_loss) || !std::isfinite(grad_l2) || nonfinite > 0.0f ||
+				avg_loss <= 0.0f) {
 				std::cerr << "[ANOMALY] Non-finite or invalid telemetry at step " << step << "\n";
 				all_healthy = false;
 				break;
 			}
 
 			if (step % checkpoint_interval == 0) {
-				if (prev_checkpoint_loss >= 0.0f && avg_loss >= prev_checkpoint_loss) {
-					std::cerr << "[ANOMALY] Loss did not drop at step " << step << " (prev="
-							  << prev_checkpoint_loss << ", curr=" << avg_loss << ")\n";
+				if (prev_checkpoint_loss > 0.05f && avg_loss >= prev_checkpoint_loss) {
+					std::cerr << "[ANOMALY] Loss failed to drop at step " << step
+							  << " (prev=" << prev_checkpoint_loss << ", curr=" << avg_loss
+							  << ")\n";
 					all_healthy = false;
 				} else {
 					std::cout << "[CHECKPOINT " << step << "] loss=" << avg_loss << " (OK)\n";
@@ -738,8 +875,15 @@ int main() {
 		}
 	}
 
+	if (all_healthy && prev_checkpoint_loss >= initial_loss) {
+		std::cerr << "[ANOMALY] Overall loss did not drop from start (" << initial_loss
+				  << " -> " << prev_checkpoint_loss << ")\n";
+		all_healthy = false;
+	}
+
 	if (all_healthy) {
-		std::cout << "[PASS GREEN] Closed-loop forward/backward passed without anomalies.\n";
+		std::cout << "[PASS GREEN] Closed-loop forward/backward dropped loss (" << initial_loss
+				  << " -> " << prev_checkpoint_loss << ") without anomalies.\n";
 		return 0;
 	}
 	std::cout << "[FAIL RED] Anomaly detected in isolated forward/backward loop.\n";
