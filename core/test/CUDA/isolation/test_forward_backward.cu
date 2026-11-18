@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-Axiom-Proprietary
+/*
+ * Copyright (c) 2026 Omid Teimory. All Rights Reserved.
+ *
+ * PROPRIETARY SOURCE-AVAILABLE SOFTWARE — NOT OPEN SOURCE.
+ * Permission to view, clone, or compile this file is granted strictly on the
+ * condition precedent of full compliance with the root ./LICENSE file.
+ * Copying snippets, modifying, creating derivative works, redistributing,
+ * commercial/SaaS use, and AI/ML training (reserved under EU Directive
+ * 2019/790 Art. 4(3) and § 42h(6) Austrian UrhG) are strictly prohibited.
+ * Removal or alteration of this notice violates 17 U.S.C. § 1202 and § 90c UrhG.
+ */
+
 /*
 Isolate the forward and backward pass - feed then fake false emmbeding data - check the out put live - loss drop per 1000 step - if drops - no abnormality - anomalies - pass green - then we find that forward pass and backward pass in isolation work perfectly which makes the question that why when compile the full app the loss is not okay!
 */
@@ -168,10 +181,10 @@ struct TestGpuActivations {
 };
 
 // Const test struct instances
-const TestGpuPortion test_gpu_portion{};
-const TestGpuEmbeddings test_gpu_embeddings{};
-const TestGpuWeights test_gpu_weights{};
-const TestGpuActivations test_gpu_activations{};
+const TestGpuPortion test_gpu_portion {};
+const TestGpuEmbeddings test_gpu_embeddings {};
+const TestGpuWeights test_gpu_weights {};
+const TestGpuActivations test_gpu_activations {};
 
 // Dimension & indexing parameters
 const size_t test_input_dim = 0;
@@ -244,93 +257,160 @@ void* const test_grad_gate = nullptr;
 void* const test_grad_up = nullptr;
 void* const test_grad_input = nullptr;
 
+// Switches
+bool call_forward_pass = true;
+bool call_forward_pass_with_embeddings = true;
+bool call_run_cutlass_saturation_benchmark = true;
+bool call_run_vram_saturation_benchmark = true;
+bool call_batched_gemm_multiply = true;
+bool call_fused_causal_attention = true;
+bool call_swiglu_forward = true;
+bool call_transformer_forward_block = true;
+bool call_launch_gather_embeddings_batched = true;
+bool call_launch_cutlass_gemm_bf16 = true;
+bool call_launch_tied_logits_bf16 = true;
+bool call_launch_softmax_argmax = true;
 
+bool call_backward_pass = true;
+bool call_backward_pass_with_embeddings = true;
+bool call_backward_scatter_embeddings = true;
+bool call_fused_causal_backward = true;
+bool call_swiglu_backward = true;
+bool call_transformer_backward_block = true;
 
 static bool test_forward() {
+	if (call_forward_pass == true) {
+		forward_pass(reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+					 reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+					 reinterpret_cast<GpuActivations*>(
+						 const_cast<TestGpuActivations*>(&test_gpu_activations)),
+					 test_input_dim, test_output_dim, test_buffer_index);
+	};
 
-	CUDA_API bool forward_pass(const GpuPortion* gpu_portion, const GpuWeights* gpu_weights,
-							   GpuActivations* gpu_activations, size_t input_dim, size_t output_dim,
-							   int buffer_index);
 
-	CUDA_API bool forward_pass_with_embeddings(
-		const GpuPortion* gpu_portion, const GpuEmbeddings* gpu_embeddings,
-		const GpuWeights* gpu_weights, GpuActivations* gpu_activations, size_t input_dim,
-		size_t output_dim, int buffer_index, bool gather_embeddings = true);
+	if (call_forward_pass_with_embeddings == true) {
+		forward_pass_with_embeddings(
+			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+			reinterpret_cast<const GpuEmbeddings*>(&test_gpu_embeddings),
+			reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+			reinterpret_cast<GpuActivations*>(
+				const_cast<TestGpuActivations*>(&test_gpu_activations)),
+			test_input_dim, test_output_dim, test_buffer_index, test_gather_embeddings);
+	}
 
-	CUDA_API bool run_cutlass_saturation_benchmark(int M, int N, int K, int iterations,
-												   double* out_tflops, double* out_bandwidth_gb_s,
-												   float* out_avg_ms);
+	if (call_run_cutlass_saturation_benchmark == true) {
+		run_cutlass_saturation_benchmark(test_M, test_N, test_K, test_iterations, test_out_tflops,
+										 test_out_bandwidth_gb_s, test_out_avg_ms);
+	}
 
-	CUDA_API bool run_vram_saturation_benchmark(size_t safety_headroom_bytes,
-												size_t* out_allocated_bytes,
-												double* out_bandwidth_gb_s, float* out_elapsed_ms);
+	if (call_run_vram_saturation_benchmark == true) {
+		run_vram_saturation_benchmark(test_safety_headroom_bytes, test_out_allocated_bytes,
+									  test_out_bandwidth_gb_s, test_out_elapsed_ms);
+	}
 
 	// Phase 3: Multi-Head Attention, SwiGLU & Transformer Forward Block
-	CUDA_API bool batched_gemm_multiply(const void* matrix_a, const void* matrix_b, void* matrix_c,
-										int rows_a, int cols_b, int common_dim, bool transpose_a,
-										bool transpose_b, void* stream);
+	if (call_batched_gemm_multiply == true) {
+		batched_gemm_multiply(test_matrix_a, test_matrix_b, test_matrix_c, test_rows_a,
+							  test_cols_b, test_common_dim, test_transpose_a, test_transpose_b,
+							  test_stream);
+	}
 
-	CUDA_API bool fused_causal_attention(const void* query, const void* key, const void* value,
-										 void* output, size_t sequence_length, size_t embedding_dim,
-										 size_t num_heads, void* stream);
+	if (call_fused_causal_attention == true) {
+		fused_causal_attention(test_query, test_key, test_value, test_output,
+							   test_sequence_length, test_embedding_dim, test_num_heads,
+							   test_stream);
+	}
 
-	CUDA_API bool swiglu_forward(const void* gate, const void* up, void* output,
-								 size_t total_elements, void* stream);
+	if (call_swiglu_forward == true) {
+		swiglu_forward(test_gate, test_up, test_output, test_total_elements, test_stream);
+	}
 
-	CUDA_API bool transformer_forward_block(void* hidden_states, const GpuWeights* gpu_weights,
-											GpuActivations* gpu_activations, size_t sequence_length,
-											size_t embedding_dim, size_t num_heads,
-											size_t feedforward_network_dimension, void* stream);
+	if (call_transformer_forward_block == true) {
+		transformer_forward_block(
+			test_hidden_states, reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+			reinterpret_cast<GpuActivations*>(
+				const_cast<TestGpuActivations*>(&test_gpu_activations)),
+			test_sequence_length, test_embedding_dim, test_num_heads,
+			test_feedforward_network_dimension, test_stream);
+	}
 
+	if (call_launch_gather_embeddings_batched == true) {
+		launch_gather_embeddings_batched(test_d_token_ids, test_d_table, test_d_output,
+										 test_batch_tokens, test_hidden_dim, test_vocab_size,
+										 test_stream);
+	}
 
-	CUDA_API void launch_gather_embeddings_batched(
-		const uint32_t* d_token_ids, const void* d_table, void* d_output, uint32_t batch_tokens,
-		uint32_t hidden_dim, uint32_t vocab_size, void* stream);
+	if (call_launch_cutlass_gemm_bf16 == true) {
+		launch_cutlass_gemm_bf16(test_M, test_N, test_K, test_d_x, test_d_w, test_d_b, test_d_y,
+								 test_stream);
+	}
 
-	CUDA_API void launch_cutlass_gemm_bf16(int M, int N, int K, const void* d_x, const void* d_w,
-										   const void* d_b, void* d_y, void* stream);
+	if (call_launch_tied_logits_bf16 == true) {
+		launch_tied_logits_bf16(test_d_normed_x, test_d_lm_head_weight, test_d_out_logits, test_M,
+								static_cast<int>(test_vocab_size),
+								static_cast<int>(test_hidden_dim), test_stream);
+	}
 
-	CUDA_API void launch_tied_logits_bf16(const void* d_normed_x, const void* d_lm_head_weight,
-										  float* d_out_logits, int M, int vocab_size,
-										  int hidden_dim, void* stream);
+	if (call_launch_softmax_argmax == true) {
+		launch_softmax_argmax(test_d_logits_and_probs, test_d_pred_id, test_n, test_stream);
+	}
 
-	CUDA_API void launch_softmax_argmax(float* d_logits_and_probs, uint32_t* d_pred_id, size_t n,
-										void* stream);
-};
+	return true;
+}
 
 static bool test_backward() {
-	CUDA_API bool backward_pass(const GpuPortion* gpu_portion, GpuWeights* gpu_weights,
-								const GpuActivations* gpu_activations, size_t input_dim,
-								size_t output_dim, float learning_rate, int buffer_index);
+	if (call_backward_pass == true) {
+		backward_pass(
+			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+			reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+			reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
+			test_output_dim, test_learning_rate, test_buffer_index);
+	}
 
-	CUDA_API bool backward_pass_with_embeddings(
-		const GpuPortion* gpu_portion, GpuEmbeddings* gpu_embeddings, GpuWeights* gpu_weights,
-		const GpuActivations* gpu_activations, size_t input_dim, size_t output_dim,
-		float learning_rate, int buffer_index, bool use_adamw, bool scatter_embeddings = true);
+	if (call_backward_pass_with_embeddings == true) {
+		backward_pass_with_embeddings(
+			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+			reinterpret_cast<GpuEmbeddings*>(
+				const_cast<TestGpuEmbeddings*>(&test_gpu_embeddings)),
+			reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+			reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
+			test_output_dim, test_learning_rate, test_buffer_index, test_use_adamw,
+			test_scatter_embeddings);
+	}
 
-	CUDA_API bool backward_scatter_embeddings(const GpuPortion* gpu_portion,
-											  GpuEmbeddings* gpu_embeddings, const void* d_dx,
-											  size_t num_tokens, size_t embedding_dim,
-											  float learning_rate, int buffer_index, void* stream);
+	if (call_backward_scatter_embeddings == true) {
+		backward_scatter_embeddings(
+			reinterpret_cast<const GpuPortion*>(&test_gpu_portion),
+			reinterpret_cast<GpuEmbeddings*>(
+				const_cast<TestGpuEmbeddings*>(&test_gpu_embeddings)),
+			test_d_dx, test_num_tokens, test_embedding_dim, test_learning_rate,
+			test_buffer_index, test_stream);
+	}
 
 	// Phase 3: Multi-Head Attention, SwiGLU & Transformer Backward Block
-	CUDA_API bool fused_causal_backward(const void* grad_output, const void* query, const void* key,
-										const void* value, void* grad_query, void* grad_key,
-										void* grad_value, size_t sequence_length,
-										size_t embedding_dim, size_t num_heads, void* stream);
+	if (call_fused_causal_backward == true) {
+		fused_causal_backward(test_grad_output, test_query, test_key, test_value, test_grad_query,
+							  test_grad_key, test_grad_value, test_sequence_length,
+							  test_embedding_dim, test_num_heads, test_stream);
+	}
 
-	CUDA_API bool swiglu_backward(const void* grad_output, const void* gate, const void* up,
-								  void* grad_gate, void* grad_up, size_t total_elements,
-								  void* stream);
+	if (call_swiglu_backward == true) {
+		swiglu_backward(test_grad_output, test_gate, test_up, test_grad_gate, test_grad_up,
+						test_total_elements, test_stream);
+	}
 
-	CUDA_API bool transformer_backward_block(
-		const void* grad_output, void* grad_input, const void* hidden_states,
-		GpuWeights* gpu_weights, const GpuActivations* gpu_activations, size_t sequence_length,
-		size_t embedding_dim, size_t num_heads, size_t feedforward_network_dimension,
-		float learning_rate, void* stream);
-};
+	if (call_transformer_backward_block == true) {
+		transformer_backward_block(
+			test_grad_output, test_grad_input, test_hidden_states,
+			reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
+			reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_sequence_length,
+			test_embedding_dim, test_num_heads, test_feedforward_network_dimension,
+			test_learning_rate, test_stream);
+	}
+
+	return true;
+}
 
 static bool pass() {
-	test_forward();
-	test_backward();
-};
+	return test_forward() && test_backward();
+}
