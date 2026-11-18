@@ -201,10 +201,10 @@ private:
 				std::cerr << "Failed to open " << path << "\n";
 				return false;
 			}
-			char buf[65536];
+			char buf[config::io_buffer_bytes];
 			uintmax_t bytes_read = 0;
 			uintmax_t last_progress_bytes = 0;
-			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+			const bool show_progress = (fsize >= config::progress_min_file_bytes);
 			const size_t initial_tokens = input.tokenized_data.size();
 
 			while (parsed_data.read(buf, sizeof(buf)) || parsed_data.gcount() > 0) {
@@ -214,13 +214,14 @@ private:
 				}
 				bytes_read += static_cast<uintmax_t>(n);
 				if (show_progress &&
-					(bytes_read - last_progress_bytes >= 2 * 1024 * 1024 || bytes_read >= fsize)) {
+					(bytes_read - last_progress_bytes >= config::progress_step_bytes ||
+					 bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
 					const double pct =
 						(fsize > 0)
 							? (static_cast<double>(bytes_read) / static_cast<double>(fsize)) * 100.0
 							: 100.0;
-					constexpr int bar_w = 24;
+					constexpr int bar_w = config::progress_bar_width;
 					const int filled = static_cast<int>((pct / 100.0) * bar_w);
 					std::string bar = "[";
 					for (int b = 0; b < bar_w; ++b) {
@@ -330,10 +331,10 @@ public:
 	std::vector<uint32_t> build_context_ids(const std::vector<uint32_t>& tokens,
 											size_t context_tokens);
 
-	// Converts a sequence of token IDs into a 128-token context window vector (size = context_tokens * embedding_dim)
-	std::vector<std::bfloat16_t> build_context_window(const Input& input,
-													  const std::vector<uint32_t>& tokens,
-													  size_t context_tokens = 128);
+	// Converts a sequence of token IDs into a context window vector (size = context_tokens * token_dim)
+	std::vector<std::bfloat16_t> build_context_window(
+		const Input& input, const std::vector<uint32_t>& tokens,
+		size_t context_tokens = config::context_window_size);
 
 	// Vocabulary serialization & persistence (Flat binary AXVK format)
 	bool save_vocabulary(const std::filesystem::path& filepath, const Input& input);

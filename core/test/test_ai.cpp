@@ -341,7 +341,6 @@ bool test_ai() {
 
 	// 2. Parser Vocabulary & Nearest-Neighbor Decoding Verification
 	Input parser_input;
-	parser_input.embedding_dim = out_dim;
 	parser_input.main_dictionary["The"] = 1;
 	parser_input.main_dictionary["quick"] = 2;
 	parser_input.main_dictionary["brown"] = 3;

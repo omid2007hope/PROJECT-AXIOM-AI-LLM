@@ -240,7 +240,7 @@ struct GpuPagedCache {
 		nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
 	void* d_block_table = nullptr; // device ptr to int (staged sequence block table)
 	size_t total_blocks = 0;
-	size_t block_size = 16;
+	size_t block_size = axiom::PAGED_BLOCK_SIZE;
 	size_t hidden_dimension = axiom::TOKEN_DIM;
 	size_t num_heads = axiom::NUM_HEADS;
 };

@@ -134,7 +134,7 @@ struct Portion {
 	// Start index of every sliding window, reshuffled at the start of each epoch
 	// (offset == 0). Windows are visited as window_order[offset].
 	std::vector<uint32_t> window_order = {};
-	std::mt19937 shuffle_engine {1337U};
+	std::mt19937 shuffle_engine {config::random_seed};
 
 	void seed_shuffle(uint32_t seed) {
 		shuffle_engine.seed(seed);

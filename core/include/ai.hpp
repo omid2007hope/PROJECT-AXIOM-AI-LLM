@@ -56,7 +56,7 @@ public:
 	size_t vocab_size = axiom::VOCAB_SIZE;
 	size_t embedding_dim = axiom::TOKEN_DIM;
 	size_t active_vocab_size = 0;
-	uint32_t random_seed = 1337U;
+	uint32_t random_seed = config::random_seed;
 
 	// Milestone 3: Discrete Autoregressive Token Classification
 	uint32_t last_predicted_token_id = 0;
@@ -118,9 +118,9 @@ public:
 				 double& validation_loss);
 
 	// Weight persistence methods
-	bool save_weights(const std::string& path = "weights.axiom");
+	bool save_weights(const std::string& path = config::weights_file);
 
-	bool load_weights(const std::string& path = "weights.axiom");
+	bool load_weights(const std::string& path = config::weights_file);
 
 	// Forward Inference Engine (no gradient updates)
 	bool predict(const std::vector<std::bfloat16_t>& context_window,
@@ -135,14 +135,14 @@ public:
 	bool generate(const std::string& prompt,
 		      Parser& parser,
 		      Input& input,
-		      size_t max_new_tokens = 128,
+		      size_t max_new_tokens = config::default_max_new_tokens,
 		      const SamplingConfig& config = {},
 		      std::function<void(const std::string&)> token_callback = nullptr);
 
 	// Phase 3: Transformer Block Construction and Execution
 	bool build_transformer_block(size_t hidden_dim,
-				     size_t heads = 4,
-				     size_t feedforward_network_dimension = 64);
+				     size_t heads = axiom::NUM_HEADS,
+				     size_t feedforward_network_dimension = axiom::FFN_DIM);
 
 	bool forward_transformer(std::vector<std::bfloat16_t>& hidden_states,
 				 size_t sequence_length);
@@ -154,7 +154,8 @@ public:
 				  float learning_rate);
 
 	// Phase 4: PagedAttention KV-Cache & Block Management
-	bool build_paged_cache(size_t total_blocks = 256, size_t block_size = 16);
+	bool build_paged_cache(size_t total_blocks = config::paged_total_blocks,
+			       size_t block_size = config::paged_block_size);
 	void free_paged_cache_memory();
 	bool fork_sequence_context(const SequenceContext& parent, SequenceContext& child);
 	bool append_sequence_token(SequenceContext& sequence,
@@ -170,18 +171,18 @@ public:
 	bool build_training_graph(Optimizer& optimizer, Portion& portion);
 	bool launch_training_graph_step();
 	void free_training_graph_resources();
-	float benchmark_graph_launch_latency(int iterations = 100);
+	float benchmark_graph_launch_latency(int iterations = config::default_graph_benchmark_iterations);
 
 	// Phase 6: Sparse Mixture of Experts (MoE) Routing
 	bool build_expert_layers(size_t hidden_dim,
 				 size_t feedforward_network_dimension,
-				 size_t num_experts = 8);
+				 size_t num_experts = config::default_num_experts);
 	bool forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
 				     size_t sequence_length,
 				     std::vector<int>& routing_histogram);
 	bool verify_routing_balance(const std::vector<int>& routing_histogram,
 				    size_t total_tokens,
-				    size_t num_experts = 8);
+				    size_t num_experts = config::default_num_experts);
 
 	// ── Axiom Native Stacked Pipeline ───────────────────────────────────────────
 	AxiomModelConfig config_;

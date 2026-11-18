@@ -1891,11 +1891,11 @@ int main(int argc, char* argv[]) {
 	bool auto_archive = false;
 	bool auto_purge = false;
 	size_t max_steps = 0;
-	size_t training_epochs = 4;
-	uint32_t min_frequency = 3;
-	uint32_t random_seed = 1337U;
+	size_t training_epochs = config::default_training_epochs;
+	uint32_t min_frequency = config::default_min_frequency;
+	uint32_t random_seed = config::random_seed;
 	bool custom_seed_set = false;
-	double target_stop_loss = 2.8;
+	double target_stop_loss = config::default_target_stop_loss;
 
 	for (int i = 1; i < argc; ++i) {
 		std::string a = argv[i];
@@ -2125,18 +2125,20 @@ int main(int argc, char* argv[]) {
 	std::filesystem::create_directories(training_dir, dir_ec);
 
 	// 1. LLM Model Paths (strictly used by Chat)
-	std::filesystem::path llm_weights_path = "models/axiom.axiom";
+	const std::filesystem::path models_dir = config::models_folder;
+	const std::filesystem::path parent_models_dir = core_dir.parent_path() / config::models_folder;
+	std::filesystem::path llm_weights_path = models_dir / config::llm_weights_file;
 	const std::vector<std::filesystem::path> llm_weights_candidates = {
-		"models/axiom.axiom",
-		"../models/axiom.axiom",
-		core_dir.parent_path() / "models" / "axiom.axiom",
-		"models/axiom3b.axiom",
-		"../models/axiom3b.axiom",
-		core_dir.parent_path() / "models" / "axiom3b.axiom",
-		"training/weights.axiom",
-		"../training/weights.axiom",
-		"models/weights.axiom",
-		"../models/weights.axiom"};
+		models_dir / config::llm_weights_file,
+		std::filesystem::path("..") / models_dir / config::llm_weights_file,
+		parent_models_dir / config::llm_weights_file,
+		models_dir / config::llm_weights_3b_file,
+		std::filesystem::path("..") / models_dir / config::llm_weights_3b_file,
+		parent_models_dir / config::llm_weights_3b_file,
+		training_dir / config::weights_file,
+		std::filesystem::path("..") / training_dir / config::weights_file,
+		models_dir / config::weights_file,
+		std::filesystem::path("..") / models_dir / config::weights_file};
 	for (const auto& candidate : llm_weights_candidates) {
 		if (std::filesystem::exists(candidate)) {
 			llm_weights_path = candidate;
@@ -2147,15 +2149,15 @@ int main(int argc, char* argv[]) {
 		llm_weights_path = custom_weights_path;
 	}
 
-	std::filesystem::path llm_vocab_path = "models/axiom_vocab.axiom";
+	std::filesystem::path llm_vocab_path = models_dir / config::llm_vocab_file;
 	const std::vector<std::filesystem::path> llm_vocab_candidates = {
-		"models/axiom_vocab.axiom",
-		"../models/axiom_vocab.axiom",
-		core_dir.parent_path() / "models" / "axiom_vocab.axiom",
-		"training/vocab.axiom",
-		"../training/vocab.axiom",
-		"models/vocab.axiom",
-		"../models/vocab.axiom"};
+		models_dir / config::llm_vocab_file,
+		std::filesystem::path("..") / models_dir / config::llm_vocab_file,
+		parent_models_dir / config::llm_vocab_file,
+		training_dir / config::vocab_file,
+		std::filesystem::path("..") / training_dir / config::vocab_file,
+		models_dir / config::vocab_file,
+		std::filesystem::path("..") / models_dir / config::vocab_file};
 	for (const auto& candidate : llm_vocab_candidates) {
 		if (std::filesystem::exists(candidate)) {
 			llm_vocab_path = candidate;
@@ -2196,7 +2198,6 @@ int main(int argc, char* argv[]) {
 
 	Parser parser(developer_mode, embedded_path, asset_dirs);
 	Input input;
-	input.embedding_dim = config::token_dim;
 	Test test = make_sample_data();
 
 	// Instantiate the required objects for the AI
@@ -2249,7 +2250,6 @@ int main(int argc, char* argv[]) {
 	// Interactive Menu Loop
 	while (true) {
 		Input session_input;
-		session_input.embedding_dim = config::token_dim;
 		AppMode selected_mode = collect_user_input(session_input);
 
 		if (selected_mode == AppMode::Exit) {

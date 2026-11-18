@@ -192,9 +192,9 @@ std::vector<uint32_t> Parser::tokenization(Input& input, Test& test) {
 // Streams directly to disk in fixed-size chunks to eliminate RAM saturation
 // and SSD page thrashing on massive datasets (hundreds of millions of tokens).
 std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
-	input.chunk_position = 0;
-	input.tokens_written = 0;
-	input.last_percentage = 0;
+	size_t chunk_position = Config::chunk_position;
+	size_t tokens_written = Config::tokens_written;
+	size_t last_percentage = Config::last_percentage;
 
 	build_embedding_table(input);
 
@@ -215,19 +215,19 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 	// If we are testing which means developer mode is on
 	// if token size is less than equal to ram's buffer size
 	const bool keep_in_ram =
-		developer_mode == true || (input.tokenized_data.size() <= input.ram_buffer_size);
+		developer_mode == true || (input.tokenized_data.size() <= config::ram_buffer_size);
 
 	if (keep_in_ram == true) {
-		input.embedded_data.resize(input.tokenized_data.size() * input.embedding_dim);
+		input.embedded_data.resize(input.tokenized_data.size() * config::token_dim);
 	} else {
 		input.embedded_data.clear();
 		input.embedded_data.shrink_to_fit();
 	}
 
-	std::vector<std::bfloat16_t> chunk(input.CHUNK_TOKENS * input.embedding_dim);
-	std::vector<std::bfloat16_t> current_vec(input.embedding_dim);
+	std::vector<std::bfloat16_t> chunk(config::chunk_tokens * config::token_dim);
+	std::vector<std::bfloat16_t> current_vec(config::token_dim);
 
-	const bool show_progress = (input.tokenized_data.size() >= input.minimum_limit);
+	const bool show_progress = (input.tokenized_data.size() >= config::minimum_limit);
 
 	for (size_t i = 0; i < input.tokenized_data.size(); ++i) {
 
@@ -243,9 +243,8 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 			} else {
 				float bound =
 					1.0f /
-					std::sqrt(static_cast<float>(
-						input.embedding_dim > 0 ? input.embedding_dim : 4));
-				for (size_t d = 0; d < input.embedding_dim; ++d) {
+					std::sqrt(static_cast<float>(config::token_dim));
+				for (size_t d = 0; d < config::token_dim; ++d) {
 					uint32_t h = id * 0x45d9f3b +
 						     static_cast<uint32_t>(d + 1) * 0x119de1f3;
 					h = ((h >> 16) ^ h) * 0x45d9f3b;
@@ -259,28 +258,28 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 		}
 
 		if (keep_in_ram == true) {
-			for (size_t d = 0; d < input.embedding_dim; ++d) {
+			for (size_t d = 0; d < config::token_dim; ++d) {
 
-				input.embedded_data[i * input.embedding_dim + d] = current_vec[d];
+				input.embedded_data[i * config::token_dim + d] = current_vec[d];
 			}
 		}
 
-		for (size_t d = 0; d < input.embedding_dim; ++d) {
-			chunk[input.chunk_position++] = current_vec[d];
+		for (size_t d = 0; d < config::token_dim; ++d) {
+			chunk[chunk_position++] = current_vec[d];
 		}
 
-		if (input.chunk_position == chunk.size()) {
+		if (chunk_position == chunk.size()) {
 			out.write(reinterpret_cast<const char*>(chunk.data()),
 				  chunk.size() * sizeof(std::bfloat16_t));
-			input.tokens_written += input.CHUNK_TOKENS;
-			input.chunk_position = 0;
+			tokens_written += config::chunk_tokens;
+			chunk_position = 0;
 
 			if (show_progress) {
 				const size_t pct =
-					(input.tokens_written * 100) / input.tokenized_data.size();
-				if (pct != input.last_percentage) {
-					input.last_percentage = pct;
-					constexpr int bar_w = 24;
+					(tokens_written * 100) / input.tokenized_data.size();
+				if (pct != last_percentage) {
+					last_percentage = pct;
+					constexpr int bar_w = config::progress_bar_width;
 					const int filled = static_cast<int>((pct / 100.0) * bar_w);
 					std::string bar = "[";
 					for (int b = 0; b < bar_w; ++b) {
@@ -294,7 +293,7 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 					bar += "]";
 					std::cout << "\r\033[K  [..] Synthesizing continuous embeddings "
 						  << bar << " " << pct << "% ("
-						  << input.tokens_written << "/"
+						  << tokens_written << "/"
 						  << input.tokenized_data.size() << " tokens)"
 						  << std::flush;
 				}
@@ -303,16 +302,16 @@ std::vector<std::bfloat16_t> Parser::embedding(Input& input, Test& test) {
 	}
 
 	// std::ofstream out(embedded_path, std::ios::binary | std::ios::trunc)
-	if (input.chunk_position > 0) {
+	if (chunk_position > 0) {
 		out.write(reinterpret_cast<const char*>(chunk.data()),
-			  input.chunk_position * sizeof(std::bfloat16_t));
-		input.tokens_written += (input.chunk_position / input.embedding_dim);
+			  chunk_position * sizeof(std::bfloat16_t));
+		tokens_written += (chunk_position / config::token_dim);
 	}
 	out.close();
 
 	if (show_progress) {
 		const uintmax_t bytes =
-			input.tokenized_data.size() * input.embedding_dim * sizeof(std::bfloat16_t);
+			input.tokenized_data.size() * config::token_dim * sizeof(std::bfloat16_t);
 		std::cout
 			<< "\r\033[K  [OK] Continuous embeddings synthesized: "
 			<< input.tokenized_data.size() << " tokens (" << format_file_size(bytes)
@@ -332,11 +331,11 @@ void Parser::build_embedding_table(Input& input) {
 
 	float bound =
 		1.0f /
-		std::sqrt(static_cast<float>(input.embedding_dim > 0 ? input.embedding_dim : 4));
+		std::sqrt(static_cast<float>(config::token_dim));
 	auto ensure_embedding = [&](uint32_t id) {
 		if (input.embedding_table.find(id) == input.embedding_table.end()) {
-			std::vector<std::bfloat16_t> vec(input.embedding_dim);
-			for (uint32_t d = 0; d < input.embedding_dim; ++d) {
+			std::vector<std::bfloat16_t> vec(config::token_dim);
+			for (uint32_t d = 0; d < config::token_dim; ++d) {
 				uint32_t h =
 					id * 0x45d9f3b + static_cast<uint32_t>(d + 1) * 0x119de1f3;
 				h = ((h >> 16) ^ h) * 0x45d9f3b;
@@ -369,18 +368,18 @@ uint32_t Parser::decode_token(const Input& input, const std::vector<float>& embe
 		input.decode_ids.clear();
 		input.decode_vectors.clear();
 		input.decode_ids.reserve(input.embedding_table.size());
-		input.decode_vectors.reserve(input.embedding_table.size() * input.embedding_dim);
+		input.decode_vectors.reserve(input.embedding_table.size() * config::token_dim);
 
 		for (const auto& [id, vec] : input.embedding_table) {
 			input.decode_ids.push_back(id);
-			for (size_t d = 0; d < input.embedding_dim; ++d) {
+			for (size_t d = 0; d < config::token_dim; ++d) {
 				input.decode_vectors.push_back(
 					d < vec.size() ? static_cast<float>(vec[d]) : 0.0f);
 			}
 		}
 	}
 
-	const size_t compared_dims = std::min(input.embedding_dim, embedding_vector.size());
+	const size_t compared_dims = std::min(config::token_dim, embedding_vector.size());
 
 	for (size_t d = 0; d < compared_dims; ++d) {
 		if (!std::isfinite(embedding_vector[d])) {
@@ -399,7 +398,7 @@ uint32_t Parser::decode_token(const Input& input, const std::vector<float>& embe
 	uint32_t best_id = 0;
 	float best_sim = -1e30f;
 
-	for (size_t i = 0; i < input.decode_ids.size(); ++i, row += input.embedding_dim) {
+	for (size_t i = 0; i < input.decode_ids.size(); ++i, row += config::token_dim) {
 		uint32_t id = input.decode_ids[i];
 		if (id == vocab::PAD) {
 			continue;
@@ -558,7 +557,7 @@ std::vector<uint32_t> Parser::build_context_ids(const std::vector<uint32_t>& tok
 std::vector<std::bfloat16_t> Parser::build_context_window(const Input& input,
 							  const std::vector<uint32_t>& tokens,
 							  size_t context_tokens) {
-	std::vector<std::bfloat16_t> window(context_tokens * input.embedding_dim,
+	std::vector<std::bfloat16_t> window(context_tokens * config::token_dim,
 					    static_cast<std::bfloat16_t>(0.0f));
 	if (tokens.empty())
 		return window;
@@ -570,8 +569,8 @@ std::vector<std::bfloat16_t> Parser::build_context_window(const Input& input,
 		uint32_t token_id = tokens[tokens.size() - count + i];
 		auto it = input.embedding_table.find(token_id);
 		if (it != input.embedding_table.end()) {
-			for (size_t d = 0; d < input.embedding_dim; ++d) {
-				window[(start_token_idx + i) * input.embedding_dim + d] =
+			for (size_t d = 0; d < config::token_dim; ++d) {
+				window[(start_token_idx + i) * config::token_dim + d] =
 					(d < it->second.size())
 						? it->second[d]
 						: static_cast<std::bfloat16_t>(0.0f);
@@ -590,7 +589,7 @@ static void print_progress_bar(const std::string& filename,
 							 static_cast<double>(total_bytes)) *
 								100.0)
 					     : 100.0;
-	constexpr int bar_width = 24;
+	constexpr int bar_width = config::progress_bar_width;
 	const int filled = static_cast<int>((pct / 100.0) * bar_width);
 
 	std::string bar = "[";
@@ -860,10 +859,10 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 					  << "\n";
 				continue;
 			}
-			char buf[65536];
+			char buf[config::io_buffer_bytes];
 			uintmax_t bytes_read = 0;
 			uintmax_t last_progress_bytes = 0;
-			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+			const bool show_progress = (fsize >= config::progress_min_file_bytes);
 
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
@@ -875,7 +874,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				}
 				bytes_read += static_cast<uintmax_t>(n);
 				if (show_progress &&
-				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
+				    (bytes_read - last_progress_bytes >= config::progress_step_bytes ||
 				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
 					print_progress_bar(fpath.filename().string(),
@@ -897,10 +896,10 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 					  << "\n";
 				continue;
 			}
-			char buf[65536];
+			char buf[config::io_buffer_bytes];
 			uintmax_t bytes_read = 0;
 			uintmax_t last_progress_bytes = 0;
-			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+			const bool show_progress = (fsize >= config::progress_min_file_bytes);
 
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
@@ -912,7 +911,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				}
 				bytes_read += static_cast<uintmax_t>(n);
 				if (show_progress &&
-				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
+				    (bytes_read - last_progress_bytes >= config::progress_step_bytes ||
 				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
 					print_progress_bar(fpath.filename().string(),
@@ -934,10 +933,10 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 					  << "\n";
 				continue;
 			}
-			char buf[65536];
+			char buf[config::io_buffer_bytes];
 			uintmax_t bytes_read = 0;
 			uintmax_t last_progress_bytes = 0;
-			const bool show_progress = (fsize >= 5 * 1024 * 1024);
+			const bool show_progress = (fsize >= config::progress_min_file_bytes);
 
 			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
 				std::streamsize n = in.gcount();
@@ -949,7 +948,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				}
 				bytes_read += static_cast<uintmax_t>(n);
 				if (show_progress &&
-				    (bytes_read - last_progress_bytes >= 2 * 1024 * 1024 ||
+				    (bytes_read - last_progress_bytes >= config::progress_step_bytes ||
 				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
 					print_progress_bar(fpath.filename().string(),
@@ -1194,10 +1193,10 @@ std::vector<uint32_t> Parser::tokenize_exact_code(
 			std::string_view candidate(raw_prompt.data() + pos, match_len);
 			auto it = vocab.find(std::string(candidate));
 			if (it != vocab.end()) {
-				if (it->second == 151643) {
+				if (it->second == vocab::ENDOFTEXT_TOKEN_ID) {
 					continue;
 				}
-				if (it->second == 151644) {
+				if (it->second == vocab::IM_START_TOKEN_ID) {
 					bool at_line_start =
 						(pos == 0 || raw_prompt[pos - 1] == '\n');
 					bool valid_role =
@@ -1213,7 +1212,7 @@ std::vector<uint32_t> Parser::tokenize_exact_code(
 						continue;
 					}
 				}
-				if (it->second == 151645) {
+				if (it->second == vocab::IM_END_TOKEN_ID) {
 					bool valid_end =
 						(pos + 10 < n && raw_prompt[pos + 10] == '\n') &&
 						(pos + 11 == n ||

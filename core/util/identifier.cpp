@@ -12,6 +12,7 @@
  */
 
 #include "Identifier.hpp"
+#include "config.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -410,7 +411,7 @@ std::vector<IdentifiedFile> Identifier::identify_directory(
 			// Skip 'archive' or 'database' folders
 			if (it->is_directory(ec)) {
 				std::string directory_name = it->path().filename().string();
-				if (directory_name == "archive" || directory_name == "database" || directory_name == ".git") {
+				if (directory_name == config::archive_folder || directory_name == config::database_folder || directory_name == ".git") {
 					it.disable_recursion_pending();
 					continue;
 				}

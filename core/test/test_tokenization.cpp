@@ -35,12 +35,11 @@ bool test_tokenization() {
 	// Generate and verify embeddings
 	std::vector<std::bfloat16_t> embedded = parser.embedding(input, test);
 	test_check(!embedded.empty(), "Embedded vector is non-empty", s_pass, s_fail);
-	test_check_eq(embedded.size(), tokenized.size() * input.embedding_dim, "Embedded floats == tokens * embedding_dim", s_pass, s_fail);
+	test_check_eq(embedded.size(), tokenized.size() * config::token_dim, "Embedded floats == tokens * token_dim", s_pass, s_fail);
 	test_check(!input.embedding_table.empty(), "Embedding lookup table is populated", s_pass, s_fail);
 
 	// Bulk directory tokenization verification
 	Input bulk_input;
-	bulk_input.embedding_dim = input.embedding_dim;
 	const std::filesystem::path bulk_test_dir = test_core_dir() / "test_sandbox_assets";
 	Parser bulk_parser(false, test_embedded_path(), {bulk_test_dir});
 	size_t files_processed = bulk_parser.bulk_tokenize_directory(bulk_test_dir, bulk_input);
@@ -61,7 +60,6 @@ bool test_tokenization() {
 		dummy_out << "archived content should be ignored by bulk tokenizer";
 	}
 	Input archive_test_input;
-	archive_test_input.embedding_dim = input.embedding_dim;
 	size_t archive_test_processed = bulk_parser.bulk_tokenize_directory(bulk_test_dir, archive_test_input);
 	test_check_eq(archive_test_processed, files_processed, "bulk_tokenize_directory strictly ignores archive folder", s_pass, s_fail);
 	std::filesystem::remove(dummy_archive_file, ec);
@@ -78,7 +76,6 @@ bool test_tokenization() {
 	test_check(std::filesystem::exists(test_vocab_file), "Serialized vocabulary file exists on disk", s_pass, s_fail);
 
 	Input restored_input;
-	restored_input.embedding_dim = input.embedding_dim;
 	test_check(parser.load_vocabulary(test_vocab_file, restored_input), "parser.load_vocabulary() succeeds", s_pass, s_fail);
 	test_check_eq(restored_input.main_dictionary.size(), input.main_dictionary.size(), "Loaded main_dictionary size matches original", s_pass, s_fail);
 	test_check_eq(restored_input.reverse_main_dictionary.size(), input.main_dictionary.size(), "reverse_main_dictionary populated with all tokens", s_pass, s_fail);
@@ -163,7 +160,6 @@ bool test_tokenization() {
 	}
 
 	Input freq_input;
-	freq_input.embedding_dim = input.embedding_dim;
 	Parser freq_parser(true, test_embedded_path(), {freq_test_dir});
 	size_t freq_files = freq_parser.bulk_tokenize_directory(freq_test_dir, freq_input, 0, 3);
 

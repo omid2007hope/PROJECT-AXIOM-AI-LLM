@@ -351,10 +351,10 @@ bool AI::load_weights(const std::string& path) {
 		return false;
 	}
 
-	// Check for optional transformer block payload (0x5458464DU)
+	// Check for optional transformer block payload (config::xform_magic)
 	uint64_t xform_magic = 0;
 	if (in.read(reinterpret_cast<char*>(&xform_magic), sizeof(xform_magic)) &&
-	    xform_magic == 0x5458464DU) {
+	    xform_magic == config::xform_magic) {
 		uint64_t xform_dim = 0;
 		uint64_t xform_ffn = 0;
 		if (in.read(reinterpret_cast<char*>(&xform_dim), sizeof(xform_dim)) &&
@@ -631,7 +631,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	LARGE_INTEGER file_size;
 	GetFileSizeEx(hFile, &file_size);
 	size_t total_bytes = static_cast<size_t>(file_size.QuadPart);
-	if (total_bytes <= 64) {
+	if (total_bytes <= config::axiom_model_header_bytes) {
 		CloseHandle(hFile);
 		return false;
 	}
@@ -660,7 +660,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	}
 
 	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
-	if (config_.magic != 0x4D4F4958U || config_.num_layers == 0 || config_.hidden_dim == 0 ||
+	if (config_.magic != config::axiom_model_magic || config_.num_layers == 0 || config_.hidden_dim == 0 ||
 	    config_.head_dim == 0 || config_.num_q_heads == 0 || config_.num_kv_heads == 0 ||
 	    config_.feedforward_network_dimension == 0 || config_.vocab_size == 0 ||
 	    config_.max_seq_len == 0) {
@@ -670,11 +670,11 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		CloseHandle(hFile);
 		return false;
 	}
-	if (config_.max_seq_len > 16384) {
-		config_.max_seq_len = 16384;
+	if (config_.max_seq_len > config::max_seq_len_cap) {
+		config_.max_seq_len = config::max_seq_len_cap;
 	}
-	const uint8_t* host_weights_ptr = mapped_base + 64;
-	size_t weights_bytes = total_bytes - 64;
+	const uint8_t* host_weights_ptr = mapped_base + config::axiom_model_header_bytes;
+	size_t weights_bytes = total_bytes - config::axiom_model_header_bytes;
 
 	const size_t D = config_.hidden_dim;
 	const size_t Qd = config_.num_q_heads * config_.head_dim;
@@ -709,7 +709,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 		return false;
 	}
 
-	const size_t chunk_bytes = 256 * 1024 * 1024;
+	const size_t chunk_bytes = config::mmap_chunk_bytes;
 	for (size_t offset = 0; offset < weights_bytes; offset += chunk_bytes) {
 		size_t to_copy = std::min(chunk_bytes, weights_bytes - offset);
 		if (!upload_device_buffer(static_cast<uint8_t*>(d_weights_arena_) + offset,
@@ -814,7 +814,8 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	d_act_buf_ = allocate_device_memory(FFN * sizeof(uint16_t));
 
 	// Allocate Paged KV Cache and physical block table
-	int num_blocks = static_cast<int>((config_.max_seq_len + 15) / 16);
+	int num_blocks = static_cast<int>((config_.max_seq_len + config::paged_block_size - 1) /
+					config::paged_block_size);
 	if (num_blocks <= 0)
 		num_blocks = 512;
 	std::vector<int32_t> h_block_table(num_blocks);
@@ -1060,12 +1061,13 @@ bool AI::generate(const std::string& prompt,
 			sync_cuda_stream(compute_stream_);
 			download_device_buffer(&h_pred_id_, d_pred_id_, sizeof(uint32_t));
 			next_token = h_pred_id_;
-			if (step == 0 && (next_token == 151643 || next_token == 151644 ||
-					  next_token == 151645)) {
+			if (step == 0 && (next_token == vocab::ENDOFTEXT_TOKEN_ID ||
+					  next_token == vocab::IM_START_TOKEN_ID ||
+					  next_token == vocab::IM_END_TOKEN_ID)) {
 				download_device_buffer(h_logits.data(), d_logits, logits_bytes);
 				float best_val = -1e30f;
 				for (uint32_t v = 0; v < config_.vocab_size; ++v) {
-					if (v >= 151643 && v <= 151645)
+					if (v >= vocab::ENDOFTEXT_TOKEN_ID && v <= vocab::IM_END_TOKEN_ID)
 						continue;
 					if (std::isfinite(h_logits[v]) && h_logits[v] > best_val) {
 						best_val = h_logits[v];
@@ -1075,10 +1077,10 @@ bool AI::generate(const std::string& prompt,
 			}
 		} else {
 			download_device_buffer(h_logits.data(), d_logits, logits_bytes);
-			if (step == 0 && config_.vocab_size > 151645) {
-				h_logits[151643] = -1e30f;
-				h_logits[151644] = -1e30f;
-				h_logits[151645] = -1e30f;
+			if (step == 0 && config_.vocab_size > vocab::IM_END_TOKEN_ID) {
+				h_logits[vocab::ENDOFTEXT_TOKEN_ID] = -1e30f;
+				h_logits[vocab::IM_START_TOKEN_ID] = -1e30f;
+				h_logits[vocab::IM_END_TOKEN_ID] = -1e30f;
 			}
 			float inv_temp = 1.0f / std::max(temperature, 0.01f);
 			candidates.clear();
@@ -1162,8 +1164,10 @@ bool AI::generate(const std::string& prompt,
 			}
 		}
 
-		// Check EOS (<|endoftext|> = 151643, <|im_start|> = 151644, <|im_end|> = 151645)
-		if (next_token == 151643 || next_token == 151644 || next_token == 151645) {
+		// Check EOS (<|endoftext|>, <|im_start|>, <|im_end|>)
+		if (next_token == vocab::ENDOFTEXT_TOKEN_ID ||
+		    next_token == vocab::IM_START_TOKEN_ID ||
+		    next_token == vocab::IM_END_TOKEN_ID) {
 			break;
 		}
 

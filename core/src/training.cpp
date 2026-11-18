@@ -338,7 +338,7 @@ bool AI::save_weights(const std::string& path) {
 			return false;
 		}
 
-		const uint64_t xform_magic = 0x5458464DU;
+		const uint64_t xform_magic = config::xform_magic;
 		const uint64_t xform_dim_u64 = xform_dim;
 		const uint64_t xform_ffn_u64 = xform_ffn;
 
@@ -467,8 +467,8 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 	if (enable_transformer) {
 		const size_t model_dim = embedding_dim > 0 ? embedding_dim : target_elements_y_total;
 		size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : 1;
-		if (model_dim / heads > 64 && model_dim % 64 == 0) {
-			heads = model_dim / 64;
+		if (model_dim / heads > axiom::MAX_HEAD_DIM && model_dim % axiom::MAX_HEAD_DIM == 0) {
+			heads = model_dim / axiom::MAX_HEAD_DIM;
 		}
 		const size_t feedforward_network_dimension =
 			(ffn_dimension > 0 && gpu_weights.transformer_dim == model_dim) ? ffn_dimension

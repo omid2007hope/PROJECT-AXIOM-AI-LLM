@@ -78,8 +78,8 @@ bool test_embeddings() {
 	// ── [2] Embedding returns correct size ───────────────────────────────────
 	std::cout << "\n[2] Embedding size\n";
 	std::vector<std::bfloat16_t> emb = parser.embedding(input, test);
-	size_t expected_size = input.tokenized_data.size() * input.embedding_dim;
-	check_eq(emb.size(), expected_size, "embedded.size == tokens * embedding_dim");
+	size_t expected_size = input.tokenized_data.size() * config::token_dim;
+	check_eq(emb.size(), expected_size, "embedded.size == tokens * token_dim");
 	check_eq(input.embedded_data.size(), expected_size, "input.embedded_data synced");
 
 	std::cout << "\n=== Embedded Data Test Result ===\n";
@@ -100,15 +100,15 @@ bool test_embeddings() {
 	      "embedding_table entries <= unique token count");
 	check(input.embedding_table.size() > 0, "embedding_table non-empty");
 
-	// Each entry must have exactly embedding_dim values
+	// Each entry must have exactly token_dim values
 	bool all_dim_correct = true;
 	for (auto& [id, vec] : input.embedding_table) {
-		if (vec.size() != input.embedding_dim) {
+		if (vec.size() != config::token_dim) {
 			all_dim_correct = false;
 			break;
 		}
 	}
-	check(all_dim_correct, "every embedding vector has embedding_dim elements");
+	check(all_dim_correct, "every embedding vector has token_dim elements");
 
 	// ── [4] BF16 precision: values are in [-1, 1] and non-zero ──────────────
 	std::cout << "\n[4] BF16 value range\n";

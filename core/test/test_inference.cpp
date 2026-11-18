@@ -46,17 +46,17 @@ bool test_inference() {
 	std::cout << "\n=== Platinum Inference & System Resilience Test Suite ===\n";
 	int s_pass = 0, s_fail = 0;
 
-	const size_t in_dim = 512;
-	const size_t out_dim = 4;
-	const float w_min = -0.1f;
-	const float w_max = 0.1f;
+	const size_t ctx_tokens = config::context_window_size;
+	const size_t out_dim = config::token_dim;
+	const size_t in_dim = ctx_tokens * out_dim;
+	const float w_min = config::weight_min;
+	const float w_max = config::weight_max;
 
 	Elements ai_elements {};
 	AI ai(in_dim, out_dim, w_min, w_max, ai_elements);
 	ai.upload_weights();
 
 	Input input;
-	input.embedding_dim = out_dim;
 	Parser parser(true, test_embedded_path(), test_asset_dirs());
 
 	// ── [1] Prompt Tokenization & Modality Boundary Invariants ─────────────────
@@ -107,11 +107,11 @@ bool test_inference() {
 	// ── [2] Autoregressive Context Window Generation & Padding Logistics ────────
 	std::cout << "\n[2] Autoregressive Context Window Generation & Padding Logistics\n";
 
-	// 2.1 Zero tokens input -> exact 512 zeros
-	std::vector<std::bfloat16_t> zero_window = parser.build_context_window(input, {}, 128);
+	// 2.1 Zero tokens input -> exact in_dim zeros
+	std::vector<std::bfloat16_t> zero_window = parser.build_context_window(input, {}, ctx_tokens);
 	test_check_eq(zero_window.size(),
-		      static_cast<size_t>(512),
-		      "Zero tokens produces exact 512 elements",
+		      in_dim,
+		      "Zero tokens produces exact in_dim elements",
 		      s_pass,
 		      s_fail);
 	bool all_zero = true;
@@ -123,30 +123,31 @@ bool test_inference() {
 	}
 	test_check(all_zero, "Zero-token context window is 100% zero-padded", s_pass, s_fail);
 
-	// 2.2 Single token input -> padded with 127 zero tokens (508 floats) and 1 token at end
+	// 2.2 Single token input -> padded with (ctx_tokens - 1) zero tokens and 1 token at end
 	std::vector<uint32_t> single_token = {normal_tokens[0]};
 	std::vector<std::bfloat16_t> single_window =
-		parser.build_context_window(input, single_token, 128);
+		parser.build_context_window(input, single_token, ctx_tokens);
 	test_check_eq(single_window.size(),
-		      static_cast<size_t>(512),
-		      "Single token produces exact 512 elements",
+		      in_dim,
+		      "Single token produces exact in_dim elements",
 		      s_pass,
 		      s_fail);
+	const size_t prefix_floats = (ctx_tokens - 1) * out_dim;
 	bool prefix_zero = true;
-	for (size_t i = 0; i < 508; ++i) {
+	for (size_t i = 0; i < prefix_floats; ++i) {
 		if (static_cast<float>(single_window[i]) != 0.0f) {
 			prefix_zero = false;
 			break;
 		}
 	}
 	test_check(prefix_zero,
-		   "Single token has 508 leading zero floats (127 padded tokens)",
+		   "Single token has leading zero floats for padded tokens",
 		   s_pass,
 		   s_fail);
 	const auto& expected_tok_emb = input.embedding_table[single_token[0]];
 	bool suffix_matches = true;
-	for (size_t d = 0; d < 4; ++d) {
-		if (single_window[508 + d] != expected_tok_emb[d]) {
+	for (size_t d = 0; d < out_dim; ++d) {
+		if (single_window[prefix_floats + d] != expected_tok_emb[d]) {
 			suffix_matches = false;
 			break;
 		}
@@ -156,31 +157,32 @@ bool test_inference() {
 		   s_pass,
 		   s_fail);
 
-	// 2.3 Overflow tokens (>128 tokens) -> slices strictly the latest 128 tokens
-	std::vector<uint32_t> large_tokens(200);
-	for (size_t i = 0; i < 200; ++i) {
+	// 2.3 Overflow tokens (>ctx_tokens) -> slices strictly the latest ctx_tokens
+	const size_t overflow_count = ctx_tokens + 72;
+	std::vector<uint32_t> large_tokens(overflow_count);
+	for (size_t i = 0; i < overflow_count; ++i) {
 		large_tokens[i] = normal_tokens[i % normal_tokens.size()];
 	}
 	std::vector<std::bfloat16_t> large_window =
-		parser.build_context_window(input, large_tokens, 128);
+		parser.build_context_window(input, large_tokens, ctx_tokens);
 	test_check_eq(large_window.size(),
-		      static_cast<size_t>(512),
-		      "Overflow context window maintains exact 512 elements",
+		      in_dim,
+		      "Overflow context window maintains exact in_dim elements",
 		      s_pass,
 		      s_fail);
 
-	// The very first token of the 128-window must correspond to large_tokens[200 - 128 = 72]
-	uint32_t expected_first_slice_token = large_tokens[72];
+	// The very first token of the window must correspond to large_tokens[overflow_count - ctx_tokens]
+	uint32_t expected_first_slice_token = large_tokens[overflow_count - ctx_tokens];
 	const auto& first_slice_emb = input.embedding_table[expected_first_slice_token];
 	bool slice_start_matches = true;
-	for (size_t d = 0; d < 4; ++d) {
+	for (size_t d = 0; d < out_dim; ++d) {
 		if (large_window[d] != first_slice_emb[d]) {
 			slice_start_matches = false;
 			break;
 		}
 	}
 	test_check(slice_start_matches,
-		   "Overflow window correctly slices the most recent 128 tokens",
+		   "Overflow window correctly slices the most recent context_window_size tokens",
 		   s_pass,
 		   s_fail);
 
@@ -281,7 +283,6 @@ bool test_inference() {
 
 	// 4.3 Empty Vocabulary Safety Guard
 	Input empty_input;
-	empty_input.embedding_dim = 4;
 	uint32_t empty_token = parser.decode_token(empty_input, target_vec);
 	test_check_eq(empty_token,
 		      static_cast<uint32_t>(0),
@@ -396,16 +397,16 @@ bool test_inference() {
 		std::string dim_mismatch_path = "test_dim_mismatch.axiom";
 		std::ofstream out(dim_mismatch_path, std::ios::binary);
 		AxiomWeightHeader bad_hdr {};
-		bad_hdr.input_elements_x_total = 1024; // Mismatch with model's in_dim 512
-		bad_hdr.target_elements_y_total = 4;
-		bad_hdr.weight_count = 1024 * 4;
-		bad_hdr.bias_count = 4;
+		bad_hdr.input_elements_x_total = in_dim + out_dim; // Mismatch with model's in_dim
+		bad_hdr.target_elements_y_total = out_dim;
+		bad_hdr.weight_count = bad_hdr.input_elements_x_total * out_dim;
+		bad_hdr.bias_count = out_dim;
 		bad_hdr.vocab_size = ai.vocab_size;
 		bad_hdr.embedding_dim = ai.embedding_dim;
 		out.write(reinterpret_cast<const char*>(&bad_hdr), sizeof(bad_hdr));
 		out.close();
 		test_check(!ai.load_weights(dim_mismatch_path),
-			   "load_weights() rejects header with in_dim mismatch (1024 != 512)",
+			   "load_weights() rejects header with in_dim mismatch",
 			   s_pass,
 			   s_fail);
 		std::filesystem::remove(dim_mismatch_path);

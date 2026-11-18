@@ -40,6 +40,10 @@
 // Total Flattened Sequence Fan-in Dimension (K = S * D = 262,144)
 #define AXIOM_FAN_IN_DIM (AXIOM_CONTEXT_WINDOW * AXIOM_TOKEN_DIM)
 
+// PagedAttention KV-Cache Default Geometry
+#define AXIOM_PAGED_TOTAL_BLOCKS 256U
+#define AXIOM_PAGED_BLOCK_SIZE 16U
+
 #ifdef __cplusplus
 namespace axiom {
 
@@ -51,6 +55,8 @@ constexpr size_t HEAD_DIM = AXIOM_HEAD_DIM;
 constexpr size_t MAX_HEAD_DIM = AXIOM_MAX_HEAD_DIM;
 constexpr size_t FFN_DIM = AXIOM_FFN_DIM;
 constexpr size_t FAN_IN_DIM = AXIOM_FAN_IN_DIM;
+constexpr size_t PAGED_TOTAL_BLOCKS = AXIOM_PAGED_TOTAL_BLOCKS;
+constexpr size_t PAGED_BLOCK_SIZE = AXIOM_PAGED_BLOCK_SIZE;
 
 static_assert(TOKEN_DIM % NUM_HEADS == 0, "TOKEN_DIM must be evenly divisible by NUM_HEADS");
 static_assert(HEAD_DIM <= MAX_HEAD_DIM, "HEAD_DIM cannot exceed MAX_HEAD_DIM (64)");

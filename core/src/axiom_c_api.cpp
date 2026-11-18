@@ -93,7 +93,7 @@ __declspec(dllexport) int axiom_generate_text(const char* prompt, char* out_buff
         return 0;
     }
     std::string result;
-    bool ok = g_engine->generate(prompt, max_new_tokens, temperature, 40, 0.9f, [&](const std::string& tok) {
+    bool ok = g_engine->generate(prompt, max_new_tokens, temperature, config::default_top_k, config::default_top_p, [&](const std::string& tok) {
         result += tok;
     });
     if (!ok) return 0;

@@ -32,7 +32,8 @@ struct SequenceContext {
 // Manages physical block allocation, reference counting, and Copy-On-Write
 class PagedBlockManager {
 public:
-	explicit PagedBlockManager(size_t total_blocks = 256, size_t block_size = 16)
+	explicit PagedBlockManager(size_t total_blocks = config::paged_total_blocks,
+				   size_t block_size = config::paged_block_size)
 	    : total_blocks_count(total_blocks),
 	      block_token_capacity(block_size),
 	      reference_counts(total_blocks, 0) {
