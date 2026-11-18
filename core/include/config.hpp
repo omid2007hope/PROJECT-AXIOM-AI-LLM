@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+
 #include "shared_params.h"
 
 #pragma pack(push, 1)
@@ -46,6 +47,15 @@ struct Config {
 	static constexpr float weight_min = -0.0033854167f;
 	static constexpr float weight_max = 0.0033854167f;
 
+	// Optimization for test
+	static constexpr size_t CHUNK_TOKENS = 65536;
+	static constexpr size_t chunk_position = 0;
+	static constexpr size_t tokens_written = 0;
+	static constexpr size_t last_percentage = 0;
+
+	// Demonstrate progress with bar
+	static constexpr size_t minimum_limit = 500000;
+
 	// Folder layout & files
 	static constexpr const char* database_folder = "database";
 	static constexpr const char* models_folder = "models";
@@ -60,14 +70,17 @@ namespace config {
 
 // Hyperparameters
 constexpr size_t ram_buffer_size = Config::ram_buffer_size; // 4M tokens (~16.7 MB in RAM)
-constexpr size_t token_dim = Config::token_dim;			// GPT-2 scale (Must be multiple of 64)
-constexpr size_t context_window_size = Config::context_window_size; // Doubled to capture paragraph-level context
+constexpr size_t token_dim = Config::token_dim;				// GPT-2 scale (Must be multiple of 64)
+constexpr size_t context_window_size =
+	Config::context_window_size; // Doubled to capture paragraph-level context
 
 // AdamW Optimizer Settings
-constexpr float learning_rate = Config::learning_rate; // Base AdamW rate (fan-in scaled inside CUDA kernels)
+constexpr float learning_rate =
+	Config::learning_rate; // Base AdamW rate (fan-in scaled inside CUDA kernels)
 
 // How many training steps pass between two loss reports
-constexpr size_t loss_report_interval = Config::loss_report_interval; // Increased to prevent CPU/GPU synchronization stalls
+constexpr size_t loss_report_interval =
+	Config::loss_report_interval; // Increased to prevent CPU/GPU synchronization stalls
 
 // Initial weights are drawn uniformly from [-sqrt(3/K), +sqrt(3/K)], K = fan-in =
 // context_window_size * token_dim = 262144. That gives std 1/sqrt(K) = 1/512, so the
@@ -171,5 +184,6 @@ struct TransformerLayerWeights {
 	const void* d_up_proj_weight = nullptr;
 	const void* d_down_proj_weight = nullptr;
 };
+
 
 #endif // INCLUDE_CONFIG_HPP
