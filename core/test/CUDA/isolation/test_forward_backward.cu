@@ -425,9 +425,16 @@ float* const test_out_avg_ms = &test_out_avg_ms_storage;
 size_t* const test_out_allocated_bytes = &test_out_allocated_bytes_storage;
 float* const test_out_elapsed_ms = &test_out_elapsed_ms_storage;
 
+// Mode selector:
+//   0 = UNFUSED_CORE (linear readout + embedding table)
+//   1 = TRANSFORMER_BLOCK (full closed-loop Transformer block matching training.cpp)
+#ifndef AXIOM_ISOLATION_TRANSFORMER
+#define AXIOM_ISOLATION_TRANSFORMER 0
+#endif
+
 // Switches: unfused core active by default (fused/block wrappers disabled for isolation)
-bool call_launch_gather_embeddings_batched = false;
-bool call_transformer_forward_block = false;
+bool call_launch_gather_embeddings_batched = (AXIOM_ISOLATION_TRANSFORMER != 0);
+bool call_transformer_forward_block = (AXIOM_ISOLATION_TRANSFORMER != 0);
 bool call_forward_pass_with_embeddings = true;
 bool call_forward_pass = false;
 bool call_run_cutlass_saturation_benchmark = false;
@@ -440,8 +447,8 @@ bool call_launch_tied_logits_bf16 = false;
 bool call_launch_softmax_argmax = false;
 
 bool call_backward_pass_with_embeddings = true;
-bool call_transformer_backward_block = false;
-bool call_backward_scatter_embeddings = false;
+bool call_transformer_backward_block = (AXIOM_ISOLATION_TRANSFORMER != 0);
+bool call_backward_scatter_embeddings = (AXIOM_ISOLATION_TRANSFORMER != 0);
 bool call_backward_pass = false;
 bool call_fused_causal_backward = false;
 bool call_swiglu_backward = false;
@@ -629,6 +636,10 @@ static bool test_forward() {
 		launch_gather_embeddings_batched(test_d_token_ids, test_d_table, test_d_output,
 										 test_batch_tokens, test_hidden_dim, test_vocab_size,
 										 test_stream);
+		launch_gather_embeddings_batched(
+			test_d_token_ids, test_d_table,
+			test_gpu_portion.d_hidden_state[test_buffer_index], test_batch_tokens,
+			test_hidden_dim, test_vocab_size, test_stream);
 		if (cudaGetLastError() != cudaSuccess) {
 			std::cerr << "[FAIL] launch_gather_embeddings_batched launch failed\n";
 			return false;
@@ -761,7 +772,8 @@ static bool test_backward() {
 
 	if (call_transformer_backward_block == true) {
 		if (!transformer_backward_block(
-				test_grad_output, test_grad_input, test_hidden_states,
+				test_grad_output, test_grad_input,
+				test_gpu_portion.d_hidden_state[test_buffer_index],
 				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
 				reinterpret_cast<const GpuActivations*>(&test_gpu_activations),
 				test_sequence_length, test_embedding_dim, test_num_heads,

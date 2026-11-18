@@ -494,7 +494,7 @@ __global__ static void update_output_head(const float* __restrict__ probs,
 	float grad_logit = (p - (v == target_tok_id ? 1.0f : 0.0f)) * seq_scale;
 	float emb_dim_f = static_cast<float>(emb_dim > 0 ? emb_dim : 1);
 	float head_lr = learning_rate / sqrtf(emb_dim_f);
-	float bound_limit = 4.0f / sqrtf(emb_dim_f);
+	constexpr float bound_limit = 2.0f;
 	size_t row_offset = v * emb_dim;
 
 	__shared__ float s_y_sq[32];
@@ -563,9 +563,9 @@ __global__ static void backward_scatter_embeddings_kernel(
 		// PAD (ID 0) is a fixed zero vector and never learns
 		if (tok_id != 0 && tok_id < vocab_size) {
 			size_t table_idx = tok_id * embedding_dim + dim_idx;
-			float inv_sqrt_tokens =
-				1.0f / sqrtf(static_cast<float>(num_tokens > 0 ? num_tokens : 1));
-			float delta = -learning_rate * inv_sqrt_tokens * dx_in[j];
+			float eff_lr =
+				learning_rate * rsqrtf(static_cast<float>(embedding_dim > 0 ? embedding_dim : 1));
+			float delta = -eff_lr * dx_in[j];
 			if (isfinite(delta)) {
 				atomicAdd(&table_master[table_idx], delta);
 			}
@@ -587,8 +587,7 @@ __global__ static void sync_scattered_embeddings(const uint32_t* __restrict__ to
 		uint32_t tok_id = token_ids[token_idx];
 
 		if (tok_id != 0 && tok_id < vocab_size) {
-			float bound_limit =
-				4.0f / sqrtf(static_cast<float>(embedding_dim > 0 ? embedding_dim : 1));
+			constexpr float bound_limit = 2.0f;
 			size_t table_idx = tok_id * embedding_dim + dim_idx;
 			float val = table_master[table_idx];
 			if (!isfinite(val)) {
@@ -635,6 +634,111 @@ extern "C" CUDA_API bool backward_scatter_embeddings(
 		gpu_embeddings->vocab_size);
 
 	return CUDA_CHECK(cudaGetLastError());
+}
+
+__device__ __forceinline__ float grad_to_float(float v) {
+	return v;
+}
+
+__device__ __forceinline__ float grad_to_float(__nv_bfloat16 v) {
+	return __bfloat162float(v);
+}
+
+template <typename GradT>
+__global__ static void batched_weight_gradient_kernel(const GradT* __restrict__ grad_out,
+													  const __nv_bfloat16* __restrict__ input,
+													  float* __restrict__ grad_W, int S, int in_dim,
+													  int out_dim) {
+
+	__shared__ float tile_x[16][16];
+	__shared__ float tile_g[16][16];
+
+	int o = blockIdx.x * 16 + threadIdx.x;
+	int i = blockIdx.y * 16 + threadIdx.y;
+
+	float sum = 0.0f;
+	for (int base_s = 0; base_s < S; base_s += 16) {
+		int s_k = base_s + threadIdx.x;
+		int s_g = base_s + threadIdx.y;
+
+		tile_x[threadIdx.y][threadIdx.x] =
+			(i < in_dim && s_k < S) ? __bfloat162float(input[s_k * in_dim + i]) : 0.0f;
+		tile_g[threadIdx.y][threadIdx.x] =
+			(o < out_dim && s_g < S) ? grad_to_float(grad_out[s_g * out_dim + o]) : 0.0f;
+
+		__syncthreads();
+
+#pragma unroll
+		for (int k = 0; k < 16; ++k) {
+			sum += tile_x[threadIdx.y][k] * tile_g[k][threadIdx.x];
+		}
+
+		__syncthreads();
+	}
+
+	if (i < in_dim && o < out_dim) {
+		grad_W[i * out_dim + o] = isfinite(sum) ? sum : 0.0f;
+	}
+}
+
+__global__ static void fused_matrix_adamw_kernel(
+	float* __restrict__ W_master, __nv_bfloat16* __restrict__ W, float* __restrict__ W_m,
+	float* __restrict__ W_v, const float* __restrict__ grad_W, size_t total_elements,
+	size_t in_dim, float learning_rate, uint64_t step, float beta1, float beta2, float eps,
+	float weight_decay, size_t start_element = 0) {
+
+	size_t idx = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+	if (idx >= start_element && idx < total_elements) {
+		float g = grad_W[idx];
+		if (!isfinite(g))
+			g = 0.0f;
+		g = fmaxf(-100.0f, fminf(100.0f, g));
+
+		float m = beta1 * W_m[idx] + (1.0f - beta1) * g;
+		float v = beta2 * W_v[idx] + (1.0f - beta2) * g * g;
+		W_m[idx] = m;
+		W_v[idx] = v;
+
+		float step_f = static_cast<float>(step);
+		float bc1 = 1.0f - powf(beta1, step_f);
+		float bc2 = 1.0f - powf(beta2, step_f);
+		float m_hat = m / (bc1 > 1e-7f ? bc1 : 1.0f);
+		float v_hat = v / (bc2 > 1e-7f ? bc2 : 1.0f);
+
+		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
+		float eff_lr = learning_rate * rsqrtf(in_dim_f);
+
+		float update = m_hat / (sqrtf(v_hat) + eps);
+		float w_val = W_master[idx] - eff_lr * (update + weight_decay * W_master[idx]);
+
+		if (isfinite(w_val)) {
+			w_val = fmaxf(-2.0f, fminf(2.0f, w_val));
+			W_master[idx] = w_val;
+			W[idx] = __float2bfloat16(w_val);
+		}
+	}
+}
+
+__global__ static void fused_matrix_sgd_kernel(
+	float* __restrict__ W_master, __nv_bfloat16* __restrict__ W, const float* __restrict__ grad_W,
+	size_t total_elements, size_t in_dim, float learning_rate, float weight_decay,
+	size_t start_element = 0) {
+
+	size_t idx = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
+	if (idx >= start_element && idx < total_elements) {
+		float g = grad_W[idx];
+		if (!isfinite(g))
+			g = 0.0f;
+		g = fmaxf(-100.0f, fminf(100.0f, g));
+
+		float eff_lr = learning_rate * rsqrtf(static_cast<float>(in_dim > 0 ? in_dim : 1));
+		float w_val = W_master[idx] - eff_lr * (g + weight_decay * W_master[idx]);
+		if (isfinite(w_val)) {
+			w_val = fmaxf(-2.0f, fminf(2.0f, w_val));
+			W_master[idx] = w_val;
+			W[idx] = __float2bfloat16(w_val);
+		}
+	}
 }
 
 extern "C" CUDA_API bool backward_pass_with_embeddings(
@@ -761,6 +865,57 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 			return false;
 		}
 
+		// Fix 1: Update output embedding head across ALL S sequence positions using d_seq_logits
+		if (has_embeddings && vocab_sz > 1) {
+			size_t grad_e_elements = vocab_sz * emb_dim;
+			float* d_grad_E =
+				static_cast<float*>(allocate_vram(grad_e_elements * sizeof(float), stream));
+			if (!d_grad_E) {
+				free_vram(d_dh_bf16, stream);
+				free_vram(d_seq_logits, stream);
+				return false;
+			}
+
+			dim3 e_block(16, 16);
+			dim3 e_grid(static_cast<unsigned int>((emb_dim + 15) / 16),
+						static_cast<unsigned int>((vocab_sz + 15) / 16));
+			batched_weight_gradient_kernel<__nv_bfloat16><<<e_grid, e_block, 0, stream>>>(
+				static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+				static_cast<const __nv_bfloat16*>(d_seq_logits), d_grad_E,
+				static_cast<int>(sequence_length), static_cast<int>(vocab_sz),
+				static_cast<int>(emb_dim));
+
+			int e_threads = 256;
+			int e_blocks = static_cast<int>((grad_e_elements + e_threads - 1) / e_threads);
+			constexpr float e_beta1 = 0.9f;
+			constexpr float e_beta2 = 0.999f;
+			constexpr float e_eps = 1e-4f;
+			constexpr float e_weight_decay = 0.01f;
+
+			if (use_adamw && gpu_embeddings->d_m && gpu_embeddings->d_v) {
+				fused_matrix_adamw_kernel<<<e_blocks, e_threads, 0, stream>>>(
+					static_cast<float*>(gpu_embeddings->d_table_master),
+					static_cast<__nv_bfloat16*>(gpu_embeddings->d_table),
+					static_cast<float*>(gpu_embeddings->d_m),
+					static_cast<float*>(gpu_embeddings->d_v), d_grad_E, grad_e_elements,
+					emb_dim, learning_rate, gpu_weights->step_count, e_beta1, e_beta2, e_eps,
+					e_weight_decay, emb_dim /* skip PAD row 0 */);
+			} else {
+				fused_matrix_sgd_kernel<<<e_blocks, e_threads, 0, stream>>>(
+					static_cast<float*>(gpu_embeddings->d_table_master),
+					static_cast<__nv_bfloat16*>(gpu_embeddings->d_table), d_grad_E,
+					grad_e_elements, emb_dim, learning_rate, e_weight_decay,
+					emb_dim /* skip PAD row 0 */);
+			}
+
+			free_vram(d_grad_E, stream);
+			if (!CUDA_CHECK(cudaGetLastError())) {
+				free_vram(d_dh_bf16, stream);
+				free_vram(d_seq_logits, stream);
+				return false;
+			}
+		}
+
 		free_vram(d_seq_logits, stream);
 
 		int dx_threads = 256;
@@ -768,6 +923,19 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 		scale_dh_to_dx_kernel<<<dx_blocks, dx_threads, 0, stream>>>(
 			static_cast<const __nv_bfloat16*>(d_dh_bf16),
 			static_cast<float*>(non_const_gpu->d_dx[buffer_index]), dh_elements, 1.0f);
+
+		// Fix 3: Backpropagate through readout RMSNorm before transformer_backward_block
+		if (gpu_activations->d_inv_rms) {
+			int norm_threads = static_cast<int>(std::min<size_t>(1024, emb_dim));
+			backward_rms_norm<<<static_cast<int>(sequence_length), norm_threads, 0, stream>>>(
+				static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]),
+				static_cast<const float*>(gpu_activations->d_inv_rms),
+				static_cast<float*>(non_const_gpu->d_dx[buffer_index]), sequence_length, emb_dim);
+			if (!CUDA_CHECK(cudaGetLastError())) {
+				free_vram(d_dh_bf16, stream);
+				return false;
+			}
+		}
 
 		size_t final_token_offset = (sequence_length > 0 ? sequence_length - 1 : 0) * emb_dim;
 		cudaMemcpyAsync(non_const_act->d_dz,
@@ -883,21 +1051,17 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 
 	// Phase 5: Output Head & Backward Scatter Kernel for learnable embedding matrix
 	if (has_embeddings) {
-		if (is_token_training && gpu_activations->d_probs && emb_dim == output_dim && vocab_sz > 0) {
+		if (!is_transformer_readout && is_token_training && gpu_activations->d_probs &&
+			emb_dim == output_dim && vocab_sz > 0) {
 			int head_threads = 256;
 			int head_blocks = static_cast<int>(vocab_sz);
-			float seq_scale = is_transformer_readout
-								  ? (1.0f / static_cast<float>(gpu_portion->token_count > 0
-																   ? gpu_portion->token_count
-																   : (input_dim / emb_dim)))
-								  : 1.0f;
 			update_output_head<<<head_blocks, head_threads, 0, stream>>>(
 				static_cast<const float*>(gpu_activations->d_probs),
 				static_cast<const __nv_bfloat16*>(gpu_activations->d_output),
 				static_cast<const __nv_bfloat16*>(gpu_portion->d_target[buffer_index]),
 				static_cast<float*>(gpu_embeddings->d_table_master),
 				static_cast<__nv_bfloat16*>(gpu_embeddings->d_table), vocab_sz, emb_dim,
-				learning_rate, seq_scale);
+				learning_rate, 1.0f);
 		}
 
 		if (scatter_embeddings && !is_transformer_readout) {
@@ -1106,43 +1270,6 @@ __global__ static void accumulate_attention_residual(float* __restrict__ d_grad_
 	}
 }
 
-__global__ static void batched_weight_gradient_kernel(const float* __restrict__ grad_out,
-													  const __nv_bfloat16* __restrict__ input,
-													  float* __restrict__ grad_W, int S, int in_dim,
-													  int out_dim) {
-
-	__shared__ float tile_x[16][16];
-	__shared__ float tile_g[16][16];
-
-	int o = blockIdx.x * 16 + threadIdx.x;
-	int i = blockIdx.y * 16 + threadIdx.y;
-
-	float sum = 0.0f;
-	for (int base_s = 0; base_s < S; base_s += 16) {
-		int s_k = base_s + threadIdx.x;
-		int s_g = base_s + threadIdx.y;
-
-		tile_x[threadIdx.y][threadIdx.x] =
-			(i < in_dim && s_k < S) ? __bfloat162float(input[s_k * in_dim + i]) : 0.0f;
-		tile_g[threadIdx.y][threadIdx.x] =
-			(o < out_dim && s_g < S) ? grad_out[s_g * out_dim + o] : 0.0f;
-
-		__syncthreads();
-
-#pragma unroll
-		for (int k = 0; k < 16; ++k) {
-			sum += tile_x[threadIdx.y][k] * tile_g[k][threadIdx.x];
-		}
-
-		__syncthreads();
-	}
-
-	if (i < in_dim && o < out_dim) {
-		float inv_s = 1.0f / static_cast<float>(S > 0 ? S : 1);
-		grad_W[i * out_dim + o] = isfinite(sum) ? (sum * inv_s) : 0.0f;
-	}
-}
-
 __global__ static void batched_input_gradient_kernel(const float* __restrict__ grad_out,
 													 const float* __restrict__ W_master,
 													 float* __restrict__ grad_X, int S, int in_dim,
@@ -1176,44 +1303,6 @@ __global__ static void batched_input_gradient_kernel(const float* __restrict__ g
 
 	if (s < S && i < in_dim) {
 		grad_X[s * in_dim + i] = isfinite(sum) ? fmaxf(-10.0f, fminf(10.0f, sum)) : 0.0f;
-	}
-}
-
-__global__ static void fused_matrix_adamw_kernel(
-	float* __restrict__ W_master, __nv_bfloat16* __restrict__ W, float* __restrict__ W_m,
-	float* __restrict__ W_v, const float* __restrict__ grad_W, size_t total_elements,
-	size_t in_dim, float learning_rate, uint64_t step, float beta1, float beta2, float eps,
-	float weight_decay) {
-
-	size_t idx = blockIdx.x * (size_t)blockDim.x + threadIdx.x;
-	if (idx < total_elements) {
-		float g = grad_W[idx];
-		if (!isfinite(g))
-			g = 0.0f;
-		g = fmaxf(-100.0f, fminf(100.0f, g));
-
-		float m = beta1 * W_m[idx] + (1.0f - beta1) * g;
-		float v = beta2 * W_v[idx] + (1.0f - beta2) * g * g;
-		W_m[idx] = m;
-		W_v[idx] = v;
-
-		float step_f = static_cast<float>(step);
-		float bc1 = 1.0f - powf(beta1, step_f);
-		float bc2 = 1.0f - powf(beta2, step_f);
-		float m_hat = m / (bc1 > 1e-7f ? bc1 : 1.0f);
-		float v_hat = v / (bc2 > 1e-7f ? bc2 : 1.0f);
-
-		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
-		float eff_lr = learning_rate * rsqrtf(in_dim_f);
-
-		float update = m_hat / (sqrtf(v_hat) + eps);
-		float w_val = W_master[idx] - eff_lr * (update + weight_decay * W_master[idx]);
-
-		if (isfinite(w_val)) {
-			w_val = fmaxf(-2.0f, fminf(2.0f, w_val));
-			W_master[idx] = w_val;
-			W[idx] = __float2bfloat16(w_val);
-		}
 	}
 }
 
