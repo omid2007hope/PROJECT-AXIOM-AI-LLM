@@ -15,6 +15,7 @@
 Isolate the forward and backward pass - feed then fake false emmbeding data - check the out put live - loss drop per 1000 step - if drops - no abnormality - anomalies - pass green - then we find that forward pass and backward pass in isolation work perfectly which makes the question that why when compile the full app the loss is not okay!
 */
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -26,12 +27,20 @@ Isolate the forward and backward pass - feed then fake false emmbeding data - ch
 #include <random>
 #include <vector>
 
+#include "../../../include/shared_params.h"
 #include "../../../src/CUDA/gpu/download.cuh"
 #include "../../../src/CUDA/kernel/backward_pass.cuh"
 #include "../../../src/CUDA/kernel/forward_pass.cuh"
 #include "../../../src/CUDA/kernel/swiglu.cuh"
 #include "../../../src/CUDA/util/gpu_types.cuh"
 #include "../../../src/CUDA/util/memory_allocation.cuh"
+
+// Scale profile selector:
+//   0 = Canonical Production Max (shared_params.h: V=65536, S=256, D=1024, H=16, FFN=4096)
+//   1 = Experimental 4096-Dim    (V=32768, S=8, D=4096, H=64, FFN=16384)
+#ifndef AXIOM_ISOLATION_PROFILE
+#define AXIOM_ISOLATION_PROFILE 0
+#endif
 
 // Mirror structs matching gpu_types.cuh field-for-field
 struct TestGpuPortion {
@@ -267,17 +276,22 @@ static void* test_alloc_zero(size_t bytes) {
 }
 
 static void* test_alloc_bf16_uniform(size_t count, float bound, uint32_t seed) {
-	std::mt19937 rng(seed);
-	std::uniform_real_distribution<float> dist(-bound, bound);
-	std::vector<__nv_bfloat16> host(count);
-	for (size_t i = 0; i < count; ++i) {
-		host[i] = __float2bfloat16(dist(rng));
-	}
 	void* ptr = nullptr;
 	check_cuda_or_abort(cudaMalloc(&ptr, count * sizeof(__nv_bfloat16)), "cudaMalloc(bf16)");
-	check_cuda_or_abort(
-		cudaMemcpy(ptr, host.data(), count * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice),
-		"cudaMemcpy(bf16)");
+	std::mt19937 rng(seed);
+	std::uniform_real_distribution<float> dist(-bound, bound);
+	constexpr size_t chunk_cap = 8ULL * 1024ULL * 1024ULL;
+	std::vector<__nv_bfloat16> host(std::min(count, chunk_cap));
+	for (size_t offset = 0; offset < count; offset += chunk_cap) {
+		size_t chunk = std::min(chunk_cap, count - offset);
+		for (size_t i = 0; i < chunk; ++i) {
+			host[i] = __float2bfloat16(dist(rng));
+		}
+		check_cuda_or_abort(
+			cudaMemcpy(static_cast<__nv_bfloat16*>(ptr) + offset, host.data(),
+					   chunk * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice),
+			"cudaMemcpy(bf16)");
+	}
 	test_registry().device_ptrs.push_back(ptr);
 	return ptr;
 }
@@ -285,24 +299,30 @@ static void* test_alloc_bf16_uniform(size_t count, float bound, uint32_t seed) {
 static void test_alloc_paired_weights(size_t count, float bound, uint32_t seed,
 									  void** out_bf16, void** out_f32,
 									  size_t zero_prefix_elems = 0) {
-	std::mt19937 rng(seed);
-	std::uniform_real_distribution<float> dist(-bound, bound);
-	std::vector<float> host_f32(count);
-	std::vector<__nv_bfloat16> host_bf16(count);
-	for (size_t i = 0; i < count; ++i) {
-		float val = (i < zero_prefix_elems) ? 0.0f : dist(rng);
-		host_f32[i] = val;
-		host_bf16[i] = __float2bfloat16(val);
-	}
 	check_cuda_or_abort(cudaMalloc(out_bf16, count * sizeof(__nv_bfloat16)),
 						"cudaMalloc(paired_bf16)");
 	check_cuda_or_abort(cudaMalloc(out_f32, count * sizeof(float)), "cudaMalloc(paired_f32)");
-	check_cuda_or_abort(cudaMemcpy(*out_bf16, host_bf16.data(),
-								   count * sizeof(__nv_bfloat16), cudaMemcpyHostToDevice),
-						"cudaMemcpy(paired_bf16)");
-	check_cuda_or_abort(
-		cudaMemcpy(*out_f32, host_f32.data(), count * sizeof(float), cudaMemcpyHostToDevice),
-		"cudaMemcpy(paired_f32)");
+	std::mt19937 rng(seed);
+	std::uniform_real_distribution<float> dist(-bound, bound);
+	constexpr size_t chunk_cap = 8ULL * 1024ULL * 1024ULL;
+	std::vector<float> host_f32(std::min(count, chunk_cap));
+	std::vector<__nv_bfloat16> host_bf16(std::min(count, chunk_cap));
+	for (size_t offset = 0; offset < count; offset += chunk_cap) {
+		size_t chunk = std::min(chunk_cap, count - offset);
+		for (size_t i = 0; i < chunk; ++i) {
+			size_t global_idx = offset + i;
+			float val = (global_idx < zero_prefix_elems) ? 0.0f : dist(rng);
+			host_f32[i] = val;
+			host_bf16[i] = __float2bfloat16(val);
+		}
+		check_cuda_or_abort(cudaMemcpy(static_cast<__nv_bfloat16*>(*out_bf16) + offset,
+									   host_bf16.data(), chunk * sizeof(__nv_bfloat16),
+									   cudaMemcpyHostToDevice),
+							"cudaMemcpy(paired_bf16)");
+		check_cuda_or_abort(cudaMemcpy(static_cast<float*>(*out_f32) + offset, host_f32.data(),
+									   chunk * sizeof(float), cudaMemcpyHostToDevice),
+							"cudaMemcpy(paired_f32)");
+	}
 	test_registry().device_ptrs.push_back(*out_bf16);
 	test_registry().device_ptrs.push_back(*out_f32);
 }
@@ -360,28 +380,39 @@ static void* test_alloc_target_token(size_t elem_count, uint32_t target_id) {
 }
 
 // Dimension & indexing parameters (consistent across all 18 kernels)
-const size_t test_input_dim = 256;
-const size_t test_output_dim = 64;
+#if AXIOM_ISOLATION_PROFILE == 1
+// Experimental 4096-dim stress scale (Llama-class hidden dim = 4096, 64 heads, FFN = 16384)
+const uint32_t test_vocab_size = 32768U;
+const size_t test_sequence_length = 8U;
+const size_t test_embedding_dim = 4096U;
+const size_t test_num_heads = 64U; // head_dim = 4096 / 64 = 64 <= 64
+const size_t test_feedforward_network_dimension = 16384U;
+#else
+// Canonical Production Max (matching core/include/shared_params.h)
+const uint32_t test_vocab_size = axiom::VOCAB_SIZE;              // 65536
+const size_t test_sequence_length = axiom::CONTEXT_WINDOW;       // 256
+const size_t test_embedding_dim = axiom::TOKEN_DIM;              // 1024
+const size_t test_num_heads = axiom::NUM_HEADS;                  // 16 (head_dim = 64)
+const size_t test_feedforward_network_dimension = axiom::FFN_DIM;// 4096
+#endif
+
+const size_t test_input_dim = test_sequence_length * test_embedding_dim;
+const size_t test_output_dim = test_embedding_dim;
 const int test_buffer_index = 0;
-const size_t test_sequence_length = 4;
-const size_t test_embedding_dim = 64;
-const size_t test_num_heads = 4;
-const size_t test_feedforward_network_dimension = 256;
-const size_t test_total_elements = 1024;
-const size_t test_num_tokens = 4;
-const size_t test_n = 32;
-const uint32_t test_batch_tokens = 4;
-const uint32_t test_hidden_dim = 64;
-const uint32_t test_vocab_size = 32;
+const size_t test_total_elements = test_sequence_length * test_feedforward_network_dimension;
+const size_t test_num_tokens = test_sequence_length;
+const size_t test_n = test_vocab_size;
+const uint32_t test_batch_tokens = static_cast<uint32_t>(test_sequence_length);
+const uint32_t test_hidden_dim = static_cast<uint32_t>(test_embedding_dim);
 
 // GEMM & benchmark parameters
-const int test_M = 4;
-const int test_N = 64;
-const int test_K = 256;
+const int test_M = static_cast<int>(test_sequence_length);
+const int test_N = static_cast<int>(test_output_dim);
+const int test_K = static_cast<int>(test_input_dim);
 const int test_iterations = 2;
-const int test_rows_a = 4;
-const int test_cols_b = 64;
-const int test_common_dim = 64;
+const int test_rows_a = static_cast<int>(test_sequence_length);
+const int test_cols_b = static_cast<int>(test_output_dim);
+const int test_common_dim = static_cast<int>(test_embedding_dim);
 const size_t test_safety_headroom_bytes = 256ULL * 1024ULL * 1024ULL;
 static double test_out_tflops_storage = 0.0;
 static double test_out_bandwidth_gb_s_storage = 0.0;
@@ -811,14 +842,24 @@ int main() {
 	constexpr int report_interval = 100;
 	constexpr int checkpoint_interval = 1000;
 
-	float initial_loss = -1.0f;
+	float step1_loss = -1.0f;
 	float prev_checkpoint_loss = -1.0f;
+	std::vector<std::pair<int, float>> checkpoint_losses;
 	bool all_healthy = true;
 
+	size_t free_vram = 0;
+	size_t total_vram = 0;
+	cudaMemGetInfo(&free_vram, &total_vram);
+
 	std::cout << std::fixed << std::setprecision(6);
-	std::cout << "[ISOLATION] Starting closed-loop forward/backward test (" << total_steps
-			  << " steps, vocab=" << test_vocab_size << ", seq=" << test_sequence_length
-			  << ", dim=" << test_embedding_dim << ")\n";
+	std::cout << "[ISOLATION] Profile=" << AXIOM_ISOLATION_PROFILE << " | steps=" << total_steps
+			  << " | vocab=" << test_vocab_size << " | seq=" << test_sequence_length
+			  << " | emb_dim=" << test_embedding_dim << " | heads=" << test_num_heads
+			  << " | ffn=" << test_feedforward_network_dimension
+			  << " | in_dim=" << test_input_dim << "\n";
+	std::cout << "[VRAM] Free: " << (free_vram / (1024ULL * 1024ULL)) << " MiB / Total: "
+			  << (total_vram / (1024ULL * 1024ULL)) << " MiB\n"
+			  << std::flush;
 
 	for (int step = 1; step <= total_steps; ++step) {
 		if (!pass()) {
@@ -826,33 +867,34 @@ int main() {
 			return 1;
 		}
 
-		if (step % report_interval == 0) {
+		if (step == 1 || step % report_interval == 0) {
 			float telemetry[telemetry_slot_count] = {0.0f};
 			if (!read_and_reset_telemetry(telemetry)) {
 				return 1;
 			}
 
+			const int window_steps = (step == 1) ? 1 : (step == report_interval ? report_interval - 1 : report_interval);
 			uint32_t pred_id = 0;
 			cudaMemcpy(&pred_id, test_gpu_activations.d_pred_id, sizeof(uint32_t),
 					   cudaMemcpyDeviceToHost);
 
-			const float avg_loss = telemetry[telemetry_loss] / static_cast<float>(report_interval);
-			const float grad_l2 = std::sqrt(
-				telemetry[telemetry_gradient_square] / static_cast<float>(report_interval));
+			const float avg_loss = telemetry[telemetry_loss] / static_cast<float>(window_steps);
+			const float grad_l2 =
+				std::sqrt(telemetry[telemetry_gradient_square] / static_cast<float>(window_steps));
 			const float act_rms = std::sqrt(
 				telemetry[telemetry_activation_square] /
-				static_cast<float>(report_interval * test_output_dim));
+				static_cast<float>(window_steps * test_output_dim));
 			const float dead_out = telemetry[telemetry_dead_output];
 			const float nonfinite = telemetry[telemetry_nonfinite];
 
-			if (initial_loss < 0.0f) {
-				initial_loss = avg_loss;
+			if (step == 1) {
+				step1_loss = avg_loss;
 			}
 
-			std::cout << "[step " << std::setw(4) << step << "] avg_loss=" << avg_loss
-					  << " grad_l2=" << grad_l2 << " act_rms=" << act_rms
-					  << " pred_id=" << pred_id << " dead_out=" << dead_out
-					  << " nonfinite=" << nonfinite << "\n";
+			std::cout << "[step " << std::setw(4) << step << "] live loss: " << avg_loss
+					  << " | grad_l2=" << grad_l2 << " | pred_id=" << pred_id
+					  << " | dead_out=" << dead_out << " | nonfinite=" << nonfinite << "\n"
+					  << std::flush;
 
 			if (!std::isfinite(avg_loss) || !std::isfinite(grad_l2) || nonfinite > 0.0f ||
 				avg_loss <= 0.0f) {
@@ -862,27 +904,38 @@ int main() {
 			}
 
 			if (step % checkpoint_interval == 0) {
-				if (prev_checkpoint_loss > 0.05f && avg_loss >= prev_checkpoint_loss) {
+				const float prev_ref =
+					(prev_checkpoint_loss < 0.0f) ? step1_loss : prev_checkpoint_loss;
+				if (prev_ref > 0.05f && avg_loss >= prev_ref) {
 					std::cerr << "[ANOMALY] Loss failed to drop at step " << step
-							  << " (prev=" << prev_checkpoint_loss << ", curr=" << avg_loss
-							  << ")\n";
+							  << " (prev=" << prev_ref << ", curr=" << avg_loss << ")\n";
 					all_healthy = false;
 				} else {
-					std::cout << "[CHECKPOINT " << step << "] loss=" << avg_loss << " (OK)\n";
+					std::cout << "[CHECKPOINT " << step << "] live loss: " << avg_loss
+							  << " (delta=" << (avg_loss - prev_ref) << ") (OK)\n"
+							  << std::flush;
 				}
+				checkpoint_losses.push_back({step, avg_loss});
 				prev_checkpoint_loss = avg_loss;
 			}
 		}
 	}
 
-	if (all_healthy && prev_checkpoint_loss >= initial_loss) {
-		std::cerr << "[ANOMALY] Overall loss did not drop from start (" << initial_loss
+	if (all_healthy && (prev_checkpoint_loss < 0.0f || prev_checkpoint_loss >= step1_loss)) {
+		std::cerr << "[ANOMALY] Overall loss did not drop from step 1 (" << step1_loss
 				  << " -> " << prev_checkpoint_loss << ")\n";
 		all_healthy = false;
 	}
 
+	std::cout << "\n--- 1000-Step Live Loss Summary ---\n";
+	std::cout << "  step    1 | loss: " << step1_loss << "\n";
+	for (const auto& entry : checkpoint_losses) {
+		std::cout << "  step " << std::setw(4) << entry.first << " | loss: " << entry.second
+				  << "\n";
+	}
+
 	if (all_healthy) {
-		std::cout << "[PASS GREEN] Closed-loop forward/backward dropped loss (" << initial_loss
+		std::cout << "[PASS GREEN] Closed-loop forward/backward dropped loss (" << step1_loss
 				  << " -> " << prev_checkpoint_loss << ") without anomalies.\n";
 		return 0;
 	}
