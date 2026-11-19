@@ -492,23 +492,26 @@ void print_hardware_telemetry(const Portion& portion) {
 		std::filesystem::space(std::filesystem::current_path(ec), ec);
 	const double disk_free_gb = ec ? 0.0 : disk_space.available / 1024.0 / 1024.0 / 1024.0;
 
-	std::cout << "\n========================================================\n"
-			  << "                LIVE HARDWARE TELEMETRY                 \n"
-			  << "========================================================\n"
-			  << std::fixed << std::setprecision(2)
-			  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
-			  << "[RAM] Engine Stream : "
-			  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0) << " MB\n"
-			  << "[RAM] Process Usage : " << process_ram_mb << " MB\n"
-			  << "[RAM] System Avail  : " << sys_avail_gb
-			  << " GB / " << sys_total_gb << " GB\n"
-			  << "[GPU] Context Window: "
-			  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
-			  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
-			  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
-			  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
-			  << "========================================================\n\n"
-			  << std::flush;
+	{
+		FormatGuard fmt(std::cout);
+		std::cout << "\n========================================================\n"
+				  << "                LIVE HARDWARE TELEMETRY                 \n"
+				  << "========================================================\n"
+				  << std::fixed << std::setprecision(2)
+				  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
+				  << "[RAM] Engine Stream : "
+				  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0) << " MB\n"
+				  << "[RAM] Process Usage : " << process_ram_mb << " MB\n"
+				  << "[RAM] System Avail  : " << sys_avail_gb
+				  << " GB / " << sys_total_gb << " GB\n"
+				  << "[GPU] Context Window: "
+				  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
+				  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
+				  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
+				  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
+				  << "========================================================\n\n"
+				  << std::flush;
+	}
 }
 
 // *****************************************************************************
@@ -530,14 +533,18 @@ void print_loss(AI& ai, size_t step, std::optional<double>& first_loss) {
 		first_loss = loss;
 	}
 
-	std::cout << std::fixed << std::setprecision(6) << "[Step " << step << "] loss " << loss;
+	{
+		FormatGuard fmt(std::cout);
+		std::cout << std::fixed << std::setprecision(6) << "[Step " << step << "] loss " << loss;
 
-	if (*first_loss > 0.0) {
-		std::cout << std::showpos << std::setprecision(1) << "  ("
-				  << (loss - *first_loss) / *first_loss * 100.0 << "% vs first)" << std::noshowpos;
+		if (*first_loss > 0.0) {
+			std::cout << std::showpos << std::setprecision(1) << "  ("
+					  << (loss - *first_loss) / *first_loss * 100.0 << "% vs first)"
+					  << std::noshowpos;
+		}
+
+		std::cout << "\n" << std::flush;
 	}
-
-	std::cout << "\n" << std::flush;
 }
 
 // *****************************************************************************
@@ -791,11 +798,15 @@ void run_chat_engine(AI& ai, Parser& parser, Input& input,
 		double gen_sec = std::chrono::duration<double>(t_end - t_first).count();
 		double tps = (gen_sec > 0.001 && token_count > 1) ? ((token_count - 1) / gen_sec) : 0.0;
 
-		std::cout << "\033[90m── [TTFT: " << std::fixed << std::setprecision(1) << ttft_ms << " ms"
-				  << " | Speed: " << std::fixed << std::setprecision(1) << tps << " t/s"
-				  << " | Generated: " << token_count << " tokens"
-				  << " | Temp: " << std::fixed << std::setprecision(2) << current_temp
-				  << "] ──\033[0m\n";
+		{
+			FormatGuard fmt(std::cout);
+			std::cout << "\033[90m── [TTFT: " << std::fixed << std::setprecision(1) << ttft_ms
+					  << " ms"
+					  << " | Speed: " << std::fixed << std::setprecision(1) << tps << " t/s"
+					  << " | Generated: " << token_count << " tokens"
+					  << " | Temp: " << std::fixed << std::setprecision(2) << current_temp
+					  << "] ──\033[0m\n";
+		}
 	}
 }
 
@@ -1012,15 +1023,18 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 	AxiomTelemetry telemetry;
 	const HardwareSpecs& specs = telemetry.get_specs();
 
-	std::cout << "Hardware Device : " << specs.gpu_name << "\n"
-			  << "Architecture    : sm_" << specs.sm_major << specs.sm_minor << " (Ada Lovelace)\n"
-			  << "Memory Bus      : " << specs.bus_width_bits
-			  << "-bit | Peak Bandwidth: " << std::fixed << std::setprecision(1)
-			  << specs.peak_bandwidth_gb_s << " GB/s\n"
-			  << "Compute Engine  : " << specs.peak_dense_tflops << " Peak Dense BF16 TFLOPs\n"
-			  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024)) << " MB Free / "
-			  << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n"
-			  << "--------------------------------------------------------\n"
+	{
+		FormatGuard fmt(std::cout);
+		std::cout << "Hardware Device : " << specs.gpu_name << "\n"
+				  << "Architecture    : sm_" << specs.sm_major << specs.sm_minor << " (Ada Lovelace)\n"
+				  << "Memory Bus      : " << specs.bus_width_bits
+				  << "-bit | Peak Bandwidth: " << std::fixed << std::setprecision(1)
+				  << specs.peak_bandwidth_gb_s << " GB/s\n"
+				  << "Compute Engine  : " << specs.peak_dense_tflops << " Peak Dense BF16 TFLOPs\n"
+				  << "VRAM Footprint  : " << (specs.free_vram_bytes / (1024 * 1024)) << " MB Free / "
+				  << (specs.total_vram_bytes / (1024 * 1024)) << " MB Total\n";
+	}
+	std::cout << "--------------------------------------------------------\n"
 			  << "[STAGE 1/3] Micro-Dispatch Latency & Decode Throughput Profile\n"
 			  << "[..] Warming up Tensor Cores (10 forward passes)...\n";
 
@@ -1061,6 +1075,7 @@ void run_hardware_benchmark(AI& ai, Parser& parser, Input& input) {
 		double bw_pct = (specs.peak_bandwidth_gb_s > 0.0)
 							? (vram_bw_gb_s / specs.peak_bandwidth_gb_s) * 100.0
 							: 0.0;
+		FormatGuard fmt(std::cout);
 		std::cout << "[OK] Dynamically allocated " << std::fixed << std::setprecision(2) << alloc_gb
 				  << " GB synthetic tensors in VRAM (leaving 2.00 GB OS safety headroom)\n"
 				  << "[OK] Vectorized GDDR6 memory streaming bandwidth: " << std::setprecision(1)
@@ -1311,7 +1326,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 						(target_steps > 0)
 							? std::min(100.0, (static_cast<double>(step) * 100.0 / target_steps))
 							: 100.0;
-					constexpr int bar_width = 24;
+					constexpr int bar_width = 16;
 					int filled = static_cast<int>((pct / 100.0) * bar_width);
 					if (filled > bar_width)
 						filled = bar_width;
@@ -1340,29 +1355,36 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 							? static_cast<uint64_t>(remaining_steps / steps_per_second)
 							: 0;
 
-					std::cout << "\r\033[K  [..] Learning " << bar << " " << std::fixed
-							  << std::setprecision(1) << pct << "% | Step " << step << "/"
-							  << target_steps << " | ETA: " << format_duration(eta_seconds) << " ("
-							  << std::setprecision(1) << steps_per_second << " stp/s)"
-							  << " | LR: " << std::setprecision(5) << dynamic_learning_rate
-							  << " | Loss: " << std::setprecision(4) << current_loss;
-					if (*first_loss > 0.0) {
-						double delta_pct = (current_loss - *first_loss) / *first_loss * 100.0;
-						std::cout << " (" << std::showpos << std::setprecision(1) << delta_pct
-								  << "% vs 1st)" << std::noshowpos;
+					const bool is_tty = _isatty(_fileno(stdout)) != 0;
+					{
+						FormatGuard fmt(std::cout);
+						if (is_tty) {
+							std::cout << "\r\033[K";
+						}
+						std::cout << "  [" << bar << " " << std::fixed << std::setprecision(0)
+								  << pct << "%] " << step << "/" << target_steps << " | "
+								  << format_duration(eta_seconds) << " (" << std::setprecision(1)
+								  << steps_per_second << "s/s) | Loss " << std::setprecision(4)
+								  << current_loss;
+						if (*first_loss > 0.0) {
+							double delta_pct = (current_loss - *first_loss) / *first_loss * 100.0;
+							std::cout << " (" << std::showpos << std::setprecision(0) << delta_pct
+									  << "%)" << std::noshowpos;
+						}
+						std::cout << " | |G| " << std::setprecision(2) << telemetry.gradient_norm
+								  << " | Dead " << std::setprecision(1)
+								  << (telemetry.dead_fraction * 100.0) << "%";
+						if (has_validation) {
+							std::cout << " | Val " << std::setprecision(4) << validation_loss;
+						}
+						std::cout << (is_tty ? "" : "\n") << std::flush;
 					}
-					std::cout << " | |Grad|: " << std::setprecision(3) << telemetry.gradient_norm
-							  << " | Dead: " << std::setprecision(1)
-							  << (telemetry.dead_fraction * 100.0) << "%";
-					if (has_validation) {
-						std::cout << " | Val: " << std::setprecision(4) << validation_loss;
-					}
-					std::cout << "   " << std::flush;
 
 					// Stabilized stop condition: Halt training only when rolling average stabilizes below target
 					const double effective_target = (target_stop_loss > 0.0) ? target_stop_loss : 3.0;
 					if (step >= 100 && rolling_loss <= effective_target && current_loss <= effective_target &&
 						(!has_validation || validation_loss <= (effective_target + 0.5))) {
+						FormatGuard fmt(std::cout);
 						std::cout << "\n\n[SUCCESS] Rolling loss stabilized at "
 								  << std::fixed << std::setprecision(4) << rolling_loss
 								  << " (Current: " << current_loss
@@ -1379,9 +1401,12 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 			}
 
 			if (step >= target_steps) {
-				std::cout << "\r\033[K  [OK] Learning [========================] 100.0% | Step " << step
-						  << "/" << target_steps << " | Loss: " << std::fixed
-						  << std::setprecision(4) << current_loss;
+				FormatGuard fmt(std::cout);
+				const bool is_tty = _isatty(_fileno(stdout)) != 0;
+				std::cout << (is_tty ? "\r\033[K" : "")
+						  << "  [OK] Done [================] 100% | Step " << step << "/"
+						  << target_steps << " | Loss: " << std::fixed << std::setprecision(4)
+						  << current_loss;
 				if (first_loss && *first_loss > 0.0) {
 					double delta_pct = (current_loss - *first_loss) / *first_loss * 100.0;
 					std::cout << " (" << std::showpos << std::setprecision(1) << delta_pct
@@ -1539,6 +1564,7 @@ bool execute_training_session(
 	uint32_t min_frequency = 3, double target_stop_loss = 2.8, size_t epochs = 4) {
 	parser.developer_mode = developer_mode;
 	ai.enable_transformer = true;
+	ai.release_legacy_weights();
 
 	if (mode != AppMode::BulkTrain && std::filesystem::exists(vocab_path)) {
 		std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
@@ -1623,26 +1649,29 @@ bool execute_training_session(
 					  << " -> Tokenized into -> " << token_id << " -> tokenized embedded into -> [";
 
 			// Query actual master embedding table from AI VRAM/host state
-			if (token_id < ai.vocab_size && !ai.host_embeddings.empty()) {
-				for (size_t d = 0; d < ai.embedding_dim; ++d) {
-					std::cout << std::fixed << std::setprecision(4)
-							  << ai.host_embeddings[token_id * ai.embedding_dim + d]
-							  << (d + 1 < ai.embedding_dim ? ", " : "");
-				}
-			} else {
-				auto it = input.embedding_table.find(token_id);
-				if (it != input.embedding_table.end()) {
-					for (size_t d = 0; d < it->second.size(); ++d) {
+			{
+				FormatGuard fmt(std::cout);
+				if (token_id < ai.vocab_size && !ai.host_embeddings.empty()) {
+					for (size_t d = 0; d < ai.embedding_dim; ++d) {
 						std::cout << std::fixed << std::setprecision(4)
-								  << static_cast<float>(it->second[d])
-								  << (d + 1 < it->second.size() ? ", " : "");
+								  << ai.host_embeddings[token_id * ai.embedding_dim + d]
+								  << (d + 1 < ai.embedding_dim ? ", " : "");
+					}
+				} else {
+					auto it = input.embedding_table.find(token_id);
+					if (it != input.embedding_table.end()) {
+						for (size_t d = 0; d < it->second.size(); ++d) {
+							std::cout << std::fixed << std::setprecision(4)
+									  << static_cast<float>(it->second[d])
+									  << (d + 1 < it->second.size() ? ", " : "");
+						}
 					}
 				}
 			}
 			std::cout << "]\n";
 		}
 		std::cout << "------------------------------------------------------------\n\n"
-				  << std::defaultfloat << std::flush;
+				  << std::flush;
 	}
 
 	parser.save_vocabulary(vocab_path, input);
@@ -1656,20 +1685,52 @@ bool execute_training_session(
 		ai.active_vocab_size = input.next_text_id;
 	}
 
-	// Hold out a disjoint 10% validation split when the un-repeated corpus spans at least 4 context windows
+	// Hold out a stratified ~10% validation split across evenly-spaced corpus blocks
 	portion.validation_token_ids.clear();
 	if (has_validation_corpus) {
 		const size_t min_val_tokens = config::context_window_size + 1;
-		const size_t val_tokens = std::max(min_val_tokens, input.tokenized_data.size() / 10);
-		if (input.tokenized_data.size() > val_tokens + min_val_tokens) {
-			const size_t split_index = input.tokenized_data.size() - val_tokens;
-			portion.validation_token_ids.assign(
-				input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(split_index),
-				input.tokenized_data.end());
-			input.tokenized_data.resize(split_index);
-			std::cout << "[OK] Generalization split: " << input.tokenized_data.size()
-					  << " train tokens | " << portion.validation_token_ids.size()
-					  << " held-out validation tokens.\n";
+		const size_t total_tokens = input.tokenized_data.size();
+		const size_t val_budget = std::max(min_val_tokens, total_tokens / 10);
+		if (total_tokens > val_budget + min_val_tokens) {
+			const size_t max_blocks = total_tokens / (min_val_tokens * 2);
+			const size_t num_blocks = std::max<size_t>(1, std::min<size_t>(10, max_blocks));
+			const size_t seg_len = total_tokens / num_blocks;
+			const size_t block_val_len = std::min(
+				seg_len - min_val_tokens, std::max(min_val_tokens, val_budget / num_blocks));
+
+			std::vector<uint32_t> train_tokens;
+			train_tokens.reserve(total_tokens - val_budget);
+			portion.validation_token_ids.reserve(num_blocks * (block_val_len + 1));
+
+			for (size_t b = 0; b < num_blocks; ++b) {
+				const size_t seg_begin = b * seg_len;
+				const size_t seg_end = (b + 1 == num_blocks) ? total_tokens : (b + 1) * seg_len;
+				const size_t val_begin = seg_begin + (seg_end - seg_begin - block_val_len) / 2;
+				const size_t val_end = val_begin + block_val_len;
+
+				train_tokens.insert(
+					train_tokens.end(),
+					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(seg_begin),
+					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_begin));
+				train_tokens.push_back(vocab::PAD);
+				train_tokens.insert(
+					train_tokens.end(),
+					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_end),
+					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(seg_end));
+
+				if (!portion.validation_token_ids.empty()) {
+					portion.validation_token_ids.push_back(vocab::PAD);
+				}
+				portion.validation_token_ids.insert(
+					portion.validation_token_ids.end(),
+					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_begin),
+					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_end));
+			}
+
+			input.tokenized_data = std::move(train_tokens);
+			std::cout << "[OK] Stratified 10%-val split (" << num_blocks
+					  << " blocks): " << input.tokenized_data.size() << " train tokens | "
+					  << portion.validation_token_ids.size() << " held-out validation tokens.\n";
 		}
 	}
 
@@ -1711,10 +1772,13 @@ bool execute_training_session(
 			ai.evaluate_validation(portion.validation_token_ids, portion.context_window_size,
 								   initial_val_loss) &&
 			(initial_val_loss > 16.0 || !std::isfinite(initial_val_loss))) {
-			std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: " << std::fixed
-					  << std::setprecision(4) << initial_val_loss
-					  << " > 16.0). Resetting brain to fresh state...\n"
-					  << std::flush;
+			{
+				FormatGuard fmt(std::cout);
+				std::cout << "[!] Pre-existing checkpoint is diverged (Val Loss: " << std::fixed
+						  << std::setprecision(4) << initial_val_loss
+						  << " > 16.0). Resetting brain to fresh state...\n"
+						  << std::flush;
+			}
 			ai.reset_weights(ai_elements);
 			ai.upload_weights();
 		}
@@ -1928,7 +1992,7 @@ int main(int argc, char* argv[]) {
 				<< "  --lr <rate>         Set optimizer learning rate (default: 0.006)\n"
 				<< "  --epochs <N>        Set number of training epochs across corpus (default: 4)\n"
 				<< "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
-				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 3)\n"
+				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 1)\n"
 				<< "  --target-loss <L>   Set target stopping loss (default: 2.8, range: 1.5 - 3.0)\n"
 				<< "  --archive           Automatically archive processed files after bulk training\n"
 				<< "  --purge             Automatically purge processed files after bulk training\n\n";
@@ -2205,8 +2269,11 @@ int main(int argc, char* argv[]) {
 	portion.seed_shuffle(random_seed);
 	Optimizer optimizer(embedded_path, learning_rate);
 	Elements ai_elements;
+	const bool allocate_legacy_flat =
+		is_interactive ||
+		(mode != AppMode::Chat && mode != AppMode::BulkTrain && mode != AppMode::Train);
 	AI ai(portion.all_elements, portion.target_elements, config::weight_min, config::weight_max,
-		  ai_elements);
+		  ai_elements, allocate_legacy_flat);
 	if (custom_seed_set) {
 		ai.random_seed = random_seed;
 		ai.reset_weights(ai_elements);
@@ -2280,7 +2347,7 @@ int main(int argc, char* argv[]) {
 			execute_training_session(ai, optimizer, portion, ai_elements, parser, session_input,
 									 empty_test, training_weights_path, training_vocab_path,
 									 embedded_path, asset_dir, core_dir, selected_mode, false,
-									 max_steps, true, auto_archive, auto_purge, 3,
+									 max_steps, true, auto_archive, auto_purge, min_frequency,
 									 target_stop_loss, training_epochs);
 			pause_menu();
 			continue;

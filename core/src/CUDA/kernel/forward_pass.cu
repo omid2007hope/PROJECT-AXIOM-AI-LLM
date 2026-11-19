@@ -22,6 +22,7 @@
 #include "forward_pass.cuh"
 #include "moe_router.cuh"
 #include "paged_gqa.cuh"
+#include "rope.cuh"
 #include "swiglu.cuh"
 
 // The CUTLASS visitor headers are not self-contained: gemm_universal.h must come
@@ -599,12 +600,17 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 						      size_t input_dim,
 						      size_t output_dim,
 						      int buffer_index,
-						      bool gather_embeddings) {
+						      bool gather_embeddings,
+						      bool compute_output_probs) {
 
-	// Safe Guard
-	if (!gpu_portion || !gpu_weights || !gpu_activations || !gpu_weights->d_weights ||
-	    !gpu_weights->d_bias || input_dim == 0 || output_dim == 0 || buffer_index < 0 ||
-	    buffer_index >= 2) {
+	if (!gpu_portion || !gpu_weights || !gpu_activations || input_dim == 0 || output_dim == 0 ||
+	    buffer_index < 0 || buffer_index >= 2) {
+		return false;
+	}
+
+	bool is_transformer_readout =
+		(gpu_weights->d_query_weights != nullptr && input_dim > output_dim);
+	if (!is_transformer_readout && (!gpu_weights->d_weights || !gpu_weights->d_bias)) {
 		return false;
 	}
 
@@ -729,18 +735,17 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 			return false;
 	}
 
-	bool is_transformer_readout =
-		(gpu_weights->d_query_weights != nullptr && input_dim > output_dim);
-
 	if (is_transformer_readout) {
-		// Transformer hidden state token readout: copy final token h_{S-1} directly to d_output
 		size_t final_token_offset = input_dim - output_dim;
-		cudaMemcpyAsync(
-			gpu_activations->d_output,
-			static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]) + final_token_offset,
-			output_dim * sizeof(__nv_bfloat16),
-			cudaMemcpyDeviceToDevice,
-			stream);
+		if (!CUDA_CHECK(cudaMemcpyAsync(
+			    gpu_activations->d_output,
+			    static_cast<const __nv_bfloat16*>(gpu_portion->d_context_window[buffer_index]) +
+				    final_token_offset,
+			    output_dim * sizeof(__nv_bfloat16),
+			    cudaMemcpyDeviceToDevice,
+			    stream))) {
+			return false;
+		}
 	} else {
 		using cute::_0;
 		using cute::_1;
@@ -804,6 +809,11 @@ extern "C" CUDA_API bool forward_pass_with_embeddings(const GpuPortion* gpu_port
 				cutlass::cutlassGetStatusString(status));
 			return false;
 		}
+	}
+
+	// Skip single-token tied logits/softmax during transformer training when sequence logits follow
+	if (!compute_output_probs) {
+		return CUDA_CHECK(cudaGetLastError());
 	}
 
 	// Milestone 3: Discrete Autoregressive Token Classification
@@ -1509,6 +1519,15 @@ extern "C" CUDA_API bool transformer_forward_block(void* hidden_states,
 			      false,
 			      false,
 			      s);
+
+	// Apply Rotary Position Embeddings (RoPE) across [0..S-1] to Q and K
+	launch_rope_sequence(gpu_activations->d_query,
+			     gpu_activations->d_key,
+			     S,
+			     static_cast<int>(num_heads),
+			     static_cast<int>(embedding_dim / num_heads),
+			     AXIOM_ROPE_THETA,
+			     s);
 
 	// 4. Fused Causal Attention
 	if (!fused_causal_attention(gpu_activations->d_query,

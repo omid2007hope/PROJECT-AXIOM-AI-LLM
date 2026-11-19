@@ -41,14 +41,16 @@ extern "C" CUDA_API bool capture_training_graph(GpuGraphExecution* graph_engine,
 	}
 	graph_engine->stream = stream;
 
-	// Warmup execution: ensures all internal static structures and memory pools
+	// Warmup execution: ensures all internal static structures and persistent scratchpads
 	// are allocated prior to stream capture, fulfilling CUDA graph capture constraints.
-	forward_pass_with_embeddings(gpu_portion, gpu_embeddings, gpu_weights,
-				     gpu_activations, input_dim, output_dim, buffer_index);
-	backward_pass_with_embeddings(gpu_portion, gpu_embeddings, gpu_weights,
-				      gpu_activations, input_dim, output_dim,
-				      learning_rate, buffer_index, true);
-	cudaStreamSynchronize(stream);
+	if (!forward_pass_with_embeddings(gpu_portion, gpu_embeddings, gpu_weights,
+					  gpu_activations, input_dim, output_dim, buffer_index) ||
+	    !backward_pass_with_embeddings(gpu_portion, gpu_embeddings, gpu_weights,
+					   gpu_activations, input_dim, output_dim,
+					   learning_rate, buffer_index, true) ||
+	    !CUDA_CHECK(cudaStreamSynchronize(stream))) {
+		return false;
+	}
 
 	// Begin stream capture mode
 	if (!CUDA_CHECK(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal))) {
@@ -123,16 +125,22 @@ extern "C" CUDA_API float benchmark_graph_latency(GpuGraphExecution* graph_engin
 	cudaStream_t s = stream ? (cudaStream_t)stream : (cudaStream_t)graph_engine->stream;
 
 	// Warmup launch
-	cudaGraphLaunch((cudaGraphExec_t)graph_engine->graph_exec, s);
-	cudaStreamSynchronize(s);
+	if (!CUDA_CHECK(cudaGraphLaunch((cudaGraphExec_t)graph_engine->graph_exec, s)) ||
+	    !CUDA_CHECK(cudaStreamSynchronize(s))) {
+		return -1.0f;
+	}
 
 	// Measure host launch latency (CPU time spent dispatching graph to queue)
 	auto start_time = std::chrono::high_resolution_clock::now();
 	for (int i = 0; i < iterations; ++i) {
-		cudaGraphLaunch((cudaGraphExec_t)graph_engine->graph_exec, s);
+		if (!CUDA_CHECK(cudaGraphLaunch((cudaGraphExec_t)graph_engine->graph_exec, s))) {
+			return -1.0f;
+		}
 	}
 	auto end_time = std::chrono::high_resolution_clock::now();
-	cudaStreamSynchronize(s);
+	if (!CUDA_CHECK(cudaStreamSynchronize(s))) {
+		return -1.0f;
+	}
 
 	double total_elapsed_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 	float avg_latency_ms = static_cast<float>(total_elapsed_ms / iterations);

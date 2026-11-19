@@ -38,6 +38,15 @@ bool test_decompressor() {
 	std::filesystem::path temp_dir = test_core_dir() / "test_temp_decom";
 	std::filesystem::create_directories(temp_dir);
 	std::filesystem::path asset_dir = test_asset_dirs()[0];
+	auto find_live_asset = [&](const char* filename) -> std::filesystem::path {
+		for (const auto& dir : test_asset_dirs()) {
+			std::filesystem::path candidate = dir / filename;
+			if (std::filesystem::exists(candidate)) {
+				return candidate;
+			}
+		}
+		return asset_dir / filename;
+	};
 
 	// ─── [1] Document Decompressor (DecompressDocument) ──────────────────────────
 	std::cout << "[1] Document Decompressor (DecompressDocument: TXT, MD, PDF, DOCX)\n";
@@ -147,7 +156,8 @@ bool test_decompressor() {
 
 	// 2.2 Live Photo.jpeg asset decode
 	{
-		std::filesystem::path photo_path = asset_dir / "Photo.jpeg";
+		std::filesystem::path photo_path = find_live_asset("Photo.jpeg");
+		test_check(std::filesystem::exists(photo_path), "Live asset Photo.jpeg exists for decode test", pass_count, fail_count);
 		if (std::filesystem::exists(photo_path)) {
 			DecodedImage decoded = DecompressImage::decode_image(photo_path);
 			test_check(decoded.is_valid, "decode_image successfully decodes Photo.jpeg", pass_count, fail_count);
@@ -203,7 +213,8 @@ bool test_decompressor() {
 
 	// 3.2 Live Voice.ogg asset decode
 	{
-		std::filesystem::path voice_path = asset_dir / "Voice.ogg";
+		std::filesystem::path voice_path = find_live_asset("Voice.ogg");
+		test_check(std::filesystem::exists(voice_path), "Live asset Voice.ogg exists for decode test", pass_count, fail_count);
 		if (std::filesystem::exists(voice_path)) {
 			DecodedAudio decoded = DecompressAudio::decode_audio(voice_path);
 			test_check(decoded.is_valid, "decode_audio successfully decodes Voice.ogg", pass_count, fail_count);
@@ -217,7 +228,8 @@ bool test_decompressor() {
 
 	// 4.1 Live Video.mp4 asset decode
 	{
-		std::filesystem::path video_path = asset_dir / "Video.mp4";
+		std::filesystem::path video_path = find_live_asset("Video.mp4");
+		test_check(std::filesystem::exists(video_path), "Live asset Video.mp4 exists for decode test", pass_count, fail_count);
 		if (std::filesystem::exists(video_path)) {
 			DecodedVideo decoded = DecompressVideo::decode_video(video_path);
 			test_check(decoded.is_valid, "decode_video successfully parses Video.mp4", pass_count, fail_count);

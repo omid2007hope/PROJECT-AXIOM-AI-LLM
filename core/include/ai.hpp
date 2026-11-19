@@ -89,7 +89,8 @@ public:
 	   size_t target_elements_y_total,
 	   float weight_min,
 	   float weight_max,
-	   Elements& elements);
+	   Elements& elements,
+	   bool allocate_legacy_flat = true);
 
 	~AI();
 
@@ -98,6 +99,9 @@ public:
 
 	// Method to copy the trained weights back into host_weights / host_bias
 	bool download_weights();
+
+	// Free unused legacy flat input->output weights when using transformer readout
+	void release_legacy_weights();
 
 	// Method to reset all parameters/weights back to chaotic state
 	void reset_weights(Elements& elements);

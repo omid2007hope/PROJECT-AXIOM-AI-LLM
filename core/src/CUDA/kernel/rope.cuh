@@ -37,6 +37,27 @@ CUDA_API void launch_rope_inplace_bf16(
 	void* stream
 );
 
+// Sequence-parallel RoPE forward (positions 0..num_tokens-1) and inverse backward on Q/K
+CUDA_API void launch_rope_sequence(
+	void* d_q,
+	void* d_k,
+	int num_tokens,
+	int num_heads,
+	int head_dim,
+	float rope_theta,
+	void* stream
+);
+
+CUDA_API void launch_rope_backward(
+	void* d_grad_q,
+	void* d_grad_k,
+	int num_tokens,
+	int num_heads,
+	int head_dim,
+	float rope_theta,
+	void* stream
+);
+
 #ifdef __cplusplus
 }
 #endif

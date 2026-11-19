@@ -147,8 +147,8 @@ bool test_identifier() {
 	test_check(non_existent.format == FileFormat::UNKNOWN, "Non-existent file format is UNKNOWN", s_pass, s_fail);
 	test_check(non_existent.modality == ModalityCategory::UNKNOWN, "Non-existent file modality is UNKNOWN", s_pass, s_fail);
 
-	// 4. Directory Scanning (Bulk identification)
-	std::cout << "\n[4] Directory Scanning (asset_sample/)\n";
+	// 4. Directory Scanning (Bulk identification across multimodal corpora)
+	std::cout << "\n[4] Directory Scanning (multimodal asset directories)\n";
 	auto identified_files = Identifier::identify_directory(asset_dir, false);
 	if (identified_files.size() < 3000) {
 		std::filesystem::path train_dir = test_core_dir() / "training_data" / "Data";
@@ -167,7 +167,7 @@ bool test_identifier() {
 			identified_files.insert(identified_files.end(), pdf_files.begin(), pdf_files.end());
 		}
 	}
-	test_check(!identified_files.empty(), "identify_directory finds files in asset_sample/", s_pass, s_fail);
+	test_check(!identified_files.empty(), "identify_directory finds files across asset directories", s_pass, s_fail);
 	test_check(identified_files.size() >= 70, "identify_directory indexed at least 70 assets", s_pass, s_fail);
 
 	size_t doc_count = 0;

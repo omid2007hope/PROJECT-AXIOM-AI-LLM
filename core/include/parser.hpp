@@ -234,9 +234,12 @@ private:
 						}
 					}
 					bar += "]";
-					std::cout << "\r  [..] Ingesting " << path.filename().string() << " " << bar
-							  << " " << std::fixed << std::setprecision(1) << pct << "%"
-							  << std::flush;
+					{
+						FormatGuard fmt(std::cout);
+						std::cout << "\r  [..] Ingesting " << path.filename().string() << " "
+							  << bar << " " << std::fixed << std::setprecision(1) << pct
+							  << "%" << std::flush;
+					}
 				}
 			}
 			const size_t added = input.tokenized_data.size() - initial_tokens;

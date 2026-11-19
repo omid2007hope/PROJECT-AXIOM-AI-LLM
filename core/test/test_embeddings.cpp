@@ -88,10 +88,28 @@ bool test_embeddings() {
 	}
 
 	std::cout << "\n=== Embedded Data Test Result ===\n";
-	std::cout << "Successfully generated " << input.embedded_data.size() << " elements!\n";
-	std::cout << "First 1000: ";
-	for (size_t i = 0; i < input.embedded_data.size() && i < 1000; ++i) {
-		std::cout << input.embedded_data[i] << " ";
+	std::vector<std::bfloat16_t> preview_emb;
+	if (in_ram) {
+		size_t n = std::min<size_t>(emb.size(), 1000);
+		preview_emb.assign(emb.begin(), emb.begin() + static_cast<std::ptrdiff_t>(n));
+	} else {
+		std::ifstream disk_in(test_embedded_path(), std::ios::binary);
+		if (disk_in.is_open()) {
+			size_t n = std::min<size_t>(expected_size, 1000);
+			preview_emb.resize(n);
+			disk_in.read(reinterpret_cast<char*>(preview_emb.data()),
+				     static_cast<std::streamsize>(n * sizeof(std::bfloat16_t)));
+			size_t read_elems =
+				static_cast<size_t>(disk_in.gcount()) / sizeof(std::bfloat16_t);
+			preview_emb.resize(read_elems);
+		}
+	}
+	std::cout << "Successfully generated "
+		  << (in_ram ? input.embedded_data.size() : expected_size) << " elements!"
+		  << (in_ram ? "\n" : " (streamed to disk)\n");
+	std::cout << "First " << preview_emb.size() << ": ";
+	for (size_t i = 0; i < preview_emb.size(); ++i) {
+		std::cout << preview_emb[i] << " ";
 	}
 	std::cout << "\n";
 
@@ -160,29 +178,42 @@ bool test_embeddings() {
 			 "file size == embedded.size * sizeof(bfloat16_t)");
 	}
 
-	// ── [7] Re-run embedding is idempotent ───────────────────────────────────
+	// ── [7] Re-run embedding is idempotent (small in-RAM slice; avoids multi-GB rewrite)
 	std::cout << "\n[7] Idempotency\n";
-	Input input2;
-	Test test2 = make_test_data();
-	Parser parser2(true, test_embedded_path(), test_asset_dirs());
-	parser2.tokenization(input2, test2);
-	std::vector<std::bfloat16_t> emb2 = parser2.embedding(input2, test2);
-	check_eq(emb2.size(), emb.size(), "second run produces same size");
-	bool same_values = (emb.size() == emb2.size()) &&
-			   (input.embedding_table.size() == input2.embedding_table.size());
-	for (size_t i = 0; i < std::min(emb.size(), emb2.size()); ++i) {
-		if (emb[i] != emb2[i]) {
+	std::filesystem::path temp_bin = test_core_dir() / "test_temp_idempotent.bin";
+	auto make_small = []() {
+		Test small_test;
+		small_test.test_input = {"The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"};
+		return small_test;
+	};
+	Input input_a, input_b;
+	Test test_a = make_small();
+	Test test_b = make_small();
+	Parser parser_a(true, temp_bin, test_asset_dirs());
+	Parser parser_b(true, temp_bin, test_asset_dirs());
+	std::vector<uint32_t> tok_a = parser_a.tokenization(input_a, test_a);
+	std::vector<uint32_t> tok_b = parser_b.tokenization(input_b, test_b);
+	std::vector<std::bfloat16_t> emb_a = parser_a.embedding(input_a, test_a);
+	std::vector<std::bfloat16_t> emb_b = parser_b.embedding(input_b, test_b);
+	std::error_code rm_ec;
+	std::filesystem::remove(temp_bin, rm_ec);
+
+	check(tok_a == tok_b && !tok_a.empty(), "second run produces identical non-empty tokens");
+	check(!emb_a.empty() && emb_a.size() == emb_b.size(),
+	      "second run produces same non-empty embedding size");
+	bool same_values = !emb_a.empty() && (emb_a.size() == emb_b.size()) &&
+			   (input_a.embedding_table.size() == input_b.embedding_table.size());
+	for (size_t i = 0; i < emb_a.size() && same_values; ++i) {
+		if (emb_a[i] != emb_b[i]) {
 			same_values = false;
-			break;
 		}
 	}
-	if (same_values && !in_ram) {
-		for (const auto& [id, vec] : input.embedding_table) {
-			auto it = input2.embedding_table.find(id);
-			if (it == input2.embedding_table.end() || it->second != vec) {
-				same_values = false;
-				break;
-			}
+	for (const auto& [id, vec] : input_a.embedding_table) {
+		if (!same_values)
+			break;
+		auto it = input_b.embedding_table.find(id);
+		if (it == input_b.embedding_table.end() || it->second != vec) {
+			same_values = false;
 		}
 	}
 	check(same_values, "deterministic: same embedding values on re-run");

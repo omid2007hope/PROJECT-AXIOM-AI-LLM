@@ -37,7 +37,8 @@ CUDA_API bool backward_pass_with_embeddings(const GpuPortion* gpu_portion,
 					    float learning_rate,
 					    int buffer_index,
 					    bool use_adamw,
-					    bool scatter_embeddings = true);
+					    bool scatter_embeddings = true,
+					    bool defer_embedding_update = false);
 
 CUDA_API bool backward_scatter_embeddings(const GpuPortion* gpu_portion,
 					  GpuEmbeddings* gpu_embeddings,
@@ -46,7 +47,18 @@ CUDA_API bool backward_scatter_embeddings(const GpuPortion* gpu_portion,
 					  size_t embedding_dim,
 					  float learning_rate,
 					  int buffer_index,
-					  void* stream);
+					  void* stream,
+					  GpuActivations* gpu_activations = nullptr,
+					  const GpuWeights* gpu_weights = nullptr,
+					  bool apply_adamw = false);
+
+CUDA_API bool evaluate_sequence_loss(const GpuPortion* gpu_portion,
+				     const GpuEmbeddings* gpu_embeddings,
+				     GpuActivations* gpu_activations,
+				     size_t sequence_length,
+				     size_t embedding_dim,
+				     int buffer_index,
+				     double* out_loss);
 
 // Phase 3: Multi-Head Attention, SwiGLU & Transformer Backward Block
 CUDA_API bool fused_causal_backward(const void* grad_output,
@@ -79,7 +91,8 @@ CUDA_API bool transformer_backward_block(const void* grad_output,
 					 size_t num_heads,
 					 size_t feedforward_network_dimension,
 					 float learning_rate,
-					 void* stream);
+					 void* stream,
+					 bool advance_step = true);
 
 #ifdef __cplusplus
 }

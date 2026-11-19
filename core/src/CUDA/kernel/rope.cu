@@ -17,9 +17,26 @@
 #include <cstdint>
 #include "rope.cuh"
 
-__global__ void rope_inplace_bf16_kernel(
-	__nv_bfloat16* __restrict__ d_q,
-	__nv_bfloat16* __restrict__ d_k,
+__device__ __forceinline__ float load_scalar(const __nv_bfloat16* p) {
+	return __bfloat162float(*p);
+}
+
+__device__ __forceinline__ float load_scalar(const float* p) {
+	return *p;
+}
+
+__device__ __forceinline__ void store_scalar(__nv_bfloat16* p, float val) {
+	*p = __float2bfloat16(val);
+}
+
+__device__ __forceinline__ void store_scalar(float* p, float val) {
+	*p = val;
+}
+
+template <typename ScalarT, int Sign>
+__global__ void rope_rotate_kernel(
+	ScalarT* __restrict__ d_q,
+	ScalarT* __restrict__ d_k,
 	const int32_t* __restrict__ d_pos,
 	int num_tokens,
 	int num_q_heads,
@@ -31,7 +48,7 @@ __global__ void rope_inplace_bf16_kernel(
 	if (token_idx >= num_tokens) return;
 
 	int half_dim = head_dim >> 1;
-	int pos = d_pos[token_idx];
+	int pos = d_pos ? d_pos[token_idx] : token_idx;
 	int total_pairs = (num_q_heads + num_kv_heads) * half_dim;
 
 	for (int idx = threadIdx.x; idx < total_pairs; idx += blockDim.x) {
@@ -43,21 +60,16 @@ __global__ void rope_inplace_bf16_kernel(
 		float angle = static_cast<float>(pos) * freq;
 		float cos_val, sin_val;
 		__sincosf(angle, &sin_val, &cos_val);
+		float sin_eff = static_cast<float>(Sign) * sin_val;
 
-		if (head_idx < num_q_heads) {
-			__nv_bfloat16* q_head = d_q + token_idx * (num_q_heads * head_dim) + head_idx * head_dim;
-			float q0 = __bfloat162float(q_head[pair_idx]);
-			float q1 = __bfloat162float(q_head[pair_idx + half_dim]);
-			q_head[pair_idx]            = __float2bfloat16(q0 * cos_val - q1 * sin_val);
-			q_head[pair_idx + half_dim] = __float2bfloat16(q1 * cos_val + q0 * sin_val);
-		} else {
-			int kv_head_idx = head_idx - num_q_heads;
-			__nv_bfloat16* k_head = d_k + token_idx * (num_kv_heads * head_dim) + kv_head_idx * head_dim;
-			float k0 = __bfloat162float(k_head[pair_idx]);
-			float k1 = __bfloat162float(k_head[pair_idx + half_dim]);
-			k_head[pair_idx]            = __float2bfloat16(k0 * cos_val - k1 * sin_val);
-			k_head[pair_idx + half_dim] = __float2bfloat16(k1 * cos_val + k0 * sin_val);
-		}
+		ScalarT* head_ptr = (head_idx < num_q_heads)
+			? (d_q + static_cast<size_t>(token_idx) * (num_q_heads * head_dim) + head_idx * head_dim)
+			: (d_k + static_cast<size_t>(token_idx) * (num_kv_heads * head_dim) + (head_idx - num_q_heads) * head_dim);
+
+		float v0 = load_scalar(&head_ptr[pair_idx]);
+		float v1 = load_scalar(&head_ptr[pair_idx + half_dim]);
+		store_scalar(&head_ptr[pair_idx],            v0 * cos_val - v1 * sin_eff);
+		store_scalar(&head_ptr[pair_idx + half_dim], v1 * cos_val + v0 * sin_eff);
 	}
 }
 
@@ -72,13 +84,55 @@ extern "C" CUDA_API void launch_rope_inplace_bf16(
 	float rope_theta,
 	void* stream
 ) {
-	rope_inplace_bf16_kernel<<<num_tokens, 256, 0, static_cast<cudaStream_t>(stream)>>>(
+	if (!d_q || !d_k || num_tokens <= 0 || num_q_heads <= 0 || num_kv_heads <= 0 ||
+	    head_dim < 2 || (head_dim & 1) != 0) {
+		return;
+	}
+	rope_rotate_kernel<__nv_bfloat16, 1><<<num_tokens, 256, 0, static_cast<cudaStream_t>(stream)>>>(
 		static_cast<__nv_bfloat16*>(d_q),
 		static_cast<__nv_bfloat16*>(d_k),
 		d_pos,
 		num_tokens,
 		num_q_heads,
 		num_kv_heads,
+		head_dim,
+		rope_theta
+	);
+}
+
+extern "C" CUDA_API void launch_rope_sequence(
+	void* d_q,
+	void* d_k,
+	int num_tokens,
+	int num_heads,
+	int head_dim,
+	float rope_theta,
+	void* stream
+) {
+	launch_rope_inplace_bf16(
+		d_q, d_k, nullptr, num_tokens, num_heads, num_heads, head_dim, rope_theta, stream);
+}
+
+extern "C" CUDA_API void launch_rope_backward(
+	void* d_grad_q,
+	void* d_grad_k,
+	int num_tokens,
+	int num_heads,
+	int head_dim,
+	float rope_theta,
+	void* stream
+) {
+	if (!d_grad_q || !d_grad_k || num_tokens <= 0 || num_heads <= 0 ||
+	    head_dim < 2 || (head_dim & 1) != 0) {
+		return;
+	}
+	rope_rotate_kernel<float, -1><<<num_tokens, 256, 0, static_cast<cudaStream_t>(stream)>>>(
+		static_cast<float*>(d_grad_q),
+		static_cast<float*>(d_grad_k),
+		nullptr,
+		num_tokens,
+		num_heads,
+		num_heads,
 		head_dim,
 		rope_theta
 	);

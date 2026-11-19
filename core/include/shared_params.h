@@ -44,6 +44,9 @@
 #define AXIOM_PAGED_TOTAL_BLOCKS 256U
 #define AXIOM_PAGED_BLOCK_SIZE 16U
 
+// Rotary Position Embedding Base Frequency
+#define AXIOM_ROPE_THETA 1000000.0f
+
 #ifdef __cplusplus
 namespace axiom {
 

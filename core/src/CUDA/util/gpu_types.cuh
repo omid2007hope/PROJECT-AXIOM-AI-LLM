@@ -230,6 +230,16 @@ struct GpuActivations {
 	void* d_weight_second = nullptr; // device ptr to float (seq_len): top-2 normalized weight
 	void* d_expert_histogram =
 		nullptr; // device ptr to int32_t (expert_count): token load counts
+
+	// Persistent backward scratchpads (eliminates per-step allocation thrashing)
+	void* d_seq_logits = nullptr;
+	size_t logits_capacity = 0;
+	void* d_dh_bf16 = nullptr;
+	size_t dh_capacity = 0;
+	void* d_grad_table = nullptr;
+	size_t grad_table_capacity = 0;
+	void* d_bwd_scratch = nullptr;
+	size_t bwd_scratch_bytes = 0;
 };
 
 // Phase 4: PagedAttention KV-Cache Physical Page Pool

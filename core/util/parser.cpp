@@ -775,10 +775,13 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			if (fname.size() > 20)
 				fname = fname.substr(0, 17) + "...";
 
-			std::cout << "\r\033[K  [..] Ingesting assets " << bar << " " << std::fixed
-				  << std::setprecision(1) << pct << "% (" << files_processed << "/"
-				  << total_files << " files | " << input.tokenized_data.size()
-				  << " tokens | " << fname << ")   " << std::flush;
+			{
+				FormatGuard fmt(std::cout);
+				std::cout << "\r\033[K  [..] Ingesting assets " << bar << " " << std::fixed
+					  << std::setprecision(1) << pct << "% (" << files_processed << "/"
+					  << total_files << " files | " << input.tokenized_data.size()
+					  << " tokens | " << fname << ")   " << std::flush;
+			}
 		}
 	};
 

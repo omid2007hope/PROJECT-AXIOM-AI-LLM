@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 CUDA_API void free_gpu(GpuPortion* gpu);
+CUDA_API void free_legacy_gpu_weights(GpuWeights* gpu);
 CUDA_API void free_gpu_weights(GpuWeights* gpu);
 CUDA_API void free_gpu_activations(GpuActivations* gpu);
 CUDA_API bool allocate_gpu_embeddings(GpuEmbeddings* gpu_emb,

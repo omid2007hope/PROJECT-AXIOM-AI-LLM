@@ -54,7 +54,8 @@ AI::AI(size_t input_elements_x_total,
        size_t target_elements_y_total,
        float weight_min,
        float weight_max,
-       Elements& elements)
+       Elements& elements,
+       bool allocate_legacy_flat)
     : input_elements_x_total(input_elements_x_total),
       target_elements_y_total(target_elements_y_total),
       weight_min(weight_min),
@@ -62,11 +63,15 @@ AI::AI(size_t input_elements_x_total,
 	// input_elements_x_total = token * dim = 262144
 	// target_elements_y_total = target * dim = 1024
 
-	elements.weight_elements = input_elements_x_total * target_elements_y_total;
-	elements.bias_elements = target_elements_y_total;
-
-	host_weights.resize(elements.weight_elements);
-	host_bias.resize(elements.bias_elements);
+	if (allocate_legacy_flat) {
+		elements.weight_elements = input_elements_x_total * target_elements_y_total;
+		elements.bias_elements = target_elements_y_total;
+		host_weights.resize(elements.weight_elements);
+		host_bias.resize(elements.bias_elements);
+	} else {
+		elements.weight_elements = 0;
+		elements.bias_elements = 0;
+	}
 
 	vocab_size = axiom::VOCAB_SIZE;
 	embedding_dim = target_elements_y_total;
@@ -78,8 +83,9 @@ AI::AI(size_t input_elements_x_total,
 	host_embeddings.resize(vocab_size * embedding_dim);
 
 	reset_weights(elements);
-	if (allocate_gpu_embeddings(&gpu_embeddings, vocab_size, embedding_dim)) {
-		upload_embeddings(host_embeddings.data(), &gpu_embeddings);
+	if (!allocate_gpu_embeddings(&gpu_embeddings, vocab_size, embedding_dim) ||
+	    !upload_embeddings(host_embeddings.data(), &gpu_embeddings)) {
+		std::cerr << "[AI Brain] Warning: failed to initialize or upload GPU embeddings.\n";
 	}
 	compute_stream_ = create_cuda_stream();
 }
@@ -89,8 +95,8 @@ void AI::reset_weights(Elements& elements) {
 }
 
 void AI::reset_weights(Elements& elements, bool verbose) {
-	elements.weight_elements = input_elements_x_total * target_elements_y_total;
-	elements.bias_elements = target_elements_y_total;
+	elements.weight_elements = host_weights.size();
+	elements.bias_elements = host_bias.size();
 
 	// Initialize with Chaos (Symmetry Breaking) using deterministic seed progression
 	std::mt19937 gen(random_seed++);
@@ -98,26 +104,35 @@ void AI::reset_weights(Elements& elements, bool verbose) {
 	// Uniform distribution between weight_min and weight_max
 	std::uniform_real_distribution<float> dis(weight_min, weight_max);
 
-	for (size_t i = 0; i < elements.weight_elements; ++i) {
-		host_weights[i] = dis(gen);
+	for (float& weight : host_weights) {
+		weight = dis(gen);
 	}
 
-	for (size_t i = 0; i < elements.bias_elements; ++i) {
-		// Biases can often safely start at 0.0, because the chaotic weights
-		// will do the heavy lifting to break the symmetry on the first pass.
-		host_bias[i] = 0.0f;
+	std::fill(host_bias.begin(), host_bias.end(), 0.0f);
+
+	if (!host_embeddings.empty() && embedding_dim > 0) {
+		float bound = 1.0f / sqrtf(static_cast<float>(embedding_dim));
+		std::uniform_real_distribution<float> dis_emb(-bound, bound);
+		for (float& val : host_embeddings) {
+			val = dis_emb(gen);
+		}
+		std::fill(host_embeddings.begin(),
+			  host_embeddings.begin() + std::min(embedding_dim, host_embeddings.size()),
+			  0.0f); // PAD row
 	}
 
-	float bound = 1.0f / sqrtf(static_cast<float>(embedding_dim));
-	std::uniform_real_distribution<float> dis_emb(-bound, bound);
-	for (float& val : host_embeddings) {
-		val = dis_emb(gen);
+	if (gpu_embeddings.d_table_master != nullptr && !host_embeddings.empty()) {
+		if (!upload_embeddings(host_embeddings.data(), &gpu_embeddings)) {
+			std::cerr << "[AI Brain] Warning: failed to upload reset embeddings to GPU.\n";
+		}
 	}
-	std::fill(
-		host_embeddings.begin(), host_embeddings.begin() + embedding_dim, 0.0f); // PAD row
 
-	if (gpu_embeddings.d_table_master != nullptr) {
-		upload_embeddings(host_embeddings.data(), &gpu_embeddings);
+	if (enable_transformer && gpu_weights.d_query_weights != nullptr) {
+		if (!allocate_transformer_weights(
+			    &gpu_weights, gpu_weights.transformer_dim, gpu_weights.transformer_ffn)) {
+			std::cerr << "[AI Brain] Warning: failed to reset transformer weights.\n";
+		}
+		gpu_weights.step_count = 0;
 	}
 
 	if (verbose) {
@@ -215,10 +230,16 @@ AI::~AI() {
 }
 
 bool AI::upload_weights() {
-	bool ok = Transfer::upload_weights(
-		host_weights, host_bias, pending_steps, gpu_weights, gpu_activations);
-	if (!ok)
-		return false;
+	if (!host_weights.empty() && !host_bias.empty()) {
+		if (!Transfer::upload_weights(
+			    host_weights, host_bias, pending_steps, gpu_weights, gpu_activations)) {
+			return false;
+		}
+	} else {
+		float stale_loss = 0.0f;
+		download_loss(&gpu_activations, &stale_loss);
+		pending_steps = 0;
+	}
 
 	if (gpu_embeddings.d_table != nullptr && !host_embeddings.empty()) {
 		if (!Transfer::upload_embeddings(host_embeddings, gpu_embeddings)) {
@@ -229,9 +250,11 @@ bool AI::upload_weights() {
 }
 
 bool AI::download_weights() {
-	bool ok = Transfer::download_weights(host_weights, host_bias, gpu_weights);
-	if (!ok)
-		return false;
+	if (gpu_weights.d_weights_master != nullptr && !host_weights.empty() && !host_bias.empty()) {
+		if (!Transfer::download_weights(host_weights, host_bias, gpu_weights)) {
+			return false;
+		}
+	}
 
 	if (gpu_embeddings.d_table_master != nullptr && !host_embeddings.empty()) {
 		if (!Transfer::download_embeddings(host_embeddings, gpu_embeddings)) {
@@ -239,6 +262,12 @@ bool AI::download_weights() {
 		}
 	}
 	return true;
+}
+
+void AI::release_legacy_weights() {
+	std::vector<float>().swap(host_weights);
+	std::vector<float>().swap(host_bias);
+	free_legacy_gpu_weights(&gpu_weights);
 }
 
 bool AI::load_weights(const std::string& path) {
@@ -273,8 +302,10 @@ bool AI::load_weights(const std::string& path) {
 		return false;
 	}
 
-	if (header.weight_count != input_elements_x_total * target_elements_y_total ||
-	    header.bias_count != target_elements_y_total) {
+	const bool has_legacy_payload = (header.weight_count != 0 || header.bias_count != 0);
+	if (has_legacy_payload &&
+	    (header.weight_count != input_elements_x_total * target_elements_y_total ||
+	     header.bias_count != target_elements_y_total)) {
 		std::cerr << "[AI Brain] Element count mismatch in " << path << "\n";
 		return false;
 	}
@@ -290,17 +321,22 @@ bool AI::load_weights(const std::string& path) {
 	std::vector<float> loaded_bias(header.bias_count);
 	std::vector<float> loaded_embeddings;
 
-	in.read(reinterpret_cast<char*>(loaded_weights.data()),
-		header.weight_count * sizeof(float));
-	if (in.gcount() != static_cast<std::streamsize>(header.weight_count * sizeof(float))) {
-		std::cerr << "[AI Brain] Incomplete weight data in " << path << "\n";
-		return false;
+	if (header.weight_count > 0) {
+		in.read(reinterpret_cast<char*>(loaded_weights.data()),
+			header.weight_count * sizeof(float));
+		if (in.gcount() != static_cast<std::streamsize>(header.weight_count * sizeof(float))) {
+			std::cerr << "[AI Brain] Incomplete weight data in " << path << "\n";
+			return false;
+		}
 	}
 
-	in.read(reinterpret_cast<char*>(loaded_bias.data()), header.bias_count * sizeof(float));
-	if (in.gcount() != static_cast<std::streamsize>(header.bias_count * sizeof(float))) {
-		std::cerr << "[AI Brain] Incomplete bias data in " << path << "\n";
-		return false;
+	if (header.bias_count > 0) {
+		in.read(reinterpret_cast<char*>(loaded_bias.data()),
+			header.bias_count * sizeof(float));
+		if (in.gcount() != static_cast<std::streamsize>(header.bias_count * sizeof(float))) {
+			std::cerr << "[AI Brain] Incomplete bias data in " << path << "\n";
+			return false;
+		}
 	}
 
 	if (header.vocab_size > 0 && header.embedding_dim > 0) {
@@ -314,35 +350,108 @@ bool AI::load_weights(const std::string& path) {
 		}
 	}
 
-	for (float w : loaded_weights) {
-		if (!std::isfinite(w)) {
-			std::cerr << "[AI Brain] Corrupt weights in " << path
-				  << ": contains NaN or Inf. Rejecting load.\n";
-			return false;
+	auto check_finite = [](const std::vector<float>& vec) {
+		for (float val : vec) {
+			if (!std::isfinite(val))
+				return false;
 		}
+		return true;
+	};
+
+	if (!check_finite(loaded_weights)) {
+		std::cerr << "[AI Brain] Corrupt weights in " << path
+			  << ": contains NaN or Inf. Rejecting load.\n";
+		return false;
 	}
-	for (float b : loaded_bias) {
-		if (!std::isfinite(b)) {
-			std::cerr << "[AI Brain] Corrupt biases in " << path
-				  << ": contains NaN or Inf. Rejecting load.\n";
-			return false;
-		}
+	if (!check_finite(loaded_bias)) {
+		std::cerr << "[AI Brain] Corrupt biases in " << path
+			  << ": contains NaN or Inf. Rejecting load.\n";
+		return false;
 	}
-	for (float e_val : loaded_embeddings) {
-		if (!std::isfinite(e_val)) {
-			std::cerr << "[AI Brain] Corrupt embeddings in " << path
+	if (!check_finite(loaded_embeddings)) {
+		std::cerr << "[AI Brain] Corrupt embeddings in " << path
+			  << ": contains NaN or Inf. Rejecting load.\n";
+		return false;
+	}
+
+	// Read and validate optional transformer payload before mutating live weights
+	bool has_xform_payload = false;
+	uint64_t xform_dim = 0;
+	uint64_t xform_ffn = 0;
+	std::vector<float> loaded_q, loaded_k, loaded_v, loaded_o;
+	std::vector<float> loaded_gate, loaded_up, loaded_down;
+
+	uint64_t xform_magic = 0;
+	if (in.read(reinterpret_cast<char*>(&xform_magic), sizeof(xform_magic))) {
+		if (xform_magic != config::xform_magic) {
+			std::cerr << "[AI Brain] Invalid transformer section magic in " << path << "\n";
+			return false;
+		}
+		if (!in.read(reinterpret_cast<char*>(&xform_dim), sizeof(xform_dim)) ||
+		    !in.read(reinterpret_cast<char*>(&xform_ffn), sizeof(xform_ffn)) ||
+		    xform_dim == 0 || xform_ffn == 0) {
+			std::cerr << "[AI Brain] Corrupt transformer header in " << path << "\n";
+			return false;
+		}
+
+		const size_t dd_elements = xform_dim * xform_dim;
+		const size_t df_elements = xform_dim * xform_ffn;
+		loaded_q.resize(dd_elements);
+		loaded_k.resize(dd_elements);
+		loaded_v.resize(dd_elements);
+		loaded_o.resize(dd_elements);
+		loaded_gate.resize(df_elements);
+		loaded_up.resize(df_elements);
+		loaded_down.resize(df_elements);
+
+		auto read_vec = [&](std::vector<float>& vec) -> bool {
+			const std::streamsize bytes =
+				static_cast<std::streamsize>(vec.size() * sizeof(float));
+			in.read(reinterpret_cast<char*>(vec.data()), bytes);
+			return in.gcount() == bytes;
+		};
+
+		if (!read_vec(loaded_q) || !read_vec(loaded_k) || !read_vec(loaded_v) ||
+		    !read_vec(loaded_o) || !read_vec(loaded_gate) || !read_vec(loaded_up) ||
+		    !read_vec(loaded_down)) {
+			std::cerr << "[AI Brain] Incomplete transformer payload in " << path << "\n";
+			return false;
+		}
+		if (!check_finite(loaded_q) || !check_finite(loaded_k) || !check_finite(loaded_v) ||
+		    !check_finite(loaded_o) || !check_finite(loaded_gate) || !check_finite(loaded_up) ||
+		    !check_finite(loaded_down)) {
+			std::cerr << "[AI Brain] Corrupt transformer weights in " << path
 				  << ": contains NaN or Inf. Rejecting load.\n";
 			return false;
 		}
+		has_xform_payload = true;
+	}
+
+	if (!has_legacy_payload && !has_xform_payload) {
+		std::cerr << "[AI Brain] Checkpoint contains neither flat nor transformer weights: "
+			  << path << "\n";
+		return false;
 	}
 
 	// Atomic update of host parameters
-	host_weights = std::move(loaded_weights);
-	host_bias = std::move(loaded_bias);
+	if (has_legacy_payload) {
+		host_weights = std::move(loaded_weights);
+		host_bias = std::move(loaded_bias);
+	} else {
+		release_legacy_weights();
+	}
+
 	if (!loaded_embeddings.empty()) {
 		vocab_size = header.vocab_size;
 		embedding_dim = header.embedding_dim;
 		host_embeddings = std::move(loaded_embeddings);
+		if (gpu_embeddings.d_table == nullptr || gpu_embeddings.vocab_size != vocab_size ||
+		    gpu_embeddings.embedding_dim != embedding_dim) {
+			if (!allocate_gpu_embeddings(&gpu_embeddings, vocab_size, embedding_dim)) {
+				std::cerr << "[AI Brain] Failed to allocate GPU embeddings for checkpoint.\n";
+				return false;
+			}
+		}
 	}
 
 	// Synchronize and push directly to GPU VRAM
@@ -351,61 +460,28 @@ bool AI::load_weights(const std::string& path) {
 		return false;
 	}
 
-	// Check for optional transformer block payload (config::xform_magic)
-	uint64_t xform_magic = 0;
-	if (in.read(reinterpret_cast<char*>(&xform_magic), sizeof(xform_magic)) &&
-	    xform_magic == config::xform_magic) {
-		uint64_t xform_dim = 0;
-		uint64_t xform_ffn = 0;
-		if (in.read(reinterpret_cast<char*>(&xform_dim), sizeof(xform_dim)) &&
-		    in.read(reinterpret_cast<char*>(&xform_ffn), sizeof(xform_ffn))) {
-			const size_t dd_elements = xform_dim * xform_dim;
-			const size_t df_elements = xform_dim * xform_ffn;
-
-			std::vector<float> loaded_q(dd_elements);
-			std::vector<float> loaded_k(dd_elements);
-			std::vector<float> loaded_v(dd_elements);
-			std::vector<float> loaded_o(dd_elements);
-			std::vector<float> loaded_gate(df_elements);
-			std::vector<float> loaded_up(df_elements);
-			std::vector<float> loaded_down(df_elements);
-
-			in.read(reinterpret_cast<char*>(loaded_q.data()), dd_elements * sizeof(float));
-			in.read(reinterpret_cast<char*>(loaded_k.data()), dd_elements * sizeof(float));
-			in.read(reinterpret_cast<char*>(loaded_v.data()), dd_elements * sizeof(float));
-			in.read(reinterpret_cast<char*>(loaded_o.data()), dd_elements * sizeof(float));
-			in.read(reinterpret_cast<char*>(loaded_gate.data()), df_elements * sizeof(float));
-			in.read(reinterpret_cast<char*>(loaded_up.data()), df_elements * sizeof(float));
-			in.read(reinterpret_cast<char*>(loaded_down.data()), df_elements * sizeof(float));
-
-			auto check_finite = [](const std::vector<float>& vec) {
-				for (float val : vec) {
-					if (!std::isfinite(val)) return false;
-				}
-				return true;
-			};
-
-			if (check_finite(loaded_q) && check_finite(loaded_k) && check_finite(loaded_v) &&
-			    check_finite(loaded_o) && check_finite(loaded_gate) && check_finite(loaded_up) &&
-			    check_finite(loaded_down)) {
-				if (gpu_weights.d_query_weights == nullptr ||
-				    gpu_weights.transformer_dim != xform_dim ||
-				    gpu_weights.transformer_ffn != xform_ffn) {
-					build_transformer_block(xform_dim, num_heads, xform_ffn);
-				}
-				upload_transformer_weights(&gpu_weights,
-							   loaded_q.data(),
-							   loaded_k.data(),
-							   loaded_v.data(),
-							   loaded_o.data(),
-							   loaded_gate.data(),
-							   loaded_up.data(),
-							   loaded_down.data(),
-							   xform_dim,
-							   xform_ffn);
-				std::cout << "[AI Brain] Loaded transformer attention & SwiGLU weights from checkpoint.\n";
+	if (has_xform_payload) {
+		if (gpu_weights.d_query_weights == nullptr || gpu_weights.transformer_dim != xform_dim ||
+		    gpu_weights.transformer_ffn != xform_ffn) {
+			if (!build_transformer_block(xform_dim, num_heads, xform_ffn)) {
+				std::cerr << "[AI Brain] Failed to allocate transformer block for checkpoint.\n";
+				return false;
 			}
 		}
+		if (!upload_transformer_weights(&gpu_weights,
+						loaded_q.data(),
+						loaded_k.data(),
+						loaded_v.data(),
+						loaded_o.data(),
+						loaded_gate.data(),
+						loaded_up.data(),
+						loaded_down.data(),
+						xform_dim,
+						xform_ffn)) {
+			std::cerr << "[AI Brain] Failed to upload transformer weights from checkpoint.\n";
+			return false;
+		}
+		std::cout << "[AI Brain] Loaded transformer attention & SwiGLU weights from checkpoint.\n";
 	}
 
 	std::cout << "[AI Brain] Successfully loaded weights and embeddings from " << path

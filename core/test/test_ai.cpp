@@ -326,7 +326,7 @@ bool test_ai() {
 	std::vector<float> prediction_output;
 	test_check(ai.predict(test_context, prediction_output),
 			   "ai.predict(context_vector) returns true", s_pass, s_fail);
-	test_check_eq(prediction_output.size(), out_dim, "Prediction output dimension == out_dim (4)",
+	test_check_eq(prediction_output.size(), out_dim, "Prediction output dimension == out_dim",
 				  s_pass, s_fail);
 
 	bool prediction_valid = true;
@@ -694,9 +694,10 @@ bool test_ai() {
 				  << " -> Multi-Step Trained Loss: " << final_xform_loss << "\n";
 		test_check(step1_loss > 0.0 && std::isfinite(step1_loss),
 				   "Gate 3: Transformer initial loss is valid positive number", s_pass, s_fail);
-		test_check(std::isfinite(final_xform_loss) && final_xform_loss > 0.0,
-				   "Gate 3: Monotonic loss reduction verified on causal sequence modeling", s_pass,
-				   s_fail);
+		test_check(std::isfinite(final_xform_loss) && final_xform_loss > 0.0 &&
+				   final_xform_loss < step1_loss,
+			   "Gate 3: Monotonic loss reduction verified on causal sequence modeling", s_pass,
+			   s_fail);
 
 		xform_portion.free_pinned();
 	}

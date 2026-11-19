@@ -16,8 +16,27 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <ios>
+#include <ostream>
 
 #include "shared_params.h"
+
+class FormatGuard {
+public:
+	explicit FormatGuard(std::ostream& stream)
+	    : stream_(stream), flags_(stream.flags()), precision_(stream.precision()) {}
+	~FormatGuard() {
+		stream_.flags(flags_);
+		stream_.precision(precision_);
+	}
+	FormatGuard(const FormatGuard&) = delete;
+	FormatGuard& operator=(const FormatGuard&) = delete;
+
+private:
+	std::ostream& stream_;
+	std::ios_base::fmtflags flags_;
+	std::streamsize precision_;
+};
 
 #pragma pack(push, 1)
 
@@ -50,7 +69,7 @@ struct Config {
 
 	// Training & CLI defaults
 	static constexpr size_t default_training_epochs = 4;
-	static constexpr uint32_t default_min_frequency = 3;
+	static constexpr uint32_t default_min_frequency = 1;
 	static constexpr double default_target_stop_loss = 2.8;
 
 	// Optimization for test
@@ -73,7 +92,7 @@ struct Config {
 	static constexpr uint64_t xform_magic = 0x5458464DU; // "TXFM"
 	static constexpr uint32_t num_layers = 28U;
 	static constexpr float rms_norm_eps = 1e-6f;
-	static constexpr float rope_theta = 1000000.0f;
+	static constexpr float rope_theta = AXIOM_ROPE_THETA;
 	static constexpr uint32_t max_seq_len_cap = 16384U;
 	static constexpr size_t mmap_chunk_bytes = 256ULL * 1024ULL * 1024ULL;
 	static constexpr size_t paged_total_blocks = axiom::PAGED_TOTAL_BLOCKS;

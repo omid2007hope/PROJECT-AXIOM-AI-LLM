@@ -198,6 +198,15 @@ struct TestGpuActivations {
 	void* d_weight_first = nullptr;
 	void* d_weight_second = nullptr;
 	void* d_expert_histogram = nullptr;
+
+	void* d_seq_logits = nullptr;
+	size_t logits_capacity = 0;
+	void* d_dh_bf16 = nullptr;
+	size_t dh_capacity = 0;
+	void* d_grad_table = nullptr;
+	size_t grad_table_capacity = 0;
+	void* d_bwd_scratch = nullptr;
+	size_t bwd_scratch_bytes = 0;
 };
 
 // Compile-time ABI parity checks against gpu_types.cuh
@@ -429,7 +438,7 @@ float* const test_out_elapsed_ms = &test_out_elapsed_ms_storage;
 //   0 = UNFUSED_CORE (linear readout + embedding table)
 //   1 = TRANSFORMER_BLOCK (full closed-loop Transformer block matching training.cpp)
 #ifndef AXIOM_ISOLATION_TRANSFORMER
-#define AXIOM_ISOLATION_TRANSFORMER 0
+#define AXIOM_ISOLATION_TRANSFORMER 1
 #endif
 
 // Switches: unfused core active by default (fused/block wrappers disabled for isolation)
@@ -488,14 +497,17 @@ static TestGpuWeights make_test_gpu_weights() {
 	float qkv_bound = 1.0f / std::sqrt(static_cast<float>(test_embedding_dim));
 	float ffn_bound = 1.0f / std::sqrt(static_cast<float>(test_feedforward_network_dimension));
 
-	test_alloc_paired_weights(w_elems, lin_bound, 2001u, &w.d_weights, &w.d_weights_master);
-	test_alloc_paired_weights(b_elems, 0.0f, 2002u, &w.d_bias, &w.d_bias_master);
-	w.d_weights_m = test_alloc_zero(w_elems * sizeof(float));
-	w.d_weights_v = test_alloc_zero(w_elems * sizeof(float));
-	w.d_bias_m = test_alloc_zero(b_elems * sizeof(float));
-	w.d_bias_v = test_alloc_zero(b_elems * sizeof(float));
-	w.weight_elements = w_elems;
-	w.bias_elements = b_elems;
+	if (!(call_transformer_forward_block && call_transformer_backward_block) ||
+		call_forward_pass || call_backward_pass) {
+		test_alloc_paired_weights(w_elems, lin_bound, 2001u, &w.d_weights, &w.d_weights_master);
+		test_alloc_paired_weights(b_elems, 0.0f, 2002u, &w.d_bias, &w.d_bias_master);
+		w.d_weights_m = test_alloc_zero(w_elems * sizeof(float));
+		w.d_weights_v = test_alloc_zero(w_elems * sizeof(float));
+		w.d_bias_m = test_alloc_zero(b_elems * sizeof(float));
+		w.d_bias_v = test_alloc_zero(b_elems * sizeof(float));
+		w.weight_elements = w_elems;
+		w.bias_elements = b_elems;
+	}
 
 	if (call_transformer_forward_block || call_transformer_backward_block) {
 		test_alloc_paired_weights(qkv_elems, qkv_bound, 3001u, &w.d_query_weights,
@@ -665,7 +677,8 @@ static bool test_forward() {
 				reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
 				reinterpret_cast<GpuActivations*>(
 					const_cast<TestGpuActivations*>(&test_gpu_activations)),
-				test_input_dim, test_output_dim, test_buffer_index, test_gather_embeddings)) {
+				test_input_dim, test_output_dim, test_buffer_index, test_gather_embeddings,
+				!call_transformer_forward_block)) {
 			std::cerr << "[FAIL] forward_pass_with_embeddings returned false\n";
 			return false;
 		}
@@ -764,7 +777,8 @@ static bool test_backward() {
 				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
 				reinterpret_cast<const GpuActivations*>(&test_gpu_activations), test_input_dim,
 				test_output_dim, test_learning_rate, test_buffer_index, test_use_adamw,
-				test_scatter_embeddings)) {
+				test_scatter_embeddings,
+				call_transformer_backward_block /* defer_embedding_update */)) {
 			std::cerr << "[FAIL] backward_pass_with_embeddings returned false\n";
 			return false;
 		}
@@ -777,7 +791,8 @@ static bool test_backward() {
 				reinterpret_cast<GpuWeights*>(const_cast<TestGpuWeights*>(&test_gpu_weights)),
 				reinterpret_cast<const GpuActivations*>(&test_gpu_activations),
 				test_sequence_length, test_embedding_dim, test_num_heads,
-				test_feedforward_network_dimension, test_learning_rate, test_stream)) {
+				test_feedforward_network_dimension, test_learning_rate, test_stream,
+				false /* advance_step */)) {
 			std::cerr << "[FAIL] transformer_backward_block returned false\n";
 			return false;
 		}
@@ -789,7 +804,11 @@ static bool test_backward() {
 				reinterpret_cast<GpuEmbeddings*>(
 					const_cast<TestGpuEmbeddings*>(&test_gpu_embeddings)),
 				test_d_dx, test_num_tokens, test_embedding_dim, test_learning_rate,
-				test_buffer_index, test_stream)) {
+				test_buffer_index, test_stream,
+				reinterpret_cast<GpuActivations*>(
+					const_cast<TestGpuActivations*>(&test_gpu_activations)),
+				reinterpret_cast<const GpuWeights*>(&test_gpu_weights),
+				test_use_adamw /* apply_adamw */)) {
 			std::cerr << "[FAIL] backward_scatter_embeddings returned false\n";
 			return false;
 		}
