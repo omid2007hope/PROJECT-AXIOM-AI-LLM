@@ -106,11 +106,12 @@ FIRMS_SOURCE = os.getenv("SPECTER_FIRMS_SOURCE", "VIIRS_SNPP_NRT")
 
 SPECTER_HOME = Path(os.getenv("SPECTER_HOME", str(SCRIPT_DIR / "specter_data")))
 CASES_DIR = SPECTER_HOME / "cases"
-AXIOM_DLL = Path(os.getenv("SPECTER_AXIOM_DLL", str(SCRIPT_DIR / "PROJECT-AXIOM" / "build" / "axiom_core.dll")))
+AXIOM_DLL = Path(os.getenv("SPECTER_AXIOM_DLL", str(SCRIPT_DIR.parents[2] / "build" / "axiom_core.dll")))
 
 USER_AGENT = "Mozilla/5.0 (compatible; SpecterOSINT/3.0; public-source research; honours robots.txt)"
 CHARS_PER_TOKEN = 3.0              # conservative budget for URL/Markdown-dense text
 MAX_RESEARCH_PASSES = 2            # Spector hard loop guard (Research_req node)
+PIN_MODELS = os.getenv("SPECTER_PIN_MODELS", "0") == "1"
 DOMAIN_INTERVAL_SECONDS = float(os.getenv("SPECTER_DOMAIN_INTERVAL", "1.5"))
 MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 MAX_STORED_CHARS = 100_000
@@ -118,6 +119,7 @@ MIN_ARTICLE_CHARS = 200
 NATIVE_EXTENSIONS = {".pdf", ".docx", ".wav", ".ogg", ".mp3"}
 TRACKING_PARAMETERS = {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid", "mc_eid"}
 CASE_ID_PATTERN = re.compile(r"^[a-f0-9]{12}$")
+STOP_WORDS = {"the", "and", "for", "with", "from", "that", "this", "site", "streamer", "switzerland", "profile"}
 
 CASES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -196,6 +198,35 @@ def clean_strings(values: Any, limit: int) -> List[str]:
 def char_budget(fixed_chars: int, reserve_tokens: int) -> int:
     """Characters left for evidence after fixed prompt text and reserved output tokens."""
     return max(4000, int((CONTEXT_TOKENS - reserve_tokens) * CHARS_PER_TOKEN) - fixed_chars)
+
+
+def anchor_terms(anchor: Optional[Dict[str, Any]], query: str = "") -> List[str]:
+    """Extracts lowercase target identifiers for relevance filtering and claim grounding."""
+    terms: List[str] = []
+    if anchor:
+        candidates = (
+            [anchor.get("primary_name", "")]
+            + list(anchor.get("known_aliases", []))
+            + list(anchor.get("known_handles_or_domains", []))
+        )
+        for item in candidates:
+            value = str(item or "").strip().lower()
+            if len(value) >= 3:
+                terms.append(value)
+    if not terms and query:
+        for token in re.findall(r"[a-zA-Z0-9_.-]{3,}", re.sub(r"\bsite:\S+", "", query)):
+            lowered = token.lower()
+            if lowered not in STOP_WORDS and lowered not in ("and", "not"):
+                terms.append(lowered)
+    return list(dict.fromkeys(terms))
+
+
+def matches_terms(text: str, terms: List[str], url: str = "") -> bool:
+    """Returns True when text or URL contains at least one target/query identifier."""
+    if not terms:
+        return True
+    haystack = f"{url}\n{text}".lower()
+    return any(term in haystack for term in terms)
 
 
 # ==============================================================================
@@ -321,19 +352,33 @@ class VRAMController:
     _active_model: str = ""
     _lock = threading.RLock()
 
+    @staticmethod
+    def resident_models() -> List[str]:
+        try:
+            response = requests.get(OLLAMA_RUNNING_URL, timeout=5)
+            if response.ok:
+                return [entry.get("name", "") for entry in response.json().get("models", []) if entry.get("name")]
+        except (requests.RequestException, ValueError):
+            pass
+        return []
+
+    @classmethod
+    def pick_model(cls, preferred_model: str, require_vision: bool = False) -> str:
+        """Reuses an already-resident Ollama model when not pinned, avoiding 12 GB unload/reload ping-pong."""
+        if PIN_MODELS or require_vision:
+            return preferred_model
+        loaded = cls.resident_models()
+        if preferred_model in loaded:
+            return preferred_model
+        return loaded[0] if loaded else preferred_model
+
     @classmethod
     def switch_to(cls, target_model: str) -> None:
         with cls._lock:
             evict_targets = {cls._active_model} if cls._active_model and cls._active_model != target_model else set()
-            try:
-                response = requests.get(OLLAMA_RUNNING_URL, timeout=5)
-                if response.ok:
-                    for entry in response.json().get("models", []):
-                        loaded = entry.get("name", "")
-                        if loaded and loaded != target_model:
-                            evict_targets.add(loaded)
-            except (requests.RequestException, ValueError):
-                pass
+            for loaded in cls.resident_models():
+                if loaded != target_model:
+                    evict_targets.add(loaded)
             for loaded in evict_targets:
                 log.info("[VRAM Guard] Evicting '%s'", loaded)
                 try:
@@ -355,8 +400,9 @@ class VRAMController:
         images_base64: Optional[List[str]] = None,
         temperature: float = 0.2,
     ) -> str:
+        selected_model = cls.pick_model(model, require_vision=bool(images_base64))
         payload: Dict[str, Any] = {
-            "model": model,
+            "model": selected_model,
             "prompt": prompt,
             "stream": False,
             "keep_alive": "15m",
@@ -368,7 +414,7 @@ class VRAMController:
             payload["images"] = images_base64
         last_error: Optional[Exception] = None
         with cls._lock:
-            cls.switch_to(model)
+            cls.switch_to(selected_model)
             for attempt in range(2):
                 try:
                     response = requests.post(OLLAMA_GENERATE_URL, json=payload, timeout=(5, 600))
@@ -376,9 +422,9 @@ class VRAMController:
                     return strip_reasoning(response.json().get("response", ""))
                 except (requests.RequestException, ValueError) as error:
                     last_error = error
-                    log.warning("[LLM] %s attempt %d failed: %s", model, attempt + 1, error)
+                    log.warning("[LLM] %s attempt %d failed: %s", selected_model, attempt + 1, error)
                     time.sleep(2)
-        raise RuntimeError(f"Ollama query failed for '{model}' at {OLLAMA_BASE}: {last_error}")
+        raise RuntimeError(f"Ollama query failed for '{selected_model}' at {OLLAMA_BASE}: {last_error}")
 
 
 # ==============================================================================
@@ -530,14 +576,54 @@ class CaseStore:
             connection.execute("INSERT OR REPLACE INTO queries VALUES (?, ?, ?)", (query, utc_now(), new_artifacts))
 
     # --- analysis -------------------------------------------------------------
-    def replace_analysis(self, analysis: Dict[str, Any], pass_number: int) -> None:
-        hypotheses = [item for item in analysis.get("hypotheses", []) if isinstance(item, dict)]
-        claims = [item for item in analysis.get("claims", []) if isinstance(item, dict)]
-        entities = [item for item in analysis.get("entities", []) if isinstance(item, dict) and item.get("name")]
+    def _ground_analysis(self, analysis: Dict[str, Any], anchor: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Prevents Anchor-echo hallucinations by verifying claims against stored evidence text."""
+        rows = self.evidence_rows()
+        evidence_by_tag = {f"E:{row['content_hash'][:10]}": row for row in rows}
+        terms = anchor_terms(anchor)
+        matched_rows = sum(1 for row in rows if matches_terms(row["content"], terms, row["url"]))
+
         try:
             confidence = float(analysis.get("confidence", 0.0) or 0.0)
         except (TypeError, ValueError):
             confidence = 0.0
+
+        verified_claims: List[Dict[str, Any]] = []
+        rejected_claims = 0
+        for claim in analysis.get("claims", []):
+            if not isinstance(claim, dict):
+                continue
+            tag = str(claim.get("evidence_tag", "")).strip()
+            row = evidence_by_tag.get(tag)
+            if not row or not matches_terms(row["content"], terms, row["url"]):
+                rejected_claims += 1
+                continue
+            verified_claims.append(claim)
+
+        gaps = clean_strings(analysis.get("intelligence_gaps"), 12)
+        if matched_rows == 0:
+            confidence = min(confidence, 0.10)
+            notice = "Zero collected evidence artifacts mention the target identifiers."
+            if notice not in gaps:
+                gaps.insert(0, notice)
+        elif matched_rows == 1:
+            confidence = min(confidence, 0.55)
+        if rejected_claims:
+            gaps.append(f"Dropped {rejected_claims} ungrounded claim(s) lacking target-matching evidence.")
+
+        return {
+            **analysis,
+            "confidence": min(1.0, max(0.0, confidence)),
+            "claims": verified_claims,
+            "intelligence_gaps": gaps[:12],
+        }
+
+    def replace_analysis(self, analysis: Dict[str, Any], pass_number: int, anchor: Optional[Dict[str, Any]] = None) -> None:
+        grounded = self._ground_analysis(analysis, anchor)
+        hypotheses = [item for item in grounded.get("hypotheses", []) if isinstance(item, dict)]
+        claims = [item for item in grounded.get("claims", []) if isinstance(item, dict)]
+        entities = [item for item in grounded.get("entities", []) if isinstance(item, dict) and item.get("name")]
+        confidence = float(grounded.get("confidence", 0.0) or 0.0)
         with closing(self._connect()) as connection, connection:
             connection.execute("DELETE FROM hypotheses")
             connection.execute("DELETE FROM claims")
@@ -568,8 +654,9 @@ class CaseStore:
                 )
             meta = {
                 "confidence": f"{min(1.0, max(0.0, confidence)):.2f}",
-                "intelligence_gaps": json.dumps(clean_strings(analysis.get("intelligence_gaps"), 12)),
-                "key_assumptions": json.dumps(clean_strings(analysis.get("key_assumptions"), 12)),
+                "intelligence_gaps": json.dumps(clean_strings(grounded.get("intelligence_gaps"), 12)),
+                "key_assumptions": json.dumps(clean_strings(grounded.get("key_assumptions"), 12)),
+                "recommended_pivots": json.dumps(clean_strings(grounded.get("pivot_queries"), 3)),
                 "passes_completed": str(pass_number),
                 "analyzed_utc": utc_now(),
             }
@@ -584,6 +671,7 @@ class CaseStore:
                 "analyzed_utc": meta.get("analyzed_utc"),
                 "intelligence_gaps": json.loads(meta.get("intelligence_gaps", "[]")),
                 "key_assumptions": json.loads(meta.get("key_assumptions", "[]")),
+                "recommended_pivots": json.loads(meta.get("recommended_pivots", "[]")),
                 "hypotheses": [dict(row) for row in connection.execute("SELECT * FROM hypotheses")],
                 "claims": [dict(row) for row in connection.execute("SELECT * FROM claims")],
                 "entities": [dict(row) for row in connection.execute("SELECT * FROM entities")],
@@ -636,21 +724,24 @@ class SourceCollector:
         self.bridge = bridge
 
     @staticmethod
-    def search(query: str, max_results: int) -> List[str]:
+    def search(query: str, max_results: int) -> List[Dict[str, str]]:
         if DDGS is None:
             raise RuntimeError("Search backend missing: pip install ddgs (or duckduckgo_search).")
-        urls: List[str] = []
+        hits: List[Dict[str, str]] = []
         seen = set()
         try:
             with DDGS() as search_client:
-                for item in search_client.text(query, max_results=max_results) or []:
+                for item in search_client.text(query, region="wt-wt", max_results=max_results) or []:
                     canonical = canonicalize_url(item.get("href", ""))
                     if canonical and canonical not in seen:
                         seen.add(canonical)
-                        urls.append(canonical)
+                        hits.append({
+                            "url": canonical,
+                            "snippet": f"{item.get('title', '')}\n{item.get('body', '')}".strip(),
+                        })
         except Exception as error:  # search backends raise many custom exception types
             log.warning("[Search] '%s' failed: %s", query, error)
-        return urls
+        return hits
 
     def _download_native(self, url: str, extension: str, evidence_dir: Path) -> tuple:
         local_file = evidence_dir / f"doc_{uuid.uuid4().hex[:10]}{extension}"
@@ -676,6 +767,8 @@ class SourceCollector:
                 text, artifact = self._download_native(url, extension, evidence_dir)
                 return url, text, ("native_document" if text else "failed"), artifact
             response = requests.get(url, timeout=20, headers={"User-Agent": USER_AGENT})
+            if response.status_code in (403, 429, 503):
+                return url, "", "needs_vision", ""
             response.raise_for_status()
             if "pdf" in response.headers.get("Content-Type", "").lower():
                 local_file = evidence_dir / f"doc_{uuid.uuid4().hex[:10]}.pdf"
@@ -750,26 +843,46 @@ class SourceCollector:
                 browser.close()
         return results
 
-    def harvest(self, store: CaseStore, query: str, max_results: int = 8, use_vision: bool = True) -> Dict[str, Any]:
-        urls = self.search(query, max_results)
-        report = {"query": query, "candidates": len(urls), "new_artifacts": 0, "duplicates": 0,
-                  "robots_denied": 0, "failed": 0, "vision_pages": 0}
+    def harvest(
+        self,
+        store: CaseStore,
+        query: str,
+        max_results: int = 8,
+        use_vision: bool = True,
+        anchor: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        hits = self.search(query, max_results)
+        terms = anchor_terms(anchor, query)
+        report = {"query": query, "candidates": len(hits), "new_artifacts": 0, "duplicates": 0,
+                  "rejected_off_topic": 0, "robots_denied": 0, "failed": 0, "vision_pages": 0}
+        filtered_urls: List[str] = []
+        for hit in hits:
+            if hit["snippet"] and not matches_terms(hit["snippet"], terms, hit["url"]):
+                report["rejected_off_topic"] += 1
+            else:
+                filtered_urls.append(hit["url"])
         vision_queue: List[str] = []
 
         def commit(url: str, text: str, method: str, artifact: str) -> None:
+            if not matches_terms(text, terms, url):
+                report["rejected_off_topic"] += 1
+                return
             if store.add_evidence(url, text, method, query, artifact):
                 report["new_artifacts"] += 1
             else:
                 report["duplicates"] += 1
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            for url, text, method, artifact in pool.map(lambda item: self.fetch_document(item, store.evidence_dir), urls):
-                if method == "needs_vision":
-                    vision_queue.append(url)
-                elif method in ("robots_denied", "failed"):
-                    report[method] += 1
-                elif text:
-                    commit(url, text, method, artifact)
+        if filtered_urls:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                for url, text, method, artifact in pool.map(
+                    lambda item: self.fetch_document(item, store.evidence_dir), filtered_urls
+                ):
+                    if method == "needs_vision":
+                        vision_queue.append(url)
+                    elif method in ("robots_denied", "failed"):
+                        report[method] += 1
+                    elif text:
+                        commit(url, text, method, artifact)
         if use_vision and vision_queue:
             for url, text, method, artifact in self.vision_batch(vision_queue[:4], store.evidence_dir):
                 report["vision_pages"] += 1
@@ -837,11 +950,12 @@ Only use information present in the seed. Seed: {seed}"""
     @staticmethod
     def wide_net_queries(anchor: Dict[str, Any]) -> List[str]:
         name = anchor["primary_name"]
-        qualifiers = [f'"{value}"' for value in (anchor["anchor_demographics"].get("origin_city"),
-                                                 anchor.get("core_profession")) if value and str(value).strip()]
-        queries = [f'"{name}" ' + " OR ".join(qualifiers) if qualifiers else f'"{name}"']
-        queries += [f'"{handle}"' for handle in anchor.get("known_handles_or_domains", [])[:2]]
-        return queries
+        queries = [f'"{name}"']
+        for alias in anchor.get("known_aliases", [])[:2]:
+            queries.append(f'"{alias}"')
+        for handle in anchor.get("known_handles_or_domains", [])[:2]:
+            queries.append(f'"{handle}"')
+        return list(dict.fromkeys(queries))
 
     @staticmethod
     def evidence_digest(rows: List[Dict[str, Any]], budget: int) -> str:
@@ -869,13 +983,13 @@ Immutable Context Anchor (re-anchored lifeline; never drift from it):
 Already executed queries (do not repeat): {json.dumps(sorted(store.executed_queries()))}
 
 Tasks:
-1. confidence (0.0-1.0) that the evidence describes the primary target rather than a namesake.
-2. Up to 3 high-diagnosticity pivot queries (official registries, publications, organisations,
-   repositories, domains) that would decisively confirm or refute a hypothesis.
-3. Rate every claim: source_reliability A (official/primary) .. F (cannot judge);
+1. CRITICAL: Do NOT treat the Context Anchor as evidence. Extract claims ONLY if explicitly corroborated in the Evidence text below. If 0 evidence documents mention the target, return `claims: []`, `confidence <= 0.10`, and state what is missing in `intelligence_gaps`.
+2. confidence (0.0-1.0) that the evidence describes the primary target rather than a namesake.
+3. Up to 3 clean, high-diagnosticity pivot queries (avoid `site:A OR site:B` boolean chains; prefer simple identifier + platform queries) that would confirm or refute a hypothesis.
+4. Rate every claim: source_reliability A (official/primary) .. F (cannot judge);
    info_credibility 1 (independently confirmed) .. 6 (cannot judge);
    hypothesis_alignment PRIMARY | NAMESAKE_COLLISION | AMBIGUOUS.
-4. Extract entities (organisations, collaborators, domains, publications) and their relation.
+5. Extract entities (organisations, collaborators, domains, publications) actually observed in Evidence.
 
 Return strict JSON:
 {{"confidence": 0.0, "pivot_queries": ["..."],
@@ -895,7 +1009,7 @@ Evidence:
         self,
         anchor: Dict[str, Any],
         store: CaseStore,
-        max_passes: int = MAX_RESEARCH_PASSES,
+        max_passes: int = 1,
         notify: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         """Think_2 -> Research_req loop, hard-capped at MAX_RESEARCH_PASSES."""
@@ -903,8 +1017,9 @@ Evidence:
         analysis: Dict[str, Any] = {}
         for pass_number in range(1, passes + 1):
             analysis = self.ach_pass(anchor, store) or analysis
-            store.replace_analysis(analysis, pass_number)
-            store.audit("ANALYSIS_PASS", {"pass": pass_number, "confidence": analysis.get("confidence")})
+            store.replace_analysis(analysis, pass_number, anchor=anchor)
+            state = store.analysis_state()
+            store.audit("ANALYSIS_PASS", {"pass": pass_number, "confidence": state["confidence"], "claims": len(state["claims"])})
             if pass_number == passes:
                 break
             executed = store.executed_queries()
@@ -914,7 +1029,7 @@ Evidence:
             for query in pivots:
                 if notify:
                     notify(f"Research_req pass {pass_number}: pivot '{query}'")
-                self.collector.harvest(store, query, max_results=5)
+                self.collector.harvest(store, query, max_results=5, anchor=anchor)
         return store.analysis_state()
 
     # --- Phase 4: ICD-203 synthesis + deterministic appendices ----------------
@@ -1103,11 +1218,13 @@ async def anchor_target(seed: str, purpose: str) -> str:
 
 @mcp.tool()
 async def harvest_sources(case_id: str, query: str, max_results: int = 8, use_vision: bool = True) -> str:
-    """Phase 2: Search public sources for `query` and ingest SHA-256 deduplicated evidence into the case."""
+    """Phase 2: Search public sources for `query` and ingest target-relevant, SHA-256 deduplicated evidence."""
     if not query.strip():
         raise ValueError("query must not be empty.")
-    _, store = open_case(case_id)
-    report = await asyncio.to_thread(core.collector.harvest, store, query.strip(), max(1, min(max_results, 25)), use_vision)
+    anchor, store = open_case(case_id)
+    report = await asyncio.to_thread(
+        core.collector.harvest, store, query.strip(), max(1, min(max_results, 25)), use_vision, anchor
+    )
     return to_json({**report, "case_id": store.case_id, "total_artifacts": store.statistics()["evidence_total"]})
 
 
@@ -1130,12 +1247,15 @@ async def ingest_url(case_id: str, url: str) -> str:
 
 
 @mcp.tool()
-async def run_analysis(case_id: str, max_passes: int = MAX_RESEARCH_PASSES) -> str:
-    """Phase 3: ACH + NATO Admiralty claim rating with diagnostic pivot research (hard cap: 2 passes)."""
+async def run_analysis(case_id: str, max_passes: int = 1) -> str:
+    """
+    Phase 3: Grounded ACH + NATO Admiralty claim rating (defaults to 1 fast pass to stay under
+    60s client tool timeouts; returns recommended_pivots for optional follow-up harvests).
+    """
     anchor, store = open_case(case_id)
     state = await asyncio.to_thread(core.run_analysis, anchor, store, max_passes)
     summary = {key: state[key] for key in ("confidence", "passes_completed", "hypotheses",
-                                           "intelligence_gaps", "key_assumptions")}
+                                           "intelligence_gaps", "key_assumptions", "recommended_pivots")}
     return to_json({**summary, "claims_rated": len(state["claims"]), "entities": len(state["entities"])})
 
 
@@ -1165,7 +1285,7 @@ async def run_full_cycle(seed: str, purpose: str, context: Context, max_results:
     store = CaseStore(anchor["case_id"])
     await phase(1, f"Phase 2: wide-net harvest for {anchor['primary_name']}...")
     for query in core.wide_net_queries(anchor):
-        await asyncio.to_thread(core.collector.harvest, store, query, max(1, min(max_results, 25)))
+        await asyncio.to_thread(core.collector.harvest, store, query, max(1, min(max_results, 25)), True, anchor)
     await phase(2, f"Phase 3: ACH over {store.statistics()['evidence_total']} artifacts (max {MAX_RESEARCH_PASSES} passes)...")
     state = await asyncio.to_thread(core.run_analysis, anchor, store, MAX_RESEARCH_PASSES, notify)
     await phase(3, "Phase 4: synthesizing ICD-203 dossier...")
