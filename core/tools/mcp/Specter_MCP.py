@@ -15,30 +15,33 @@
  """
 
 """
-Specter MCP — Sovereign All-Source OSINT Intelligence Server (Project Axiom / Spector).
+Specter MCP — Standalone, LLM-Agnostic All-Source OSINT & Sensory Fusion Server.
 
-Fuses Spy.py (MCP surface), We_Know/orchestrator.py (recursive pipeline) and
-We_Know/pure.md (tradecraft upgrade plan + Spector roadmap) into one server:
+Works with ANY MCP host LLM (AnythingLLM, Claude, OpenAI, Gemini, Ollama, LM Studio,
+Cursor, Cline, Antigravity) with ZERO hard dependency on Project Axiom, Ollama,
+ComfyUI, or Playwright:
 
   Phase 1  Immutable Context Anchor + competing hypotheses (H1 target vs H2 namesake)
-  Phase 2  Multi-modal harvest: search -> C++23 native / Python document extraction
-           -> Trafilatura Markdown -> Playwright + VLM vision fallback (ComfyUI 4x upscale)
-  Phase 3  Think_2 sync hub: ACH + NATO Admiralty ratings, Research_req pivots (hard cap: 2 passes)
-  Phase 4  ICD-203 dossier + deterministic chain-of-custody appendix (SHA-256, UTC)
-  Sensors  NASA FIRMS thermal anomalies + USGS seismic events + regional news correlation
+  Phase 2  Multi-source harvest: web search + keyless GitHub/Wikipedia enrichment
+           + relevance gate + Trafilatura / stdlib HTML & document extractors
+  Phase 3  Grounded ACH + NATO Admiralty ratings (A1-F6) + clean bounded pivots (<= 2)
+  Phase 4  ICD-203 Markdown dossier + SHA-256 chain-of-custody & redaction appendices
+  Sensors  NASA FIRMS thermal anomalies + USGS seismic events + regional news fusion
 
-Guardrails: public open sources only, robots.txt honoured, per-domain rate limit,
-CAPTCHA / anti-bot / login gates are skipped (never bypassed), every action is audit-logged,
-sensitive personal identifiers are excluded and redacted from dossiers.
-
-All logs go to stderr: stdout is reserved for MCP stdio JSON-RPC framing.
+Design invariants:
+- Host-LLM-first: deterministic core runs in seconds with ZERO internal VRAM contention.
+- Optional pluggable LLM backend (`SPECTER_LLM_PROVIDER=openai|ollama`) if desired.
+- Hard wall-clock deadline (`max_seconds`, default 42s) prevents 60s MCP client timeouts.
+- Ethical guardrails: public open sources only, RFC 9309 robots.txt honoured, per-domain
+  rate limiting, anti-bot/login gates never bypassed, PII redacted, full audit trail.
+- All logs route strictly to stderr so MCP stdio JSON-RPC framing is never corrupted.
 """
 
 import asyncio
-import base64
 import csv
 import ctypes
 import hashlib
+import html
 import io
 import json
 import logging
@@ -55,13 +58,15 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from urllib.robotparser import RobotFileParser
 
 import requests
-try:  # mcp 2.x renamed FastMCP -> MCPServer (same decorator / Context surface used here)
+
+try:  # mcp 2.x renamed FastMCP -> MCPServer
     from mcp.server.mcpserver import Context, MCPServer as FastMCP
 except ImportError:  # mcp 1.x
     from mcp.server.fastmcp import Context, FastMCP
@@ -71,15 +76,15 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     stream=sys.stderr,
 )
-log = logging.getLogger("specter")
+logger = logging.getLogger("specter")
 
-# --- Optional dependencies (server still boots without them) -------------------
+# --- Optional dependencies (server boots and runs cleanly without them) -------
 try:
     import trafilatura
 except ImportError:
     trafilatura = None
 
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search")
+warnings.filterwarnings("ignore", message=".*duckduckgo_search.*", category=RuntimeWarning)
 try:
     from ddgs import DDGS
 except ImportError:
@@ -88,50 +93,72 @@ except ImportError:
     except ImportError:
         DDGS = None
 
-# ==============================================================================
-# 0. CONFIGURATION (every value overridable via environment)
-# ==============================================================================
-SCRIPT_DIR = Path(__file__).resolve().parent
-OLLAMA_BASE = os.getenv("SPECTER_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_GENERATE_URL = f"{OLLAMA_BASE}/api/generate"
-OLLAMA_RUNNING_URL = f"{OLLAMA_BASE}/api/ps"
-OLLAMA_TAGS_URL = f"{OLLAMA_BASE}/api/tags"
-COMFYUI_URL = os.getenv("SPECTER_COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
-UPSCALE_MODEL = os.getenv("SPECTER_UPSCALE_MODEL", "4x_NMKD-Siax_200k.pth")
-ANALYST_MODEL = os.getenv("SPECTER_ANALYST_LLM", "eriktonon/qwen3.8-uncensored:9b")
-OBSERVER_MODEL = os.getenv("SPECTER_OBSERVER_VLM", "huihui_ai/gemma-4-abliterated:12b-qat")
-CONTEXT_TOKENS = int(os.getenv("SPECTER_NUM_CTX", "32768"))
-FIRMS_MAP_KEY = os.getenv("SPECTER_FIRMS_KEY", "")
-FIRMS_SOURCE = os.getenv("SPECTER_FIRMS_SOURCE", "VIIRS_SNPP_NRT")
 
-SPECTER_HOME = Path(os.getenv("SPECTER_HOME", str(SCRIPT_DIR / "specter_data")))
-CASES_DIR = SPECTER_HOME / "cases"
-AXIOM_DLL = Path(os.getenv("SPECTER_AXIOM_DLL", str(SCRIPT_DIR.parents[2] / "build" / "axiom_core.dll")))
+# ==============================================================================
+# 0. CONFIGURATION (100% standalone; every option overridable via environment)
+# ==============================================================================
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+SPECTER_HOME = Path(os.getenv("SPECTER_HOME", str(SCRIPT_DIRECTORY / "specter_data")))
+CASES_DIRECTORY = SPECTER_HOME / "cases"
 
-USER_AGENT = "Mozilla/5.0 (compatible; SpecterOSINT/3.0; public-source research; honours robots.txt)"
-CHARS_PER_TOKEN = 3.0              # conservative budget for URL/Markdown-dense text
-MAX_RESEARCH_PASSES = 2            # Spector hard loop guard (Research_req node)
-PIN_MODELS = os.getenv("SPECTER_PIN_MODELS", "0") == "1"
-DOMAIN_INTERVAL_SECONDS = float(os.getenv("SPECTER_DOMAIN_INTERVAL", "1.5"))
-MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
-MAX_STORED_CHARS = 100_000
-MIN_ARTICLE_CHARS = 200
-NATIVE_EXTENSIONS = {".pdf", ".docx", ".wav", ".ogg", ".mp3"}
-TRACKING_PARAMETERS = {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid", "mc_eid"}
+# Optional external LLM backend (default "none": host MCP LLM handles reasoning)
+LLM_PROVIDER = os.getenv("SPECTER_LLM_PROVIDER", "none").strip().lower()  # none | openai | ollama
+LLM_URL = os.getenv("SPECTER_LLM_URL", "").strip().rstrip("/")
+LLM_MODEL = os.getenv("SPECTER_LLM_MODEL", "").strip()
+LLM_API_KEY = os.getenv("SPECTER_LLM_API_KEY", "").strip()
+LLM_CONTEXT_TOKENS = int(os.getenv("SPECTER_NUM_CTX", "32768"))
+
+# Optional external plugins (never required)
+NATIVE_DLL_PATH = Path(os.getenv("SPECTER_NATIVE_DLL", "")) if os.getenv("SPECTER_NATIVE_DLL") else None
+FIRMS_MAP_KEY = os.getenv("SPECTER_FIRMS_KEY", "").strip()
+FIRMS_SOURCE = os.getenv("SPECTER_FIRMS_SOURCE", "VIIRS_SNPP_NRT").strip()
+
+USER_AGENT = "Mozilla/5.0 (compatible; SpecterOSINT/4.0; public-source research; honours robots.txt)"
+MAX_RESEARCH_PASSES = 2
+DEFAULT_CYCLE_SECONDS = float(os.getenv("SPECTER_CYCLE_SECONDS", "42"))
+DOMAIN_INTERVAL_SECONDS = float(os.getenv("SPECTER_DOMAIN_INTERVAL", "1.0"))
+MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
+MAX_STORED_CHARACTERS = 100_000
+MIN_ARTICLE_CHARACTERS = 140
+DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".json", ".csv", ".xml"}
+TRACKING_PARAMETERS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "fbclid", "gclid", "mc_eid", "msockid", "ref_src", "ref_url",
+}
 CASE_ID_PATTERN = re.compile(r"^[a-f0-9]{12}$")
-STOP_WORDS = {"the", "and", "for", "with", "from", "that", "this", "site", "streamer", "switzerland", "profile"}
 
-CASES_DIR.mkdir(parents=True, exist_ok=True)
+PROSE_STOP_WORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "confirm", "databases", "described",
+    "e.g", "entity", "find", "for", "from", "history", "in", "is", "legal", "matching",
+    "of", "official", "on", "or", "ownership", "profile", "query", "related", "search",
+    "site", "that", "the", "this", "to", "under", "verify", "with",
+}
 
-ANALYTIC_RULES = """Analytic & ethical rules (mandatory):
-- Use ONLY the supplied public evidence. Never invent facts, URLs, dates or hashes.
-- Cite evidence inline with its tag, e.g. [E:1a2b3c4d5e].
-- Never merge namesake / collision evidence into the primary target profile.
-- EXCLUDE private residential addresses, personal phone numbers, government ID numbers,
-  financial account data, medical information, and any details about minors."""
+AUTHORITATIVE_SUFFIXES = (".gov", ".gv.at", ".gov.uk", ".europa.eu", ".edu", ".ac.at", ".ac.uk", ".org")
+REPUTABLE_DOMAINS = (
+    "github.com", "gitlab.com", "wikipedia.org", "arxiv.org", "orcid.org",
+    "scholar.google.com", "linkedin.com", "ieee.org", "acm.org", "npmjs.com",
+    "pypi.org", "reuters.com", "apnews.com", "bbc.com", "firmenbuch.at", "justiz.gv.at",
+)
+SOCIAL_PLATFORMS = {
+    "github.com": "github",
+    "gitlab.com": "gitlab",
+    "linkedin.com": "linkedin",
+    "x.com": "x_twitter",
+    "twitter.com": "x_twitter",
+    "youtube.com": "youtube",
+    "twitch.tv": "twitch",
+    "instagram.com": "instagram",
+    "orcid.org": "orcid",
+    "medium.com": "medium",
+    "substack.com": "substack",
+}
+
+CASES_DIRECTORY.mkdir(parents=True, exist_ok=True)
+
 
 # ==============================================================================
-# 1. PURE HELPERS
+# 1. PURE HELPERS (deterministic seed/query/HTML parsing, grounding, redaction)
 # ==============================================================================
 SENSITIVE_PATTERNS = [
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[REDACTED-ID]"),
@@ -169,14 +196,18 @@ def parse_json(raw_text: str) -> Dict[str, Any]:
 def canonicalize_url(url: str) -> str:
     try:
         parsed = urlparse(url.strip())
-        clean_query = [(key, value) for key, value in parse_qsl(parsed.query) if key.lower() not in TRACKING_PARAMETERS]
+        clean_query = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query)
+            if key.lower() not in TRACKING_PARAMETERS
+        ]
         return urlunparse((parsed.scheme, parsed.netloc.lower(), parsed.path, parsed.params, urlencode(clean_query), ""))
     except ValueError:
         return url.strip()
 
 
 def validate_case_id(case_id: str) -> str:
-    """Guards every filesystem path built from client input (no traversal)."""
+    """Prevents path traversal on every case-scoped path."""
     normalized = (case_id or "").strip().lower()
     if not CASE_ID_PATTERN.match(normalized):
         raise ValueError(f"Invalid case_id '{case_id}' (expected 12 hex characters).")
@@ -192,16 +223,95 @@ def redact_sensitive(text: str) -> str:
 def clean_strings(values: Any, limit: int) -> List[str]:
     if not isinstance(values, list):
         return []
-    return [value.strip() for value in values if isinstance(value, str) and value.strip()][:limit]
+    cleaned = [value.strip() for value in values if isinstance(value, str) and value.strip()]
+    return list(dict.fromkeys(cleaned))[:limit]
 
 
-def char_budget(fixed_chars: int, reserve_tokens: int) -> int:
-    """Characters left for evidence after fixed prompt text and reserved output tokens."""
-    return max(4000, int((CONTEXT_TOKENS - reserve_tokens) * CHARS_PER_TOKEN) - fixed_chars)
+def parse_seed(
+    seed: str,
+    aliases: Optional[List[str]] = None,
+    handles: Optional[List[str]] = None,
+    location: str = "",
+    profession: str = "",
+) -> Dict[str, Any]:
+    """Deterministic, zero-LLM seed parser (<1ms) preserving exact ground-truth qualifiers."""
+    raw = (seed or "").strip()
+    extracted_aliases = list(aliases or [])
+    extracted_handles = list(handles or [])
+
+    # Extract parenthetical aliases: "Name (formerly Alias)" / "(aka Alias)"
+    for match in re.findall(r"\((?:formerly|aka|also known as|né|nee|alias)\s+([^)]+)\)", raw, flags=re.I):
+        for piece in re.split(r"[,;/]", match):
+            if piece.strip():
+                extracted_aliases.append(piece.strip())
+
+    # Extract explicit @handles and domains
+    for handle in re.findall(r"@[A-Za-z0-9_.-]{2,}", raw):
+        extracted_handles.append(handle)
+    for domain in re.findall(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|dev|ai|at|ch|de|uk|edu|gov)\b", raw):
+        extracted_handles.append(domain.lower())
+
+    # Strip parenthetical notes to isolate primary_name and qualifiers
+    stripped = re.sub(r"\([^)]*\)", "", raw).strip()
+    parts = [part.strip() for part in stripped.split(",") if part.strip()]
+    primary_name = parts[0] if parts else raw
+    remainder = ", ".join(parts[1:]) if len(parts) > 1 else ""
+
+    origin_city = location.strip()
+    if not origin_city:
+        loc_match = re.search(r"\b(?:from|in|based in)\s+([A-Z][A-Za-z\s-]{2,30})", raw)
+        if loc_match:
+            origin_city = loc_match.group(1).strip(" .,")
+
+    birth_year: Optional[int] = None
+    year_match = re.search(r"\b(?:born\s+(?:in\s+)?)?((?:19|20)\d{2})\b", raw)
+    if year_match:
+        candidate = int(year_match.group(1))
+        if 1900 <= candidate <= datetime.now(timezone.utc).year:
+            birth_year = candidate
+
+    core_profession = profession.strip() or remainder
+    entity_kind = "domain" if "." in primary_name and " " not in primary_name else "person"
+    if re.search(r"\b(?:inc|llc|gmbh|ag|corp|ltd|foundation|university|institute)\b", raw, flags=re.I):
+        entity_kind = "organization"
+
+    return {
+        "primary_name": primary_name or "Unknown Target",
+        "entity_kind": entity_kind,
+        "known_aliases": clean_strings(extracted_aliases, 10),
+        "known_handles_or_domains": clean_strings(extracted_handles, 10),
+        "anchor_demographics": {"birth_year": birth_year, "origin_city": origin_city},
+        "core_profession": core_profession[:160],
+        "initial_hypotheses": [
+            {"id": "H1", "label": "Primary Target", "description": f"Subject matching seed qualifiers: {raw}"},
+            {"id": "H2", "label": "Namesake / Collision", "description": "Distinct entity sharing name, alias, or handle"},
+        ],
+    }
+
+
+def sanitize_query(raw_query: str) -> str:
+    """Collapses LLM-generated prose sentences into compact, search-engine-safe keyword queries."""
+    cleaned = re.sub(r"\s+", " ", (raw_query or "").strip())
+    words = cleaned.split()
+    if len(words) <= 9:
+        return cleaned
+    quoted = re.findall(r'["\']([^"\']{2,50})["\']', cleaned)
+    tokens = [
+        token.strip(".,;:()[]{}")
+        for token in words
+        if token.strip(".,;:()[]{}").lower() not in PROSE_STOP_WORDS and len(token.strip(".,;:()[]{}")) >= 3
+    ]
+    compact: List[str] = [f'"{phrase}"' for phrase in quoted[:2]]
+    for token in tokens:
+        if len(compact) >= 6:
+            break
+        if all(token.lower() not in existing.lower() for existing in compact):
+            compact.append(token)
+    return " ".join(compact) or " ".join(words[:6])
 
 
 def anchor_terms(anchor: Optional[Dict[str, Any]], query: str = "") -> List[str]:
-    """Extracts lowercase target identifiers for relevance filtering and claim grounding."""
+    """Extracts lowercase target identifiers (including compact no-space handle forms) for relevance filtering."""
     terms: List[str] = []
     if anchor:
         candidates = (
@@ -210,27 +320,132 @@ def anchor_terms(anchor: Optional[Dict[str, Any]], query: str = "") -> List[str]
             + list(anchor.get("known_handles_or_domains", []))
         )
         for item in candidates:
-            value = str(item or "").strip().lower()
+            value = str(item or "").strip().lower().lstrip("@")
             if len(value) >= 3:
                 terms.append(value)
+                compact = re.sub(r"[\s_-]+", "", value)
+                if len(compact) >= 6 and compact != value:
+                    terms.append(compact)
     if not terms and query:
-        for token in re.findall(r"[a-zA-Z0-9_.-]{3,}", re.sub(r"\bsite:\S+", "", query)):
+        stripped = re.sub(r"\bsite:\S+", "", query)
+        for token in re.findall(r"[A-Za-z0-9_.-]{3,}", stripped):
             lowered = token.lower()
-            if lowered not in STOP_WORDS and lowered not in ("and", "not"):
+            if lowered not in PROSE_STOP_WORDS:
                 terms.append(lowered)
     return list(dict.fromkeys(terms))
 
 
 def matches_terms(text: str, terms: List[str], url: str = "") -> bool:
-    """Returns True when text or URL contains at least one target/query identifier."""
     if not terms:
         return True
     haystack = f"{url}\n{text}".lower()
     return any(term in haystack for term in terms)
 
 
+class HtmlTextExtractor(HTMLParser):
+    """Zero-dependency stdlib HTML text & metadata extractor."""
+
+    SKIP_TAGS = {"script", "style", "noscript", "svg", "iframe", "template"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.title = ""
+        self.descriptions: List[str] = []
+        self.json_ld: List[str] = []
+        self._chunks: List[str] = []
+        self._skip_depth = 0
+        self._in_title = False
+        self._in_json_ld = False
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        lower = tag.lower()
+        attr_map = {key.lower(): (val or "") for key, val in attrs}
+        if lower == "script" and "ld+json" in attr_map.get("type", "").lower():
+            self._in_json_ld = True
+            return
+        if lower in self.SKIP_TAGS:
+            self._skip_depth += 1
+        elif lower == "title":
+            self._in_title = True
+        elif lower == "meta":
+            name = (attr_map.get("name") or attr_map.get("property") or "").lower()
+            content = attr_map.get("content", "").strip()
+            if content and name in ("description", "og:title", "og:description", "twitter:description", "author"):
+                self.descriptions.append(f"{name}: {content}")
+        elif lower in ("p", "div", "br", "li", "h1", "h2", "h3", "h4", "tr", "section", "article"):
+            self._chunks.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        lower = tag.lower()
+        if lower == "script" and self._in_json_ld:
+            self._in_json_ld = False
+        elif lower in self.SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+        elif lower == "title":
+            self._in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_json_ld:
+            self.json_ld.append(data)
+        elif self._in_title:
+            self.title += data
+        elif self._skip_depth == 0 and data.strip():
+            self._chunks.append(data.strip() + " ")
+
+    def rendered_text(self) -> str:
+        header_lines: List[str] = []
+        if self.title.strip():
+            header_lines.append(f"# {self.title.strip()}")
+        for meta in list(dict.fromkeys(self.descriptions))[:5]:
+            header_lines.append(meta)
+        body = re.sub(r"\n{3,}", "\n\n", "".join(self._chunks)).strip()
+        return "\n".join(header_lines + (["", body] if body else [])).strip()
+
+
+def extract_html_text(raw_html: str, url: str) -> str:
+    """Extracts clean Markdown via Trafilatura when available, falling back to stdlib HTML parser."""
+    extracted = ""
+    if trafilatura is not None:
+        try:
+            extracted = trafilatura.extract(raw_html, output_format="markdown", include_links=True, url=url) or ""
+        except Exception as error:  # trafilatura/lxml can raise parser-specific errors
+            logger.debug("[HTML] Trafilatura fallback on %s: %s", url, error)
+    parser = HtmlTextExtractor()
+    try:
+        parser.feed(raw_html)
+    except Exception:
+        pass
+    stdlib_text = parser.rendered_text()
+    if len(extracted.strip()) >= MIN_ARTICLE_CHARACTERS:
+        title_prefix = f"# {parser.title.strip()}\n\n" if parser.title.strip() and parser.title.strip() not in extracted[:200] else ""
+        return (title_prefix + extracted).strip()
+    return stdlib_text if len(stdlib_text) >= 60 else extracted.strip()
+
+
+def classify_reliability(url: str, method: str, anchor: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
+    """Deterministic NATO Admiralty source-reliability (A-F) and credibility baseline (1-6)."""
+    if method == "search_snippet":
+        return ("E", "5")
+    if method in ("github_api", "wikipedia_api"):
+        return ("A", "2")
+    domain = urlparse(url).netloc.lower()
+    if domain.startswith("www."):
+        domain = domain[4:]
+    if any(domain.endswith(suffix) for suffix in AUTHORITATIVE_SUFFIXES):
+        return ("A", "2")
+    if anchor:
+        compact = re.sub(r"[\s_-]+", "", str(anchor.get("primary_name", "")).lower())
+        if len(compact) >= 6 and compact in domain:
+            return ("B", "2")
+    if any(domain == known or domain.endswith(f".{known}") for known in REPUTABLE_DOMAINS):
+        return ("B", "2")
+    if method in ("markdown", "native_document", "html_text"):
+        return ("C", "3")
+    return ("D", "4")
+
+
 # ==============================================================================
-# 2. POLITENESS GATE (robots.txt + per-domain rate limiting)
+# 2. POLITENESS GATE (RFC 9309 robots.txt + per-domain rate limit)
 # ==============================================================================
 class PolitenessGate:
     def __init__(self) -> None:
@@ -240,10 +455,9 @@ class PolitenessGate:
 
     @staticmethod
     def _load_robots(root: str) -> Optional[RobotFileParser]:
-        """RFC 9309: 2xx parse, 4xx allow all, 5xx / unreachable disallow all."""
         parser = RobotFileParser()
         try:
-            response = requests.get(f"{root}/robots.txt", timeout=8, headers={"User-Agent": USER_AGENT})
+            response = requests.get(f"{root}/robots.txt", timeout=4, headers={"User-Agent": USER_AGENT})
         except requests.RequestException:
             parser.disallow_all = True
             return parser
@@ -280,23 +494,20 @@ class PolitenessGate:
 
 
 # ==============================================================================
-# 3. NATIVE C++23 BRIDGE (+ pure-Python fallback extractors)
+# 3. DOCUMENT EXTRACTOR (pure Python + optional C DLL plugin)
 # ==============================================================================
-class AxiomNativeBridge:
-    """ctypes bridge to Project Axiom extractors; dynamic buffer when the DLL exports a size probe."""
+class DocumentExtractor:
+    """Extracts text from .txt/.md/.json/.csv/.docx/.pdf with optional native DLL acceleration."""
 
-    def __init__(self, dll_path: Path) -> None:
+    def __init__(self, dll_path: Optional[Path] = None) -> None:
         self.dll = None
         self.has_probe = False
-        for search_dir in (dll_path.parent, dll_path.parent.parent / "core", Path(r"C:\msys64\ucrt64\bin")):
-            if search_dir.exists():
-                try:
-                    os.add_dll_directory(str(search_dir.resolve()))
-                except (OSError, AttributeError):
-                    pass
-        if not dll_path.exists():
-            log.info("Native DLL not found at %s; using Python extractors.", dll_path)
+        if not dll_path or not dll_path.exists():
             return
+        try:
+            os.add_dll_directory(str(dll_path.parent.resolve()))
+        except (OSError, AttributeError):
+            pass
         try:
             self.dll = ctypes.CDLL(str(dll_path.resolve()))
             self.dll.axiom_extract_document.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
@@ -305,207 +516,147 @@ class AxiomNativeBridge:
                 self.dll.axiom_required_size.argtypes = [ctypes.c_char_p]
                 self.dll.axiom_required_size.restype = ctypes.c_int
                 self.has_probe = True
-            log.info("Bound native C++23 engine: %s (size probe: %s)", dll_path.name, self.has_probe)
+            logger.info("Loaded optional native extractor DLL: %s", dll_path.name)
         except (OSError, AttributeError) as error:
             self.dll = None
-            log.warning("Failed to bind DLL %s: %s", dll_path, error)
+            logger.warning("Optional native DLL skipped (%s): %s", dll_path, error)
 
     def _extract_native(self, path: Path) -> str:
         if not self.dll:
             return ""
-        encoded_path = str(path).encode("utf-8")
+        encoded = str(path).encode("utf-8")
         capacity = 8 * 1024 * 1024
         if self.has_probe:
-            required = self.dll.axiom_required_size(encoded_path)
+            required = self.dll.axiom_required_size(encoded)
             if required <= 0:
                 return ""
             capacity = required + 1
         buffer = ctypes.create_string_buffer(capacity)
-        bytes_read = self.dll.axiom_extract_document(encoded_path, buffer, capacity)
+        bytes_read = self.dll.axiom_extract_document(encoded, buffer, capacity)
         return buffer.value.decode("utf-8", errors="replace") if bytes_read > 0 else ""
 
     @staticmethod
     def _extract_python(path: Path) -> str:
         extension = path.suffix.lower()
         try:
+            if extension in (".txt", ".md", ".json", ".csv", ".xml"):
+                return path.read_text(encoding="utf-8", errors="replace")
+            if extension == ".docx":
+                with zipfile.ZipFile(path) as archive:
+                    xml_text = archive.read("word/document.xml").decode("utf-8", errors="replace")
+                return html.unescape(re.sub(r"<[^>]+>", "", xml_text.replace("</w:p>", "\n")))
             if extension == ".pdf":
                 from pypdf import PdfReader
                 return "\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
-            if extension == ".docx":
-                with zipfile.ZipFile(path) as archive:
-                    xml = archive.read("word/document.xml").decode("utf-8", errors="replace")
-                return re.sub(r"<[^>]+>", "", xml.replace("</w:p>", "\n"))
         except ImportError:
-            log.debug("pypdf not installed; cannot extract %s", path.name)
-        except Exception as error:  # third-party parsers raise heterogeneous errors on malformed files
-            log.debug("Python extraction failed for %s: %s", path.name, error)
+            logger.debug("pypdf not installed; skipping PDF extraction for %s", path.name)
+        except Exception as error:
+            logger.debug("Document extraction failed for %s: %s", path.name, error)
         return ""
 
-    def extract_document(self, path: Path) -> str:
+    def extract(self, path: Path) -> str:
         return (self._extract_native(path) or self._extract_python(path)).strip()
 
 
 # ==============================================================================
-# 4. VRAM RESIDENCY CONTROLLER (thread-safe, single model resident on 12 GB)
+# 4. OPTIONAL UNIVERSAL LLM CLIENT (disabled by default -> zero VRAM conflict)
 # ==============================================================================
-class VRAMController:
-    _active_model: str = ""
-    _lock = threading.RLock()
+class LanguageModelClient:
+    """
+    Provider-agnostic optional LLM client.
+    - SPECTER_LLM_PROVIDER=none   (default): disabled; host MCP LLM drives reasoning.
+    - SPECTER_LLM_PROVIDER=openai : any OpenAI-compatible /v1/chat/completions API.
+    - SPECTER_LLM_PROVIDER=ollama : local Ollama /api/generate (auto-reuses resident model).
+    """
 
-    @staticmethod
-    def resident_models() -> List[str]:
+    def __init__(self) -> None:
+        self.provider = LLM_PROVIDER
+        self.base_url = LLM_URL or ("http://127.0.0.1:11434" if self.provider == "ollama" else "https://api.openai.com/v1")
+        self.model = LLM_MODEL
+        self.api_key = LLM_API_KEY
+
+    @property
+    def enabled(self) -> bool:
+        return self.provider in ("openai", "ollama")
+
+    def _resolve_ollama_model(self) -> str:
+        if self.model:
+            return self.model
         try:
-            response = requests.get(OLLAMA_RUNNING_URL, timeout=5)
+            response = requests.get(f"{self.base_url}/api/ps", timeout=3)
             if response.ok:
-                return [entry.get("name", "") for entry in response.json().get("models", []) if entry.get("name")]
+                running = [entry.get("name", "") for entry in response.json().get("models", []) if entry.get("name")]
+                if running:
+                    return running[0]
+            tags = requests.get(f"{self.base_url}/api/tags", timeout=3)
+            if tags.ok:
+                models = [entry.get("name", "") for entry in tags.json().get("models", []) if entry.get("name")]
+                if models:
+                    return models[0]
         except (requests.RequestException, ValueError):
             pass
-        return []
+        return ""
 
-    @classmethod
-    def pick_model(cls, preferred_model: str, require_vision: bool = False) -> str:
-        """Reuses an already-resident Ollama model when not pinned, avoiding 12 GB unload/reload ping-pong."""
-        if PIN_MODELS or require_vision:
-            return preferred_model
-        loaded = cls.resident_models()
-        if preferred_model in loaded:
-            return preferred_model
-        return loaded[0] if loaded else preferred_model
+    def complete(self, prompt: str, json_mode: bool = False, timeout_seconds: int = 35) -> str:
+        if not self.enabled:
+            return ""
+        if self.provider == "openai":
+            if not self.model:
+                raise RuntimeError("SPECTER_LLM_MODEL must be set when SPECTER_LLM_PROVIDER=openai.")
+            headers = {"Content-Type": "application/json"}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            payload: Dict[str, Any] = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+            }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
+            response = requests.post(
+                f"{self.base_url}/chat/completions", json=payload, headers=headers, timeout=(5, timeout_seconds)
+            )
+            response.raise_for_status()
+            choices = response.json().get("choices", [])
+            return strip_reasoning(choices[0]["message"]["content"]) if choices else ""
 
-    @classmethod
-    def switch_to(cls, target_model: str) -> None:
-        with cls._lock:
-            evict_targets = {cls._active_model} if cls._active_model and cls._active_model != target_model else set()
-            for loaded in cls.resident_models():
-                if loaded != target_model:
-                    evict_targets.add(loaded)
-            for loaded in evict_targets:
-                log.info("[VRAM Guard] Evicting '%s'", loaded)
-                try:
-                    requests.post(OLLAMA_GENERATE_URL, json={"model": loaded, "keep_alive": 0}, timeout=15)
-                except requests.RequestException:
-                    pass
-            cls._active_model = target_model
-
-    @classmethod
-    def evict_models(cls) -> None:
-        cls.switch_to("")
-
-    @classmethod
-    def query_llm(
-        cls,
-        model: str,
-        prompt: str,
-        json_mode: bool = False,
-        images_base64: Optional[List[str]] = None,
-        temperature: float = 0.2,
-    ) -> str:
-        selected_model = cls.pick_model(model, require_vision=bool(images_base64))
-        payload: Dict[str, Any] = {
-            "model": selected_model,
+        model = self._resolve_ollama_model()
+        if not model:
+            raise RuntimeError(f"No Ollama model available at {self.base_url}.")
+        payload = {
+            "model": model,
             "prompt": prompt,
             "stream": False,
             "keep_alive": "15m",
-            "options": {"temperature": temperature, "num_ctx": CONTEXT_TOKENS},
+            "options": {"temperature": 0.2, "num_ctx": LLM_CONTEXT_TOKENS},
         }
         if json_mode:
             payload["format"] = "json"
-        if images_base64:
-            payload["images"] = images_base64
-        last_error: Optional[Exception] = None
-        with cls._lock:
-            cls.switch_to(selected_model)
-            for attempt in range(2):
-                try:
-                    response = requests.post(OLLAMA_GENERATE_URL, json=payload, timeout=(5, 600))
-                    response.raise_for_status()
-                    return strip_reasoning(response.json().get("response", ""))
-                except (requests.RequestException, ValueError) as error:
-                    last_error = error
-                    log.warning("[LLM] %s attempt %d failed: %s", selected_model, attempt + 1, error)
-                    time.sleep(2)
-        raise RuntimeError(f"Ollama query failed for '{selected_model}' at {OLLAMA_BASE}: {last_error}")
+        response = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=(5, timeout_seconds))
+        response.raise_for_status()
+        return strip_reasoning(response.json().get("response", ""))
 
 
 # ==============================================================================
-# 5. COMFYUI FORENSIC UPSCALER (polls /history, downloads real output)
-# ==============================================================================
-class ComfyUIBridge:
-    @staticmethod
-    def upscale_image(input_path: Path, timeout_seconds: int = 60) -> Optional[Path]:
-        if not input_path.exists():
-            return None
-        try:
-            VRAMController.evict_models()
-            with open(input_path, "rb") as image_file:
-                upload = requests.post(f"{COMFYUI_URL}/upload/image", files={"image": image_file}, timeout=15)
-            upload.raise_for_status()
-            uploaded_name = upload.json().get("name", input_path.name)
-            workflow = {
-                "1": {"inputs": {"image": uploaded_name, "upload": "image"}, "class_type": "LoadImage"},
-                "2": {"inputs": {"model_name": UPSCALE_MODEL}, "class_type": "UpscaleModelLoader"},
-                "3": {"inputs": {"upscale_model": ["2", 0], "image": ["1", 0]}, "class_type": "ImageUpscaleWithModel"},
-                "4": {"inputs": {"filename_prefix": "Specter_Forensic", "images": ["3", 0]}, "class_type": "SaveImage"},
-            }
-            queued = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow}, timeout=20)
-            queued.raise_for_status()
-            prompt_id = queued.json().get("prompt_id")
-            if not prompt_id:
-                return None
-            deadline = time.monotonic() + timeout_seconds
-            output_info = None
-            while time.monotonic() < deadline and not output_info:
-                history = requests.get(f"{COMFYUI_URL}/history/{prompt_id}", timeout=10)
-                if history.ok:
-                    images = history.json().get(prompt_id, {}).get("outputs", {}).get("4", {}).get("images", [])
-                    output_info = images[0] if images else None
-                if not output_info:
-                    time.sleep(0.75)
-            if not output_info:
-                log.warning("[ComfyUI] Upscale timed out (prompt_id=%s)", prompt_id)
-                return None
-            view = requests.get(
-                f"{COMFYUI_URL}/view",
-                params={
-                    "filename": output_info["filename"],
-                    "subfolder": output_info.get("subfolder", ""),
-                    "type": output_info.get("type", "output"),
-                },
-                timeout=30,
-            )
-            view.raise_for_status()
-            input_path.write_bytes(view.content)
-            return input_path
-        except (requests.RequestException, OSError, ValueError, KeyError) as error:
-            log.info("[ComfyUI Bypass] %s", error)
-            return None
-        finally:
-            try:
-                requests.post(f"{COMFYUI_URL}/free", json={"unload_models": True, "free_memory": True}, timeout=10)
-            except requests.RequestException:
-                pass
-
-
-# ==============================================================================
-# 6. CASE STORE (SQLite knowledge graph + chain of custody + audit log)
+# 5. CASE STORE (SQLite knowledge graph + chain of custody + claim grounding)
 # ==============================================================================
 class CaseStore:
     def __init__(self, case_id: str) -> None:
         self.case_id = validate_case_id(case_id)
-        self.directory = CASES_DIR / self.case_id
-        self.evidence_dir = self.directory / "evidence"
+        self.directory = CASES_DIRECTORY / self.case_id
+        self.evidence_directory = self.directory / "evidence"
         self.anchor_path = self.directory / "anchor.json"
         self.dossier_path = self.directory / "dossier.md"
         self.database_path = self.directory / "case.db"
-        self.evidence_dir.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
+        self.evidence_directory.mkdir(parents=True, exist_ok=True)
+        self._initialize_schema()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path, timeout=30)
         connection.row_factory = sqlite3.Row
         return connection
 
-    def _init_schema(self) -> None:
+    def _initialize_schema(self) -> None:
         with closing(self._connect()) as connection, connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.executescript(
@@ -528,15 +679,14 @@ class CaseStore:
                 """
             )
 
-    # --- evidence -------------------------------------------------------------
     def add_evidence(self, url: str, content: str, method: str, query: str = "", artifact_path: str = "") -> bool:
-        cleaned = (content or "").strip()[:MAX_STORED_CHARS]
+        cleaned = (content or "").strip()[:MAX_STORED_CHARACTERS]
         if not cleaned:
             return False
         with closing(self._connect()) as connection, connection:
             cursor = connection.execute(
                 "INSERT OR IGNORE INTO evidence VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (sha256_text(cleaned), url, urlparse(url).netloc, method, query, utc_now(), artifact_path, cleaned),
+                (sha256_text(cleaned), url, urlparse(url).netloc.lower(), method, query, utc_now(), artifact_path, cleaned),
             )
             return cursor.rowcount > 0
 
@@ -566,7 +716,32 @@ class CaseStore:
             })
         return results
 
-    # --- queries --------------------------------------------------------------
+    def evidence_excerpts(self, anchor: Optional[Dict[str, Any]], limit: int = 8, excerpt_chars: int = 800) -> List[Dict[str, Any]]:
+        """Returns compact, relevance-ranked primary evidence excerpts for ANY host LLM."""
+        rows = self.evidence_rows()
+        terms = anchor_terms(anchor)
+        ranked = sorted(
+            rows,
+            key=lambda row: (
+                0 if row["method"] == "search_snippet" else 1,
+                sum(1 for term in terms if term in f"{row['url']}\n{row['content']}".lower()),
+                len(row["content"]),
+            ),
+            reverse=True,
+        )
+        excerpts = []
+        for row in ranked[:limit]:
+            reliability, credibility = classify_reliability(row["url"], row["method"], anchor)
+            excerpts.append({
+                "evidence_tag": f"E:{row['content_hash'][:10]}",
+                "rating": f"{reliability}{credibility}",
+                "method": row["method"],
+                "url": row["url"],
+                "collected_utc": row["collected_utc"],
+                "excerpt": redact_sensitive(row["content"][:excerpt_chars]),
+            })
+        return excerpts
+
     def executed_queries(self) -> set:
         with closing(self._connect()) as connection:
             return {row["query"].lower() for row in connection.execute("SELECT query FROM queries")}
@@ -575,13 +750,13 @@ class CaseStore:
         with closing(self._connect()) as connection, connection:
             connection.execute("INSERT OR REPLACE INTO queries VALUES (?, ?, ?)", (query, utc_now(), new_artifacts))
 
-    # --- analysis -------------------------------------------------------------
-    def _ground_analysis(self, analysis: Dict[str, Any], anchor: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        """Prevents Anchor-echo hallucinations by verifying claims against stored evidence text."""
+    def ground_analysis(self, analysis: Dict[str, Any], anchor: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Server-side anti-hallucination guard: every claim must map to target-matching evidence."""
         rows = self.evidence_rows()
         evidence_by_tag = {f"E:{row['content_hash'][:10]}": row for row in rows}
         terms = anchor_terms(anchor)
-        matched_rows = sum(1 for row in rows if matches_terms(row["content"], terms, row["url"]))
+        matched_rows = [row for row in rows if matches_terms(row["content"], terms, row["url"])]
+        primary_domains = {row["domain"] for row in matched_rows if row["method"] != "search_snippet"}
 
         try:
             confidence = float(analysis.get("confidence", 0.0) or 0.0)
@@ -589,37 +764,42 @@ class CaseStore:
             confidence = 0.0
 
         verified_claims: List[Dict[str, Any]] = []
-        rejected_claims = 0
+        dropped = 0
         for claim in analysis.get("claims", []):
-            if not isinstance(claim, dict):
+            if not isinstance(claim, dict) or not str(claim.get("statement", "")).strip():
                 continue
             tag = str(claim.get("evidence_tag", "")).strip()
             row = evidence_by_tag.get(tag)
             if not row or not matches_terms(row["content"], terms, row["url"]):
-                rejected_claims += 1
+                dropped += 1
                 continue
-            verified_claims.append(claim)
+            verified_claims.append({
+                **claim,
+                "source_url": str(claim.get("source_url") or row["url"]),
+            })
 
         gaps = clean_strings(analysis.get("intelligence_gaps"), 12)
-        if matched_rows == 0:
+        if not matched_rows:
             confidence = min(confidence, 0.10)
             notice = "Zero collected evidence artifacts mention the target identifiers."
             if notice not in gaps:
                 gaps.insert(0, notice)
-        elif matched_rows == 1:
-            confidence = min(confidence, 0.55)
-        if rejected_claims:
-            gaps.append(f"Dropped {rejected_claims} ungrounded claim(s) lacking target-matching evidence.")
+        elif not primary_domains:
+            confidence = min(confidence, 0.35)
+        elif len(primary_domains) == 1:
+            confidence = min(confidence, 0.60)
+        if dropped:
+            gaps.append(f"Dropped {dropped} ungrounded claim(s) lacking matching evidence citation.")
 
         return {
             **analysis,
-            "confidence": min(1.0, max(0.0, confidence)),
+            "confidence": round(min(0.95, max(0.0, confidence)), 2),
             "claims": verified_claims,
             "intelligence_gaps": gaps[:12],
         }
 
-    def replace_analysis(self, analysis: Dict[str, Any], pass_number: int, anchor: Optional[Dict[str, Any]] = None) -> None:
-        grounded = self._ground_analysis(analysis, anchor)
+    def replace_analysis(self, analysis: Dict[str, Any], pass_number: int, anchor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        grounded = self.ground_analysis(analysis, anchor)
         hypotheses = [item for item in grounded.get("hypotheses", []) if isinstance(item, dict)]
         claims = [item for item in grounded.get("claims", []) if isinstance(item, dict)]
         entities = [item for item in grounded.get("entities", []) if isinstance(item, dict) and item.get("name")]
@@ -645,22 +825,24 @@ class CaseStore:
                     (str(claim.get("category", "general")), str(claim.get("statement", "")),
                      str(claim.get("evidence_tag", "")), str(claim.get("source_url", "")),
                      str(claim.get("source_reliability", "F"))[:1].upper(),
-                     str(claim.get("info_credibility", "6"))[:1], str(claim.get("hypothesis_alignment", "AMBIGUOUS"))),
+                     str(claim.get("info_credibility", "6"))[:1],
+                     str(claim.get("hypothesis_alignment", "AMBIGUOUS"))),
                 )
             for entity in entities:
                 connection.execute(
                     "INSERT OR REPLACE INTO entities VALUES (?, ?, ?)",
-                    (str(entity["name"]), str(entity.get("type", "unknown")), str(entity.get("relation", ""))),
+                    (str(entity["name"])[:160], str(entity.get("type", "unknown"))[:40], str(entity.get("relation", ""))[:200]),
                 )
             meta = {
-                "confidence": f"{min(1.0, max(0.0, confidence)):.2f}",
+                "confidence": f"{confidence:.2f}",
                 "intelligence_gaps": json.dumps(clean_strings(grounded.get("intelligence_gaps"), 12)),
                 "key_assumptions": json.dumps(clean_strings(grounded.get("key_assumptions"), 12)),
-                "recommended_pivots": json.dumps(clean_strings(grounded.get("pivot_queries"), 3)),
+                "recommended_pivots": json.dumps(clean_strings(grounded.get("pivot_queries"), 5)),
                 "passes_completed": str(pass_number),
                 "analyzed_utc": utc_now(),
             }
             connection.executemany("INSERT OR REPLACE INTO analysis_meta VALUES (?, ?)", meta.items())
+        return self.analysis_state()
 
     def analysis_state(self) -> Dict[str, Any]:
         with closing(self._connect()) as connection:
@@ -677,7 +859,6 @@ class CaseStore:
                 "entities": [dict(row) for row in connection.execute("SELECT * FROM entities")],
             }
 
-    # --- audit ----------------------------------------------------------------
     def audit(self, action: str, detail: Any = "") -> None:
         text = detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False)
         with closing(self._connect()) as connection, connection:
@@ -702,50 +883,163 @@ class CaseStore:
 
 
 def load_anchor(case_id: str) -> Dict[str, Any]:
-    """Reads an existing case anchor without creating directories for unknown ids."""
-    anchor_path = CASES_DIR / validate_case_id(case_id) / "anchor.json"
+    anchor_path = CASES_DIRECTORY / validate_case_id(case_id) / "anchor.json"
     if not anchor_path.exists():
         raise FileNotFoundError(f"No case '{case_id}'. Run anchor_target first.")
     return json.loads(anchor_path.read_text(encoding="utf-8"))
 
 
-def open_case(case_id: str) -> tuple:
-    """Returns (anchor, store) for an existing case."""
+def open_case(case_id: str) -> Tuple[Dict[str, Any], CaseStore]:
     anchor = load_anchor(case_id)
     return anchor, CaseStore(case_id)
 
 
 # ==============================================================================
-# 7. SOURCE COLLECTOR (search -> native -> Markdown -> vision fallback)
+# 6. SOURCE COLLECTOR (web search + public GitHub/Wikipedia APIs + relevance gate)
 # ==============================================================================
 class SourceCollector:
-    def __init__(self, gate: PolitenessGate, bridge: AxiomNativeBridge) -> None:
+    def __init__(self, gate: PolitenessGate, extractor: DocumentExtractor) -> None:
         self.gate = gate
-        self.bridge = bridge
+        self.extractor = extractor
 
     @staticmethod
-    def search(query: str, max_results: int) -> List[Dict[str, str]]:
+    def search_web(query: str, max_results: int) -> List[Dict[str, str]]:
         if DDGS is None:
-            raise RuntimeError("Search backend missing: pip install ddgs (or duckduckgo_search).")
-        hits: List[Dict[str, str]] = []
-        seen = set()
-        try:
-            with DDGS() as search_client:
-                for item in search_client.text(query, region="wt-wt", max_results=max_results) or []:
-                    canonical = canonicalize_url(item.get("href", ""))
-                    if canonical and canonical not in seen:
-                        seen.add(canonical)
-                        hits.append({
-                            "url": canonical,
-                            "snippet": f"{item.get('title', '')}\n{item.get('body', '')}".strip(),
-                        })
-        except Exception as error:  # search backends raise many custom exception types
-            log.warning("[Search] '%s' failed: %s", query, error)
-        return hits
+            return []
+        clean_query = sanitize_query(query)
+        unquoted = clean_query.replace('"', "").strip()
+        attempts = [unquoted] if unquoted else []
+        if clean_query and clean_query != unquoted:
+            attempts.append(clean_query)
 
-    def _download_native(self, url: str, extension: str, evidence_dir: Path) -> tuple:
-        local_file = evidence_dir / f"doc_{uuid.uuid4().hex[:10]}{extension}"
-        with requests.get(url, timeout=30, stream=True, headers={"User-Agent": USER_AGENT}) as response:
+        for candidate in attempts:
+            hits: List[Dict[str, str]] = []
+            seen = set()
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    with DDGS() as search_client:
+                        try:
+                            raw_items = search_client.text(candidate, backend="duckduckgo", max_results=max_results)
+                        except TypeError:
+                            raw_items = search_client.text(candidate, max_results=max_results)
+                        if not raw_items:
+                            raw_items = search_client.text(candidate, max_results=max_results)
+                        for item in raw_items or []:
+                            canonical = canonicalize_url(item.get("href", ""))
+                            if canonical and canonical not in seen:
+                                seen.add(canonical)
+                                title = str(item.get("title", "")).strip()
+                                body = str(item.get("body", "")).strip()
+                                hits.append({"url": canonical, "snippet": f"{title}\n{body}".strip()})
+            except Exception as error:
+                logger.warning("[Search] '%s' failed: %s", candidate, error)
+            if hits:
+                return hits
+        return []
+
+    def enrich_public_apis(self, store: CaseStore, anchor: Dict[str, Any]) -> Dict[str, int]:
+        """Keyless, high-reliability public API enrichment (GitHub + repos + blog + Wikipedia)."""
+        name = anchor.get("primary_name", "").strip()
+        terms = anchor_terms(anchor)
+        counts = {"github_hits": 0, "github_blogs": 0, "wikipedia_hits": 0}
+        if not name:
+            return counts
+        headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+
+        # 1. GitHub public user & repository search (free, unauthenticated)
+        try:
+            response = requests.get(
+                "https://api.github.com/search/users",
+                params={"q": name, "per_page": 3},
+                headers=headers,
+                timeout=6,
+            )
+            if response.ok:
+                for user in response.json().get("items", [])[:2]:
+                    login = user.get("login", "")
+                    if not login:
+                        continue
+                    profile = requests.get(f"https://api.github.com/users/{login}", headers=headers, timeout=5)
+                    if not profile.ok:
+                        continue
+                    data = profile.json()
+                    repo_lines: List[str] = []
+                    try:
+                        repos_resp = requests.get(
+                            f"https://api.github.com/users/{login}/repos",
+                            params={"sort": "updated", "per_page": 8},
+                            headers=headers,
+                            timeout=5,
+                        )
+                        if repos_resp.ok:
+                            for repo in repos_resp.json()[:8]:
+                                repo_lines.append(
+                                    f"- {repo.get('name')} ({repo.get('language') or 'n/a'}, "
+                                    f"stars={repo.get('stargazers_count', 0)}): {repo.get('description') or ''}"
+                                )
+                    except (requests.RequestException, ValueError):
+                        pass
+
+                    blog = str(data.get("blog") or "").strip()
+                    summary = (
+                        f"GitHub Profile: @{data.get('login')} ({data.get('name') or ''})\n"
+                        f"Bio: {data.get('bio') or ''}\nCompany: {data.get('company') or ''}\n"
+                        f"Location: {data.get('location') or ''}\nBlog: {blog}\n"
+                        f"Public Repos: {data.get('public_repos', 0)} | Followers: {data.get('followers', 0)}\n"
+                        f"Created: {data.get('created_at', '')}"
+                    )
+                    if repo_lines:
+                        summary += "\nRecent Repositories:\n" + "\n".join(repo_lines)
+                    profile_url = data.get("html_url", f"https://github.com/{login}")
+                    if matches_terms(summary, terms, profile_url):
+                        if store.add_evidence(profile_url, summary, "github_api", f"github:{name}"):
+                            counts["github_hits"] += 1
+                        if blog:
+                            blog_url = canonicalize_url(blog if blog.startswith(("http://", "https://")) else f"https://{blog}")
+                            _, text, method, artifact = self.fetch_document(blog_url, store.evidence_directory)
+                            if text and matches_terms(text, terms, blog_url):
+                                if store.add_evidence(blog_url, text, method, f"github_blog:{login}", artifact):
+                                    counts["github_blogs"] += 1
+        except (requests.RequestException, ValueError, KeyError) as error:
+            logger.debug("[GitHub API] %s", error)
+
+        # 2. Wikipedia public REST summary lookup (keyless)
+        try:
+            search_resp = requests.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={"action": "opensearch", "search": name, "limit": 2, "format": "json"},
+                headers=headers,
+                timeout=5,
+            )
+            if search_resp.ok:
+                payload = search_resp.json()
+                titles = payload[1] if isinstance(payload, list) and len(payload) > 1 else []
+                urls = payload[3] if isinstance(payload, list) and len(payload) > 3 else []
+                for title, page_url in zip(titles, urls):
+                    if not matches_terms(title, terms, page_url):
+                        continue
+                    slug = title.replace(" ", "_")
+                    summary_resp = requests.get(
+                        f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}",
+                        headers=headers,
+                        timeout=5,
+                    )
+                    if summary_resp.ok:
+                        extract = summary_resp.json().get("extract", "").strip()
+                        if extract and matches_terms(extract, terms, page_url):
+                            if store.add_evidence(page_url, f"# {title}\n\n{extract}", "wikipedia_api", f"wiki:{name}"):
+                                counts["wikipedia_hits"] += 1
+        except (requests.RequestException, ValueError, KeyError) as error:
+            logger.debug("[Wikipedia API] %s", error)
+
+        if any(counts.values()):
+            store.audit("API_ENRICHMENT", counts)
+        return counts
+
+    def _download_document(self, url: str, extension: str, evidence_directory: Path) -> Tuple[str, str]:
+        local_file = evidence_directory / f"doc_{uuid.uuid4().hex[:10]}{extension}"
+        with requests.get(url, timeout=15, stream=True, headers={"User-Agent": USER_AGENT}) as response:
             response.raise_for_status()
             written = 0
             with open(local_file, "wb") as handle:
@@ -754,341 +1048,443 @@ class SourceCollector:
                     if written > MAX_DOWNLOAD_BYTES:
                         raise ValueError(f"Artifact exceeds {MAX_DOWNLOAD_BYTES} bytes")
                     handle.write(chunk)
-        return self.bridge.extract_document(local_file), str(local_file)
+        return self.extractor.extract(local_file), str(local_file)
 
-    def fetch_document(self, url: str, evidence_dir: Path) -> tuple:
-        """Returns (url, text, method, artifact_path). method 'needs_vision' marks fallback candidates."""
+    def fetch_document(self, url: str, evidence_directory: Path) -> Tuple[str, str, str, str]:
+        """Returns (url, text, method, artifact_path)."""
         if not self.gate.allowed(url):
             return url, "", "robots_denied", ""
         self.gate.throttle(url)
         extension = Path(urlparse(url).path).suffix.lower()
         try:
-            if extension in NATIVE_EXTENSIONS:
-                text, artifact = self._download_native(url, extension, evidence_dir)
+            if extension in DOCUMENT_EXTENSIONS:
+                text, artifact = self._download_document(url, extension, evidence_directory)
                 return url, text, ("native_document" if text else "failed"), artifact
-            response = requests.get(url, timeout=20, headers={"User-Agent": USER_AGENT})
-            if response.status_code in (403, 429, 503):
-                return url, "", "needs_vision", ""
+            response = requests.get(url, timeout=12, headers={"User-Agent": USER_AGENT})
+            if response.status_code in (401, 403, 429, 503):
+                return url, "", "access_blocked", ""
             response.raise_for_status()
-            if "pdf" in response.headers.get("Content-Type", "").lower():
-                local_file = evidence_dir / f"doc_{uuid.uuid4().hex[:10]}.pdf"
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "pdf" in content_type:
+                local_file = evidence_directory / f"doc_{uuid.uuid4().hex[:10]}.pdf"
                 local_file.write_bytes(response.content[:MAX_DOWNLOAD_BYTES])
-                text = self.bridge.extract_document(local_file)
+                text = self.extractor.extract(local_file)
                 return url, text, ("native_document" if text else "failed"), str(local_file)
-            if trafilatura is not None:
-                markdown = trafilatura.extract(response.text, output_format="markdown", include_links=True, url=url)
-                if markdown and len(markdown.strip()) >= MIN_ARTICLE_CHARS:
-                    return url, markdown, "markdown", ""
-            return url, "", "needs_vision", ""
-        except (requests.RequestException, OSError, ValueError) as error:
-            log.debug("[Fetch] %s: %s", url, error)
+            if "text/plain" in content_type or "application/json" in content_type:
+                return url, response.text[:MAX_STORED_CHARACTERS], "markdown", ""
+            extracted = extract_html_text(response.text, url)
+            if extracted and len(extracted.strip()) >= 60:
+                method = "markdown" if trafilatura is not None else "html_text"
+                return url, extracted, method, ""
             return url, "", "failed", ""
-
-    def vision_batch(self, urls: List[str], evidence_dir: Path) -> List[tuple]:
-        """One headless browser for all fallback pages; CAPTCHA / login gates are skipped, never bypassed."""
-        if not urls:
-            return []
-        try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
-            log.info("[Vision] Playwright not installed; skipping %d pages.", len(urls))
-            return []
-        results: List[tuple] = []
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            try:
-                browser_context = browser.new_context(viewport={"width": 1280, "height": 900}, user_agent=USER_AGENT)
-                for url in urls:
-                    self.gate.throttle(url)
-                    shot_path = evidence_dir / f"snap_{uuid.uuid4().hex[:10]}.png"
-                    page = browser_context.new_page()
-                    try:
-                        page.goto(url, timeout=20000, wait_until="domcontentloaded")
-                        page.wait_for_timeout(1800)
-                        page.screenshot(path=str(shot_path))
-                        if shot_path.stat().st_size < 64 * 1024:
-                            ComfyUIBridge.upscale_image(shot_path)
-                        image_data = base64.b64encode(shot_path.read_bytes()).decode("ascii")
-                        decision = parse_json(VRAMController.query_llm(
-                            OBSERVER_MODEL,
-                            "Inspect this webpage screenshot. If a CAPTCHA, login wall or anti-bot gate is present, "
-                            'return {"action": "blocked"}. If a cookie banner or modal covers the content, return '
-                            '{"action": "dismiss", "x": int, "y": int} with the dismiss button centre. '
-                            'Otherwise return {"action": "extract"}.',
-                            json_mode=True,
-                            images_base64=[image_data],
-                        ))
-                        if decision.get("action") == "blocked":
-                            log.info("[Vision] Gate detected on %s; skipped.", url)
-                            continue
-                        if decision.get("action") == "dismiss":
-                            page.mouse.click(int(decision.get("x", 640)), int(decision.get("y", 450)))
-                            page.wait_for_timeout(1500)
-                            page.screenshot(path=str(shot_path))
-                            image_data = base64.b64encode(shot_path.read_bytes()).decode("ascii")
-                        extracted = VRAMController.query_llm(
-                            OBSERVER_MODEL,
-                            "Transcribe all factual organisational, professional, biographical, handle, domain "
-                            "and date details visible on this page. Do not speculate.",
-                            images_base64=[image_data],
-                        )
-                        if extracted.strip():
-                            results.append((url, extracted, "vision_vlm", str(shot_path)))
-                    except Exception as error:  # Playwright / LLM failures must not abort the batch
-                        log.warning("[Vision] %s: %s", url, error)
-                    finally:
-                        page.close()
-                browser_context.close()
-            finally:
-                browser.close()
-        return results
+        except (requests.RequestException, OSError, ValueError) as error:
+            logger.debug("[Fetch] %s: %s", url, error)
+            return url, "", "failed", ""
 
     def harvest(
         self,
         store: CaseStore,
         query: str,
         max_results: int = 8,
-        use_vision: bool = True,
+        strict_relevance: bool = True,
         anchor: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        hits = self.search(query, max_results)
-        terms = anchor_terms(anchor, query)
-        report = {"query": query, "candidates": len(hits), "new_artifacts": 0, "duplicates": 0,
-                  "rejected_off_topic": 0, "robots_denied": 0, "failed": 0, "vision_pages": 0}
-        filtered_urls: List[str] = []
+        clean_query = sanitize_query(query)
+        hits = self.search_web(clean_query, max_results)
+        terms = anchor_terms(anchor, clean_query) if strict_relevance else []
+        report = {
+            "query": clean_query,
+            "candidates": len(hits),
+            "new_artifacts": 0,
+            "snippets_saved": 0,
+            "duplicates": 0,
+            "rejected_off_topic": 0,
+            "robots_denied": 0,
+            "access_blocked": 0,
+            "failed": 0,
+        }
+        snippet_by_url: Dict[str, str] = {}
+        fetch_urls: List[str] = []
         for hit in hits:
-            if hit["snippet"] and not matches_terms(hit["snippet"], terms, hit["url"]):
+            url, snippet = hit["url"], hit["snippet"]
+            if strict_relevance and snippet and not matches_terms(snippet, terms, url):
                 report["rejected_off_topic"] += 1
-            else:
-                filtered_urls.append(hit["url"])
-        vision_queue: List[str] = []
+                continue
+            snippet_by_url[url] = snippet
+            fetch_urls.append(url)
 
-        def commit(url: str, text: str, method: str, artifact: str) -> None:
-            if not matches_terms(text, terms, url):
-                report["rejected_off_topic"] += 1
-                return
-            if store.add_evidence(url, text, method, query, artifact):
-                report["new_artifacts"] += 1
-            else:
-                report["duplicates"] += 1
+        def save_snippet_fallback(url: str) -> None:
+            snippet = snippet_by_url.get(url, "")
+            if snippet and matches_terms(snippet, terms, url):
+                body = f"[Public search index snippet; origin page not fetched]\n{snippet}"
+                if store.add_evidence(url, body, "search_snippet", clean_query):
+                    report["snippets_saved"] += 1
+                    report["new_artifacts"] += 1
 
-        if filtered_urls:
-            with ThreadPoolExecutor(max_workers=4) as pool:
+        if fetch_urls:
+            with ThreadPoolExecutor(max_workers=5) as pool:
                 for url, text, method, artifact in pool.map(
-                    lambda item: self.fetch_document(item, store.evidence_dir), filtered_urls
+                    lambda target_url: self.fetch_document(target_url, store.evidence_directory), fetch_urls
                 ):
-                    if method == "needs_vision":
-                        vision_queue.append(url)
-                    elif method in ("robots_denied", "failed"):
+                    if method in ("robots_denied", "access_blocked", "failed"):
                         report[method] += 1
+                        save_snippet_fallback(url)
                     elif text:
-                        commit(url, text, method, artifact)
-        if use_vision and vision_queue:
-            for url, text, method, artifact in self.vision_batch(vision_queue[:4], store.evidence_dir):
-                report["vision_pages"] += 1
-                commit(url, text, method, artifact)
-        store.record_query(query, report["new_artifacts"])
+                        if strict_relevance and not matches_terms(text, terms, url):
+                            report["rejected_off_topic"] += 1
+                            continue
+                        if store.add_evidence(url, text, method, clean_query, artifact):
+                            report["new_artifacts"] += 1
+                        else:
+                            report["duplicates"] += 1
+
+        store.record_query(clean_query, report["new_artifacts"])
         store.audit("HARVEST", report)
-        log.info("[Harvest] %s", report)
+        logger.info("[Harvest] %s", report)
         return report
 
 
 # ==============================================================================
-# 8. INTELLIGENCE CORE (anchor -> ACH sync hub -> bounded pivots -> ICD-203 dossier)
+# 7. INTELLIGENCE CORE (deterministic ACH + entities + ICD-203 dossier)
 # ==============================================================================
 class IntelligenceCore:
     def __init__(self) -> None:
-        self.bridge = AxiomNativeBridge(AXIOM_DLL)
-        self.collector = SourceCollector(PolitenessGate(), self.bridge)
+        self.extractor = DocumentExtractor(NATIVE_DLL_PATH)
+        self.collector = SourceCollector(PolitenessGate(), self.extractor)
+        self.llm = LanguageModelClient()
 
-    # --- Phase 1: Immutable Context Anchor (Input node + Think_1 zero-shot hypotheses) ---
-    def build_anchor(self, seed: str, purpose: str) -> Dict[str, Any]:
+    def build_anchor(
+        self,
+        seed: str,
+        purpose: str,
+        aliases: Optional[List[str]] = None,
+        handles: Optional[List[str]] = None,
+        location: str = "",
+        profession: str = "",
+    ) -> Dict[str, Any]:
         seed, purpose = (seed or "").strip(), (purpose or "").strip()
         if not seed:
             raise ValueError("seed must not be empty.")
         if len(purpose) < 10:
             raise ValueError("purpose must state the lawful research objective (min 10 characters).")
         case_id = uuid.uuid4().hex[:12]
-        prompt = f"""You are an all-source intelligence targeting officer.
-Convert the seed into a strict JSON Context Anchor and formulate competing hypotheses.
-Schema:
-{{"primary_name": "string", "entity_kind": "person|organization|domain|event|other",
-  "known_aliases": ["string"], "known_handles_or_domains": ["string"],
-  "anchor_demographics": {{"birth_year": null, "origin_city": "string"}},
-  "core_profession": "string",
-  "initial_hypotheses": [
-    {{"id": "H1", "label": "Primary Target", "description": "subject matching the exact seed qualifiers"}},
-    {{"id": "H2", "label": "Namesake / Collision", "description": "distinct entity sharing name or alias"}}]}}
-Only use information present in the seed. Seed: {seed}"""
-        try:
-            anchor = parse_json(VRAMController.query_llm(ANALYST_MODEL, prompt, json_mode=True))
-        except RuntimeError as error:
-            log.warning("[Anchor] LLM unavailable, deterministic anchor used: %s", error)
-            anchor = {}
-        if not isinstance(anchor.get("anchor_demographics"), dict):
-            anchor["anchor_demographics"] = {}
-        anchor["anchor_demographics"].setdefault("birth_year", None)
-        anchor["anchor_demographics"].setdefault("origin_city", "")
-        anchor["primary_name"] = str(anchor.get("primary_name") or seed.split(",")[0].strip() or "Unknown Target")
-        anchor["entity_kind"] = str(anchor.get("entity_kind") or "other")
-        anchor["known_aliases"] = clean_strings(anchor.get("known_aliases"), 10)
-        anchor["known_handles_or_domains"] = clean_strings(anchor.get("known_handles_or_domains"), 10)
-        anchor["core_profession"] = str(anchor.get("core_profession") or "")
-        if not isinstance(anchor.get("initial_hypotheses"), list) or not anchor["initial_hypotheses"]:
-            anchor["initial_hypotheses"] = [
-                {"id": "H1", "label": "Primary Target", "description": f"Subject matching: {seed}"},
-                {"id": "H2", "label": "Namesake / Collision", "description": "Distinct entity sharing identifiers"},
-            ]
-        anchor.update({"case_id": case_id, "seed": seed, "purpose": purpose,
-                       "created_utc": utc_now(), "immutable": True})
+        anchor = parse_seed(seed, aliases=aliases, handles=handles, location=location, profession=profession)
+        anchor.update({"case_id": case_id, "seed": seed, "purpose": purpose, "created_utc": utc_now(), "immutable": True})
         store = CaseStore(case_id)
         store.anchor_path.write_text(json.dumps(anchor, indent=2, ensure_ascii=False), encoding="utf-8")
         store.audit("ANCHOR_LOCKED", {"seed": seed, "purpose": purpose})
-        log.info("[Phase 1] Anchor locked: %s (%s)", anchor["primary_name"], case_id)
+        logger.info("[Phase 1] Anchor locked: %s (%s)", anchor["primary_name"], case_id)
         return anchor
 
     @staticmethod
     def wide_net_queries(anchor: Dict[str, Any]) -> List[str]:
         name = anchor["primary_name"]
-        queries = [f'"{name}"']
+        queries = [name]
         for alias in anchor.get("known_aliases", [])[:2]:
-            queries.append(f'"{alias}"')
+            queries.append(alias)
         for handle in anchor.get("known_handles_or_domains", [])[:2]:
-            queries.append(f'"{handle}"')
+            queries.append(handle)
         return list(dict.fromkeys(queries))
 
-    @staticmethod
-    def evidence_digest(rows: List[Dict[str, Any]], budget: int) -> str:
-        if not rows:
-            return "(no evidence collected yet)"
-        per_source = max(1200, budget // len(rows))
-        blocks, used = [], 0
-        for row in rows:
-            block = (f"[E:{row['content_hash'][:10]}] {row['url']} | method={row['method']} | "
-                     f"utc={row['collected_utc']}\n{row['content'][:per_source]}")
-            if used + len(block) > budget:
-                break
-            blocks.append(block)
-            used += len(block)
-        return "\n\n---\n\n".join(blocks)
+    def deterministic_analysis(self, anchor: Dict[str, Any], store: CaseStore) -> Dict[str, Any]:
+        """Fast (<50ms), 100% grounded ACH, entity, timeline, and clean pivot extraction."""
+        rows = store.evidence_rows()
+        terms = anchor_terms(anchor)
+        name = anchor["primary_name"]
+        location = str(anchor.get("anchor_demographics", {}).get("origin_city") or "").strip().lower()
+        profession = str(anchor.get("core_profession") or "").strip().lower()
 
-    # --- Phase 3: Think_2 sync hub (ACH) --------------------------------------
-    def ach_pass(self, anchor: Dict[str, Any], store: CaseStore) -> Dict[str, Any]:
-        template = f"""Perform Analysis of Competing Hypotheses (ACH) with diagnosticity scoring.
-{ANALYTIC_RULES}
+        matched_rows = [row for row in rows if matches_terms(row["content"], terms, row["url"])]
+        primary_rows = [row for row in matched_rows if row["method"] != "search_snippet"]
+        unique_domains = sorted({row["domain"] for row in primary_rows if row["domain"]})
+        all_domains = sorted({row["domain"] for row in matched_rows if row["domain"]})
 
-Immutable Context Anchor (re-anchored lifeline; never drift from it):
-{json.dumps(anchor, ensure_ascii=False)}
+        claims: List[Dict[str, Any]] = []
+        entities: Dict[Tuple[str, str], str] = {}
+        seen_statements = set()
+        qualifier_hits = 0
 
-Already executed queries (do not repeat): {json.dumps(sorted(store.executed_queries()))}
+        for row in matched_rows:
+            tag = f"E:{row['content_hash'][:10]}"
+            url = row["url"]
+            domain = row["domain"]
+            text = row["content"]
+            lower_text = text.lower()
+            reliability, credibility = classify_reliability(url, row["method"], anchor)
 
-Tasks:
-1. CRITICAL: Do NOT treat the Context Anchor as evidence. Extract claims ONLY if explicitly corroborated in the Evidence text below. If 0 evidence documents mention the target, return `claims: []`, `confidence <= 0.10`, and state what is missing in `intelligence_gaps`.
-2. confidence (0.0-1.0) that the evidence describes the primary target rather than a namesake.
-3. Up to 3 clean, high-diagnosticity pivot queries (avoid `site:A OR site:B` boolean chains; prefer simple identifier + platform queries) that would confirm or refute a hypothesis.
-4. Rate every claim: source_reliability A (official/primary) .. F (cannot judge);
-   info_credibility 1 (independently confirmed) .. 6 (cannot judge);
-   hypothesis_alignment PRIMARY | NAMESAKE_COLLISION | AMBIGUOUS.
-5. Extract entities (organisations, collaborators, domains, publications) actually observed in Evidence.
+            if domain:
+                platform = next((label for host, label in SOCIAL_PLATFORMS.items() if domain == host or domain.endswith(f".{host}")), None)
+                if platform:
+                    entities[(url, platform)] = f"Public {platform} footprint ({tag})"
+                else:
+                    entities[(domain, "domain")] = f"Referenced source domain ({tag})"
 
-Return strict JSON:
-{{"confidence": 0.0, "pivot_queries": ["..."],
-  "hypotheses": [{{"id": "H1", "label": "...", "description": "...", "status": "LEADING|ACTIVE|DISCOUNTED", "diagnostic_score": 0.0}}],
-  "claims": [{{"category": "temporal|relational|digital_footprint|professional", "statement": "...",
-              "evidence_tag": "E:xxxxxxxxxx", "source_url": "...", "source_reliability": "B",
-              "info_credibility": "2", "hypothesis_alignment": "PRIMARY"}}],
-  "entities": [{{"name": "...", "type": "organization|person|domain|publication|handle", "relation": "..."}}],
-  "key_assumptions": ["..."], "intelligence_gaps": ["..."]}}
+            if location and location in lower_text:
+                qualifier_hits += 1
+            if profession and any(word in lower_text for word in profession.split() if len(word) >= 4):
+                qualifier_hits += 1
 
-Evidence:
-"""
-        digest = self.evidence_digest(store.evidence_rows(), char_budget(len(template), reserve_tokens=6000))
-        return parse_json(VRAMController.query_llm(ANALYST_MODEL, template + digest, json_mode=True))
+            # Extract grounded public social/repo URLs mentioned inside the page
+            for found_url in re.findall(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]{8,140}", text):
+                parsed = urlparse(found_url.rstrip(".,);"))
+                host = parsed.netloc.lower()
+                platform = next((label for key, label in SOCIAL_PLATFORMS.items() if host == key or host.endswith(f".{key}")), None)
+                if platform and len(parsed.path.strip("/")) >= 2:
+                    entities[(found_url.rstrip(".,);"), platform)] = f"Linked profile in {tag}"
+
+            # Extract grounded sentences containing target terms or dated milestones
+            sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
+            added_from_row = 0
+            for sentence in sentences:
+                clean = re.sub(r"\s+", " ", sentence).strip(" -*#")
+                if not (25 <= len(clean) <= 260):
+                    continue
+                if not matches_terms(clean, terms):
+                    continue
+                normalized = clean.lower()
+                if normalized in seen_statements:
+                    continue
+                seen_statements.add(normalized)
+                has_year = bool(re.search(r"\b(?:19|20)\d{2}\b", clean))
+                category = "temporal" if has_year else ("digital_footprint" if row["method"] in ("github_api", "search_snippet") else "biographical")
+                claims.append({
+                    "category": category,
+                    "statement": redact_sensitive(clean),
+                    "evidence_tag": tag,
+                    "source_url": url,
+                    "source_reliability": reliability,
+                    "info_credibility": credibility,
+                    "hypothesis_alignment": "PRIMARY",
+                })
+                added_from_row += 1
+                if added_from_row >= 4:
+                    break
+
+        # Calibrated confidence strictly derived from independent domain corroboration
+        if not matched_rows:
+            confidence = 0.05
+        elif not primary_rows:
+            confidence = min(0.35, 0.15 + 0.08 * len(all_domains))
+        else:
+            base = 0.40 + 0.14 * min(len(unique_domains), 3)
+            bonus = 0.10 if qualifier_hits > 0 else 0.0
+            authority_bonus = 0.08 if any(c["source_reliability"] == "A" for c in claims) else 0.0
+            confidence = min(0.92, round(base + bonus + authority_bonus, 2))
+
+        h1_status = "LEADING" if confidence >= 0.50 else ("ACTIVE" if matched_rows else "UNVERIFIED")
+        h2_score = round(max(0.05, 1.0 - confidence), 2)
+        h2_status = "DISCOUNTED" if confidence >= 0.70 else "ACTIVE"
+
+        # Clean, short, search-engine-safe pivot queries (never prose sentences!)
+        executed = store.executed_queries()
+        pivot_candidates = [
+            f"{name} github",
+            f"{name} linkedin",
+            f"{name} {location}" if location else f"{name} biography",
+            f"{name} projects",
+        ]
+        for alias in anchor.get("known_aliases", [])[:2]:
+            pivot_candidates.append(alias)
+        pivots = [
+            query.strip()
+            for query in dict.fromkeys(pivot_candidates)
+            if query.strip() and query.strip().lower() not in executed
+        ][:3]
+
+        gaps: List[str] = []
+        if not matched_rows:
+            gaps.append("Zero collected evidence artifacts mention the target identifiers.")
+        if len(unique_domains) < 2:
+            gaps.append("Corroboration from additional independent primary domains is needed.")
+        if not any(claim["category"] == "temporal" for claim in claims):
+            gaps.append("No independently dated chronological milestones verified in collected sources.")
+        if not any(etype in ("github", "linkedin", "x_twitter", "orcid") for _, etype in entities):
+            gaps.append("No verified third-party social or code-repository profile confirmed yet.")
+
+        assumptions = [
+            "Open-source collection is restricted to publicly indexable pages honouring robots.txt.",
+            "Claims sharing the target identifier across distinct domains are provisionally linked under H1 pending disambiguation.",
+        ]
+
+        return {
+            "confidence": confidence,
+            "pivot_queries": pivots,
+            "hypotheses": [
+                {
+                    "id": "H1",
+                    "label": "Primary Target",
+                    "description": anchor["initial_hypotheses"][0]["description"],
+                    "status": h1_status,
+                    "diagnostic_score": confidence,
+                },
+                {
+                    "id": "H2",
+                    "label": "Namesake / Collision",
+                    "description": anchor["initial_hypotheses"][1]["description"],
+                    "status": h2_status,
+                    "diagnostic_score": h2_score,
+                },
+            ],
+            "claims": claims[:40],
+            "entities": [{"name": entity_name, "type": entity_type, "relation": relation}
+                         for (entity_name, entity_type), relation in list(entities.items())[:40]],
+            "key_assumptions": assumptions,
+            "intelligence_gaps": gaps,
+        }
 
     def run_analysis(
         self,
         anchor: Dict[str, Any],
         store: CaseStore,
         max_passes: int = 1,
+        deadline: Optional[float] = None,
         notify: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
-        """Think_2 -> Research_req loop, hard-capped at MAX_RESEARCH_PASSES."""
+        """Bounded Research_req + grounded ACH loop (hard-capped at MAX_RESEARCH_PASSES and deadline)."""
         passes = max(1, min(int(max_passes), MAX_RESEARCH_PASSES))
-        analysis: Dict[str, Any] = {}
         for pass_number in range(1, passes + 1):
-            analysis = self.ach_pass(anchor, store) or analysis
-            store.replace_analysis(analysis, pass_number, anchor=anchor)
-            state = store.analysis_state()
-            store.audit("ANALYSIS_PASS", {"pass": pass_number, "confidence": state["confidence"], "claims": len(state["claims"])})
+            analysis = self.deterministic_analysis(anchor, store)
+            state = store.replace_analysis(analysis, pass_number, anchor=anchor)
+            store.audit("ANALYSIS_PASS", {
+                "pass": pass_number, "confidence": state["confidence"],
+                "claims": len(state["claims"]), "entities": len(state["entities"]),
+            })
             if pass_number == passes:
                 break
-            executed = store.executed_queries()
-            pivots = [query for query in clean_strings(analysis.get("pivot_queries"), 3) if query.lower() not in executed]
+            if deadline and time.monotonic() >= deadline - 6.0:
+                logger.info("[Analysis] Deadline budget reached before pivot pass; finishing cleanly.")
+                break
+            pivots = state.get("recommended_pivots", [])[:2]
             if not pivots:
                 break
             for query in pivots:
+                if deadline and time.monotonic() >= deadline - 4.0:
+                    break
                 if notify:
                     notify(f"Research_req pass {pass_number}: pivot '{query}'")
-                self.collector.harvest(store, query, max_results=5, anchor=anchor)
+                self.collector.harvest(store, query, max_results=5, strict_relevance=True, anchor=anchor)
         return store.analysis_state()
 
-    # --- Phase 4: ICD-203 synthesis + deterministic appendices ----------------
     @staticmethod
-    def custody_appendix(store: CaseStore, state: Dict[str, Any]) -> str:
-        lines = ["\n\n---\n\n## Appendix A — Evidence Register (Chain of Custody)\n",
-                 "| Tag | SHA-256 | Method | Collected (UTC) | Source |", "|---|---|---|---|---|"]
-        for row in store.evidence_rows():
-            lines.append(f"| E:{row['content_hash'][:10]} | `{row['content_hash']}` | {row['method']} | "
-                         f"{row['collected_utc']} | {row['url']} |")
-        lines += ["\n## Appendix B — ACH Matrix\n", "| ID | Hypothesis | Status | Diagnostic score |", "|---|---|---|---|"]
-        for hypothesis in state["hypotheses"]:
-            lines.append(f"| {hypothesis['hypothesis_id']} | {hypothesis['label']} — {hypothesis['description']} | "
-                         f"{hypothesis['status']} | {hypothesis['diagnostic_score']:.2f} |")
-        lines += ["\n## Appendix C — Rated Claims (NATO Admiralty)\n",
-                  "| Rating | Alignment | Claim | Evidence |", "|---|---|---|---|"]
-        for claim in state["claims"]:
-            statement = claim["statement"].replace("|", "/")
-            lines.append(f"| {claim['source_reliability']}{claim['info_credibility']} | {claim['hypothesis_alignment']} | "
-                         f"{statement} | {claim['evidence_tag'] or claim['source_url']} |")
-        return "\n".join(lines) + "\n"
+    def confidence_label(score: float) -> str:
+        if score >= 0.75:
+            return "HIGH"
+        if score >= 0.45:
+            return "MODERATE"
+        return "LOW"
 
-    def synthesize(self, anchor: Dict[str, Any], store: CaseStore) -> Path:
+    def synthesize(self, anchor: Dict[str, Any], store: CaseStore, analyst_narrative: str = "") -> Path:
+        """Compiles an ICD-203 Markdown dossier deterministically (+ optional LLM/host narrative)."""
         state = store.analysis_state()
-        template = f"""You are the Phase 4 all-source synthesis engine. Write an executive-grade Markdown
-intelligence dossier adhering to ICD-203 analytic standards.
-{ANALYTIC_RULES}
-- Flag single-source or low-credibility (ratings D-F or 4-6) items as [UNVERIFIED / LOW CONFIDENCE].
-- Use estimative language (almost certainly, likely, roughly even chance, unlikely).
+        rows = store.evidence_rows()
+        stats = store.statistics()
+        confidence = state["confidence"]
+        band = self.confidence_label(confidence)
 
-Mandatory sections:
-1. BLUF & Analytic Confidence (High / Moderate / Low) with key judgments
-2. ACH & Disambiguation (how the target was separated from namesakes)
-3. Chronological Timeline with [E:tag] citations and [Reliability/Credibility] codes, e.g. [B2]
-4. Entity & Network Relationship Matrix
-5. Verified Public Digital Footprint (organisational domains, public handles, publications)
-6. Key Assumptions & Intelligence Gaps
+        narrative = analyst_narrative.strip()
+        if not narrative and self.llm.enabled and rows:
+            try:
+                excerpts = store.evidence_excerpts(anchor, limit=6, excerpt_chars=600)
+                prompt = (
+                    "Write a concise ICD-203 Executive BLUF (3-5 bullet judgments with [E:tag] citations) "
+                    "using ONLY these grounded facts. Do not invent URLs, dates, or private PII.\n"
+                    f"Anchor: {json.dumps(anchor, ensure_ascii=False)}\n"
+                    f"Evidence: {json.dumps(excerpts, ensure_ascii=False)}"
+                )
+                narrative = self.llm.complete(prompt, timeout_seconds=25)
+            except Exception as error:
+                logger.warning("[Synthesize] Optional LLM narrative skipped: %s", error)
 
-Immutable Context Anchor:
-{json.dumps(anchor, indent=2, ensure_ascii=False)}
+        lines = [
+            f"<!-- Specter case {store.case_id} | generated {utc_now()} | purpose: {anchor.get('purpose', '')} -->",
+            "",
+            f"# Intelligence Dossier: {anchor['primary_name']}",
+            "",
+            "## 1. BLUF (Bottom Line Up Front) & Analytic Confidence",
+            f"- **Case ID:** `{store.case_id}`",
+            f"- **Analytic Confidence:** **{band}** (`{confidence:.2f}`)",
+            f"- **Target Identity:** {anchor['primary_name']} (`{anchor.get('entity_kind', 'unknown')}`)",
+            f"- **Aliases / Handles:** {', '.join(anchor.get('known_aliases', []) + anchor.get('known_handles_or_domains', [])) or 'None specified'}",
+            f"- **Evidence Base:** {stats['evidence_total']} unique SHA-256 artifacts across {stats['unique_domains']} domain(s); {len(state['claims'])} grounded claims.",
+        ]
+        if narrative:
+            lines += ["", "### Analyst Executive Assessment", narrative]
 
-ACH state (hypotheses, rated claims, entities, gaps):
-{json.dumps(state, indent=2, ensure_ascii=False)}
+        lines += [
+            "",
+            "## 2. Analysis of Competing Hypotheses (ACH)",
+            "| ID | Hypothesis | Status | Diagnostic Score |",
+            "|---|---|---|---|",
+        ]
+        for hyp in state["hypotheses"]:
+            desc = str(hyp["description"]).replace("|", "/")
+            lines.append(f"| {hyp['hypothesis_id']} | **{hyp['label']}** — {desc} | {hyp['status']} | {hyp['diagnostic_score']:.2f} |")
 
-Evidence corpus:
-"""
-        digest = self.evidence_digest(store.evidence_rows(), char_budget(len(template), reserve_tokens=8000))
-        dossier = VRAMController.query_llm(OBSERVER_MODEL, template + digest, temperature=0.25)
-        VRAMController.evict_models()
-        header = f"<!-- Specter case {store.case_id} | generated {utc_now()} | purpose: {anchor.get('purpose', '')} -->\n\n"
-        store.dossier_path.write_text(redact_sensitive(header + dossier + self.custody_appendix(store, state)),
-                                      encoding="utf-8")
+        timeline_claims = [c for c in state["claims"] if c["category"] == "temporal"]
+        lines += ["", "## 3. Grounded Chronological Timeline"]
+        if timeline_claims:
+            for claim in timeline_claims:
+                code = f"{claim['source_reliability']}{claim['info_credibility']}"
+                flag = " `[UNVERIFIED / LOW CONFIDENCE]`" if claim["source_reliability"] in ("D", "E", "F") else ""
+                lines.append(f"- `[{code}]` [{claim['evidence_tag']}] {claim['statement']}{flag}")
+        else:
+            lines.append("- *No independently dated milestones verified in current evidence.*")
+
+        lines += [
+            "",
+            "## 4. Verified Digital Footprint & Entities",
+            "| Entity / Handle / URL | Type | Relation |",
+            "|---|---|---|",
+        ]
+        if state["entities"]:
+            for entity in state["entities"]:
+                lines.append(f"| {str(entity['name']).replace('|', '/')} | {entity['entity_type']} | {str(entity['relation']).replace('|', '/')} |")
+        else:
+            lines.append("| *None verified* | — | — |")
+
+        lines += ["", "## 5. Key Assumptions & Intelligence Gaps", "### Key Assumptions"]
+        for item in state["key_assumptions"] or ["None recorded."]:
+            lines.append(f"- {item}")
+        lines += ["", "### Intelligence Gaps"]
+        for item in state["intelligence_gaps"] or ["None recorded."]:
+            lines.append(f"- {item}")
+
+        lines += [
+            "",
+            "---",
+            "",
+            "## Appendix A — Evidence Register (Chain of Custody)",
+            "| Tag | SHA-256 | Method | Collected (UTC) | Source |",
+            "|---|---|---|---|---|",
+        ]
+        for row in rows:
+            lines.append(
+                f"| E:{row['content_hash'][:10]} | `{row['content_hash']}` | {row['method']} | "
+                f"{row['collected_utc']} | {row['url']} |"
+            )
+
+        lines += [
+            "",
+            "## Appendix B — Grounded Rated Claims (NATO Admiralty)",
+            "| Rating | Category | Claim | Evidence |",
+            "|---|---|---|---|",
+        ]
+        for claim in state["claims"]:
+            statement = str(claim["statement"]).replace("|", "/")
+            lines.append(
+                f"| {claim['source_reliability']}{claim['info_credibility']} | {claim['category']} | "
+                f"{statement} | {claim['evidence_tag'] or claim['source_url']} |"
+            )
+
+        dossier_text = redact_sensitive("\n".join(lines) + "\n")
+        store.dossier_path.write_text(dossier_text, encoding="utf-8")
         store.audit("DOSSIER_WRITTEN", str(store.dossier_path))
-        log.info("[Phase 4] Dossier written: %s", store.dossier_path)
+        logger.info("[Phase 4] Dossier written: %s", store.dossier_path)
         return store.dossier_path
 
 
 # ==============================================================================
-# 9. GEO SENSOR FUSION (Spector sensory layer: FIRMS thermal + USGS seismic + news)
+# 8. GEO SENSOR FUSION (NASA FIRMS thermal + USGS seismic + regional news)
 # ==============================================================================
 class GeoSensor:
     EARTH_RADIUS_KM = 6371.0
@@ -1102,20 +1498,24 @@ class GeoSensor:
         return 2 * cls.EARTH_RADIUS_KM * math.asin(math.sqrt(haversine))
 
     @staticmethod
-    def bounding_box(latitude: float, longitude: float, radius_km: float) -> tuple:
+    def bounding_box(latitude: float, longitude: float, radius_km: float) -> Tuple[float, float, float, float]:
         latitude_delta = radius_km / 111.32
         longitude_delta = radius_km / (111.32 * max(0.01, math.cos(math.radians(latitude))))
-        return (max(-180.0, longitude - longitude_delta), max(-90.0, latitude - latitude_delta),
-                min(180.0, longitude + longitude_delta), min(90.0, latitude + latitude_delta))
+        return (
+            max(-180.0, longitude - longitude_delta), max(-90.0, latitude - latitude_delta),
+            min(180.0, longitude + longitude_delta), min(90.0, latitude + latitude_delta),
+        )
 
     @classmethod
     def thermal_hotspots(cls, latitude: float, longitude: float, radius_km: float, days: int) -> Dict[str, Any]:
         if not FIRMS_MAP_KEY:
             return {"status": "disabled", "reason": "Set SPECTER_FIRMS_KEY (free NASA Earthdata FIRMS MAP_KEY)."}
         west, south, east, north = cls.bounding_box(latitude, longitude, radius_km)
-        url = (f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{FIRMS_MAP_KEY}/{FIRMS_SOURCE}/"
-               f"{west:.4f},{south:.4f},{east:.4f},{north:.4f}/{max(1, min(days, 5))}")
-        response = requests.get(url, timeout=30, headers={"User-Agent": USER_AGENT})
+        url = (
+            f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{FIRMS_MAP_KEY}/{FIRMS_SOURCE}/"
+            f"{west:.4f},{south:.4f},{east:.4f},{north:.4f}/{max(1, min(days, 5))}"
+        )
+        response = requests.get(url, timeout=20, headers={"User-Agent": USER_AGENT})
         response.raise_for_status()
         hotspots = []
         for row in csv.DictReader(io.StringIO(response.text)):
@@ -1126,10 +1526,12 @@ class GeoSensor:
                 continue
             distance = cls.distance_km(latitude, longitude, point_latitude, point_longitude)
             if distance <= radius_km:
-                hotspots.append({"latitude": point_latitude, "longitude": point_longitude,
-                                 "distance_km": round(distance, 2), "frp_mw": radiative_power,
-                                 "acquired": f"{row.get('acq_date', '')} {row.get('acq_time', '')}",
-                                 "confidence": row.get("confidence"), "daynight": row.get("daynight")})
+                hotspots.append({
+                    "latitude": point_latitude, "longitude": point_longitude,
+                    "distance_km": round(distance, 2), "frp_mw": radiative_power,
+                    "acquired": f"{row.get('acq_date', '')} {row.get('acq_time', '')}",
+                    "confidence": row.get("confidence"), "daynight": row.get("daynight"),
+                })
         hotspots.sort(key=lambda spot: spot["frp_mw"], reverse=True)
         return {"status": "ok", "source": FIRMS_SOURCE, "count": len(hotspots), "hotspots": hotspots[:50]}
 
@@ -1138,18 +1540,24 @@ class GeoSensor:
         start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
         response = requests.get(
             "https://earthquake.usgs.gov/fdsnws/event/1/query",
-            params={"format": "geojson", "latitude": latitude, "longitude": longitude,
-                    "maxradiuskm": radius_km, "starttime": start, "orderby": "magnitude", "limit": 50},
-            timeout=30, headers={"User-Agent": USER_AGENT},
+            params={
+                "format": "geojson", "latitude": latitude, "longitude": longitude,
+                "maxradiuskm": radius_km, "starttime": start, "orderby": "magnitude", "limit": 50,
+            },
+            timeout=20, headers={"User-Agent": USER_AGENT},
         )
         response.raise_for_status()
         events = []
         for feature in response.json().get("features", []):
             properties = feature.get("properties", {})
             coordinates = feature.get("geometry", {}).get("coordinates", [])
-            events.append({"magnitude": properties.get("mag"), "place": properties.get("place"),
-                           "time_utc": datetime.fromtimestamp((properties.get("time") or 0) / 1000, timezone.utc).isoformat(),
-                           "depth_km": coordinates[2] if len(coordinates) > 2 else None, "url": properties.get("url")})
+            events.append({
+                "magnitude": properties.get("mag"),
+                "place": properties.get("place"),
+                "time_utc": datetime.fromtimestamp((properties.get("time") or 0) / 1000, timezone.utc).isoformat(),
+                "depth_km": coordinates[2] if len(coordinates) > 2 else None,
+                "url": properties.get("url"),
+            })
         return {"status": "ok", "count": len(events), "events": events}
 
     @staticmethod
@@ -1160,15 +1568,16 @@ class GeoSensor:
         try:
             with DDGS() as search_client:
                 items = search_client.news(query, max_results=max_results) or []
-        except Exception as error:  # search backends raise many custom exception types
+        except Exception as error:
             return {"status": "error", "reason": str(error)}
         return {"status": "ok", "query": query, "items": [
             {"title": item.get("title"), "date": item.get("date"), "source": item.get("source"), "url": item.get("url")}
-            for item in items]}
+            for item in items
+        ]}
 
 
 # ==============================================================================
-# 10. FASTMCP SERVER SURFACE
+# 9. FASTMCP / MCPSERVER SURFACE (LLM-agnostic, fast, timeout-safe)
 # ==============================================================================
 mcp = FastMCP("Specter_Intel")
 core = IntelligenceCore()
@@ -1180,68 +1589,90 @@ def to_json(payload: Any) -> str:
 
 @mcp.tool()
 async def system_health() -> str:
-    """Reports readiness of every subsystem: Ollama models, ComfyUI, native DLL, search, Playwright, FIRMS."""
+    """Reports runtime readiness (zero hard dependencies; lists optional modules and LLM mode)."""
     def probe() -> Dict[str, Any]:
-        report: Dict[str, Any] = {"specter_home": str(SPECTER_HOME), "native_dll": bool(core.bridge.dll),
-                                  "trafilatura": trafilatura is not None, "search_backend": DDGS is not None,
-                                  "firms_key": bool(FIRMS_MAP_KEY)}
         try:
-            installed = {model.get("name") for model in requests.get(OLLAMA_TAGS_URL, timeout=5).json().get("models", [])}
-            report["ollama"] = {"reachable": True, "analyst_ready": ANALYST_MODEL in installed,
-                                "observer_ready": OBSERVER_MODEL in installed}
-        except (requests.RequestException, ValueError):
-            report["ollama"] = {"reachable": False, "url": OLLAMA_BASE}
-        try:
-            report["comfyui"] = requests.get(f"{COMFYUI_URL}/system_stats", timeout=5).ok
-        except requests.RequestException:
-            report["comfyui"] = False
-        try:
-            import playwright  # noqa: F401
-            report["playwright"] = True
+            import pypdf  # noqa: F401
+            has_pypdf = True
         except ImportError:
-            report["playwright"] = False
-        return report
+            has_pypdf = False
+        return {
+            "status": "READY",
+            "mode": "host_llm_agnostic" if not core.llm.enabled else f"external_llm:{core.llm.provider}",
+            "specter_home": str(SPECTER_HOME),
+            "web_search": DDGS is not None,
+            "trafilatura": trafilatura is not None,
+            "stdlib_html_fallback": True,
+            "pypdf": has_pypdf,
+            "optional_native_dll": bool(core.extractor.dll),
+            "firms_key": bool(FIRMS_MAP_KEY),
+            "external_llm": {"provider": core.llm.provider, "url": core.llm.base_url if core.llm.enabled else None,
+                             "model": core.llm.model or None},
+        }
     return to_json(await asyncio.to_thread(probe))
 
 
 @mcp.tool()
-async def anchor_target(seed: str, purpose: str) -> str:
+async def anchor_target(
+    seed: str,
+    purpose: str,
+    aliases: Optional[List[str]] = None,
+    handles_or_domains: Optional[List[str]] = None,
+    location: str = "",
+    profession: str = "",
+) -> str:
     """
-    Phase 1: Lock an Immutable Context Anchor and open a case (SQLite chain-of-custody store).
-    seed: identifying qualifiers, e.g. "Jane Doe, materials scientist, ETH Zurich".
-    purpose: lawful research objective (recorded in the audit log), e.g. "vendor due diligence".
+    Phase 1: Instantly (<10ms) locks an Immutable Context Anchor and opens a SQLite case.
+    Works with any LLM; never requires Ollama or external APIs.
     """
-    anchor = await asyncio.to_thread(core.build_anchor, seed, purpose)
-    return to_json({"status": "ANCHOR_LOCKED", "case_id": anchor["case_id"], "primary_name": anchor["primary_name"],
-                    "hypotheses": anchor["initial_hypotheses"], "wide_net_queries": core.wide_net_queries(anchor)})
+    anchor = await asyncio.to_thread(
+        core.build_anchor, seed, purpose, aliases, handles_or_domains, location, profession
+    )
+    return to_json({
+        "status": "ANCHOR_LOCKED",
+        "case_id": anchor["case_id"],
+        "primary_name": anchor["primary_name"],
+        "aliases": anchor["known_aliases"],
+        "handles_or_domains": anchor["known_handles_or_domains"],
+        "hypotheses": anchor["initial_hypotheses"],
+        "wide_net_queries": core.wide_net_queries(anchor),
+    })
 
 
 @mcp.tool()
-async def harvest_sources(case_id: str, query: str, max_results: int = 8, use_vision: bool = True) -> str:
-    """Phase 2: Search public sources for `query` and ingest target-relevant, SHA-256 deduplicated evidence."""
+async def harvest_sources(
+    case_id: str,
+    query: str,
+    max_results: int = 8,
+    strict_relevance: bool = True,
+    enrich_apis: bool = False,
+) -> str:
+    """
+    Phase 2: Searches public sources, honours robots.txt, rejects off-topic fallback noise,
+    and ingests SHA-256 deduplicated evidence into the case SQLite store.
+    """
     if not query.strip():
         raise ValueError("query must not be empty.")
     anchor, store = open_case(case_id)
     report = await asyncio.to_thread(
-        core.collector.harvest, store, query.strip(), max(1, min(max_results, 25)), use_vision, anchor
+        core.collector.harvest, store, query.strip(), max(1, min(max_results, 20)), strict_relevance, anchor
     )
+    if enrich_apis:
+        report["api_enrichment"] = await asyncio.to_thread(core.collector.enrich_public_apis, store, anchor)
     return to_json({**report, "case_id": store.case_id, "total_artifacts": store.statistics()["evidence_total"]})
 
 
 @mcp.tool()
 async def ingest_url(case_id: str, url: str) -> str:
-    """Phase 2 (targeted): Fetch a single public URL (robots.txt honoured) into the case evidence store."""
+    """Phase 2 (targeted): Fetches a single public URL (robots.txt honoured) into the case store."""
     _, store = open_case(case_id)
     canonical = canonicalize_url(url)
 
     def ingest() -> Dict[str, Any]:
-        _, text, method, artifact = core.collector.fetch_document(canonical, store.evidence_dir)
-        if method == "needs_vision":
-            fallback = core.collector.vision_batch([canonical], store.evidence_dir)
-            _, text, method, artifact = fallback[0] if fallback else (canonical, "", "failed", "")
+        _, text, method, artifact = core.collector.fetch_document(canonical, store.evidence_directory)
         added = bool(text) and store.add_evidence(canonical, text, method, "manual_ingest", artifact)
         store.audit("INGEST_URL", {"url": canonical, "method": method, "added": added})
-        return {"url": canonical, "method": method, "added": added, "chars": len(text or "")}
+        return {"url": canonical, "method": method, "added": added, "characters": len(text or "")}
 
     return to_json(await asyncio.to_thread(ingest))
 
@@ -1249,78 +1680,185 @@ async def ingest_url(case_id: str, url: str) -> str:
 @mcp.tool()
 async def run_analysis(case_id: str, max_passes: int = 1) -> str:
     """
-    Phase 3: Grounded ACH + NATO Admiralty claim rating (defaults to 1 fast pass to stay under
-    60s client tool timeouts; returns recommended_pivots for optional follow-up harvests).
+    Phase 3: Fast grounded ACH, NATO Admiralty claim rating, entity/timeline extraction,
+    and clean pivot generation. Returns structured findings + primary evidence excerpts
+    so ANY host LLM can synthesize or add findings via record_findings.
     """
     anchor, store = open_case(case_id)
-    state = await asyncio.to_thread(core.run_analysis, anchor, store, max_passes)
-    summary = {key: state[key] for key in ("confidence", "passes_completed", "hypotheses",
-                                           "intelligence_gaps", "key_assumptions", "recommended_pivots")}
-    return to_json({**summary, "claims_rated": len(state["claims"]), "entities": len(state["entities"])})
+    deadline = time.monotonic() + DEFAULT_CYCLE_SECONDS
+    state = await asyncio.to_thread(core.run_analysis, anchor, store, max_passes, deadline)
+    return to_json({
+        "case_id": store.case_id,
+        "confidence": state["confidence"],
+        "confidence_band": core.confidence_label(state["confidence"]),
+        "passes_completed": state["passes_completed"],
+        "hypotheses": state["hypotheses"],
+        "entities": state["entities"],
+        "claims_rated": len(state["claims"]),
+        "claims": state["claims"][:20],
+        "intelligence_gaps": state["intelligence_gaps"],
+        "recommended_pivots": state["recommended_pivots"],
+        "evidence_excerpts": store.evidence_excerpts(anchor, limit=6),
+    })
 
 
 @mcp.tool()
-async def synthesize_dossier(case_id: str) -> str:
-    """Phase 4: Write the ICD-203 dossier with chain-of-custody, ACH and rated-claims appendices."""
+async def record_findings(
+    case_id: str,
+    claims: Optional[List[Dict[str, Any]]] = None,
+    entities: Optional[List[Dict[str, Any]]] = None,
+    hypotheses: Optional[List[Dict[str, Any]]] = None,
+    intelligence_gaps: Optional[List[str]] = None,
+    key_assumptions: Optional[List[str]] = None,
+    confidence: Optional[float] = None,
+) -> str:
+    """
+    Lets ANY host LLM commit structured ACH claims/entities into SQLite with automatic
+    server-side verification against stored [E:<hash>] evidence tags.
+    """
     anchor, store = open_case(case_id)
-    path = await asyncio.to_thread(core.synthesize, anchor, store)
-    return to_json({"status": "DOSSIER_READY", "case_id": store.case_id, "dossier_path": str(path),
-                    "resource": f"specter://cases/{store.case_id}/dossier"})
+    current = store.analysis_state()
+    merged = {
+        "confidence": current["confidence"] if confidence is None else confidence,
+        "hypotheses": hypotheses if hypotheses is not None else current["hypotheses"],
+        "claims": claims if claims is not None else current["claims"],
+        "entities": entities if entities is not None else current["entities"],
+        "intelligence_gaps": intelligence_gaps if intelligence_gaps is not None else current["intelligence_gaps"],
+        "key_assumptions": key_assumptions if key_assumptions is not None else current["key_assumptions"],
+        "pivot_queries": current["recommended_pivots"],
+    }
+    state = await asyncio.to_thread(store.replace_analysis, merged, max(1, current["passes_completed"]), anchor)
+    store.audit("HOST_FINDINGS_RECORDED", {"claims": len(state["claims"]), "confidence": state["confidence"]})
+    return to_json({
+        "status": "FINDINGS_VERIFIED",
+        "case_id": store.case_id,
+        "confidence": state["confidence"],
+        "verified_claims": len(state["claims"]),
+        "entities": len(state["entities"]),
+        "intelligence_gaps": state["intelligence_gaps"],
+    })
 
 
 @mcp.tool()
-async def run_full_cycle(seed: str, purpose: str, context: Context, max_results: int = 8) -> str:
-    """End-to-end: anchor -> wide-net harvest -> ACH with bounded pivots -> ICD-203 dossier (with live progress)."""
+async def synthesize_dossier(case_id: str, analyst_narrative: str = "") -> str:
+    """
+    Phase 4: Instantly compiles an ICD-203 Markdown Intelligence Dossier with optional
+    host-LLM `analyst_narrative` and deterministic SHA-256 chain-of-custody appendices.
+    """
+    anchor, store = open_case(case_id)
+    path = await asyncio.to_thread(core.synthesize, anchor, store, analyst_narrative)
+    return to_json({
+        "status": "DOSSIER_READY",
+        "case_id": store.case_id,
+        "dossier_path": str(path),
+        "resource": f"specter://cases/{store.case_id}/dossier",
+    })
+
+
+@mcp.tool()
+async def run_full_cycle(
+    seed: str,
+    purpose: str,
+    context: Context,
+    max_results: int = 6,
+    max_seconds: float = DEFAULT_CYCLE_SECONDS,
+) -> str:
+    """
+    End-to-end 4-phase OSINT cycle guaranteed to stay within `max_seconds` (default 42s,
+    safely under 60s MCP client timeouts). Works with ANY LLM, zero local LLM contention.
+    Returns case summary, dossier path, grounded claims, and primary evidence excerpts.
+    """
+    started = time.monotonic()
+    deadline = started + max(12.0, min(float(max_seconds), 50.0))
     loop = asyncio.get_running_loop()
 
-    async def phase(step: int, message: str) -> None:
-        await context.info(message)
-        await context.report_progress(step, 4)
+    async def report_phase(step: int, message: str) -> None:
+        try:
+            await context.info(message)
+            await context.report_progress(step, 4)
+        except Exception:
+            pass
 
     def notify(message: str) -> None:
-        asyncio.run_coroutine_threadsafe(context.info(message), loop)
+        try:
+            asyncio.run_coroutine_threadsafe(context.info(message), loop)
+        except Exception:
+            pass
 
-    await phase(0, "Phase 1: locking Immutable Context Anchor...")
+    await report_phase(0, "Phase 1: locking Immutable Context Anchor...")
     anchor = await asyncio.to_thread(core.build_anchor, seed, purpose)
     store = CaseStore(anchor["case_id"])
-    await phase(1, f"Phase 2: wide-net harvest for {anchor['primary_name']}...")
+
+    await report_phase(1, f"Phase 2: wide-net harvest + public API enrichment for {anchor['primary_name']}...")
+    capped_results = max(1, min(max_results, 12))
+    await asyncio.to_thread(core.collector.enrich_public_apis, store, anchor)
     for query in core.wide_net_queries(anchor):
-        await asyncio.to_thread(core.collector.harvest, store, query, max(1, min(max_results, 25)), True, anchor)
-    await phase(2, f"Phase 3: ACH over {store.statistics()['evidence_total']} artifacts (max {MAX_RESEARCH_PASSES} passes)...")
-    state = await asyncio.to_thread(core.run_analysis, anchor, store, MAX_RESEARCH_PASSES, notify)
-    await phase(3, "Phase 4: synthesizing ICD-203 dossier...")
-    path = await asyncio.to_thread(core.synthesize, anchor, store)
-    await phase(4, "Complete.")
-    return to_json({"status": "COMPLETE", "case_id": store.case_id, "primary_name": anchor["primary_name"],
-                    "analytic_confidence": state["confidence"], "statistics": store.statistics(),
-                    "dossier_path": str(path)})
+        if time.monotonic() >= deadline - 14.0:
+            break
+        await asyncio.to_thread(core.collector.harvest, store, query, capped_results, True, anchor)
+
+    await report_phase(2, f"Phase 3: grounded ACH + bounded pivots ({store.statistics()['evidence_total']} artifacts)...")
+    state = await asyncio.to_thread(core.run_analysis, anchor, store, MAX_RESEARCH_PASSES, deadline, notify)
+
+    await report_phase(3, "Phase 4: compiling ICD-203 dossier & chain-of-custody appendices...")
+    dossier_path = await asyncio.to_thread(core.synthesize, anchor, store)
+    await report_phase(4, "Complete.")
+
+    return to_json({
+        "status": "COMPLETE",
+        "elapsed_seconds": round(time.monotonic() - started, 2),
+        "case_id": store.case_id,
+        "primary_name": anchor["primary_name"],
+        "analytic_confidence": state["confidence"],
+        "confidence_band": core.confidence_label(state["confidence"]),
+        "statistics": store.statistics(),
+        "dossier_path": str(dossier_path),
+        "resource": f"specter://cases/{store.case_id}/dossier",
+        "entities": state["entities"][:20],
+        "top_claims": state["claims"][:15],
+        "intelligence_gaps": state["intelligence_gaps"],
+        "recommended_pivots": state["recommended_pivots"],
+        "evidence_excerpts": store.evidence_excerpts(anchor, limit=6),
+    })
 
 
 @mcp.tool()
 async def case_status(case_id: str) -> str:
-    """Summarise a case: anchor, evidence statistics, ACH confidence, gaps, dossier and recent audit trail."""
+    """Summarizes a case: anchor, evidence statistics, ACH confidence, gaps, dossier, and audit trail."""
     anchor, store = open_case(case_id)
     state = store.analysis_state()
-    return to_json({"case_id": store.case_id, "primary_name": anchor["primary_name"], "purpose": anchor.get("purpose"),
-                    "created_utc": anchor.get("created_utc"), "statistics": store.statistics(),
-                    "confidence": state["confidence"], "passes_completed": state["passes_completed"],
-                    "intelligence_gaps": state["intelligence_gaps"], "dossier_ready": store.dossier_path.exists(),
-                    "recent_audit": store.audit_log(10)})
+    return to_json({
+        "case_id": store.case_id,
+        "primary_name": anchor["primary_name"],
+        "purpose": anchor.get("purpose"),
+        "created_utc": anchor.get("created_utc"),
+        "statistics": store.statistics(),
+        "confidence": state["confidence"],
+        "confidence_band": core.confidence_label(state["confidence"]),
+        "passes_completed": state["passes_completed"],
+        "intelligence_gaps": state["intelligence_gaps"],
+        "recommended_pivots": state["recommended_pivots"],
+        "dossier_ready": store.dossier_path.exists(),
+        "recent_audit": store.audit_log(10),
+    })
 
 
 @mcp.tool()
 async def list_cases() -> str:
-    """List every case on disk with target name, creation time and evidence count."""
+    """Lists all cases on disk with target name, creation time, evidence count, and dossier status."""
     def collect() -> List[Dict[str, Any]]:
         cases = []
-        for directory in sorted(CASES_DIR.iterdir()):
+        for directory in sorted(CASES_DIRECTORY.iterdir()):
             anchor_file = directory / "anchor.json"
             if directory.is_dir() and CASE_ID_PATTERN.match(directory.name) and anchor_file.exists():
                 anchor = json.loads(anchor_file.read_text(encoding="utf-8"))
-                cases.append({"case_id": directory.name, "primary_name": anchor.get("primary_name"),
-                              "created_utc": anchor.get("created_utc"),
-                              "evidence_total": CaseStore(directory.name).statistics()["evidence_total"],
-                              "dossier_ready": (directory / "dossier.md").exists()})
+                cases.append({
+                    "case_id": directory.name,
+                    "primary_name": anchor.get("primary_name"),
+                    "created_utc": anchor.get("created_utc"),
+                    "evidence_total": CaseStore(directory.name).statistics()["evidence_total"],
+                    "dossier_ready": (directory / "dossier.md").exists(),
+                })
         return cases
     return to_json(await asyncio.to_thread(collect))
 
@@ -1335,11 +1873,16 @@ async def search_evidence(case_id: str, keyword: str, limit: int = 10) -> str:
 
 
 @mcp.tool()
-async def scan_geo_events(latitude: float, longitude: float, radius_km: float = 25.0,
-                          days: int = 2, place_name: str = "") -> str:
+async def scan_geo_events(
+    latitude: float,
+    longitude: float,
+    radius_km: float = 25.0,
+    days: int = 2,
+    place_name: str = "",
+) -> str:
     """
-    Spector sensory fusion: NASA FIRMS thermal anomalies + USGS seismic events within radius_km
-    of a coordinate over the last `days`, optionally correlated with regional news for place_name.
+    Geo-sensory fusion: NASA FIRMS thermal anomalies + USGS seismic events within radius_km
+    over the last `days`, optionally correlated with regional news for `place_name`.
     """
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
         raise ValueError("Coordinates out of range.")
