@@ -61,7 +61,7 @@ from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from urllib.robotparser import RobotFileParser
 
 import requests
@@ -115,12 +115,37 @@ FIRMS_SOURCE = os.getenv("SPECTER_FIRMS_SOURCE", "VIIRS_SNPP_NRT").strip()
 
 USER_AGENT = "Mozilla/5.0 (compatible; SpecterOSINT/4.0; public-source research; honours robots.txt)"
 MAX_RESEARCH_PASSES = 2
+MAX_TRAVERSAL_DEPTH = 2
+MAX_TRAVERSAL_PAGES = 12
 DEFAULT_CYCLE_SECONDS = float(os.getenv("SPECTER_CYCLE_SECONDS", "42"))
 DOMAIN_INTERVAL_SECONDS = float(os.getenv("SPECTER_DOMAIN_INTERVAL", "1.0"))
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
 MAX_STORED_CHARACTERS = 100_000
 MIN_ARTICLE_CHARACTERS = 140
 DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".json", ".csv", ".xml"}
+ASSET_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".css", ".js",
+    ".mjs", ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm", ".zip", ".gz",
+}
+HIGH_VALUE_PATHS = (
+    "/about", "/project", "/resume", "/cv", "/work", "/research",
+    "/publication", "/portfolio", "/blog", "/contact", "/bio", "/profile",
+)
+SKIP_LINK_SEGMENTS = (
+    "privacy", "terms", "cookie", "login", "signin", "signup", "register",
+    "share?", "intent/tweet", "sharer.php", "wp-content", "cdn-cgi",
+)
+SKIP_LINK_DOMAINS = (
+    "fonts.googleapis.com", "fonts.gstatic.com", "w3.org", "schema.org",
+    "creativecommons.org", "cloudflare.com", "google.com", "gstatic.com",
+    "apple.com", "microsoft.com", "adobe.com", "gravatar.com",
+)
+CORROBORATION_DOMAINS = (
+    "github.com", "gitlab.com", "credly.com", "orcid.org", "wakatime.com",
+    "committers.top", "npmjs.com", "pypi.org", "arxiv.org", "scholar.google.com",
+    "huggingface.co", "kaggle.com", "stackoverflow.com", "dev.to", "substack.com",
+    "medium.com", "linkedin.com", "x.com", "twitter.com", "youtube.com", "twitch.tv",
+)
 TRACKING_PARAMETERS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "fbclid", "gclid", "mc_eid", "msockid", "ref_src", "ref_url",
@@ -233,11 +258,15 @@ def parse_seed(
     handles: Optional[List[str]] = None,
     location: str = "",
     profession: str = "",
+    hints: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Deterministic, zero-LLM seed parser (<1ms) preserving exact ground-truth qualifiers."""
+    """Deterministic, zero-LLM seed parser (<1ms) preserving exact ground-truth qualifiers & hints."""
     raw = (seed or "").strip()
+    hint_map = hints if isinstance(hints, dict) else {}
     extracted_aliases = list(aliases or [])
-    extracted_handles = list(handles or [])
+    extracted_handles = list(handles or []) + list(hint_map.get("handles", []))
+    extracted_domains = list(hint_map.get("domains", []))
+    extracted_emails = list(hint_map.get("emails", []))
 
     # Extract parenthetical aliases: "Name (formerly Alias)" / "(aka Alias)"
     for match in re.findall(r"\((?:formerly|aka|also known as|né|nee|alias)\s+([^)]+)\)", raw, flags=re.I):
@@ -245,11 +274,15 @@ def parse_seed(
             if piece.strip():
                 extracted_aliases.append(piece.strip())
 
-    # Extract explicit @handles and domains
-    for handle in re.findall(r"@[A-Za-z0-9_.-]{2,}", raw):
+    # Extract explicit public emails, @handles, and domains from seed
+    for email in re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", raw):
+        extracted_emails.append(email.lower())
+    for handle in re.findall(r"(?<![\w.])@[A-Za-z0-9_.-]{2,}", raw):
         extracted_handles.append(handle)
-    for domain in re.findall(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|dev|ai|at|ch|de|uk|edu|gov)\b", raw):
-        extracted_handles.append(domain.lower())
+    for domain in re.findall(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|dev|ai|app|at|ch|de|uk|edu|gov)\b", raw):
+        lowered = domain.lower()
+        if not any(lowered in mail for mail in extracted_emails):
+            extracted_domains.append(lowered)
 
     # Strip parenthetical notes to isolate primary_name and qualifiers
     stripped = re.sub(r"\([^)]*\)", "", raw).strip()
@@ -275,11 +308,21 @@ def parse_seed(
     if re.search(r"\b(?:inc|llc|gmbh|ag|corp|ltd|foundation|university|institute)\b", raw, flags=re.I):
         entity_kind = "organization"
 
+    clean_handles = clean_strings(extracted_handles, 10)
+    clean_domains = clean_strings(extracted_domains, 10)
+    clean_emails = clean_strings(extracted_emails, 10)
+
     return {
         "primary_name": primary_name or "Unknown Target",
         "entity_kind": entity_kind,
         "known_aliases": clean_strings(extracted_aliases, 10),
-        "known_handles_or_domains": clean_strings(extracted_handles, 10),
+        "known_handles_or_domains": clean_strings(clean_handles + clean_domains, 15),
+        "hints": {
+            "emails": clean_emails,
+            "phones": [],
+            "handles": clean_handles,
+            "domains": clean_domains,
+        },
         "anchor_demographics": {"birth_year": birth_year, "origin_city": origin_city},
         "core_profession": core_profession[:160],
         "initial_hypotheses": [
@@ -343,19 +386,25 @@ def matches_terms(text: str, terms: List[str], url: str = "") -> bool:
 
 
 class HtmlTextExtractor(HTMLParser):
-    """Zero-dependency stdlib HTML text & metadata extractor."""
+    """Zero-dependency stdlib HTML text, metadata, outbound-link, and temporal-signal extractor."""
 
     SKIP_TAGS = {"script", "style", "noscript", "svg", "iframe", "template"}
 
-    def __init__(self) -> None:
+    def __init__(self, base_url: str = "") -> None:
         super().__init__(convert_charrefs=True)
+        self.base_url = base_url
         self.title = ""
         self.descriptions: List[str] = []
         self.json_ld: List[str] = []
+        self.links: List[Dict[str, Any]] = []
+        self.dates: List[str] = []
         self._chunks: List[str] = []
         self._skip_depth = 0
         self._in_title = False
         self._in_json_ld = False
+        self._active_href = ""
+        self._active_rel = ""
+        self._active_label: List[str] = []
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         lower = tag.lower()
@@ -365,13 +414,28 @@ class HtmlTextExtractor(HTMLParser):
             return
         if lower in self.SKIP_TAGS:
             self._skip_depth += 1
-        elif lower == "title":
+            return
+        if lower == "title":
             self._in_title = True
+        elif lower == "a" and self._skip_depth == 0:
+            href = attr_map.get("href", "").strip()
+            if href and not href.startswith(("#", "javascript:", "tel:")):
+                self._active_href = urljoin(self.base_url, href) if self.base_url else href
+                self._active_rel = attr_map.get("rel", "").lower()
+                self._active_label = []
+        elif lower == "time":
+            dt_val = attr_map.get("datetime", "").strip()
+            if dt_val:
+                self.dates.append(dt_val)
         elif lower == "meta":
             name = (attr_map.get("name") or attr_map.get("property") or "").lower()
             content = attr_map.get("content", "").strip()
             if content and name in ("description", "og:title", "og:description", "twitter:description", "author"):
                 self.descriptions.append(f"{name}: {content}")
+            elif content and name in (
+                "article:published_time", "article:modified_time", "og:updated_time", "date", "last-modified"
+            ):
+                self.dates.append(content)
         elif lower in ("p", "div", "br", "li", "h1", "h2", "h3", "h4", "tr", "section", "article"):
             self._chunks.append("\n")
 
@@ -383,6 +447,16 @@ class HtmlTextExtractor(HTMLParser):
             self._skip_depth -= 1
         elif lower == "title":
             self._in_title = False
+        elif lower == "a" and self._active_href:
+            label = re.sub(r"\s+", " ", "".join(self._active_label)).strip()[:100]
+            self.links.append({
+                "url": canonicalize_url(self._active_href),
+                "label": label,
+                "rel_me": "me" in self._active_rel.split(),
+            })
+            self._active_href = ""
+            self._active_rel = ""
+            self._active_label = []
 
     def handle_data(self, data: str) -> None:
         if self._in_json_ld:
@@ -390,6 +464,8 @@ class HtmlTextExtractor(HTMLParser):
         elif self._in_title:
             self.title += data
         elif self._skip_depth == 0 and data.strip():
+            if self._active_href:
+                self._active_label.append(data)
             self._chunks.append(data.strip() + " ")
 
     def rendered_text(self) -> str:
@@ -402,24 +478,102 @@ class HtmlTextExtractor(HTMLParser):
         return "\n".join(header_lines + (["", body] if body else [])).strip()
 
 
-def extract_html_text(raw_html: str, url: str) -> str:
-    """Extracts clean Markdown via Trafilatura when available, falling back to stdlib HTML parser."""
+def extract_html_bundle(raw_html: str, url: str) -> Dict[str, Any]:
+    """Extracts clean text, outbound links, and temporal metadata from HTML."""
     extracted = ""
     if trafilatura is not None:
         try:
             extracted = trafilatura.extract(raw_html, output_format="markdown", include_links=True, url=url) or ""
-        except Exception as error:  # trafilatura/lxml can raise parser-specific errors
+        except Exception as error:
             logger.debug("[HTML] Trafilatura fallback on %s: %s", url, error)
-    parser = HtmlTextExtractor()
+    parser = HtmlTextExtractor(base_url=url)
     try:
         parser.feed(raw_html)
     except Exception:
         pass
     stdlib_text = parser.rendered_text()
     if len(extracted.strip()) >= MIN_ARTICLE_CHARACTERS:
-        title_prefix = f"# {parser.title.strip()}\n\n" if parser.title.strip() and parser.title.strip() not in extracted[:200] else ""
-        return (title_prefix + extracted).strip()
-    return stdlib_text if len(stdlib_text) >= 60 else extracted.strip()
+        title_prefix = (
+            f"# {parser.title.strip()}\n\n"
+            if parser.title.strip() and parser.title.strip() not in extracted[:200]
+            else ""
+        )
+        text = (title_prefix + extracted).strip()
+    else:
+        text = stdlib_text if len(stdlib_text) >= 60 else extracted.strip()
+
+    # Extract JSON-LD dates and sameAs profile links
+    dates = list(parser.dates)
+    links = list(parser.links)
+    for blob in parser.json_ld:
+        for date_match in re.findall(r'"date(?:Published|Modified|Created)"\s*:\s*"([^"]{8,32})"', blob):
+            dates.append(date_match)
+        for same_as in re.findall(r'https?://[^\s"<>]+', blob):
+            links.append({"url": canonicalize_url(same_as), "label": "json-ld", "rel_me": True})
+
+    # Deduplicate links while preserving order
+    unique_links: List[Dict[str, Any]] = []
+    seen_urls = set()
+    for link in links:
+        href = link["url"]
+        if href.startswith(("http://", "https://")) and href not in seen_urls:
+            seen_urls.add(href)
+            unique_links.append(link)
+
+    return {
+        "text": text,
+        "links": unique_links[:80],
+        "dates": list(dict.fromkeys(dates))[:12],
+    }
+
+
+def extract_html_text(raw_html: str, url: str) -> str:
+    return extract_html_bundle(raw_html, url)["text"]
+
+
+def rank_link(url: str, label: str, source_url: str, anchor: Optional[Dict[str, Any]], rel_me: bool = False) -> int:
+    """Scores discovered outbound links for the bounded `Links -> Open -> spy -> Data` loop (0 = skip)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return 0
+    host = parsed.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    path = parsed.path.lower()
+    if Path(path).suffix in ASSET_EXTENSIONS:
+        return 0
+    if any(host == skip or host.endswith(f".{skip}") for skip in SKIP_LINK_DOMAINS):
+        return 0
+    if any(bad in f"{path}?{parsed.query.lower()}" for bad in SKIP_LINK_SEGMENTS):
+        return 0
+
+    source_host = urlparse(source_url).netloc.lower().removeprefix("www.")
+    terms = anchor_terms(anchor)
+    score = 0
+
+    # Priority 1: Verified corroboration platforms (GitHub, Credly, ORCID, WakaTime, etc.)
+    if any(host == platform or host.endswith(f".{platform}") for platform in CORROBORATION_DOMAINS):
+        if len(path.strip("/")) >= 1:
+            score = max(score, 92 if rel_me else 88)
+
+    # Priority 2: High-value routes on same verified domain (/projects, /resume, /about, etc.)
+    if host == source_host and source_host:
+        if any(path.startswith(prefix) or prefix in path for prefix in HIGH_VALUE_PATHS):
+            score = max(score, 95)
+        elif path not in ("", "/") and len(path.strip("/").split("/")) <= 2:
+            score = max(score, 68)
+
+    # Priority 3: Deployed apps, personal domains, or anchor-term matches
+    if matches_terms(label, terms, url):
+        score = max(score, 85)
+    elif rel_me:
+        score = max(score, 82)
+    elif host != source_host and any(host.endswith(tld) for tld in (".app", ".dev", ".io", ".ai")):
+        score = max(score, 76)
+    elif label and any(word in label.lower() for word in ("project", "resume", "cv", "github", "orcid", "credly", "demo", "live")):
+        score = max(score, 78)
+
+    return score
 
 
 def classify_reliability(url: str, method: str, anchor: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
@@ -673,11 +827,194 @@ class CaseStore:
                     source_url TEXT, source_reliability TEXT, info_credibility TEXT, hypothesis_alignment TEXT);
                 CREATE TABLE IF NOT EXISTS entities (
                     name TEXT NOT NULL, entity_type TEXT NOT NULL, relation TEXT, PRIMARY KEY (name, entity_type));
+                CREATE TABLE IF NOT EXISTS connections (
+                    source_node TEXT NOT NULL, target_node TEXT NOT NULL, relation TEXT NOT NULL,
+                    direction TEXT NOT NULL, confidence REAL DEFAULT 0.5, verified_at TEXT NOT NULL,
+                    sources TEXT NOT NULL, PRIMARY KEY (source_node, target_node, relation));
+                CREATE TABLE IF NOT EXISTS links (
+                    url TEXT PRIMARY KEY, source_url TEXT NOT NULL, label TEXT, depth INTEGER NOT NULL,
+                    priority INTEGER NOT NULL, status TEXT NOT NULL, discovered_utc TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS analysis_meta (key TEXT PRIMARY KEY, value TEXT);
                 CREATE TABLE IF NOT EXISTS audit (
                     audit_id INTEGER PRIMARY KEY AUTOINCREMENT, utc TEXT NOT NULL, action TEXT NOT NULL, detail TEXT);
                 """
             )
+
+    def has_url(self, url: str) -> bool:
+        with closing(self._connect()) as connection:
+            row = connection.execute("SELECT 1 FROM evidence WHERE url = ? LIMIT 1", (url,)).fetchone()
+            return row is not None
+
+    def queue_links(
+        self,
+        discovered: List[Dict[str, Any]],
+        source_url: str,
+        depth: int,
+        anchor: Optional[Dict[str, Any]],
+    ) -> int:
+        """Scores and queues unseen outbound links for bounded `Links -> Open -> spy -> Data` traversal."""
+        if depth > MAX_TRAVERSAL_DEPTH or not discovered:
+            return 0
+        added = 0
+        now = utc_now()
+        with closing(self._connect()) as connection, connection:
+            for item in discovered:
+                url = canonicalize_url(str(item.get("url", "")))
+                if not url or url == source_url:
+                    continue
+                label = str(item.get("label", ""))[:100]
+                rel_me = bool(item.get("rel_me", False))
+                priority = rank_link(url, label, source_url, anchor, rel_me=rel_me)
+                if priority <= 0:
+                    continue
+                cursor = connection.execute(
+                    "INSERT OR IGNORE INTO links VALUES (?, ?, ?, ?, ?, 'queued', ?)",
+                    (url, source_url, label, depth, priority, now),
+                )
+                if cursor.rowcount > 0:
+                    added += 1
+        return added
+
+    def next_queued_links(self, limit: int, max_depth: int) -> List[Dict[str, Any]]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                "SELECT url, source_url, label, depth, priority FROM links "
+                "WHERE status = 'queued' AND depth <= ? ORDER BY priority DESC, depth ASC, rowid ASC LIMIT ?",
+                (max_depth, limit),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def mark_link(self, url: str, status: str) -> None:
+        with closing(self._connect()) as connection, connection:
+            connection.execute("UPDATE links SET status = ? WHERE url = ?", (status, url))
+
+    def add_connection(
+        self,
+        source_node: str,
+        target_node: str,
+        relation: str = "links_to",
+        direction: str = "out",
+        confidence: float = 0.65,
+        evidence_tag: str = "",
+    ) -> str:
+        """
+        Records a directional edge and automatically promotes A -> B + B -> A into a single
+        `two_directional` (bidirectional) edge without duplicate conflicting records.
+        """
+        left = (source_node or "").strip()[:180]
+        right = (target_node or "").strip()[:180]
+        rel = (relation or "associated_with").strip()[:60]
+        if not left or not right or left.lower() == right.lower():
+            return "ignored"
+        new_sources = [evidence_tag] if evidence_tag else []
+        score = round(min(0.98, max(0.05, float(confidence))), 2)
+        now = utc_now()
+
+        with closing(self._connect()) as connection, connection:
+            # Check if an existing bidirectional edge already covers this pair
+            existing_bi = connection.execute(
+                "SELECT source_node, target_node, relation, confidence, sources FROM connections "
+                "WHERE direction = 'bidirectional' AND ("
+                "(lower(source_node) = lower(?) AND lower(target_node) = lower(?)) OR "
+                "(lower(source_node) = lower(?) AND lower(target_node) = lower(?))) LIMIT 1",
+                (left, right, right, left),
+            ).fetchone()
+            if existing_bi:
+                merged_sources = clean_strings(json.loads(existing_bi["sources"]) + new_sources, 15)
+                merged_score = round(max(float(existing_bi["confidence"]), score), 2)
+                connection.execute(
+                    "UPDATE connections SET confidence = ?, verified_at = ?, sources = ? "
+                    "WHERE source_node = ? AND target_node = ? AND relation = ?",
+                    (merged_score, now, json.dumps(merged_sources),
+                     existing_bi["source_node"], existing_bi["target_node"], existing_bi["relation"]),
+                )
+                return "two_directional"
+
+            # Check if reverse one-directional edge (B -> A) exists -> PROMOTE to bidirectional!
+            reverse = connection.execute(
+                "SELECT source_node, target_node, relation, confidence, sources FROM connections "
+                "WHERE direction = 'out' AND lower(source_node) = lower(?) AND lower(target_node) = lower(?) LIMIT 1",
+                (right, left),
+            ).fetchone()
+            if reverse or direction == "bidirectional":
+                prev_sources = json.loads(reverse["sources"]) if reverse else []
+                prev_score = float(reverse["confidence"]) if reverse else score
+                if reverse:
+                    connection.execute(
+                        "DELETE FROM connections WHERE source_node = ? AND target_node = ? AND relation = ?",
+                        (reverse["source_node"], reverse["target_node"], reverse["relation"]),
+                    )
+                merged_sources = clean_strings(prev_sources + new_sources, 15)
+                promoted_score = round(min(0.95, max(prev_score, score) + (0.15 if reverse else 0.0)), 2)
+                canonical_pair = sorted([left, right], key=str.lower)
+                mutual_rel = rel if rel.startswith("mutual_") else f"mutual_{rel}"
+                connection.execute(
+                    "INSERT OR REPLACE INTO connections VALUES (?, ?, ?, 'bidirectional', ?, ?, ?)",
+                    (canonical_pair[0], canonical_pair[1], mutual_rel, promoted_score, now, json.dumps(merged_sources)),
+                )
+                return "promoted_two_directional"
+
+            # Upsert one-directional edge (A -> B)
+            existing = connection.execute(
+                "SELECT confidence, sources FROM connections "
+                "WHERE source_node = ? AND target_node = ? AND relation = ?",
+                (left, right, rel),
+            ).fetchone()
+            merged_sources = clean_strings((json.loads(existing["sources"]) if existing else []) + new_sources, 15)
+            merged_score = round(max(float(existing["confidence"]) if existing else 0.0, score), 2)
+            connection.execute(
+                "INSERT OR REPLACE INTO connections VALUES (?, ?, ?, 'out', ?, ?, ?)",
+                (left, right, rel, merged_score, now, json.dumps(merged_sources)),
+            )
+            return "one_directional"
+
+    def connection_graph(self, anchor: Dict[str, Any]) -> Dict[str, Any]:
+        """Exports Page B's exact directional connection schema (one_directional vs. two_directional)."""
+        one_way: List[Dict[str, Any]] = []
+        two_way: List[Dict[str, Any]] = []
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                "SELECT source_node, target_node, relation, direction, confidence, verified_at, sources "
+                "FROM connections ORDER BY confidence DESC, source_node ASC"
+            ).fetchall()
+        for row in rows:
+            sources = json.loads(row["sources"])
+            if row["direction"] == "bidirectional":
+                two_way.append({
+                    "pair": [row["source_node"], row["target_node"]],
+                    "relation": row["relation"],
+                    "direction": "bidirectional",
+                    "confidence": row["confidence"],
+                    "verified_at": row["verified_at"],
+                    "sources": sources,
+                })
+            else:
+                one_way.append({
+                    "from": row["source_node"],
+                    "to": row["target_node"],
+                    "relation": row["relation"],
+                    "direction": "out",
+                    "confidence": row["confidence"],
+                    "verified_at": row["verified_at"],
+                    "sources": sources,
+                })
+        hints = anchor.get("hints") or {
+            "emails": [],
+            "phones": [],
+            "handles": anchor.get("known_aliases", []),
+            "domains": anchor.get("known_handles_or_domains", []),
+        }
+        return {
+            "target": {
+                "id": self.case_id,
+                "label": anchor.get("primary_name", ""),
+                "hints": hints,
+            },
+            "connections": {
+                "one_directional": one_way,
+                "two_directional": two_way,
+            },
+        }
 
     def add_evidence(self, url: str, content: str, method: str, query: str = "", artifact_path: str = "") -> bool:
         cleaned = (content or "").strip()[:MAX_STORED_CHARACTERS]
@@ -755,7 +1092,10 @@ class CaseStore:
         rows = self.evidence_rows()
         evidence_by_tag = {f"E:{row['content_hash'][:10]}": row for row in rows}
         terms = anchor_terms(anchor)
-        matched_rows = [row for row in rows if matches_terms(row["content"], terms, row["url"])]
+        matched_rows = [
+            row for row in rows
+            if matches_terms(row["content"], terms, row["url"]) or str(row.get("query", "")).startswith(("link_crawl:", "github:"))
+        ]
         primary_domains = {row["domain"] for row in matched_rows if row["method"] != "search_snippet"}
 
         try:
@@ -770,7 +1110,13 @@ class CaseStore:
                 continue
             tag = str(claim.get("evidence_tag", "")).strip()
             row = evidence_by_tag.get(tag)
-            if not row or not matches_terms(row["content"], terms, row["url"]):
+            is_verified_source = bool(
+                row and (
+                    matches_terms(row["content"], terms, row["url"])
+                    or str(row.get("query", "")).startswith(("link_crawl:", "github:"))
+                )
+            )
+            if not is_verified_source:
                 dropped += 1
                 continue
             verified_claims.append({
@@ -872,6 +1218,8 @@ class CaseStore:
     def statistics(self) -> Dict[str, Any]:
         with closing(self._connect()) as connection:
             by_method = {row[0]: row[1] for row in connection.execute("SELECT method, COUNT(*) FROM evidence GROUP BY method")}
+            conn_counts = {row[0]: row[1] for row in connection.execute("SELECT direction, COUNT(*) FROM connections GROUP BY direction")}
+            link_counts = {row[0]: row[1] for row in connection.execute("SELECT status, COUNT(*) FROM links GROUP BY status")}
             return {
                 "evidence_total": sum(by_method.values()),
                 "evidence_by_method": by_method,
@@ -879,6 +1227,10 @@ class CaseStore:
                 "queries_executed": connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0],
                 "claims": connection.execute("SELECT COUNT(*) FROM claims").fetchone()[0],
                 "entities": connection.execute("SELECT COUNT(*) FROM entities").fetchone()[0],
+                "connections_one_way": conn_counts.get("out", 0),
+                "connections_mutual": conn_counts.get("bidirectional", 0),
+                "links_visited": link_counts.get("visited", 0),
+                "links_queued": link_counts.get("queued", 0),
             }
 
 
@@ -938,16 +1290,116 @@ class SourceCollector:
                 return hits
         return []
 
+    def fetch_github_profile(
+        self,
+        login: str,
+        store: CaseStore,
+        anchor: Dict[str, Any],
+        source_url: str = "",
+        depth: int = 0,
+    ) -> Dict[str, int]:
+        """Fetches GitHub user profile, recent repos (with homepages/pushed_at), and recent public events."""
+        counts = {"github_hits": 0, "github_blogs": 0, "links_queued": 0}
+        headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+        terms = anchor_terms(anchor)
+        try:
+            profile = requests.get(f"https://api.github.com/users/{login}", headers=headers, timeout=5)
+            if not profile.ok:
+                return counts
+            data = profile.json()
+        except (requests.RequestException, ValueError):
+            return counts
+
+        repo_lines: List[str] = []
+        discovered_links: List[Dict[str, Any]] = []
+        latest_activity = str(data.get("updated_at") or "")
+        try:
+            repos_resp = requests.get(
+                f"https://api.github.com/users/{login}/repos",
+                params={"sort": "pushed", "per_page": 10},
+                headers=headers,
+                timeout=5,
+            )
+            if repos_resp.ok:
+                for repo in repos_resp.json()[:10]:
+                    pushed = str(repo.get("pushed_at") or "")
+                    if pushed and pushed > latest_activity:
+                        latest_activity = pushed
+                    homepage = str(repo.get("homepage") or "").strip()
+                    if homepage:
+                        norm_hp = canonicalize_url(homepage if homepage.startswith(("http://", "https://")) else f"https://{homepage}")
+                        discovered_links.append({"url": norm_hp, "label": f"project:{repo.get('name')}", "rel_me": True})
+                    repo_lines.append(
+                        f"- {repo.get('name')} ({repo.get('language') or 'n/a'}, "
+                        f"stars={repo.get('stargazers_count', 0)}, pushed={pushed[:10]}): "
+                        f"{repo.get('description') or ''}" + (f" [app: {homepage}]" if homepage else "")
+                    )
+        except (requests.RequestException, ValueError):
+            pass
+
+        event_lines: List[str] = []
+        try:
+            events_resp = requests.get(
+                f"https://api.github.com/users/{login}/events/public",
+                params={"per_page": 6},
+                headers=headers,
+                timeout=4,
+            )
+            if events_resp.ok:
+                for event in events_resp.json()[:5]:
+                    ev_date = str(event.get("created_at") or "")
+                    if ev_date and ev_date > latest_activity:
+                        latest_activity = ev_date
+                    ev_repo = event.get("repo", {}).get("name", "")
+                    event_lines.append(f"- {ev_date[:10]} {event.get('type', '')} on {ev_repo}")
+        except (requests.RequestException, ValueError):
+            pass
+
+        blog = str(data.get("blog") or "").strip()
+        summary = (
+            f"GitHub Profile: @{data.get('login')} ({data.get('name') or ''})\n"
+            f"Bio: {data.get('bio') or ''}\nCompany: {data.get('company') or ''}\n"
+            f"Location: {data.get('location') or ''}\nBlog: {blog}\n"
+            f"Public Repos: {data.get('public_repos', 0)} | Followers: {data.get('followers', 0)}\n"
+            f"Account Created: {data.get('created_at', '')} | Latest Verified Activity: {latest_activity}"
+        )
+        if repo_lines:
+            summary += "\nPublic Repositories:\n" + "\n".join(repo_lines)
+        if event_lines:
+            summary += "\nRecent Public Activity:\n" + "\n".join(event_lines)
+
+        profile_url = data.get("html_url", f"https://github.com/{login}")
+        if not matches_terms(summary, terms, profile_url) and not source_url:
+            return counts
+
+        added = store.add_evidence(profile_url, summary, "github_api", f"github:{login}")
+        if added:
+            counts["github_hits"] += 1
+        tag = f"E:{sha256_text(summary.strip()[:MAX_STORED_CHARACTERS])[:10]}"
+        target_label = anchor["primary_name"]
+        store.add_connection(target_label, profile_url, "owns_profile", "out", 0.85, tag)
+        if blog:
+            blog_url = canonicalize_url(blog if blog.startswith(("http://", "https://")) else f"https://{blog}")
+            blog_host = urlparse(blog_url).netloc.lower().removeprefix("www.")
+            # GitHub profile links back to blog_host -> record directed edge (promotes to mutual if blog linked to GitHub!)
+            store.add_connection(profile_url, blog_host, "links_to", "out", 0.88, tag)
+            discovered_links.insert(0, {"url": blog_url, "label": f"github_blog:{login}", "rel_me": True})
+        if source_url:
+            src_host = urlparse(source_url).netloc.lower().removeprefix("www.")
+            store.add_connection(src_host, profile_url, "links_to", "out", 0.85, tag)
+        counts["links_queued"] += store.queue_links(discovered_links, profile_url, depth + 1, anchor)
+        return counts
+
     def enrich_public_apis(self, store: CaseStore, anchor: Dict[str, Any]) -> Dict[str, int]:
-        """Keyless, high-reliability public API enrichment (GitHub + repos + blog + Wikipedia)."""
+        """Keyless, high-reliability public API enrichment (GitHub + repos + activity + Wikipedia)."""
         name = anchor.get("primary_name", "").strip()
         terms = anchor_terms(anchor)
-        counts = {"github_hits": 0, "github_blogs": 0, "wikipedia_hits": 0}
+        counts = {"github_hits": 0, "github_blogs": 0, "wikipedia_hits": 0, "links_queued": 0}
         if not name:
             return counts
         headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
-        # 1. GitHub public user & repository search (free, unauthenticated)
+        # 1. GitHub public user search (free, unauthenticated)
         try:
             response = requests.get(
                 "https://api.github.com/search/users",
@@ -958,49 +1410,10 @@ class SourceCollector:
             if response.ok:
                 for user in response.json().get("items", [])[:2]:
                     login = user.get("login", "")
-                    if not login:
-                        continue
-                    profile = requests.get(f"https://api.github.com/users/{login}", headers=headers, timeout=5)
-                    if not profile.ok:
-                        continue
-                    data = profile.json()
-                    repo_lines: List[str] = []
-                    try:
-                        repos_resp = requests.get(
-                            f"https://api.github.com/users/{login}/repos",
-                            params={"sort": "updated", "per_page": 8},
-                            headers=headers,
-                            timeout=5,
-                        )
-                        if repos_resp.ok:
-                            for repo in repos_resp.json()[:8]:
-                                repo_lines.append(
-                                    f"- {repo.get('name')} ({repo.get('language') or 'n/a'}, "
-                                    f"stars={repo.get('stargazers_count', 0)}): {repo.get('description') or ''}"
-                                )
-                    except (requests.RequestException, ValueError):
-                        pass
-
-                    blog = str(data.get("blog") or "").strip()
-                    summary = (
-                        f"GitHub Profile: @{data.get('login')} ({data.get('name') or ''})\n"
-                        f"Bio: {data.get('bio') or ''}\nCompany: {data.get('company') or ''}\n"
-                        f"Location: {data.get('location') or ''}\nBlog: {blog}\n"
-                        f"Public Repos: {data.get('public_repos', 0)} | Followers: {data.get('followers', 0)}\n"
-                        f"Created: {data.get('created_at', '')}"
-                    )
-                    if repo_lines:
-                        summary += "\nRecent Repositories:\n" + "\n".join(repo_lines)
-                    profile_url = data.get("html_url", f"https://github.com/{login}")
-                    if matches_terms(summary, terms, profile_url):
-                        if store.add_evidence(profile_url, summary, "github_api", f"github:{name}"):
-                            counts["github_hits"] += 1
-                        if blog:
-                            blog_url = canonicalize_url(blog if blog.startswith(("http://", "https://")) else f"https://{blog}")
-                            _, text, method, artifact = self.fetch_document(blog_url, store.evidence_directory)
-                            if text and matches_terms(text, terms, blog_url):
-                                if store.add_evidence(blog_url, text, method, f"github_blog:{login}", artifact):
-                                    counts["github_blogs"] += 1
+                    if login:
+                        gh = self.fetch_github_profile(login, store, anchor, depth=0)
+                        counts["github_hits"] += gh["github_hits"]
+                        counts["links_queued"] += gh["links_queued"]
         except (requests.RequestException, ValueError, KeyError) as error:
             logger.debug("[GitHub API] %s", error)
 
@@ -1033,6 +1446,17 @@ class SourceCollector:
         except (requests.RequestException, ValueError, KeyError) as error:
             logger.debug("[Wikipedia API] %s", error)
 
+        # 3. Also seed known domains from anchor hints directly into the link queue (depth 0)
+        hint_domains = anchor.get("hints", {}).get("domains", []) or [
+            h for h in anchor.get("known_handles_or_domains", []) if "." in h and not h.startswith("@")
+        ]
+        seed_links = [
+            {"url": d if d.startswith(("http://", "https://")) else f"https://{d}", "label": "anchor_domain", "rel_me": True}
+            for d in hint_domains[:4]
+        ]
+        if seed_links:
+            counts["links_queued"] += store.queue_links(seed_links, "", 0, anchor)
+
         if any(counts.values()):
             store.audit("API_ENRICHMENT", counts)
         return counts
@@ -1050,36 +1474,43 @@ class SourceCollector:
                     handle.write(chunk)
         return self.extractor.extract(local_file), str(local_file)
 
-    def fetch_document(self, url: str, evidence_directory: Path) -> Tuple[str, str, str, str]:
-        """Returns (url, text, method, artifact_path)."""
+    def fetch_document(self, url: str, evidence_directory: Path) -> Tuple[str, str, str, str, List[Dict[str, Any]]]:
+        """Returns (url, text, method, artifact_path, outbound_links)."""
         if not self.gate.allowed(url):
-            return url, "", "robots_denied", ""
+            return url, "", "robots_denied", "", []
         self.gate.throttle(url)
         extension = Path(urlparse(url).path).suffix.lower()
         try:
             if extension in DOCUMENT_EXTENSIONS:
                 text, artifact = self._download_document(url, extension, evidence_directory)
-                return url, text, ("native_document" if text else "failed"), artifact
-            response = requests.get(url, timeout=12, headers={"User-Agent": USER_AGENT})
+                return url, text, ("native_document" if text else "failed"), artifact, []
+            response = requests.get(url, timeout=10, headers={"User-Agent": USER_AGENT})
             if response.status_code in (401, 403, 429, 503):
-                return url, "", "access_blocked", ""
+                return url, "", "access_blocked", "", []
             response.raise_for_status()
             content_type = response.headers.get("Content-Type", "").lower()
             if "pdf" in content_type:
                 local_file = evidence_directory / f"doc_{uuid.uuid4().hex[:10]}.pdf"
                 local_file.write_bytes(response.content[:MAX_DOWNLOAD_BYTES])
                 text = self.extractor.extract(local_file)
-                return url, text, ("native_document" if text else "failed"), str(local_file)
+                return url, text, ("native_document" if text else "failed"), str(local_file), []
             if "text/plain" in content_type or "application/json" in content_type:
-                return url, response.text[:MAX_STORED_CHARACTERS], "markdown", ""
-            extracted = extract_html_text(response.text, url)
-            if extracted and len(extracted.strip()) >= 60:
+                return url, response.text[:MAX_STORED_CHARACTERS], "markdown", "", []
+            bundle = extract_html_bundle(response.text, url)
+            text = bundle["text"]
+            dates = list(bundle["dates"])
+            last_mod = response.headers.get("Last-Modified", "").strip()
+            if last_mod:
+                dates.append(last_mod)
+            if dates and text:
+                text = f"Temporal Metadata: {', '.join(list(dict.fromkeys(dates))[:4])}\n\n{text}"
+            if text and len(text.strip()) >= 60:
                 method = "markdown" if trafilatura is not None else "html_text"
-                return url, extracted, method, ""
-            return url, "", "failed", ""
+                return url, text, method, "", bundle["links"]
+            return url, "", "failed", "", bundle["links"]
         except (requests.RequestException, OSError, ValueError) as error:
             logger.debug("[Fetch] %s: %s", url, error)
-            return url, "", "failed", ""
+            return url, "", "failed", "", []
 
     def harvest(
         self,
@@ -1097,6 +1528,7 @@ class SourceCollector:
             "candidates": len(hits),
             "new_artifacts": 0,
             "snippets_saved": 0,
+            "links_queued": 0,
             "duplicates": 0,
             "rejected_off_topic": 0,
             "robots_denied": 0,
@@ -1123,7 +1555,7 @@ class SourceCollector:
 
         if fetch_urls:
             with ThreadPoolExecutor(max_workers=5) as pool:
-                for url, text, method, artifact in pool.map(
+                for url, text, method, artifact, links in pool.map(
                     lambda target_url: self.fetch_document(target_url, store.evidence_directory), fetch_urls
                 ):
                     if method in ("robots_denied", "access_blocked", "failed"):
@@ -1137,10 +1569,139 @@ class SourceCollector:
                             report["new_artifacts"] += 1
                         else:
                             report["duplicates"] += 1
+                        if links:
+                            report["links_queued"] += store.queue_links(links, url, 1, anchor)
 
         store.record_query(clean_query, report["new_artifacts"])
         store.audit("HARVEST", report)
         logger.info("[Harvest] %s", report)
+        return report
+
+    def crawl_links(
+        self,
+        store: CaseStore,
+        anchor: Dict[str, Any],
+        max_depth: int = MAX_TRAVERSAL_DEPTH,
+        max_pages: int = 8,
+        deadline: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Implements Page A's `Links -> Open -> spy -> Data` + bounded `Repeate` loop:
+        traverses highest-priority queued outbound links (same-origin /projects, /resume,
+        GitHub, Credly, ORCID, WakaTime, deployed apps), extracts new evidence + links,
+        and promotes reciprocal edges from one_directional to two_directional.
+        """
+        depth_cap = max(1, min(int(max_depth), MAX_TRAVERSAL_DEPTH))
+        page_cap = max(1, min(int(max_pages), MAX_TRAVERSAL_PAGES))
+        terms = anchor_terms(anchor)
+        report = {
+            "pages_opened": 0,
+            "new_artifacts": 0,
+            "links_queued": 0,
+            "connections_added": 0,
+            "mutual_promoted": 0,
+            "skipped_or_blocked": 0,
+        }
+
+        while report["pages_opened"] < page_cap:
+            if deadline and time.monotonic() >= deadline - 4.0:
+                break
+            batch = store.next_queued_links(limit=min(4, page_cap - report["pages_opened"]), max_depth=depth_cap)
+            if not batch:
+                break
+
+            fetch_batch: List[Dict[str, Any]] = []
+            for entry in batch:
+                url = entry["url"]
+                source_url = entry["source_url"]
+                depth = entry["depth"]
+                parsed = urlparse(url)
+                host = parsed.netloc.lower().removeprefix("www.")
+                segments = [seg for seg in parsed.path.strip("/").split("/") if seg]
+
+                # Route GitHub profile links via GitHub API (avoids robots.txt block & gets repos + activity!)
+                if host == "github.com" and len(segments) == 1 and segments[0].lower() not in (
+                    "topics", "explore", "features", "pricing", "about", "login", "signup", "orgs", "marketplace"
+                ):
+                    store.mark_link(url, "visited")
+                    report["pages_opened"] += 1
+                    gh = self.fetch_github_profile(segments[0], store, anchor, source_url=source_url, depth=depth)
+                    report["new_artifacts"] += gh["github_hits"]
+                    report["links_queued"] += gh["links_queued"]
+                    continue
+
+                if store.has_url(url):
+                    store.mark_link(url, "visited")
+                    continue
+                fetch_batch.append(entry)
+
+            if not fetch_batch:
+                continue
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                fetched = list(pool.map(
+                    lambda entry: (entry, self.fetch_document(entry["url"], store.evidence_directory)),
+                    fetch_batch,
+                ))
+
+            for entry, (url, text, method, artifact, links) in fetched:
+                source_url = entry["source_url"]
+                depth = entry["depth"]
+                report["pages_opened"] += 1
+                if method in ("robots_denied", "access_blocked", "failed") or not text:
+                    store.mark_link(url, method or "failed")
+                    report["skipped_or_blocked"] += 1
+                    # Still record outbound platform reference if linked directly from a verified page
+                    if source_url and any(urlparse(url).netloc.lower().endswith(dom) for dom in CORROBORATION_DOMAINS):
+                        src_host = urlparse(source_url).netloc.lower().removeprefix("www.")
+                        outcome = store.add_connection(src_host, url, "links_to", "out", 0.72)
+                        report["connections_added"] += 1
+                        if outcome == "promoted_two_directional":
+                            report["mutual_promoted"] += 1
+                    continue
+
+                store.mark_link(url, "visited")
+                # Accept same-origin subpages of verified domains OR pages matching target/project context
+                src_host = urlparse(source_url).netloc.lower().removeprefix("www.") if source_url else ""
+                cur_host = urlparse(url).netloc.lower().removeprefix("www.")
+                is_same_origin = bool(src_host and cur_host == src_host)
+                is_corroboration = any(cur_host == dom or cur_host.endswith(f".{dom}") for dom in CORROBORATION_DOMAINS)
+                if not (is_same_origin or is_corroboration or matches_terms(text, terms, url) or entry["priority"] >= 75):
+                    continue
+
+                if store.add_evidence(url, text, method, f"link_crawl:d{depth}", artifact):
+                    report["new_artifacts"] += 1
+                tag = f"E:{sha256_text(text.strip()[:MAX_STORED_CHARACTERS])[:10]}"
+
+                # Record directional edge from source -> opened link (and check reciprocal links!)
+                if src_host and cur_host and src_host != cur_host:
+                    outcome = store.add_connection(src_host, cur_host, "links_to", "out", 0.78, tag)
+                    report["connections_added"] += 1
+                    if outcome == "promoted_two_directional":
+                        report["mutual_promoted"] += 1
+
+                # Inspect outbound links on this page for reciprocal backlinks & next-hop traversal
+                for out_link in links:
+                    out_url = out_link["url"]
+                    out_host = urlparse(out_url).netloc.lower().removeprefix("www.")
+                    if out_host and out_host != cur_host and any(
+                        out_host == dom or out_host.endswith(f".{dom}") for dom in CORROBORATION_DOMAINS
+                    ):
+                        outcome = store.add_connection(cur_host, out_url, "links_to", "out", 0.82 if out_link.get("rel_me") else 0.75, tag)
+                        report["connections_added"] += 1
+                        if outcome == "promoted_two_directional":
+                            report["mutual_promoted"] += 1
+                    elif src_host and out_host == src_host and cur_host != src_host:
+                        # Reciprocal backlink discovered -> promotes src_host <-> cur_host to two_directional!
+                        outcome = store.add_connection(cur_host, src_host, "links_to", "out", 0.85, tag)
+                        if outcome == "promoted_two_directional":
+                            report["mutual_promoted"] += 1
+
+                if depth < depth_cap and links:
+                    report["links_queued"] += store.queue_links(links, url, depth + 1, anchor)
+
+        store.audit("LINK_TRAVERSAL", report)
+        logger.info("[Traverse] %s", report)
         return report
 
 
@@ -1161,6 +1722,7 @@ class IntelligenceCore:
         handles: Optional[List[str]] = None,
         location: str = "",
         profession: str = "",
+        hints: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         seed, purpose = (seed or "").strip(), (purpose or "").strip()
         if not seed:
@@ -1168,7 +1730,9 @@ class IntelligenceCore:
         if len(purpose) < 10:
             raise ValueError("purpose must state the lawful research objective (min 10 characters).")
         case_id = uuid.uuid4().hex[:12]
-        anchor = parse_seed(seed, aliases=aliases, handles=handles, location=location, profession=profession)
+        anchor = parse_seed(
+            seed, aliases=aliases, handles=handles, location=location, profession=profession, hints=hints
+        )
         anchor.update({"case_id": case_id, "seed": seed, "purpose": purpose, "created_utc": utc_now(), "immutable": True})
         store = CaseStore(case_id)
         store.anchor_path.write_text(json.dumps(anchor, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -1186,18 +1750,33 @@ class IntelligenceCore:
             queries.append(handle)
         return list(dict.fromkeys(queries))
 
+    @staticmethod
+    def extract_latest_activity(rows: List[Dict[str, Any]]) -> str:
+        """Extracts the most recent verified ISO timestamp (YYYY-MM-DD...) proving active vs. stale presence."""
+        iso_dates: List[str] = []
+        current_year = datetime.now(timezone.utc).year
+        for row in rows:
+            for match in re.findall(r"\b((?:20[0-2]\d)-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:T\d{2}:\d{2}:\d{2}Z?)?)\b", row["content"]):
+                if int(match[:4]) <= current_year:
+                    iso_dates.append(match)
+        return max(iso_dates) if iso_dates else ""
+
     def deterministic_analysis(self, anchor: Dict[str, Any], store: CaseStore) -> Dict[str, Any]:
-        """Fast (<50ms), 100% grounded ACH, entity, timeline, and clean pivot extraction."""
+        """Fast (<50ms), 100% grounded ACH, entity, temporal activity, connection, and pivot extraction."""
         rows = store.evidence_rows()
         terms = anchor_terms(anchor)
         name = anchor["primary_name"]
         location = str(anchor.get("anchor_demographics", {}).get("origin_city") or "").strip().lower()
         profession = str(anchor.get("core_profession") or "").strip().lower()
 
-        matched_rows = [row for row in rows if matches_terms(row["content"], terms, row["url"])]
+        matched_rows = [
+            row for row in rows
+            if matches_terms(row["content"], terms, row["url"]) or str(row.get("query", "")).startswith(("link_crawl:", "github:"))
+        ]
         primary_rows = [row for row in matched_rows if row["method"] != "search_snippet"]
         unique_domains = sorted({row["domain"] for row in primary_rows if row["domain"]})
         all_domains = sorted({row["domain"] for row in matched_rows if row["domain"]})
+        latest_activity = self.extract_latest_activity(matched_rows)
 
         claims: List[Dict[str, Any]] = []
         entities: Dict[Tuple[str, str], str] = {}
@@ -1211,13 +1790,18 @@ class IntelligenceCore:
             text = row["content"]
             lower_text = text.lower()
             reliability, credibility = classify_reliability(url, row["method"], anchor)
+            is_verified_crawl = str(row.get("query", "")).startswith(("link_crawl:", "github:"))
 
             if domain:
-                platform = next((label for host, label in SOCIAL_PLATFORMS.items() if domain == host or domain.endswith(f".{host}")), None)
+                clean_domain = domain.removeprefix("www.")
+                platform = next((label for host, label in SOCIAL_PLATFORMS.items() if clean_domain == host or clean_domain.endswith(f".{host}")), None)
                 if platform:
                     entities[(url, platform)] = f"Public {platform} footprint ({tag})"
+                    store.add_connection(name, url, f"profile_{platform}", "out", 0.80 if row["method"] != "search_snippet" else 0.55, tag)
                 else:
-                    entities[(domain, "domain")] = f"Referenced source domain ({tag})"
+                    entities[(clean_domain, "domain")] = f"Referenced source domain ({tag})"
+                    if matches_terms(clean_domain, terms) or is_verified_crawl:
+                        store.add_connection(name, clean_domain, "associated_domain", "out", 0.82, tag)
 
             if location and location in lower_text:
                 qualifier_hits += 1
@@ -1226,27 +1810,33 @@ class IntelligenceCore:
 
             # Extract grounded public social/repo URLs mentioned inside the page
             for found_url in re.findall(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]{8,140}", text):
-                parsed = urlparse(found_url.rstrip(".,);"))
-                host = parsed.netloc.lower()
+                cleaned_url = found_url.rstrip(".,);]")
+                parsed = urlparse(cleaned_url)
+                host = parsed.netloc.lower().removeprefix("www.")
                 platform = next((label for key, label in SOCIAL_PLATFORMS.items() if host == key or host.endswith(f".{key}")), None)
                 if platform and len(parsed.path.strip("/")) >= 2:
-                    entities[(found_url.rstrip(".,);"), platform)] = f"Linked profile in {tag}"
+                    entities[(cleaned_url, platform)] = f"Linked profile in {tag}"
+                    store.add_connection(name, cleaned_url, f"profile_{platform}", "out", 0.78, tag)
 
-            # Extract grounded sentences containing target terms or dated milestones
+            # Extract grounded sentences (including verified repo/project bullets & dated activity!)
             sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
             added_from_row = 0
             for sentence in sentences:
                 clean = re.sub(r"\s+", " ", sentence).strip(" -*#")
-                if not (25 <= len(clean) <= 260):
+                if not (20 <= len(clean) <= 260):
                     continue
-                if not matches_terms(clean, terms):
+                has_iso_date = bool(re.search(r"\b20[0-2]\d-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b", clean))
+                is_repo_or_project = (
+                    row["method"] == "github_api" and ("pushed=" in clean or "Latest Verified Activity" in clean or "PushEvent" in clean)
+                ) or (is_verified_crawl and any(k in clean.lower() for k in ("project", "built", "engine", "simulator", "platform", "app", "c++", "cuda", "research")))
+                if not (matches_terms(clean, terms) or is_repo_or_project or (is_verified_crawl and has_iso_date)):
                     continue
                 normalized = clean.lower()
                 if normalized in seen_statements:
                     continue
                 seen_statements.add(normalized)
-                has_year = bool(re.search(r"\b(?:19|20)\d{2}\b", clean))
-                category = "temporal" if has_year else ("digital_footprint" if row["method"] in ("github_api", "search_snippet") else "biographical")
+                has_year = has_iso_date or bool(re.search(r"\b(?:19|20)\d{2}\b", clean))
+                category = "temporal" if has_year else ("project" if is_repo_or_project else ("digital_footprint" if row["method"] in ("github_api", "search_snippet") else "biographical"))
                 claims.append({
                     "category": category,
                     "statement": redact_sensitive(clean),
@@ -1257,19 +1847,22 @@ class IntelligenceCore:
                     "hypothesis_alignment": "PRIMARY",
                 })
                 added_from_row += 1
-                if added_from_row >= 4:
+                if added_from_row >= 6:
                     break
 
-        # Calibrated confidence strictly derived from independent domain corroboration
+        # Calibrated confidence strictly derived from independent domain corroboration + mutual links
+        graph = store.connection_graph(anchor)
+        mutual_count = len(graph["connections"]["two_directional"])
         if not matched_rows:
             confidence = 0.05
         elif not primary_rows:
             confidence = min(0.35, 0.15 + 0.08 * len(all_domains))
         else:
             base = 0.40 + 0.14 * min(len(unique_domains), 3)
-            bonus = 0.10 if qualifier_hits > 0 else 0.0
+            bonus = 0.08 if qualifier_hits > 0 else 0.0
             authority_bonus = 0.08 if any(c["source_reliability"] == "A" for c in claims) else 0.0
-            confidence = min(0.92, round(base + bonus + authority_bonus, 2))
+            mutual_bonus = 0.08 if mutual_count > 0 else 0.0
+            confidence = min(0.94, round(base + bonus + authority_bonus + mutual_bonus, 2))
 
         h1_status = "LEADING" if confidence >= 0.50 else ("ACTIVE" if matched_rows else "UNVERIFIED")
         h2_score = round(max(0.05, 1.0 - confidence), 2)
@@ -1296,18 +1889,21 @@ class IntelligenceCore:
             gaps.append("Zero collected evidence artifacts mention the target identifiers.")
         if len(unique_domains) < 2:
             gaps.append("Corroboration from additional independent primary domains is needed.")
-        if not any(claim["category"] == "temporal" for claim in claims):
-            gaps.append("No independently dated chronological milestones verified in collected sources.")
+        if not latest_activity:
+            gaps.append("No recent ISO-dated activity timestamp confirmed; subject currency unverified.")
+        if mutual_count == 0:
+            gaps.append("No reciprocal two-directional cross-domain backlink verified yet.")
         if not any(etype in ("github", "linkedin", "x_twitter", "orcid") for _, etype in entities):
             gaps.append("No verified third-party social or code-repository profile confirmed yet.")
 
         assumptions = [
             "Open-source collection is restricted to publicly indexable pages honouring robots.txt.",
-            "Claims sharing the target identifier across distinct domains are provisionally linked under H1 pending disambiguation.",
+            "Edges promote from one_directional to two_directional only when reciprocal/independent evidence confirms both directions.",
         ]
 
         return {
             "confidence": confidence,
+            "latest_activity_utc": latest_activity,
             "pivot_queries": pivots,
             "hypotheses": [
                 {
@@ -1325,9 +1921,9 @@ class IntelligenceCore:
                     "diagnostic_score": h2_score,
                 },
             ],
-            "claims": claims[:40],
+            "claims": claims[:50],
             "entities": [{"name": entity_name, "type": entity_type, "relation": relation}
-                         for (entity_name, entity_type), relation in list(entities.items())[:40]],
+                         for (entity_name, entity_type), relation in list(entities.items())[:50]],
             "key_assumptions": assumptions,
             "intelligence_gaps": gaps,
         }
@@ -1378,6 +1974,8 @@ class IntelligenceCore:
         state = store.analysis_state()
         rows = store.evidence_rows()
         stats = store.statistics()
+        graph = store.connection_graph(anchor)
+        latest_activity = self.extract_latest_activity(rows)
         confidence = state["confidence"]
         band = self.confidence_label(confidence)
 
@@ -1403,9 +2001,11 @@ class IntelligenceCore:
             "## 1. BLUF (Bottom Line Up Front) & Analytic Confidence",
             f"- **Case ID:** `{store.case_id}`",
             f"- **Analytic Confidence:** **{band}** (`{confidence:.2f}`)",
+            f"- **Latest Verified Activity (Temporal Grounding):** `{latest_activity or 'Unverified'}`",
             f"- **Target Identity:** {anchor['primary_name']} (`{anchor.get('entity_kind', 'unknown')}`)",
             f"- **Aliases / Handles:** {', '.join(anchor.get('known_aliases', []) + anchor.get('known_handles_or_domains', [])) or 'None specified'}",
-            f"- **Evidence Base:** {stats['evidence_total']} unique SHA-256 artifacts across {stats['unique_domains']} domain(s); {len(state['claims'])} grounded claims.",
+            f"- **Evidence Base:** {stats['evidence_total']} unique SHA-256 artifacts across {stats['unique_domains']} domain(s); "
+            f"{len(state['claims'])} grounded claims; {stats['connections_mutual']} mutual / {stats['connections_one_way']} one-way connections.",
         ]
         if narrative:
             lines += ["", "### Analyst Executive Assessment", narrative]
@@ -1421,7 +2021,7 @@ class IntelligenceCore:
             lines.append(f"| {hyp['hypothesis_id']} | **{hyp['label']}** — {desc} | {hyp['status']} | {hyp['diagnostic_score']:.2f} |")
 
         timeline_claims = [c for c in state["claims"] if c["category"] == "temporal"]
-        lines += ["", "## 3. Grounded Chronological Timeline"]
+        lines += ["", "## 3. Grounded Chronological Timeline & Temporal Proof"]
         if timeline_claims:
             for claim in timeline_claims:
                 code = f"{claim['source_reliability']}{claim['info_credibility']}"
@@ -1432,7 +2032,36 @@ class IntelligenceCore:
 
         lines += [
             "",
-            "## 4. Verified Digital Footprint & Entities",
+            "## 4. Directional Connection Graph & Digital Footprint",
+            "### Two-Directional Connections (Mutual / Reciprocally Verified `A <-> B`)",
+            "| Pair | Relation | Confidence | Sources |",
+            "|---|---|---|---|",
+        ]
+        if graph["connections"]["two_directional"]:
+            for edge in graph["connections"]["two_directional"]:
+                pair_str = f"{edge['pair'][0]} <-> {edge['pair'][1]}".replace("|", "/")
+                lines.append(f"| {pair_str} | {edge['relation']} | {edge['confidence']:.2f} | {', '.join(edge['sources']) or '—'} |")
+        else:
+            lines.append("| *None verified yet* | — | — | — |")
+
+        lines += [
+            "",
+            "### One-Directional Connections (`A -> B`)",
+            "| From | To | Relation | Confidence | Sources |",
+            "|---|---|---|---|---|",
+        ]
+        if graph["connections"]["one_directional"]:
+            for edge in graph["connections"]["one_directional"][:30]:
+                lines.append(
+                    f"| {str(edge['from']).replace('|', '/')} | {str(edge['to']).replace('|', '/')} | "
+                    f"{edge['relation']} | {edge['confidence']:.2f} | {', '.join(edge['sources']) or '—'} |"
+                )
+        else:
+            lines.append("| *None recorded* | — | — | — | — |")
+
+        lines += [
+            "",
+            "### Verified Entities & Profiles",
             "| Entity / Handle / URL | Type | Relation |",
             "|---|---|---|",
         ]
@@ -1620,20 +2249,21 @@ async def anchor_target(
     handles_or_domains: Optional[List[str]] = None,
     location: str = "",
     profession: str = "",
+    hints: Optional[Dict[str, List[str]]] = None,
 ) -> str:
     """
-    Phase 1: Instantly (<10ms) locks an Immutable Context Anchor and opens a SQLite case.
+    Phase 1: Instantly (<10ms) locks an Immutable Context Anchor, Hints, and SQLite case.
     Works with any LLM; never requires Ollama or external APIs.
     """
     anchor = await asyncio.to_thread(
-        core.build_anchor, seed, purpose, aliases, handles_or_domains, location, profession
+        core.build_anchor, seed, purpose, aliases, handles_or_domains, location, profession, hints
     )
     return to_json({
         "status": "ANCHOR_LOCKED",
         "case_id": anchor["case_id"],
         "primary_name": anchor["primary_name"],
         "aliases": anchor["known_aliases"],
-        "handles_or_domains": anchor["known_handles_or_domains"],
+        "hints": anchor.get("hints", {}),
         "hypotheses": anchor["initial_hypotheses"],
         "wide_net_queries": core.wide_net_queries(anchor),
     })
@@ -1649,7 +2279,7 @@ async def harvest_sources(
 ) -> str:
     """
     Phase 2: Searches public sources, honours robots.txt, rejects off-topic fallback noise,
-    and ingests SHA-256 deduplicated evidence into the case SQLite store.
+    queues outbound links for `traverse_links`, and ingests SHA-256 deduplicated evidence.
     """
     if not query.strip():
         raise ValueError("query must not be empty.")
@@ -1664,17 +2294,61 @@ async def harvest_sources(
 
 @mcp.tool()
 async def ingest_url(case_id: str, url: str) -> str:
-    """Phase 2 (targeted): Fetches a single public URL (robots.txt honoured) into the case store."""
-    _, store = open_case(case_id)
+    """Phase 2 (targeted): Fetches a single public URL (robots.txt honoured) and queues its outbound links."""
+    anchor, store = open_case(case_id)
     canonical = canonicalize_url(url)
 
     def ingest() -> Dict[str, Any]:
-        _, text, method, artifact = core.collector.fetch_document(canonical, store.evidence_directory)
+        _, text, method, artifact, links = core.collector.fetch_document(canonical, store.evidence_directory)
         added = bool(text) and store.add_evidence(canonical, text, method, "manual_ingest", artifact)
-        store.audit("INGEST_URL", {"url": canonical, "method": method, "added": added})
-        return {"url": canonical, "method": method, "added": added, "characters": len(text or "")}
+        queued = store.queue_links(links, canonical, 1, anchor) if links else 0
+        store.audit("INGEST_URL", {"url": canonical, "method": method, "added": added, "links_queued": queued})
+        return {"url": canonical, "method": method, "added": added, "characters": len(text or ""), "links_queued": queued}
 
     return to_json(await asyncio.to_thread(ingest))
+
+
+@mcp.tool()
+async def traverse_links(case_id: str, max_depth: int = MAX_TRAVERSAL_DEPTH, max_pages: int = 8) -> str:
+    """
+    Phase 2B (Page A `Links -> Open -> spy -> Data` + bounded `Repeate` loop):
+    Opens highest-priority discovered links (/projects, /resume, GitHub, Credly, ORCID,
+    deployed apps), extracts temporal proof, and promotes reciprocal links to two_directional.
+    """
+    anchor, store = open_case(case_id)
+    deadline = time.monotonic() + DEFAULT_CYCLE_SECONDS
+    report = await asyncio.to_thread(core.collector.crawl_links, store, anchor, max_depth, max_pages, deadline)
+    return to_json({**report, "case_id": store.case_id, "statistics": store.statistics()})
+
+
+@mcp.tool()
+async def get_connection_graph(case_id: str) -> str:
+    """Returns the Page B directional JSON connection graph (`one_directional` vs. `two_directional`)."""
+    anchor, store = open_case(case_id)
+    return to_json(store.connection_graph(anchor))
+
+
+@mcp.tool()
+async def record_connection(
+    case_id: str,
+    source_node: str,
+    target_node: str,
+    relation: str = "knows",
+    direction: str = "out",
+    evidence_tag: str = "",
+    confidence: float = 0.70,
+) -> str:
+    """
+    Records a directed (`out`) or mutual (`bidirectional`) connection edge in the case graph.
+    If the reverse edge (`target_node -> source_node`) already exists, automatically promotes
+    the pair to `two_directional` (`bidirectional`).
+    """
+    anchor, store = open_case(case_id)
+    outcome = store.add_connection(source_node, target_node, relation, direction, confidence, evidence_tag)
+    store.audit("CONNECTION_RECORDED", {
+        "from": source_node, "to": target_node, "relation": relation, "outcome": outcome,
+    })
+    return to_json({"status": outcome, "graph": store.connection_graph(anchor)})
 
 
 @mcp.tool()
@@ -1789,20 +2463,24 @@ async def run_full_cycle(
     anchor = await asyncio.to_thread(core.build_anchor, seed, purpose)
     store = CaseStore(anchor["case_id"])
 
-    await report_phase(1, f"Phase 2: wide-net harvest + public API enrichment for {anchor['primary_name']}...")
+    await report_phase(1, f"Phase 2A: wide-net harvest + public API enrichment for {anchor['primary_name']}...")
     capped_results = max(1, min(max_results, 12))
     await asyncio.to_thread(core.collector.enrich_public_apis, store, anchor)
     for query in core.wide_net_queries(anchor):
-        if time.monotonic() >= deadline - 14.0:
+        if time.monotonic() >= deadline - 18.0:
             break
         await asyncio.to_thread(core.collector.harvest, store, query, capped_results, True, anchor)
 
-    await report_phase(2, f"Phase 3: grounded ACH + bounded pivots ({store.statistics()['evidence_total']} artifacts)...")
+    await report_phase(2, "Phase 2B: Links -> Open -> spy -> Data bounded traversal (Repeate loop)...")
+    traversal = await asyncio.to_thread(core.collector.crawl_links, store, anchor, MAX_TRAVERSAL_DEPTH, 8, deadline)
+
+    await report_phase(3, f"Phase 3: grounded ACH + directional graph ({store.statistics()['evidence_total']} artifacts)...")
     state = await asyncio.to_thread(core.run_analysis, anchor, store, MAX_RESEARCH_PASSES, deadline, notify)
 
-    await report_phase(3, "Phase 4: compiling ICD-203 dossier & chain-of-custody appendices...")
+    await report_phase(4, "Phase 4: compiling ICD-203 dossier & directional graph appendices...")
     dossier_path = await asyncio.to_thread(core.synthesize, anchor, store)
-    await report_phase(4, "Complete.")
+    graph = store.connection_graph(anchor)
+    latest_activity = core.extract_latest_activity(store.evidence_rows())
 
     return to_json({
         "status": "COMPLETE",
@@ -1811,14 +2489,18 @@ async def run_full_cycle(
         "primary_name": anchor["primary_name"],
         "analytic_confidence": state["confidence"],
         "confidence_band": core.confidence_label(state["confidence"]),
+        "latest_activity_utc": latest_activity or None,
+        "traversal": traversal,
         "statistics": store.statistics(),
         "dossier_path": str(dossier_path),
         "resource": f"specter://cases/{store.case_id}/dossier",
-        "entities": state["entities"][:20],
-        "top_claims": state["claims"][:15],
+        "graph_resource": f"specter://cases/{store.case_id}/graph",
+        "connection_graph": graph,
+        "entities": state["entities"][:25],
+        "top_claims": state["claims"][:20],
         "intelligence_gaps": state["intelligence_gaps"],
         "recommended_pivots": state["recommended_pivots"],
-        "evidence_excerpts": store.evidence_excerpts(anchor, limit=6),
+        "evidence_excerpts": store.evidence_excerpts(anchor, limit=8),
     })
 
 
@@ -1925,6 +2607,13 @@ def read_audit(case_id: str) -> str:
     """Full audit trail (accountability log) for a case."""
     _, store = open_case(case_id)
     return to_json(store.audit_log())
+
+
+@mcp.resource("specter://cases/{case_id}/graph")
+def read_graph(case_id: str) -> str:
+    """Page B directional JSON connection graph (`one_directional` vs. `two_directional`)."""
+    anchor, store = open_case(case_id)
+    return to_json(store.connection_graph(anchor))
 
 
 if __name__ == "__main__":
