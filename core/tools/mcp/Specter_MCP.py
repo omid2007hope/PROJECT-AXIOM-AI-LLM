@@ -187,7 +187,7 @@ CASES_DIRECTORY.mkdir(parents=True, exist_ok=True)
 # ==============================================================================
 SENSITIVE_PATTERNS = [
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[REDACTED-ID]"),
-    (re.compile(r"\b(?:\d{4}[ -]){3}\d{4}\b"), "[REDACTED-CARD]"),
+    (re.compile(r"(?<!orcid\.org/)\b(?:\d{4}[ -]){3}\d{4}\b"), "[REDACTED-CARD]"),
     (re.compile(r"\+\d{1,3}(?:[\s.-]?\(?\d{2,4}\)?){2,4}\d"), "[REDACTED-PHONE]"),
     (re.compile(r"(?<!\w)\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?!\w)"), "[REDACTED-PHONE]"),
 ]
@@ -2482,6 +2482,12 @@ async def run_full_cycle(
     graph = store.connection_graph(anchor)
     latest_activity = core.extract_latest_activity(store.evidence_rows())
 
+    compact_graph = {
+        "two_directional": graph["connections"]["two_directional"][:10],
+        "one_directional": graph["connections"]["one_directional"][:12],
+        "one_directional_total": len(graph["connections"]["one_directional"]),
+    }
+
     return to_json({
         "status": "COMPLETE",
         "elapsed_seconds": round(time.monotonic() - started, 2),
@@ -2495,12 +2501,12 @@ async def run_full_cycle(
         "dossier_path": str(dossier_path),
         "resource": f"specter://cases/{store.case_id}/dossier",
         "graph_resource": f"specter://cases/{store.case_id}/graph",
-        "connection_graph": graph,
-        "entities": state["entities"][:25],
-        "top_claims": state["claims"][:20],
+        "connection_graph": compact_graph,
+        "entities": state["entities"][:15],
+        "top_claims": state["claims"][:12],
         "intelligence_gaps": state["intelligence_gaps"],
         "recommended_pivots": state["recommended_pivots"],
-        "evidence_excerpts": store.evidence_excerpts(anchor, limit=8),
+        "evidence_excerpts": store.evidence_excerpts(anchor, limit=4, excerpt_chars=450),
     })
 
 
