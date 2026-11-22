@@ -2303,9 +2303,12 @@ class IntelligenceCore:
                 qualifier_hits += 1
 
             # Extract grounded public social/repo URLs mentioned inside verified primary pages
-            for found_url in re.findall(r"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]{8,140}", text):
+            for found_url in re.findall(r"https?://[A-Za-z0-9._~:/?#@!$&'()*+,;=-]{8,140}", text):
                 cleaned_url = found_url.rstrip(".,);]")
-                parsed = urlparse(cleaned_url)
+                try:
+                    parsed = urlparse(cleaned_url)
+                except ValueError:
+                    continue
                 host = parsed.netloc.lower().removeprefix("www.")
                 platform = next((label for key, label in SOCIAL_PLATFORMS.items() if host == key or host.endswith(f".{key}")), None)
                 if platform and self.is_profile_url(parsed, platform):
