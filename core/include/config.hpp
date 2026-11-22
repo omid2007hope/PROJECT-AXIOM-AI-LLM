@@ -54,7 +54,7 @@ struct AxiomWeightHeader {
 
 static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactly 56 bytes");
 
-enum class AppMode { Chat, Use, Train, BulkTrain, Test, Benchmark, Server, Exit };
+enum class AppMode { Chat, Use, BulkTrain, Test, Benchmark, Server, Exit };
 
 struct Config {
 	static constexpr size_t ram_buffer_size = 4194304;

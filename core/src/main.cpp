@@ -19,7 +19,7 @@
 // utility layers never decide anything on their own.
 //
 //   app.exe            interactive menu
-//   app.exe --train    train on the built-in sample data
+//   app.exe --bulk     bulk train on asset_sample
 //   app.exe --test     run the test suites
 // =============================================================================
 
@@ -104,23 +104,6 @@ std::filesystem::path locate_core_dir() {
 	}
 	std::filesystem::path p = std::filesystem::absolute(__FILE__).parent_path().parent_path();
 	return p.empty() ? cur : p;
-}
-
-// Raw data samples used by developer mode (--train)
-Test make_sample_data() {
-	Test test;
-	test.test_input = {
-		"The", "silicon", "engine", "computes", "forward", "activations", "and", "analytical",
-		"backward", "gradients", "across", "unified", "tensor", "cores", "without", "numerical",
-		"divergence", "in", "native", "hardware", "execution", "using", "fast", "parallel",
-		"floating", "point", "tensor", "operations", "on", "modern", "gpus"
-	};
-
-	test.data_image = {};
-	test.data_video = {};
-	test.data_voice = {};
-
-	return test;
 }
 
 // *****************************************************************************
@@ -209,125 +192,23 @@ void pause_menu() {
 	std::getline(std::cin, dummy);
 }
 
-// Validates a single whitespace-free token
-template <typename E>
-bool parse_token(const std::string& token, E& value) {
-	char extra;
-	std::istringstream iss(token);
-
-	if (!(iss >> value) || (iss >> extra)) {
-		return false;
-	}
-
-	if constexpr (std::is_arithmetic_v<E>) {
-		// Numeric types: zero or positive only
-		return value >= 0;
-	} else {
-		// Non-numeric types (e.g. std::string): any non-empty token is accepted
-		return true;
-	}
-}
-
-// Validator for final stage v-1
-// Asks until the whole line is a non-empty, space-separated list of valid
-// values. T is a vector of the wanted element type.
-template <typename T>
-T Validate(const std::string& c_out) {
-	using Element = typename T::value_type;
-
-	std::string c_in;
-
-	while (true) {
-		std::cout << c_out << "\n";
-
-		if (!std::getline(std::cin, c_in)) {
-			std::cin.clear();
-			std::cerr << "\n[!] Input stream closed. Exiting.\n";
-			std::exit(1);
-		}
-		strip_utf8_bom(c_in);
-
-		// If more lines from a multi-line paste are already queued in the console buffer, absorb them
-		if constexpr (std::is_same_v<Element, std::string>) {
-			while (_isatty(_fileno(stdin)) && _kbhit()) {
-				std::string next_line;
-				if (std::getline(std::cin, next_line)) {
-					strip_utf8_bom(next_line);
-					c_in += " " + next_line;
-				} else {
-					break;
-				}
-			}
-		}
-
-		T data;
-		Element value {};
-		std::string token;
-		std::istringstream iss(c_in);
-		bool valid = true;
-
-		while (iss >> token) {
-			if (!parse_token(token, value)) {
-				valid = false;
-				break;
-			}
-			data.push_back(value);
-		}
-
-		if (valid && !data.empty()) {
-			return data;
-		}
-
-		std::cout << "[!] Invalid input. Please try again.\n";
-	}
-}
-
-// Validates a single file or directory path, preserving whitespace and stripping quotes
-std::vector<std::string> ValidatePaths(const std::string& c_out) {
-	std::string c_in;
-	while (true) {
-		std::cout << c_out << "\n";
-		if (!std::getline(std::cin, c_in)) {
-			std::cin.clear();
-			std::cerr << "\n[!] Input stream closed. Exiting.\n";
-			std::exit(1);
-		}
-		strip_utf8_bom(c_in);
-		size_t start = c_in.find_first_not_of(" \t\r\n");
-		if (start == std::string::npos) {
-			std::cout << "[!] Invalid input. Please try again.\n";
-			continue;
-		}
-		size_t end = c_in.find_last_not_of(" \t\r\n");
-		std::string trimmed = c_in.substr(start, end - start + 1);
-		if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
-			trimmed = trimmed.substr(1, trimmed.size() - 2);
-		}
-		if (!trimmed.empty()) {
-			return {trimmed};
-		}
-		std::cout << "[!] Invalid input. Please try again.\n";
-	}
-}
-
 // fetch arguments
 std::string fetch_argument(int count, char* argument[]) {
 	return count > 1 ? std::string(argument[1]) : std::string();
 }
 
-// Interactive menu. Fills `input` and returns the selected AppMode.
-AppMode collect_user_input(Input& input) {
+// Interactive menu. Returns the selected AppMode.
+AppMode collect_user_input() {
 	int option = 0;
 	while (true) {
 		std::cout << "======================================\n"
 				  << "           Welcome to AXIOM           \n"
 				  << "======================================\n"
 				  << "[1] Chat with Axiom\n"
-				  << "[2] Train it (Training)\n"
-				  << "[3] Run Tests\n"
-				  << "[4] Benchmark Hardware (Telemetry HUD)\n"
-				  << "[5] Bulk Training (asset_sample)\n"
-				  << "[6] Exit\n"
+				  << "[2] Run Tests\n"
+				  << "[3] Benchmark Hardware (Telemetry HUD)\n"
+				  << "[4] Bulk Training (asset_sample)\n"
+				  << "[5] Exit\n"
 				  << "> ";
 
 		option = read_choice();
@@ -340,128 +221,27 @@ AppMode collect_user_input(Input& input) {
 			return AppMode::Chat;
 		}
 
-		if (option == 3) {
+		if (option == 2) {
 			return AppMode::Test;
 		}
 
-		if (option == 4) {
+		if (option == 3) {
 			return AppMode::Benchmark;
 		}
 
-		if (option == 5) {
+		if (option == 4) {
 			return AppMode::BulkTrain;
 		}
 
-		if (option == 6 || option == 8) {
+		if (option == 5 || option == 8) {
 			return AppMode::Exit;
 		}
 
-		if (option != 2) {
-			std::cout << "\n[!] Invalid option.\n";
-			if (!_isatty(_fileno(stdin))) {
-				return AppMode::Exit;
-			}
-			continue;
-		}
-
-		break;
-	}
-
-	std::cout << "\n--- Training Mode: ON ---\n\n";
-
-	int type = 0;
-	while (true) {
-		std::cout << "Select Data Type:\n"
-				  << "[1] Text\n"
-				  << "[2] Image\n"
-				  << "[3] Video\n"
-				  << "[4] Voice\n"
-				  << "> ";
-
-		type = read_choice();
-
-		if (!std::cin || std::cin.eof()) {
-			return AppMode::Exit;
-		}
-
-		if (type >= 1 && type <= 4) {
-			break;
-		}
-
-		std::cout << "\n[!] Invalid data type.\n";
+		std::cout << "\n[!] Invalid option.\n";
 		if (!_isatty(_fileno(stdin))) {
 			return AppMode::Exit;
 		}
 	}
-
-	if (type == 1) {
-		input.user_input = Validate<std::vector<std::string>>("Enter Text: ");
-	} else if (type == 2) {
-		input.user_image_paths = ValidatePaths("Enter Image Path: ");
-	} else if (type == 3) {
-		input.user_video_paths = ValidatePaths("Enter Video Path: ");
-	} else if (type == 4) {
-		input.user_voice_paths = ValidatePaths("Enter Voice Path: ");
-	}
-
-	// Text and numbers can be paired with media
-	if (type == 1) {
-		int media = 0;
-		while (true) {
-			std::cout << "\nAdd media?\n[1] Yes\n[2] No\n> ";
-
-			media = read_choice();
-
-			if (!std::cin || std::cin.eof()) {
-				return AppMode::Exit;
-			}
-
-			if (media == 1 || media == 2) {
-				break;
-			}
-
-			std::cout << "\n[!] Invalid option.\n";
-			if (!_isatty(_fileno(stdin))) {
-				return AppMode::Exit;
-			}
-		}
-
-		if (media == 1) {
-			int media_type = 0;
-			while (true) {
-				std::cout << "\nSelect Media Type:\n"
-						  << "[1] Image\n"
-						  << "[2] Video\n"
-						  << "[3] Voice\n"
-						  << "> ";
-
-				media_type = read_choice();
-
-				if (!std::cin || std::cin.eof()) {
-					return AppMode::Exit;
-				}
-
-				if (media_type >= 1 && media_type <= 3) {
-					break;
-				}
-
-				std::cout << "\n[!] Invalid media type.\n";
-				if (!_isatty(_fileno(stdin))) {
-					return AppMode::Exit;
-				}
-			}
-
-			if (media_type == 1) {
-				input.user_image_paths = ValidatePaths("Enter Image Path: ");
-			} else if (media_type == 2) {
-				input.user_video_paths = ValidatePaths("Enter Video Path: ");
-			} else if (media_type == 3) {
-				input.user_voice_paths = ValidatePaths("Enter Voice Path: ");
-			}
-		}
-	}
-
-	return AppMode::Train;
 }
 
 // *****************************************************************************
@@ -702,7 +482,7 @@ void run_chat_engine(AI& ai, Parser& parser, Input& input,
 	} else {
 		std::cerr << "\033[31m[!] No valid model checkpoint found at: " << target_weights
 				  << "\033[0m\n"
-				  << "[!] Tip: Run Option [5] Bulk Training to train the brain first,\n"
+				  << "[!] Tip: Run Option [4] Bulk Training to train the brain first,\n"
 				  << "[!] or convert a GGUF model via 'python tools/convert_gguf_to_axiom.py'.\n"
 				  << std::flush;
 		return;
@@ -878,7 +658,7 @@ void run_inference_engine(AI& ai, Parser& parser, Input& input,
 	} else {
 		std::cout << "[!] Notice: '" << target_weights.filename().string() << "' not found.\n"
 				  << "[!] Running with baseline initialized weights.\n"
-				  << "[!] Tip: Run 'app.exe --train' and press 'S' to save trained weights.\n\n";
+				  << "[!] Tip: Run 'app.exe --bulk' to train and save trained weights.\n\n";
 	}
 
 	if (!is_transformer) {
@@ -1554,25 +1334,19 @@ struct EmbeddedDataCleanup {
 	~EmbeddedDataCleanup() { run(); }
 };
 
-// Executes a full training pipeline session (interactive or CLI)
+// Executes a full bulk training pipeline session (interactive or CLI)
 bool execute_training_session(
 	AI& ai, Optimizer& optimizer, Portion& portion, Elements& ai_elements, Parser& parser,
-	Input& input, Test& test, const std::filesystem::path& weights_path,
+	Input& input, const std::filesystem::path& weights_path,
 	const std::filesystem::path& vocab_path, const std::filesystem::path& embedded_path,
-	const std::filesystem::path& asset_dir, const std::filesystem::path& core_dir, AppMode mode,
+	const std::filesystem::path& asset_dir, const std::filesystem::path& core_dir,
 	bool developer_mode, size_t max_steps, bool is_interactive, bool auto_archive, bool auto_purge,
 	uint32_t min_frequency = 3, double target_stop_loss = 2.8, size_t epochs = 4) {
 	parser.developer_mode = developer_mode;
 	ai.enable_transformer = true;
 	ai.release_legacy_weights();
 
-	if (mode != AppMode::BulkTrain && std::filesystem::exists(vocab_path)) {
-		std::cout << "[..] Pre-existing vocabulary found at " << vocab_path.filename().string()
-				  << ". Loading vocabulary checkpoint...\n";
-		parser.load_vocabulary(vocab_path, input);
-	}
-
-	if (mode == AppMode::BulkTrain) {
+	{
 		std::error_code ec;
 		if (!std::filesystem::exists(asset_dir, ec)) {
 			std::filesystem::create_directories(asset_dir, ec);
@@ -1600,13 +1374,6 @@ bool execute_training_session(
 		}
 		std::cout << "\n[OK] Bulk ingestion complete: " << input.tokenized_data.size()
 				  << " tokens collected across " << processed << " files.\n";
-	} else {
-		std::cout << "[..] Parsing and tokenizing multimodal data...\n";
-		parser.tokenization(input, test);
-		if (input.tokenized_data.empty()) {
-			std::cerr << "[!] No data could be tokenized from the specified input.\n";
-			return false;
-		}
 	}
 
 	// Repeat sequence if shorter than one full context window + target to enable continuous training
@@ -1641,9 +1408,7 @@ bool execute_training_session(
 		std::cout << "\n--- Multimodal Tokenization & Embedding Pipeline Preview ---\n";
 		for (size_t i = 0; i < preview_count; ++i) {
 			const uint32_t token_id = input.tokenized_data[i];
-			const std::string raw_item = (developer_mode && i < test.test_input.size())
-											 ? test.test_input[i]
-											 : parser.token_to_string(input, token_id);
+			const std::string raw_item = parser.token_to_string(input, token_id);
 
 			std::cout << "  \"" << raw_item << "\" assigned id: " << token_id
 					  << " -> Tokenized into -> " << token_id << " -> tokenized embedded into -> [";
@@ -1797,7 +1562,7 @@ bool execute_training_session(
 		return false;
 	}
 
-	if (mode == AppMode::BulkTrain) {
+	{
 		std::cout << "\n========================================================\n"
 				  << "          BULK TRAINING COMPLETED SUCCESSFULLY          \n"
 				  << "========================================================\n"
@@ -1981,7 +1746,6 @@ int main(int argc, char* argv[]) {
 				<< "Execution Modes:\n"
 				<< "  (no argument)       Interactive console menu\n"
 				<< "  --chat              Speak directly with Axiom (Native GQA Transformer)\n"
-				<< "  --train [N]         Train on sample data / prompt (optional N steps limit)\n"
 				<< "  --bulk [N]          Bulk train on all files in asset directory (optional N steps)\n"
 				<< "  --benchmark         Run hardware saturation & telemetry benchmark\n"
 				<< "  --test              Run all automated test suites\n"
@@ -2140,7 +1904,7 @@ int main(int argc, char* argv[]) {
 			primary_mode_arg = "--chat";
 		} else if (a == "--use" || a == "--benchmark") {
 			primary_mode_arg = a;
-		} else if (a == "--bulk" || a == "--train-bulk" || a == "--train") {
+		} else if (a == "--bulk" || a == "--train-bulk") {
 			primary_mode_arg = a;
 			if (i + 1 < argc && argv[i + 1][0] != '-') {
 				try {
@@ -2153,7 +1917,7 @@ int main(int argc, char* argv[]) {
 		} else {
 			std::cerr
 				<< "Unknown argument: " << a << "\n"
-				<< "Usage: app.exe [--use | --train | --bulk | --benchmark | --test | --weights <path> | --vocab <path> | --lr <rate> | --data <dir> | --min-count <N> | --archive | --purge | --help]\n";
+				<< "Usage: app.exe [--use | --bulk | --benchmark | --test | --weights <path> | --vocab <path> | --lr <rate> | --data <dir> | --min-count <N> | --archive | --purge | --help]\n";
 			return 1;
 		}
 	}
@@ -2161,7 +1925,7 @@ int main(int argc, char* argv[]) {
 	const bool is_interactive = primary_mode_arg.empty() && custom_vocab_path.empty() &&
 								custom_weights_path.empty() && custom_data_dir.empty();
 
-	AppMode mode = AppMode::Train;
+	AppMode mode = AppMode::BulkTrain;
 	bool developer_mode = false;
 
 	if (primary_mode_arg == "--chat") {
@@ -2173,9 +1937,6 @@ int main(int argc, char* argv[]) {
 	} else if (primary_mode_arg == "--bulk" || primary_mode_arg == "--train-bulk") {
 		mode = AppMode::BulkTrain;
 		developer_mode = false;
-	} else if (primary_mode_arg == "--train") {
-		mode = AppMode::Train;
-		developer_mode = true;
 	}
 
 	// Everything below is configured here and handed down to the backend
@@ -2262,7 +2023,6 @@ int main(int argc, char* argv[]) {
 
 	Parser parser(developer_mode, embedded_path, asset_dirs);
 	Input input;
-	Test test = make_sample_data();
 
 	// Instantiate the required objects for the AI
 	Portion portion(config::ram_buffer_size, config::token_dim, config::context_window_size);
@@ -2271,7 +2031,7 @@ int main(int argc, char* argv[]) {
 	Elements ai_elements;
 	const bool allocate_legacy_flat =
 		is_interactive ||
-		(mode != AppMode::Chat && mode != AppMode::BulkTrain && mode != AppMode::Train);
+		(mode != AppMode::Chat && mode != AppMode::BulkTrain);
 	AI ai(portion.all_elements, portion.target_elements, config::weight_min, config::weight_max,
 		  ai_elements, allocate_legacy_flat);
 	if (custom_seed_set) {
@@ -2303,10 +2063,10 @@ int main(int argc, char* argv[]) {
 			run_hardware_benchmark(ai, parser, input);
 			return 0;
 		}
-		if (mode == AppMode::Train || mode == AppMode::BulkTrain) {
+		if (mode == AppMode::BulkTrain) {
 			const bool ok = execute_training_session(
-				ai, optimizer, portion, ai_elements, parser, input, test, training_weights_path,
-				training_vocab_path, embedded_path, asset_dir, core_dir, mode, developer_mode,
+				ai, optimizer, portion, ai_elements, parser, input, training_weights_path,
+				training_vocab_path, embedded_path, asset_dir, core_dir, developer_mode,
 				max_steps, false, auto_archive, auto_purge, min_frequency, target_stop_loss,
 				training_epochs);
 			return ok ? 0 : 1;
@@ -2317,7 +2077,7 @@ int main(int argc, char* argv[]) {
 	// Interactive Menu Loop
 	while (true) {
 		Input session_input;
-		AppMode selected_mode = collect_user_input(session_input);
+		AppMode selected_mode = collect_user_input();
 
 		if (selected_mode == AppMode::Exit) {
 			break;
@@ -2342,11 +2102,10 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		if (selected_mode == AppMode::Train || selected_mode == AppMode::BulkTrain) {
-			Test empty_test;
+		if (selected_mode == AppMode::BulkTrain) {
 			execute_training_session(ai, optimizer, portion, ai_elements, parser, session_input,
-									 empty_test, training_weights_path, training_vocab_path,
-									 embedded_path, asset_dir, core_dir, selected_mode, false,
+									 training_weights_path, training_vocab_path,
+									 embedded_path, asset_dir, core_dir, false,
 									 max_steps, true, auto_archive, auto_purge, min_frequency,
 									 target_stop_loss, training_epochs);
 			pause_menu();
