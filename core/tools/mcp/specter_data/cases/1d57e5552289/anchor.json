@@ -1,0 +1,40 @@
+{
+  "primary_name": "Omid Teimory",
+  "entity_kind": "person",
+  "known_aliases": [],
+  "known_handles_or_domains": [
+    "https://x.com/Omid2007hope",
+    "https://omidteimory.com/"
+  ],
+  "hints": {
+    "emails": [],
+    "phones": [],
+    "handles": [
+      "https://x.com/Omid2007hope",
+      "https://omidteimory.com/"
+    ],
+    "domains": []
+  },
+  "anchor_demographics": {
+    "birth_year": null,
+    "origin_city": ""
+  },
+  "core_profession": "",
+  "initial_hypotheses": [
+    {
+      "id": "H1",
+      "label": "Primary Target",
+      "description": "Subject matching seed qualifiers: Omid Teimory"
+    },
+    {
+      "id": "H2",
+      "label": "Namesake / Collision",
+      "description": "Distinct entity sharing name, alias, or handle"
+    }
+  ],
+  "case_id": "1d57e5552289",
+  "seed": "Omid Teimory",
+  "purpose": "NSA/CIA Quality Spy on Omid Teimory",
+  "created_utc": "2026-11-22T05:43:45+00:00",
+  "immutable": true
+}

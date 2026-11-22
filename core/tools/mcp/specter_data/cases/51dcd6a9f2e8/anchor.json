@@ -26,8 +26,9 @@
       "description": "Distinct entity sharing name, alias, or handle"
     }
   ],
-  "case_id": "6613fdcb6ee8",
+  "case_id": "51dcd6a9f2e8",
   "seed": "Omid Teimory",
-  "purpose": "NSA/CIA quality spying investigation - compile complete intelligence dossier on target Omid Teimory with full web search, GitHub queries, Wikipedia lookups, link crawling, ACH hypothesis evaluation, and dossier synthesis.",
-  "created_utc": "2026-11-22T05:06:54+00:00",
+  "purpose": "Open-source public intelligence research",
+  "created_utc": "2026-11-22T05:41:10+00:00",
   "immutable": true
+}
