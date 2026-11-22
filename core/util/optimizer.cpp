@@ -84,13 +84,90 @@ void Optimizer::read_chunk_into(std::vector<std::bfloat16_t>& buffer,
 	}
 }
 
+void Optimizer::read_token_chunk(std::vector<uint32_t>& buffer,
+				 size_t chunk_size,
+				 size_t context_size) {
+	buffer.clear();
+
+	if (!file_stream.is_open()) {
+		file_stream.open(data_path, std::ios::binary);
+		if (!file_stream) {
+			std::cerr << "Failed to open " << data_path << "\n";
+			return;
+		}
+	}
+
+	// Wrap cleanly to start of ocean on EOF (including exact chunk-size boundaries)
+	if (file_stream.eof() || file_stream.peek() == std::ifstream::traits_type::eof()) {
+		file_stream.clear();
+		file_stream.seekg(0, std::ios::beg);
+		token_seam_carry.clear();
+	}
+
+	// Prepend intra-epoch seam carry-forward so boundary windows between pools are preserved
+	if (!token_seam_carry.empty() && context_size > 0) {
+		const size_t carry_tokens = std::min<size_t>(token_seam_carry.size(), context_size);
+		buffer.assign(token_seam_carry.end() - static_cast<std::ptrdiff_t>(carry_tokens),
+			      token_seam_carry.end());
+	}
+
+	const size_t previous_size = buffer.size();
+	const size_t tokens_needed = (chunk_size > previous_size) ? (chunk_size - previous_size) : 0;
+
+	if (tokens_needed > 0) {
+		buffer.resize(previous_size + tokens_needed);
+		file_stream.read(reinterpret_cast<char*>(buffer.data() + previous_size),
+				 static_cast<std::streamsize>(tokens_needed * sizeof(uint32_t)));
+		const std::streamsize bytes_read = file_stream.gcount();
+		const size_t tokens_read =
+			(bytes_read > 0) ? (static_cast<size_t>(bytes_read) / sizeof(uint32_t)) : 0;
+		buffer.resize(previous_size + tokens_read);
+	}
+
+	// Ensure minimum window + target length if the entire ocean file is tiny
+	const size_t minimum_tokens = context_size + 1;
+	while (!buffer.empty() && buffer.size() < minimum_tokens) {
+		file_stream.clear();
+		file_stream.seekg(0, std::ios::beg);
+		const size_t current_size = buffer.size();
+		const size_t remaining_needed = minimum_tokens - current_size;
+		buffer.resize(current_size + remaining_needed);
+		file_stream.read(
+			reinterpret_cast<char*>(buffer.data() + current_size),
+			static_cast<std::streamsize>(remaining_needed * sizeof(uint32_t)));
+		const std::streamsize more_bytes = file_stream.gcount();
+		if (more_bytes <= 0) {
+			buffer.resize(current_size);
+			break;
+		}
+		buffer.resize(current_size + (static_cast<size_t>(more_bytes) / sizeof(uint32_t)));
+	}
+
+	// Update seam carry for the next pool chunk within this epoch
+	if (context_size > 0 && buffer.size() >= context_size) {
+		token_seam_carry.assign(
+			buffer.end() - static_cast<std::ptrdiff_t>(context_size), buffer.end());
+	} else {
+		token_seam_carry.clear();
+	}
+}
+
 void Optimizer::prefetch_loop(size_t chunk_size, size_t context_size, size_t dim) {
 	while (prefetch_active.load(std::memory_order_acquire)) {
 		if (chunk_buffer.can_produce()) {
 			ChunkSlot& slot = chunk_buffer.get_producer_slot();
-			read_chunk_into(slot.tokens, chunk_size, context_size, dim);
-			slot.elements = slot.tokens.size();
+			if (token_stream_mode) {
+				read_token_chunk(slot.token_values, chunk_size, context_size);
+				slot.elements = slot.token_values.size();
+			} else {
+				read_chunk_into(slot.tokens, chunk_size, context_size, dim);
+				slot.elements = slot.tokens.size();
+			}
 			chunk_buffer.push_produced();
+			if (slot.elements == 0) {
+				prefetch_active.store(false, std::memory_order_release);
+				break;
+			}
 		} else {
 			std::this_thread::sleep_for(std::chrono::microseconds(100));
 		}
@@ -99,6 +176,9 @@ void Optimizer::prefetch_loop(size_t chunk_size, size_t context_size, size_t dim
 
 void Optimizer::start_prefetch(const Portion& portion) {
 	if (!prefetch_active.load(std::memory_order_acquire)) {
+		if (prefetch_worker.joinable()) {
+			prefetch_worker.join();
+		}
 		prefetch_active.store(true, std::memory_order_release);
 		prefetch_worker = std::thread(
 			&Optimizer::prefetch_loop,
@@ -110,13 +190,11 @@ void Optimizer::start_prefetch(const Portion& portion) {
 }
 
 void Optimizer::stop_prefetch() {
-	if (prefetch_active.load(std::memory_order_acquire)) {
-		prefetch_active.store(false, std::memory_order_release);
-		if (prefetch_worker.joinable()) {
-			prefetch_worker.join();
-		}
-		chunk_buffer.clear();
+	prefetch_active.store(false, std::memory_order_release);
+	if (prefetch_worker.joinable()) {
+		prefetch_worker.join();
 	}
+	chunk_buffer.clear();
 }
 
 void Optimizer::disk_to_ram(Portion& portion) {
@@ -124,16 +202,35 @@ void Optimizer::disk_to_ram(Portion& portion) {
 	    portion.context_in_use.load(std::memory_order_acquire) == false) {
 		portion.buffer_in_use.store(true, std::memory_order_release);
 
-		if (chunk_buffer.can_consume()) {
-			ChunkSlot& slot = chunk_buffer.get_consumer_slot();
-			portion.ram_buffer_tokens = std::move(slot.tokens);
-			chunk_buffer.pop_consumed();
+		// When background prefetching owns file_stream, wait for the SPSC ring slot
+		while (prefetch_active.load(std::memory_order_acquire) &&
+		       !chunk_buffer.can_consume()) {
+			std::this_thread::sleep_for(std::chrono::microseconds(100));
+		}
+
+		if (token_stream_mode) {
+			if (chunk_buffer.can_consume()) {
+				ChunkSlot& slot = chunk_buffer.get_consumer_slot();
+				portion.ram_buffer_token_ids = std::move(slot.token_values);
+				chunk_buffer.pop_consumed();
+			} else {
+				read_token_chunk(
+					portion.ram_buffer_token_ids,
+					portion.ram_buffer_size,
+					portion.context_window_size);
+			}
 		} else {
-			read_chunk_into(
-				portion.ram_buffer_tokens,
-				portion.ram_buffer_size,
-				portion.context_window_size,
-				portion.token_dim);
+			if (chunk_buffer.can_consume()) {
+				ChunkSlot& slot = chunk_buffer.get_consumer_slot();
+				portion.ram_buffer_tokens = std::move(slot.tokens);
+				chunk_buffer.pop_consumed();
+			} else {
+				read_chunk_into(
+					portion.ram_buffer_tokens,
+					portion.ram_buffer_size,
+					portion.context_window_size,
+					portion.token_dim);
+			}
 		}
 
 		portion.offset = 0;

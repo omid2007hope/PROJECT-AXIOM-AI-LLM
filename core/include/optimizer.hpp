@@ -202,6 +202,7 @@ struct Portion {
 // -----------------------------------------------------------------------------
 struct ChunkSlot {
 	std::vector<std::bfloat16_t> tokens {};
+	std::vector<uint32_t> token_values {};
 	size_t elements = 0;
 };
 
@@ -252,6 +253,11 @@ public:
 	void clear() {
 		read_index.store(0, std::memory_order_relaxed);
 		write_index.store(0, std::memory_order_relaxed);
+		for (size_t i = 0; i < Capacity; ++i) {
+			slots[i].tokens.clear();
+			slots[i].token_values.clear();
+			slots[i].elements = 0;
+		}
 	}
 };
 
@@ -266,15 +272,20 @@ private:
 	std::atomic<bool> prefetch_active {false};
 	ChunkRingBuffer<4> chunk_buffer;
 	std::vector<std::bfloat16_t> seam_carry;
+	std::vector<uint32_t> token_seam_carry;
+	bool token_stream_mode = false;
 
 	void prefetch_loop(size_t chunk_size, size_t context_size, size_t dim);
 	void read_chunk_into(std::vector<std::bfloat16_t>& buffer,
 			     size_t chunk_size,
 			     size_t context_size,
 			     size_t dim);
+	void read_token_chunk(std::vector<uint32_t>& buffer,
+			      size_t chunk_size,
+			      size_t context_size);
 
 public:
-	// Path to the binary embedded data file produced by Parser::embedding().
+	// Path to the binary ocean file (uint32_t token IDs or legacy BF16 embeddings).
 	// Decided by the caller (main) and read by disk_to_ram().
 	std::filesystem::path data_path;
 
@@ -289,10 +300,23 @@ public:
 		close_stream();
 	}
 
+	void set_token_mode(bool enabled) {
+		stop_prefetch();
+		close_stream();
+		token_stream_mode = enabled;
+	}
+
+	bool is_token_mode() const {
+		return token_stream_mode;
+	}
+
 	void close_stream() {
+		stop_prefetch();
 		if (file_stream.is_open()) {
 			file_stream.close();
 		}
+		seam_carry.clear();
+		token_seam_carry.clear();
 	}
 
 	void start_prefetch(const Portion& portion);

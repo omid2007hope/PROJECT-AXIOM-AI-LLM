@@ -912,17 +912,23 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 					   const std::filesystem::path& weights_path,
 					   const std::filesystem::path& vocab_path, size_t max_steps = 0,
 					   double target_stop_loss = 2.8, size_t epochs = 4) {
-	size_t total_dataset_tokens = portion.ram_buffer_token_ids.size();
+	size_t total_dataset_tokens = 0;
 	std::error_code ec;
-	uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
-	if (total_dataset_tokens == 0 && !ec && file_bytes > 0) {
-		total_dataset_tokens = file_bytes / (portion.token_dim * sizeof(std::bfloat16_t));
+	const uintmax_t file_bytes = std::filesystem::file_size(optimizer.data_path, ec);
+	if (optimizer.is_token_mode() && !ec && file_bytes > 0) {
+		total_dataset_tokens = static_cast<size_t>(file_bytes / sizeof(uint32_t));
+	} else if (!portion.ram_buffer_token_ids.empty()) {
+		total_dataset_tokens = portion.ram_buffer_token_ids.size();
+	} else if (!ec && file_bytes > 0) {
+		total_dataset_tokens =
+			static_cast<size_t>(file_bytes / (portion.token_dim * sizeof(std::bfloat16_t)));
 	}
 	const size_t available_span = (total_dataset_tokens > portion.context_window_size)
 									  ? (total_dataset_tokens - portion.context_window_size)
 									  : 0;
 	const size_t window_stride =
-		(!portion.ram_buffer_token_ids.empty() && portion.context_window_size > 0)
+		((optimizer.is_token_mode() || !portion.ram_buffer_token_ids.empty()) &&
+		 portion.context_window_size > 0)
 			? std::min<size_t>(portion.context_window_size, 2048)
 			: 1;
 	const size_t steps_per_epoch =
@@ -1206,9 +1212,23 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 			}
 		}
 
-		// When the RAM buffer is exhausted, the offset resets to 0.
-		// Pull the next massive chunk from disk into RAM or cycle to next epoch.
+		// When the RAM pool is exhausted, the offset resets to 0.
+		// Refill the RAM pool from the disk ocean or cycle to the next epoch.
 		if (portion.offset == 0) {
+			if (optimizer.is_token_mode()) {
+				optimizer.disk_to_ram(portion);
+				if (portion.ram_buffer_token_ids.size() < portion.context_window_size + 1) {
+					if (step < target_steps && steps_per_epoch > 0) {
+						optimizer.disk_to_ram(portion);
+						if (portion.ram_buffer_token_ids.size() >=
+						    portion.context_window_size + 1) {
+							continue;
+						}
+					}
+					break;
+				}
+				continue;
+			}
 			if (!portion.ram_buffer_token_ids.empty()) {
 				if (step < target_steps) {
 					continue;
@@ -1316,8 +1336,8 @@ struct EmbeddedDataCleanup {
 	const std::filesystem::path& path;
 
 	void run() {
-		// Windows cannot delete a file that is still open, and the next session
-		// must start reading from the top of a fresh file.
+		// Stop background prefetch and close the file handle before removal on Windows.
+		optimizer.stop_prefetch();
 		optimizer.close_stream();
 		portion.ram_buffer_tokens.clear();
 		portion.ram_buffer_token_ids.clear();
@@ -1326,7 +1346,7 @@ struct EmbeddedDataCleanup {
 
 		std::error_code ec;
 		if (std::filesystem::remove(path, ec)) {
-			std::cout << "[OK] Temporary embedding stream automatically removed: "
+			std::cout << "[OK] Temporary token ocean automatically removed: "
 					  << path.filename().string() << "\n";
 		}
 	}
@@ -1499,10 +1519,19 @@ bool execute_training_session(
 		}
 	}
 
-	// Phase 4.1: Invert Host-to-Device Dataflow
-	// Stream token IDs directly via portion.ram_buffer_token_ids for 512-byte PCIe transfers and CUDA gather
-	portion.ram_buffer_token_ids = std::move(input.tokenized_data);
+	// Unified Ocean -> Pool -> Glass -> Engine streaming on uint32_t token IDs:
+	// Flush training tokens to disk (Ocean), release full-corpus RAM, and fill Pool 1.
+	optimizer.set_token_mode(true);
+	if (!parser.save_token_ocean(embedded_path, input.tokenized_data)) {
+		std::cerr << "[!] Failed to persist token ocean to disk.\n";
+		return false;
+	}
+	std::vector<uint32_t>().swap(input.tokenized_data);
+
+	portion.ram_buffer_tokens.clear();
+	portion.ram_buffer_token_ids.clear();
 	portion.offset = 0;
+	optimizer.disk_to_ram(portion);
 
 	// Training Mode
 	if (developer_mode) {
@@ -1551,10 +1580,14 @@ bool execute_training_session(
 
 	print_hardware_telemetry(portion);
 
+	// Overlap Ocean -> Pool disk reads with GPU Glass -> Engine execution
+	optimizer.start_prefetch(portion);
+
 	const bool training_ok =
 		run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path,
 						  vocab_path, max_steps, target_stop_loss, epochs);
 
+	optimizer.stop_prefetch();
 	portion.free_pinned();
 	embedded_cleanup.run();
 

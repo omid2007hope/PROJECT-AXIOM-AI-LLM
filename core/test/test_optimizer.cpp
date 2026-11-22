@@ -205,6 +205,118 @@ bool test_optimizer() {
 		check(!prefetch_opt.is_prefetch_running(), "Prefetch stopped after stop_prefetch");
 	}
 
+	// ── [9] Token-ID Ocean -> Pool -> Glass Streaming Cycle ──────────────────
+	std::cout << "\n[9] Token-ID Ocean -> Pool -> Glass Streaming Cycle\n";
+	{
+		const std::filesystem::path ocean_path =
+			test_core_dir() / config::database_folder / "test_token_ocean.bin";
+		constexpr size_t ocean_tokens = 1500;
+		constexpr size_t pool_tokens = 600;
+		std::vector<uint32_t> source_tokens(ocean_tokens);
+		for (size_t i = 0; i < ocean_tokens; ++i) {
+			source_tokens[i] = static_cast<uint32_t>(1000 + i);
+		}
+
+		Parser ocean_parser(true, ocean_path, test_asset_dirs());
+		check(ocean_parser.save_token_ocean(ocean_path, source_tokens),
+		      "save_token_ocean() writes uint32_t ocean to disk");
+		std::error_code size_error;
+		check_eq(std::filesystem::file_size(ocean_path, size_error),
+			 static_cast<uintmax_t>(ocean_tokens * sizeof(uint32_t)),
+			 "token ocean file size is exactly 4 bytes per token");
+
+		Portion token_portion(pool_tokens, TOKEN_DIM, CONTEXT_WINDOW);
+		check(token_portion.allocate_pinned(), "token portion pinned allocation succeeded");
+
+		Optimizer token_opt(ocean_path, c.learning_rate);
+		token_opt.set_token_mode(true);
+		check(token_opt.is_token_mode(), "optimizer token mode enabled");
+
+		// Pool 1: tokens [1000 .. 1599]
+		token_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), pool_tokens,
+			 "Pool 1 filled to pool_tokens (600)");
+		check_eq(token_portion.ram_buffer_token_ids.front(), uint32_t {1000},
+			 "Pool 1 begins at ocean token 0");
+
+		// Drain every Glass from Pool 1 and verify contiguous context -> target alignment
+		size_t pool1_glasses = 0;
+		bool alignment_valid = true;
+		while (token_opt.load_context_window(token_portion)) {
+			++pool1_glasses;
+			const uint32_t* ctx = token_portion.context_token_ids[token_portion.buffer_index];
+			const uint32_t target_id =
+				*reinterpret_cast<const uint32_t*>(token_portion.target_tokens[token_portion.buffer_index]);
+			if (!token_portion.has_token_ids || ctx[CONTEXT_WINDOW - 1] + 1U != target_id) {
+				alignment_valid = false;
+			}
+		}
+		check(pool1_glasses == 2, "Pool 1 yielded 2 non-overlapping 256-token glasses");
+		check(alignment_valid, "Every glass has contiguous context and exact next-token target");
+		check_eq(token_portion.offset, size_t {0}, "Pool 1 offset reset to 0 after exhaustion");
+
+		// Pool 2: 256 seam carry [1344..1599] + 344 new [1600..1943]
+		token_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), pool_tokens,
+			 "Pool 2 filled to pool_tokens with seam carry");
+		check_eq(token_portion.ram_buffer_token_ids[0], uint32_t {1344},
+			 "Pool 2 starts with 256-token seam carry");
+		check_eq(token_portion.ram_buffer_token_ids[CONTEXT_WINDOW], uint32_t {1600},
+			 "Pool 2 continues seamlessly at token 600");
+
+		// Pool 3: 256 seam [1688..1943] + 344 new [1944..2287]
+		token_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), pool_tokens,
+			 "Pool 3 filled to pool_tokens");
+
+		// Pool 4 (Ocean tail): 256 seam [2032..2287] + 212 remaining [2288..2499] = 468
+		token_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), size_t {468},
+			 "Pool 4 holds ocean tail with seam carry (468 tokens)");
+		check_eq(token_portion.ram_buffer_token_ids.back(), uint32_t {2499},
+			 "Pool 4 ends on final ocean token");
+
+		// Pool 5 (Epoch 2 wrap-around): clean restart at token 0 without cross-epoch seam
+		token_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), pool_tokens,
+			 "Pool 5 wraps cleanly to Epoch 2 with 600 tokens");
+		check_eq(token_portion.ram_buffer_token_ids.front(), uint32_t {1000},
+			 "Epoch 2 starts cleanly at token 0 (no cross-epoch seam bleed)");
+
+		// Async SPSC Prefetch in Token-ID mode
+		token_opt.start_prefetch(token_portion);
+		check(token_opt.is_prefetch_running(), "Token prefetch worker started");
+		token_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), pool_tokens,
+			 "Async prefetched token Pool 2 consumed cleanly");
+		check_eq(token_portion.ram_buffer_token_ids[0], uint32_t {1344},
+			 "Async prefetched token Pool 2 preserved seam carry");
+		token_opt.stop_prefetch();
+		token_opt.close_stream();
+
+		// Exact chunk-size multiple Ocean wrap-around check
+		const std::vector<uint32_t> exact_tokens(source_tokens.begin(),
+							 source_tokens.begin() + pool_tokens);
+		check(ocean_parser.save_token_ocean(ocean_path, exact_tokens),
+		      "save_token_ocean() writes exact-multiple ocean (600 tokens)");
+		Optimizer exact_opt(ocean_path, c.learning_rate);
+		exact_opt.set_token_mode(true);
+		exact_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), pool_tokens,
+			 "Exact-multiple ocean Pool 1 has 600 tokens");
+		exact_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.size(), pool_tokens,
+			 "Exact-multiple ocean Pool 2 wraps cleanly to 600 tokens");
+		check_eq(token_portion.ram_buffer_token_ids.front(), uint32_t {1000},
+			 "Exact-multiple ocean Epoch 2 restarts at token 0");
+		exact_opt.close_stream();
+
+		token_portion.free_pinned();
+		std::error_code remove_error;
+		check(std::filesystem::remove(ocean_path, remove_error),
+		      "Temporary test token ocean removed cleanly after stream close");
+	}
+
 	std::cout << "\n=== Optimizer Test Suite: " << s_pass << " passed, " << s_fail
 		  << " failed ===\n";
 	int fails = s_fail;

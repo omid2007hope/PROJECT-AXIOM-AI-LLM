@@ -971,6 +971,11 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 			// Phase 1.3: Non-media binary assets are NOT streamed into image_dictionary
 			report_file_done(fpath, fsize, "Binary Asset (Skipped Raw Streaming)", 0);
 		}
+
+		// Mark document/asset boundary so unrelated files never bleed across a context window
+		if (input.tokenized_data.size() > initial_tokens) {
+			input.tokenized_data.push_back(vocab::EOS);
+		}
 	}
 
 	if (!developer_mode && files_processed > 0) {
@@ -981,6 +986,62 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 	}
 
 	return files_processed;
+}
+
+bool Parser::save_token_ocean(const std::filesystem::path& target_path,
+			      const std::vector<uint32_t>& token_stream) const {
+	if (token_stream.empty()) {
+		std::cerr << "[!] Cannot write empty token ocean to " << target_path.string()
+			  << "\n";
+		return false;
+	}
+
+	if (!target_path.parent_path().empty()) {
+		std::error_code dir_error;
+		std::filesystem::create_directories(target_path.parent_path(), dir_error);
+	}
+
+	std::ofstream output_file(target_path, std::ios::binary | std::ios::trunc);
+	if (!output_file) {
+		std::cerr << "[!] Fatal: Failed to open " << target_path.string()
+			  << " for writing token ocean.\n";
+		return false;
+	}
+
+	const size_t total_tokens = token_stream.size();
+	size_t written_tokens = 0;
+	while (written_tokens < total_tokens) {
+		const size_t batch_count =
+			std::min<size_t>(config::chunk_tokens, total_tokens - written_tokens);
+		output_file.write(
+			reinterpret_cast<const char*>(token_stream.data() + written_tokens),
+			static_cast<std::streamsize>(batch_count * sizeof(uint32_t)));
+		if (!output_file) {
+			std::cerr << "[!] Write failure while streaming token ocean to "
+				  << target_path.string() << "\n";
+			output_file.close();
+			std::error_code remove_error;
+			std::filesystem::remove(target_path, remove_error);
+			return false;
+		}
+		written_tokens += batch_count;
+	}
+
+	output_file.close();
+	if (!output_file) {
+		std::cerr << "[!] Failed to flush token ocean to " << target_path.string() << "\n";
+		std::error_code remove_error;
+		std::filesystem::remove(target_path, remove_error);
+		return false;
+	}
+
+	const uintmax_t total_bytes =
+		static_cast<uintmax_t>(total_tokens) * sizeof(uint32_t);
+	std::cout << "[OK] Token ocean streamed to disk: " << total_tokens << " tokens ("
+		  << format_file_size(total_bytes) << ") -> " << target_path.filename().string()
+		  << "\n"
+		  << std::flush;
+	return true;
 }
 
 bool Parser::save_vocabulary(const std::filesystem::path& filepath, const Input& input) {

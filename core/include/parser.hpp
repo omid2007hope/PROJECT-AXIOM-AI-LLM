@@ -295,6 +295,10 @@ public:
 	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input,
 								   size_t max_files = 0, uint32_t min_frequency = 1);
 
+	// Writes flat uint32_t token IDs to disk in bounded chunks (the persistent Token Ocean)
+	bool save_token_ocean(const std::filesystem::path& target_path,
+						  const std::vector<uint32_t>& token_stream) const;
+
 	// Returns the list of files processed in the most recent bulk tokenization run
 	const std::vector<std::filesystem::path>& get_last_bulk_files() const {
 		return last_bulk_files;
