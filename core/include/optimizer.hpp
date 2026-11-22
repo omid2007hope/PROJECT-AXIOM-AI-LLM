@@ -125,6 +125,9 @@ struct Portion {
 	// Flag indicating if current window in portion was loaded with token IDs
 	bool has_token_ids = false;
 
+	// True when the active Pool reaches the end of the current epoch (allows tail window)
+	bool pool_at_epoch_end = true;
+
 	// RAM buffer for uint32_t token IDs
 	std::vector<uint32_t> ram_buffer_token_ids = {};
 
@@ -134,9 +137,11 @@ struct Portion {
 	// Start index of every sliding window, reshuffled at the start of each epoch
 	// (offset == 0). Windows are visited as window_order[offset].
 	std::vector<uint32_t> window_order = {};
+	uint32_t shuffle_seed = config::random_seed;
 	std::mt19937 shuffle_engine {config::random_seed};
 
 	void seed_shuffle(uint32_t seed) {
+		shuffle_seed = seed;
 		shuffle_engine.seed(seed);
 	}
 
@@ -204,6 +209,7 @@ struct ChunkSlot {
 	std::vector<std::bfloat16_t> tokens {};
 	std::vector<uint32_t> token_values {};
 	size_t elements = 0;
+	bool at_epoch_end = false;
 };
 
 template <size_t Capacity = 4>
@@ -257,6 +263,7 @@ public:
 			slots[i].tokens.clear();
 			slots[i].token_values.clear();
 			slots[i].elements = 0;
+			slots[i].at_epoch_end = false;
 		}
 	}
 };
@@ -282,7 +289,8 @@ private:
 			     size_t dim);
 	void read_token_chunk(std::vector<uint32_t>& buffer,
 			      size_t chunk_size,
-			      size_t context_size);
+			      size_t context_size,
+			      bool& at_epoch_end);
 
 public:
 	// Path to the binary ocean file (uint32_t token IDs or legacy BF16 embeddings).
@@ -329,6 +337,8 @@ public:
 	}
 
 	void disk_to_ram(Portion& portion);
+
+	void reset_stream(Portion& portion, bool restart_prefetch = false);
 
 	bool load_context_window(Portion& portion);
 };

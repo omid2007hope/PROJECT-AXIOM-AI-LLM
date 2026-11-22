@@ -86,8 +86,10 @@ void Optimizer::read_chunk_into(std::vector<std::bfloat16_t>& buffer,
 
 void Optimizer::read_token_chunk(std::vector<uint32_t>& buffer,
 				 size_t chunk_size,
-				 size_t context_size) {
+				 size_t context_size,
+				 bool& at_epoch_end) {
 	buffer.clear();
+	at_epoch_end = false;
 
 	if (!file_stream.is_open()) {
 		file_stream.open(data_path, std::ios::binary);
@@ -124,23 +126,29 @@ void Optimizer::read_token_chunk(std::vector<uint32_t>& buffer,
 		buffer.resize(previous_size + tokens_read);
 	}
 
-	// Ensure minimum window + target length if the entire ocean file is tiny
-	const size_t minimum_tokens = context_size + 1;
-	while (!buffer.empty() && buffer.size() < minimum_tokens) {
-		file_stream.clear();
-		file_stream.seekg(0, std::ios::beg);
-		const size_t current_size = buffer.size();
-		const size_t remaining_needed = minimum_tokens - current_size;
-		buffer.resize(current_size + remaining_needed);
-		file_stream.read(
-			reinterpret_cast<char*>(buffer.data() + current_size),
-			static_cast<std::streamsize>(remaining_needed * sizeof(uint32_t)));
-		const std::streamsize more_bytes = file_stream.gcount();
-		if (more_bytes <= 0) {
-			buffer.resize(current_size);
-			break;
+	const bool reached_eof =
+		file_stream.eof() || (file_stream.peek() == std::ifstream::traits_type::eof());
+
+	if (reached_eof) {
+		at_epoch_end = true;
+		token_seam_carry.clear();
+
+		// Pad tiny oceans (< context_size + 1) in RAM with EOS delimiters so file_stream stays at EOF
+		const size_t minimum_tokens = context_size + 1;
+		if (!buffer.empty() && buffer.size() < minimum_tokens && previous_size == 0) {
+			const std::vector<uint32_t> seed_tokens = buffer;
+			buffer.reserve(minimum_tokens);
+			while (buffer.size() < minimum_tokens) {
+				if (buffer.back() != vocab::EOS) {
+					buffer.push_back(vocab::EOS);
+				}
+				for (size_t i = 0; i < seed_tokens.size() && buffer.size() < minimum_tokens;
+				     ++i) {
+					buffer.push_back(seed_tokens[i]);
+				}
+			}
 		}
-		buffer.resize(current_size + (static_cast<size_t>(more_bytes) / sizeof(uint32_t)));
+		return;
 	}
 
 	// Update seam carry for the next pool chunk within this epoch
@@ -157,11 +165,16 @@ void Optimizer::prefetch_loop(size_t chunk_size, size_t context_size, size_t dim
 		if (chunk_buffer.can_produce()) {
 			ChunkSlot& slot = chunk_buffer.get_producer_slot();
 			if (token_stream_mode) {
-				read_token_chunk(slot.token_values, chunk_size, context_size);
+				read_token_chunk(
+					slot.token_values,
+					chunk_size,
+					context_size,
+					slot.at_epoch_end);
 				slot.elements = slot.token_values.size();
 			} else {
 				read_chunk_into(slot.tokens, chunk_size, context_size, dim);
 				slot.elements = slot.tokens.size();
+				slot.at_epoch_end = false;
 			}
 			chunk_buffer.push_produced();
 			if (slot.elements == 0) {
@@ -212,12 +225,16 @@ void Optimizer::disk_to_ram(Portion& portion) {
 			if (chunk_buffer.can_consume()) {
 				ChunkSlot& slot = chunk_buffer.get_consumer_slot();
 				portion.ram_buffer_token_ids = std::move(slot.token_values);
+				portion.pool_at_epoch_end = slot.at_epoch_end;
 				chunk_buffer.pop_consumed();
 			} else {
+				bool at_epoch_end = false;
 				read_token_chunk(
 					portion.ram_buffer_token_ids,
 					portion.ram_buffer_size,
-					portion.context_window_size);
+					portion.context_window_size,
+					at_epoch_end);
+				portion.pool_at_epoch_end = at_epoch_end;
 			}
 		} else {
 			if (chunk_buffer.can_consume()) {
@@ -235,6 +252,21 @@ void Optimizer::disk_to_ram(Portion& portion) {
 
 		portion.offset = 0;
 		portion.buffer_in_use.store(false, std::memory_order_release);
+	}
+}
+
+void Optimizer::reset_stream(Portion& portion, bool restart_prefetch) {
+	close_stream();
+	portion.offset = 0;
+	portion.window_order.clear();
+	portion.ram_buffer_tokens.clear();
+	portion.ram_buffer_token_ids.clear();
+	portion.pool_at_epoch_end = true;
+	if (!data_path.empty()) {
+		disk_to_ram(portion);
+	}
+	if (restart_prefetch) {
+		start_prefetch(portion);
 	}
 }
 
@@ -265,22 +297,36 @@ bool Optimizer::load_context_window(Portion& portion) {
 				(portion.ram_buffer_token_ids.size() > portion.context_window_size)
 					? (portion.ram_buffer_token_ids.size() - portion.context_window_size)
 					: 0;
-			const size_t total_windows =
+			size_t total_windows =
 				(available_span > 0)
 					? ((available_span - 1) / window_stride + 1)
 					: 0;
+			const bool append_tail_window =
+				portion.pool_at_epoch_end && (available_span > 1) &&
+				(((available_span - 1) % window_stride) != 0);
+			if (append_tail_window) {
+				++total_windows;
+			}
 
 			if (portion.offset == 0 || portion.window_order.size() != total_windows) {
 				portion.window_order.resize(total_windows);
-				std::iota(portion.window_order.begin(), portion.window_order.end(), 0U);
+				const size_t aligned_count =
+					append_tail_window ? (total_windows - 1) : total_windows;
+				for (size_t i = 0; i < aligned_count; ++i) {
+					portion.window_order[i] =
+						static_cast<uint32_t>(i * window_stride);
+				}
+				if (append_tail_window) {
+					portion.window_order[aligned_count] =
+						static_cast<uint32_t>(available_span - 1);
+				}
 				std::shuffle(portion.window_order.begin(),
 					     portion.window_order.end(),
 					     portion.shuffle_engine);
 			}
 
 			if (portion.offset < total_windows) {
-				const size_t window_start =
-					portion.window_order[portion.offset] * window_stride;
+				const size_t window_start = portion.window_order[portion.offset];
 				if (portion.context_token_ids[buffer_index]) {
 					std::memcpy(portion.context_token_ids[buffer_index],
 						    portion.ram_buffer_token_ids.data() + window_start,

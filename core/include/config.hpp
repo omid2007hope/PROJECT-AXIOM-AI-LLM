@@ -126,6 +126,9 @@ constexpr size_t token_dim = Config::token_dim;				// GPT-2 scale (Must be multi
 constexpr size_t context_window_size =
 	Config::context_window_size; // Doubled to capture paragraph-level context
 
+static_assert(ram_buffer_size % context_window_size == 0,
+	      "ram_buffer_size must be an exact multiple of context_window_size");
+
 // AdamW Optimizer Settings
 constexpr float learning_rate =
 	Config::learning_rate; // Base AdamW rate (fan-in scaled inside CUDA kernels)

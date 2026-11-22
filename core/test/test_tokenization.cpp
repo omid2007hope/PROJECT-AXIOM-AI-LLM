@@ -204,6 +204,64 @@ bool test_tokenization() {
 	std::filesystem::remove(freq_sample_file, ec);
 	std::filesystem::remove(freq_test_dir, ec);
 
+	// ── Streaming Ingestion + Globally Block-Shuffled Ocean Split ────────────
+	std::cout << "\n[+] Streaming Ingestion & Block-Shuffled Ocean Pipeline\n";
+	const std::filesystem::path stream_dir = test_core_dir() / "test_sandbox_stream";
+	std::filesystem::create_directories(stream_dir, ec);
+	{
+		for (int f = 0; f < 4; ++f) {
+			std::ofstream f_out(stream_dir / ("doc_" + std::to_string(f) + ".txt"));
+			for (int r = 0; r < 12000; ++r) {
+				f_out << "token" << f << " word" << (r % 50) << " alpha" << f << "\n";
+			}
+		}
+	}
+
+	Input stream_input;
+	Parser stream_parser(true, test_embedded_path(), {stream_dir});
+	const std::filesystem::path staging_bin =
+		test_core_dir() / config::database_folder / "test_stream_staging.bin";
+	const std::filesystem::path shuffled_bin =
+		test_core_dir() / config::database_folder / "test_stream_ocean.bin";
+	size_t streamed_total = 0;
+	const size_t stream_files = stream_parser.bulk_tokenize_directory(
+		stream_dir, stream_input, 0, 1, staging_bin, true, config::random_seed,
+		&streamed_total);
+
+	test_check_eq(stream_files, static_cast<size_t>(4), "Streaming ingestion processed 4 files", s_pass, s_fail);
+	test_check(stream_input.tokenized_data.empty(), "Streaming ingestion avoids buffering tokens in input.tokenized_data", s_pass, s_fail);
+	test_check(streamed_total > 140000, "Streaming ingestion wrote > 140k tokens directly to disk", s_pass, s_fail);
+	test_check_eq(std::filesystem::file_size(staging_bin, ec),
+		      static_cast<uintmax_t>(streamed_total * sizeof(uint32_t)),
+		      "Staging file size matches exact streamed token count (4 B/token)", s_pass, s_fail);
+
+	std::vector<uint32_t> val_split;
+	size_t train_ocean_tokens = 0;
+	constexpr size_t small_pool_cap = 70000;
+	const bool prep_ok = stream_parser.prepare_training_ocean(
+		staging_bin, shuffled_bin, config::context_window_size, small_pool_cap,
+		config::random_seed, val_split, train_ocean_tokens);
+	test_check(prep_ok, "prepare_training_ocean() splits validation and block-shuffles multi-pool Ocean", s_pass, s_fail);
+	test_check(!std::filesystem::exists(staging_bin, ec), "Staging temporary file deleted after ocean split", s_pass, s_fail);
+	test_check(!val_split.empty() && val_split.size() <= small_pool_cap,
+		   "Validation split bounded within pool_capacity", s_pass, s_fail);
+	test_check(train_ocean_tokens > small_pool_cap, "Multi-pool train ocean exceeds pool_capacity", s_pass, s_fail);
+	test_check_eq(std::filesystem::file_size(shuffled_bin, ec),
+		      static_cast<uintmax_t>(train_ocean_tokens * sizeof(uint32_t)),
+		      "Block-shuffled ocean file preserves exact train token count", s_pass, s_fail);
+
+	bool no_pad_in_val = true;
+	for (uint32_t tok : val_split) {
+		if (tok == vocab::PAD) {
+			no_pad_in_val = false;
+			break;
+		}
+	}
+	test_check(no_pad_in_val, "Validation split uses EOS delimiters (zero PAD corruption)", s_pass, s_fail);
+
+	std::filesystem::remove(shuffled_bin, ec);
+	std::filesystem::remove_all(stream_dir, ec);
+
 	std::cout << "=== Tokenization & Modality Test Suite: " << s_pass << " passed, " << s_fail << " failed ===\n";
 	return s_fail == 0;
 }

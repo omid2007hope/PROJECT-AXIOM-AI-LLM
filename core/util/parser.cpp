@@ -20,6 +20,8 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <numeric>
+#include <random>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -611,11 +613,93 @@ static void print_progress_bar(const std::string& filename,
 		  << " / " << format_file_size(total_bytes) << ")" << std::flush;
 }
 
+enum class BulkModality { Document, Image, Video, Audio, Binary };
+
+static BulkModality classify_bulk_modality(const std::filesystem::path& file_path,
+					   const IdentifiedFile& id_file,
+					   std::string& lowercase_ext) {
+	lowercase_ext = file_path.extension().string();
+	for (char& c : lowercase_ext) {
+		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	}
+
+	const bool is_text_ext =
+		(lowercase_ext == ".txt" || lowercase_ext == ".text" || lowercase_ext == ".md" ||
+		 lowercase_ext == ".markdown" || lowercase_ext == ".json" ||
+		 lowercase_ext == ".csv" || lowercase_ext == ".log" || lowercase_ext == ".c" ||
+		 lowercase_ext == ".cpp" || lowercase_ext == ".h" || lowercase_ext == ".hpp" ||
+		 lowercase_ext == ".cu" || lowercase_ext == ".cuh" || lowercase_ext == ".py" ||
+		 lowercase_ext == ".html" || lowercase_ext == ".htm" || lowercase_ext == ".xml" ||
+		 lowercase_ext == ".yaml" || lowercase_ext == ".yml" || lowercase_ext == ".ini" ||
+		 lowercase_ext == ".cfg" || lowercase_ext == ".conf" || lowercase_ext == ".sql" ||
+		 lowercase_ext == ".rs" || lowercase_ext == ".go" || lowercase_ext == ".java" ||
+		 lowercase_ext == ".ts" || lowercase_ext == ".js" || lowercase_ext == ".sh" ||
+		 lowercase_ext == ".bat" || lowercase_ext == ".ps1");
+
+	if (id_file.modality == ModalityCategory::DOCUMENT || is_text_ext ||
+	    lowercase_ext == ".pdf" || lowercase_ext == ".docx") {
+		return BulkModality::Document;
+	}
+	if (id_file.modality == ModalityCategory::IMAGE || lowercase_ext == ".jpg" ||
+	    lowercase_ext == ".jpeg" || lowercase_ext == ".png" || lowercase_ext == ".bmp" ||
+	    lowercase_ext == ".webp" || lowercase_ext == ".gif" || lowercase_ext == ".tiff" ||
+	    lowercase_ext == ".tif") {
+		return BulkModality::Image;
+	}
+	if (id_file.modality == ModalityCategory::VIDEO || lowercase_ext == ".mp4" ||
+	    lowercase_ext == ".mkv" || lowercase_ext == ".avi" || lowercase_ext == ".mov" ||
+	    lowercase_ext == ".webm" || lowercase_ext == ".wmv") {
+		return BulkModality::Video;
+	}
+	if (id_file.modality == ModalityCategory::AUDIO || lowercase_ext == ".ogg" ||
+	    lowercase_ext == ".wav" || lowercase_ext == ".mp3" || lowercase_ext == ".flac" ||
+	    lowercase_ext == ".aac" || lowercase_ext == ".m4a" || lowercase_ext == ".wma" ||
+	    lowercase_ext == ".opus") {
+		return BulkModality::Audio;
+	}
+	return BulkModality::Binary;
+}
+
+static bool copy_token_range(std::ifstream& in_file,
+			     size_t count,
+			     std::vector<uint32_t>& scratch,
+			     std::ofstream* out_file,
+			     std::vector<uint32_t>* out_vec) {
+	size_t remaining = count;
+	while (remaining > 0) {
+		const size_t batch = std::min<size_t>(scratch.size(), remaining);
+		in_file.read(reinterpret_cast<char*>(scratch.data()),
+			     static_cast<std::streamsize>(batch * sizeof(uint32_t)));
+		if (static_cast<size_t>(in_file.gcount()) != batch * sizeof(uint32_t)) {
+			return false;
+		}
+		if (out_file) {
+			out_file->write(reinterpret_cast<const char*>(scratch.data()),
+					static_cast<std::streamsize>(batch * sizeof(uint32_t)));
+			if (!(*out_file)) {
+				return false;
+			}
+		}
+		if (out_vec) {
+			out_vec->insert(out_vec->end(), scratch.begin(), scratch.begin() + batch);
+		}
+		remaining -= batch;
+	}
+	return true;
+}
+
 size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				       Input& input,
 				       size_t max_files,
-				       uint32_t min_frequency) {
+				       uint32_t min_frequency,
+				       const std::filesystem::path& ocean_path,
+				       bool shuffle_files,
+				       uint32_t shuffle_seed,
+				       size_t* total_tokens) {
 	last_bulk_files.clear();
+	if (total_tokens) {
+		*total_tokens = 0;
+	}
 
 	std::error_code ec;
 	if (!std::filesystem::exists(dir_path, ec) ||
@@ -651,6 +735,10 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 	}
 
 	std::sort(files.begin(), files.end());
+	if (shuffle_files && files.size() > 1) {
+		std::mt19937 file_rng(shuffle_seed);
+		std::shuffle(files.begin(), files.end(), file_rng);
+	}
 	std::cout << "\n[+] Discovered " << files.size() << " asset file(s) in "
 		  << dir_path.string() << ":\n";
 
@@ -667,24 +755,9 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				break;
 			}
 			++scan_count;
-			std::string ext = fpath.extension().string();
-			for (char& c : ext) {
-				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-			}
+			std::string ext;
 			IdentifiedFile id_file = Identifier::identify(fpath);
-			bool is_text_ext =
-				(ext == ".txt" || ext == ".text" || ext == ".md" ||
-				 ext == ".markdown" || ext == ".json" || ext == ".csv" ||
-				 ext == ".log" || ext == ".c" || ext == ".cpp" || ext == ".h" ||
-				 ext == ".hpp" || ext == ".cu" || ext == ".cuh" || ext == ".py" ||
-				 ext == ".html" || ext == ".htm" || ext == ".xml" ||
-				 ext == ".yaml" || ext == ".yml" || ext == ".ini" ||
-				 ext == ".cfg" || ext == ".conf" || ext == ".sql" || ext == ".rs" ||
-				 ext == ".go" || ext == ".java" || ext == ".ts" || ext == ".js" ||
-				 ext == ".sh" || ext == ".bat" || ext == ".ps1");
-			bool is_doc = (id_file.modality == ModalityCategory::DOCUMENT ||
-				       is_text_ext || ext == ".pdf" || ext == ".docx");
-			if (is_doc) {
+			if (classify_bulk_modality(fpath, id_file, ext) == BulkModality::Document) {
 				std::string extracted_text =
 					DecompressDocument::extract_text(fpath);
 				std::istringstream iss(extracted_text);
@@ -735,7 +808,44 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		}
 	}
 
+	struct StreamSinkGuard {
+		Parser& parser;
+		bool active = false;
+		~StreamSinkGuard() {
+			if (active) {
+				parser.flush_ocean_buffer();
+				if (parser.active_ocean_stream_.is_open()) {
+					parser.active_ocean_stream_.close();
+				}
+				parser.active_ocean_buffer_.clear();
+				parser.streaming_to_disk_ = false;
+			}
+		}
+	} sink_guard {*this, false};
+
+	active_ocean_buffer_.clear();
+	active_ocean_count_ = 0;
+	streaming_to_disk_ = false;
+	stream_write_failed_ = false;
+
+	if (!ocean_path.empty()) {
+		if (!ocean_path.parent_path().empty()) {
+			std::error_code dir_ec;
+			std::filesystem::create_directories(ocean_path.parent_path(), dir_ec);
+		}
+		active_ocean_stream_.open(ocean_path, std::ios::binary | std::ios::trunc);
+		if (!active_ocean_stream_) {
+			std::cerr << "[!] Failed to open staging ocean file for writing: "
+				  << ocean_path.string() << "\n";
+			return 0;
+		}
+		active_ocean_buffer_.reserve(config::chunk_tokens * 4);
+		streaming_to_disk_ = true;
+		sink_guard.active = true;
+	}
+
 	size_t files_processed = 0;
+	size_t eos_delimiters = 0;
 	const size_t total_files =
 		(max_files > 0 && max_files < files.size()) ? max_files : files.size();
 
@@ -779,7 +889,7 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				FormatGuard fmt(std::cout);
 				std::cout << "\r\033[K  [..] Ingesting assets " << bar << " " << std::fixed
 					  << std::setprecision(1) << pct << "% (" << files_processed << "/"
-					  << total_files << " files | " << input.tokenized_data.size()
+					  << total_files << " files | " << active_token_count(input)
 					  << " tokens | " << fname << ")   " << std::flush;
 			}
 		}
@@ -789,44 +899,21 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 		if (max_files > 0 && files_processed >= max_files) {
 			break;
 		}
+		if (stream_write_failed_) {
+			break;
+		}
+
 		IdentifiedFile id_file = Identifier::identify(fpath);
-		std::string ext = fpath.extension().string();
-		for (char& c : ext)
-			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		std::string ext;
+		const BulkModality modality = classify_bulk_modality(fpath, id_file, ext);
 
 		uintmax_t fsize = std::filesystem::file_size(fpath, ec);
 		if (ec)
 			fsize = 0;
 
-		const size_t initial_tokens = input.tokenized_data.size();
+		const size_t initial_tokens = active_token_count(input);
 
-		bool is_text_ext =
-			(ext == ".txt" || ext == ".text" || ext == ".md" || ext == ".markdown" ||
-			 ext == ".json" || ext == ".csv" || ext == ".log" || ext == ".c" ||
-			 ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".cu" ||
-			 ext == ".cuh" || ext == ".py" || ext == ".html" || ext == ".htm" ||
-			 ext == ".xml" || ext == ".yaml" || ext == ".yml" || ext == ".ini" ||
-			 ext == ".cfg" || ext == ".conf" || ext == ".sql" || ext == ".rs" ||
-			 ext == ".go" || ext == ".java" || ext == ".ts" || ext == ".js" ||
-			 ext == ".sh" || ext == ".bat" || ext == ".ps1");
-
-		bool is_doc = (id_file.modality == ModalityCategory::DOCUMENT || is_text_ext ||
-			       ext == ".pdf" || ext == ".docx");
-
-		bool is_image =
-			(id_file.modality == ModalityCategory::IMAGE || ext == ".jpg" ||
-			 ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".webp" ||
-			 ext == ".gif" || ext == ".tiff" || ext == ".tif");
-
-		bool is_video = (id_file.modality == ModalityCategory::VIDEO || ext == ".mp4" ||
-				 ext == ".mkv" || ext == ".avi" || ext == ".mov" ||
-				 ext == ".webm" || ext == ".wmv");
-
-		bool is_audio = (id_file.modality == ModalityCategory::AUDIO || ext == ".ogg" ||
-				 ext == ".wav" || ext == ".mp3" || ext == ".flac" ||
-				 ext == ".aac" || ext == ".m4a" || ext == ".wma" || ext == ".opus");
-
-		if (is_doc) {
+		if (modality == BulkModality::Document) {
 			// Phase 1.2: Sanitize Document Ingestion & Eliminate PDF Byte Streaming
 			// Extract clean text from PDF, DOCX, TXT, MD so linguistic terms enter main_dictionary
 			std::string extracted_text = DecompressDocument::extract_text(fpath);
@@ -839,9 +926,9 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 						auto it = input.main_dictionary.find(clean);
 						if (it != input.main_dictionary.end() &&
 						    it->second <= vocab::TEXT_MAX_ID) {
-							input.tokenized_data.push_back(it->second);
+							emit_token(input, it->second);
 						} else {
-							input.tokenized_data.push_back(vocab::UNK);
+							emit_token(input, vocab::UNK);
 						}
 					} else {
 						add_assign_increase(clean,
@@ -851,19 +938,40 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 					}
 				}
 			}
-			const size_t added = input.tokenized_data.size() - initial_tokens;
+			const size_t added = active_token_count(input) - initial_tokens;
 			std::string tag = (ext == ".pdf")
 						  ? "PDF Document"
 						  : ((ext == ".docx") ? "DOCX Document" : "Text");
 			report_file_done(fpath, fsize, tag, added);
-		} else if (is_image) {
-			// Phase 1.3: Genuine visual media to discrete visual byte tokenizer
+		} else if (modality == BulkModality::Image || modality == BulkModality::Video ||
+			   modality == BulkModality::Audio) {
 			std::ifstream in(fpath, std::ios::binary);
 			if (!in) {
 				std::cerr << "  [!] Failed to open " << fpath.filename().string()
 					  << "\n";
 				continue;
 			}
+			auto& dict = (modality == BulkModality::Image)
+					     ? input.image_dictionary
+					     : ((modality == BulkModality::Video)
+							? input.video_dictionary
+							: input.voice_dictionary);
+			uint32_t& next_id = (modality == BulkModality::Image)
+						    ? input.next_image_id
+						    : ((modality == BulkModality::Video)
+							       ? input.next_video_id
+							       : input.next_voice_id);
+			const char* bar_label = (modality == BulkModality::Image)
+							? "Ingesting Image"
+							: ((modality == BulkModality::Video)
+								   ? "Tokenizing Video"
+								   : "Ingesting Audio");
+			const char* done_label = (modality == BulkModality::Image)
+							 ? "Image"
+							 : ((modality == BulkModality::Video)
+								    ? "Video"
+								    : "Voice/Audio");
+
 			char buf[config::io_buffer_bytes];
 			uintmax_t bytes_read = 0;
 			uintmax_t last_progress_bytes = 0;
@@ -873,8 +981,8 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				std::streamsize n = in.gcount();
 				for (std::streamsize i = 0; i < n; ++i) {
 					add_assign_increase(static_cast<uint8_t>(buf[i]),
-							    input.image_dictionary,
-							    input.next_image_id,
+							    dict,
+							    next_id,
 							    input);
 				}
 				bytes_read += static_cast<uintmax_t>(n);
@@ -883,109 +991,321 @@ size_t Parser::bulk_tokenize_directory(const std::filesystem::path& dir_path,
 				     bytes_read >= fsize)) {
 					last_progress_bytes = bytes_read;
 					print_progress_bar(fpath.filename().string(),
-							   "Ingesting Image",
+							   bar_label,
 							   bytes_read,
 							   fsize);
 				}
 			}
-			const size_t added = input.tokenized_data.size() - initial_tokens;
+			const size_t added = active_token_count(input) - initial_tokens;
 			if (show_progress) {
 				std::cout << "\r\033[K";
 			}
-			report_file_done(fpath, fsize, "Image", added);
-		} else if (is_video) {
-			// Video visual frames to discrete visual byte tokenizer
-			std::ifstream in(fpath, std::ios::binary);
-			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string()
-					  << "\n";
-				continue;
-			}
-			char buf[config::io_buffer_bytes];
-			uintmax_t bytes_read = 0;
-			uintmax_t last_progress_bytes = 0;
-			const bool show_progress = (fsize >= config::progress_min_file_bytes);
-
-			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
-				std::streamsize n = in.gcount();
-				for (std::streamsize i = 0; i < n; ++i) {
-					add_assign_increase(static_cast<uint8_t>(buf[i]),
-							    input.video_dictionary,
-							    input.next_video_id,
-							    input);
-				}
-				bytes_read += static_cast<uintmax_t>(n);
-				if (show_progress &&
-				    (bytes_read - last_progress_bytes >= config::progress_step_bytes ||
-				     bytes_read >= fsize)) {
-					last_progress_bytes = bytes_read;
-					print_progress_bar(fpath.filename().string(),
-							   "Tokenizing Video",
-							   bytes_read,
-							   fsize);
-				}
-			}
-			const size_t added = input.tokenized_data.size() - initial_tokens;
-			if (show_progress) {
-				std::cout << "\r\033[K";
-			}
-			report_file_done(fpath, fsize, "Video", added);
-		} else if (is_audio) {
-			// Genuine audio waveforms to discrete acoustic byte tokenizer
-			std::ifstream in(fpath, std::ios::binary);
-			if (!in) {
-				std::cerr << "  [!] Failed to open " << fpath.filename().string()
-					  << "\n";
-				continue;
-			}
-			char buf[config::io_buffer_bytes];
-			uintmax_t bytes_read = 0;
-			uintmax_t last_progress_bytes = 0;
-			const bool show_progress = (fsize >= config::progress_min_file_bytes);
-
-			while (in.read(buf, sizeof(buf)) || in.gcount() > 0) {
-				std::streamsize n = in.gcount();
-				for (std::streamsize i = 0; i < n; ++i) {
-					add_assign_increase(static_cast<uint8_t>(buf[i]),
-							    input.voice_dictionary,
-							    input.next_voice_id,
-							    input);
-				}
-				bytes_read += static_cast<uintmax_t>(n);
-				if (show_progress &&
-				    (bytes_read - last_progress_bytes >= config::progress_step_bytes ||
-				     bytes_read >= fsize)) {
-					last_progress_bytes = bytes_read;
-					print_progress_bar(fpath.filename().string(),
-							   "Ingesting Audio",
-							   bytes_read,
-							   fsize);
-				}
-			}
-			const size_t added = input.tokenized_data.size() - initial_tokens;
-			if (show_progress) {
-				std::cout << "\r\033[K";
-			}
-			report_file_done(fpath, fsize, "Voice/Audio", added);
+			report_file_done(fpath, fsize, done_label, added);
 		} else {
 			// Phase 1.3: Non-media binary assets are NOT streamed into image_dictionary
 			report_file_done(fpath, fsize, "Binary Asset (Skipped Raw Streaming)", 0);
 		}
 
 		// Mark document/asset boundary so unrelated files never bleed across a context window
-		if (input.tokenized_data.size() > initial_tokens) {
-			input.tokenized_data.push_back(vocab::EOS);
+		if (active_token_count(input) > initial_tokens) {
+			emit_token(input, vocab::EOS);
+			++eos_delimiters;
 		}
+	}
+
+	if (streaming_to_disk_) {
+		flush_ocean_buffer();
+		active_ocean_stream_.close();
+		if (!active_ocean_stream_) {
+			stream_write_failed_ = true;
+		}
+	}
+
+	const size_t final_token_count = active_token_count(input);
+	if (stream_write_failed_) {
+		std::cerr << "[!] Write failure while streaming ingested tokens to "
+			  << ocean_path.string() << "\n";
+		std::error_code rm_ec;
+		std::filesystem::remove(ocean_path, rm_ec);
+		return 0;
+	}
+
+	if (total_tokens) {
+		*total_tokens = final_token_count;
 	}
 
 	if (!developer_mode && files_processed > 0) {
 		std::cout << "\r\033[K  [OK] Ingesting assets [========================] 100.0% ("
 			  << files_processed << "/" << total_files << " files | "
-			  << input.tokenized_data.size() << " tokens)\n"
-			  << std::flush;
+			  << final_token_count << " tokens";
+		if (eos_delimiters > 0) {
+			std::cout << " | " << eos_delimiters << " <EOS> delimiters";
+		}
+		std::cout << ")\n" << std::flush;
 	}
 
 	return files_processed;
+}
+
+bool Parser::prepare_training_ocean(const std::filesystem::path& staging_path,
+				    const std::filesystem::path& ocean_path,
+				    size_t context_window,
+				    size_t pool_capacity,
+				    uint32_t shuffle_seed,
+				    std::vector<uint32_t>& validation_tokens,
+				    size_t& train_tokens_out) const {
+	validation_tokens.clear();
+	train_tokens_out = 0;
+
+	std::error_code ec;
+	const uintmax_t staging_bytes = std::filesystem::file_size(staging_path, ec);
+	if (ec || staging_bytes < sizeof(uint32_t)) {
+		std::cerr << "[!] Staging ocean missing or empty: " << staging_path.string() << "\n";
+		return false;
+	}
+	size_t total_tokens = static_cast<size_t>(staging_bytes / sizeof(uint32_t));
+
+	// Repeat tiny corpora in-place so continuous autoregressive training has >= 1 window
+	const size_t min_training_tokens = context_window + 1;
+	if (total_tokens < min_training_tokens) {
+		std::cout << "[..] Dataset sequence (" << total_tokens
+			  << " tokens) is shorter than context window (" << context_window
+			  << " tokens). Repeating sequence to enable continuous autoregressive training...\n";
+		std::vector<uint32_t> tiny_tokens(total_tokens);
+		{
+			std::ifstream tiny_in(staging_path, std::ios::binary);
+			if (!tiny_in) {
+				return false;
+			}
+			tiny_in.read(reinterpret_cast<char*>(tiny_tokens.data()),
+				     static_cast<std::streamsize>(total_tokens * sizeof(uint32_t)));
+			if (static_cast<size_t>(tiny_in.gcount()) != total_tokens * sizeof(uint32_t)) {
+				return false;
+			}
+		}
+		const size_t target_tokens = context_window * 8;
+		std::vector<uint32_t> expanded;
+		expanded.reserve(target_tokens);
+		while (expanded.size() < target_tokens) {
+			for (size_t i = 0; i < tiny_tokens.size() && expanded.size() < target_tokens;
+			     ++i) {
+				expanded.push_back(tiny_tokens[i]);
+			}
+			if (expanded.size() < target_tokens && !expanded.empty() &&
+			    expanded.back() != vocab::EOS) {
+				expanded.push_back(vocab::EOS);
+			}
+		}
+		if (!save_token_ocean(ocean_path, expanded)) {
+			return false;
+		}
+		std::filesystem::remove(staging_path, ec);
+		train_tokens_out = expanded.size();
+		return true;
+	}
+
+	const std::filesystem::path raw_train_path = ocean_path.string() + ".raw.tmp";
+	auto cleanup_temps = [&]() {
+		std::error_code rm_ec;
+		std::filesystem::remove(raw_train_path, rm_ec);
+	};
+
+	const size_t stream_batch_tokens = config::chunk_tokens * 4;
+	std::vector<uint32_t> scratch(stream_batch_tokens);
+	const bool has_validation_corpus = (total_tokens >= context_window * 4);
+	size_t train_count = 0;
+
+	if (has_validation_corpus) {
+		const size_t min_val_tokens = context_window + 1;
+		const size_t val_budget =
+			std::max(min_val_tokens, std::min<size_t>(total_tokens / 10, pool_capacity));
+		if (total_tokens > val_budget + min_val_tokens) {
+			const size_t max_blocks = total_tokens / (min_val_tokens * 2);
+			const size_t num_blocks = std::max<size_t>(1, std::min<size_t>(10, max_blocks));
+			const size_t seg_len = total_tokens / num_blocks;
+			const size_t block_val_len = std::min(
+				seg_len - min_val_tokens, std::max(min_val_tokens, val_budget / num_blocks));
+
+			std::ifstream staging_in(staging_path, std::ios::binary);
+			std::ofstream raw_out(raw_train_path, std::ios::binary | std::ios::trunc);
+			if (!staging_in || !raw_out) {
+				cleanup_temps();
+				return false;
+			}
+
+			validation_tokens.reserve(num_blocks * (block_val_len + 1));
+
+			for (size_t b = 0; b < num_blocks; ++b) {
+				const size_t seg_begin = b * seg_len;
+				const size_t seg_end =
+					(b + 1 == num_blocks) ? total_tokens : (b + 1) * seg_len;
+				const size_t val_begin =
+					seg_begin + (seg_end - seg_begin - block_val_len) / 2;
+				const size_t val_end = val_begin + block_val_len;
+
+				if (!copy_token_range(staging_in,
+						      val_begin - seg_begin,
+						      scratch,
+						      &raw_out,
+						      nullptr)) {
+					cleanup_temps();
+					return false;
+				}
+				train_count += (val_begin - seg_begin);
+
+				const uint32_t seam_eos = vocab::EOS;
+				raw_out.write(reinterpret_cast<const char*>(&seam_eos), sizeof(uint32_t));
+				if (!raw_out) {
+					cleanup_temps();
+					return false;
+				}
+				++train_count;
+
+				if (!validation_tokens.empty()) {
+					validation_tokens.push_back(vocab::EOS);
+				}
+				if (!copy_token_range(staging_in,
+						      val_end - val_begin,
+						      scratch,
+						      nullptr,
+						      &validation_tokens)) {
+					cleanup_temps();
+					return false;
+				}
+				if (!copy_token_range(staging_in,
+						      seg_end - val_end,
+						      scratch,
+						      &raw_out,
+						      nullptr)) {
+					cleanup_temps();
+					return false;
+				}
+				train_count += (seg_end - val_end);
+			}
+
+			raw_out.close();
+			staging_in.close();
+			if (!raw_out) {
+				cleanup_temps();
+				return false;
+			}
+			std::filesystem::remove(staging_path, ec);
+
+			std::cout << "[OK] Stratified validation split (" << num_blocks
+				  << " blocks): " << train_count << " train tokens | "
+				  << validation_tokens.size() << " held-out validation tokens.\n";
+		}
+	}
+
+	std::filesystem::path source_train_path = raw_train_path;
+	if (train_count == 0) {
+		train_count = total_tokens;
+		source_train_path = staging_path;
+	}
+
+	// Single-pool corpus (<= pool_capacity): Pool 1 holds 100% of data and shuffles globally in RAM
+	if (train_count <= pool_capacity) {
+		std::filesystem::remove(ocean_path, ec);
+		ec.clear();
+		std::filesystem::rename(source_train_path, ocean_path, ec);
+		if (ec) {
+			ec.clear();
+			std::filesystem::copy_file(
+				source_train_path,
+				ocean_path,
+				std::filesystem::copy_options::overwrite_existing,
+				ec);
+			std::filesystem::remove(source_train_path, ec);
+			if (ec) {
+				cleanup_temps();
+				return false;
+			}
+		}
+		train_tokens_out = train_count;
+		const uintmax_t ocean_bytes =
+			static_cast<uintmax_t>(train_count) * sizeof(uint32_t);
+		std::cout << "[OK] Token ocean streamed to disk: " << train_count << " tokens ("
+			  << format_file_size(ocean_bytes) << ") -> "
+			  << ocean_path.filename().string() << "\n"
+			  << std::flush;
+		return true;
+	}
+
+	// Multi-pool corpus (> pool_capacity): globally shuffle aligned blocks across the Ocean on disk
+	const size_t unit_align = std::max<size_t>(1, context_window);
+	size_t block_tokens = (config::chunk_tokens >= unit_align)
+				      ? ((config::chunk_tokens / unit_align) * unit_align)
+				      : unit_align;
+	if (block_tokens == 0) {
+		block_tokens = unit_align;
+	}
+	const size_t num_full_blocks = train_count / block_tokens;
+	const size_t tail_tokens = train_count % block_tokens;
+
+	std::vector<uint32_t> block_order(num_full_blocks);
+	std::iota(block_order.begin(), block_order.end(), 0U);
+	std::mt19937 block_rng(shuffle_seed);
+	std::shuffle(block_order.begin(), block_order.end(), block_rng);
+
+	std::ifstream train_in(source_train_path, std::ios::binary);
+	std::ofstream ocean_out(ocean_path, std::ios::binary | std::ios::trunc);
+	if (!train_in || !ocean_out) {
+		cleanup_temps();
+		return false;
+	}
+
+	std::vector<uint32_t> block_buf(block_tokens);
+	const std::streamsize block_bytes = static_cast<std::streamsize>(block_tokens * sizeof(uint32_t));
+	for (uint32_t block_idx : block_order) {
+		const std::streamoff offset_bytes =
+			static_cast<std::streamoff>(static_cast<uint64_t>(block_idx) * block_tokens * sizeof(uint32_t));
+		train_in.seekg(offset_bytes, std::ios::beg);
+		train_in.read(reinterpret_cast<char*>(block_buf.data()), block_bytes);
+		if (train_in.gcount() != block_bytes) {
+			ocean_out.close();
+			std::filesystem::remove(ocean_path, ec);
+			cleanup_temps();
+			return false;
+		}
+		ocean_out.write(reinterpret_cast<const char*>(block_buf.data()), block_bytes);
+		if (!ocean_out) {
+			ocean_out.close();
+			std::filesystem::remove(ocean_path, ec);
+			cleanup_temps();
+			return false;
+		}
+	}
+
+	if (tail_tokens > 0) {
+		const std::streamoff tail_offset =
+			static_cast<std::streamoff>(static_cast<uint64_t>(num_full_blocks) * block_tokens * sizeof(uint32_t));
+		train_in.seekg(tail_offset, std::ios::beg);
+		if (!copy_token_range(train_in, tail_tokens, scratch, &ocean_out, nullptr)) {
+			ocean_out.close();
+			std::filesystem::remove(ocean_path, ec);
+			cleanup_temps();
+			return false;
+		}
+	}
+
+	train_in.close();
+	ocean_out.close();
+	if (!ocean_out) {
+		std::filesystem::remove(ocean_path, ec);
+		cleanup_temps();
+		return false;
+	}
+	std::filesystem::remove(source_train_path, ec);
+	cleanup_temps();
+
+	train_tokens_out = train_count;
+	const uintmax_t ocean_bytes = static_cast<uintmax_t>(train_count) * sizeof(uint32_t);
+	std::cout << "[OK] Globally block-shuffled token ocean (" << num_full_blocks << " x "
+		  << block_tokens << "-token blocks): " << train_count << " tokens ("
+		  << format_file_size(ocean_bytes) << ") -> " << ocean_path.filename().string()
+		  << "\n"
+		  << std::flush;
+	return true;
 }
 
 bool Parser::save_token_ocean(const std::filesystem::path& target_path,

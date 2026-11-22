@@ -108,6 +108,42 @@ private:
 	// Files processed in the last bulk tokenization
 	std::vector<std::filesystem::path> last_bulk_files = {};
 
+	// Streaming token-sink state for out-of-core ingestion (bounded <= 1 MiB RAM)
+	std::ofstream active_ocean_stream_;
+	std::vector<uint32_t> active_ocean_buffer_ = {};
+	size_t active_ocean_count_ = 0;
+	bool streaming_to_disk_ = false;
+	bool stream_write_failed_ = false;
+
+	void emit_token(Input& input, uint32_t token_id) {
+		if (streaming_to_disk_) {
+			active_ocean_buffer_.push_back(token_id);
+			++active_ocean_count_;
+			if (active_ocean_buffer_.size() >= (config::chunk_tokens * 4)) {
+				flush_ocean_buffer();
+			}
+			return;
+		}
+		input.tokenized_data.push_back(token_id);
+	}
+
+	void flush_ocean_buffer() {
+		if (!streaming_to_disk_ || active_ocean_buffer_.empty() || stream_write_failed_) {
+			return;
+		}
+		active_ocean_stream_.write(
+			reinterpret_cast<const char*>(active_ocean_buffer_.data()),
+			static_cast<std::streamsize>(active_ocean_buffer_.size() * sizeof(uint32_t)));
+		if (!active_ocean_stream_) {
+			stream_write_failed_ = true;
+		}
+		active_ocean_buffer_.clear();
+	}
+
+	size_t active_token_count(const Input& input) const {
+		return streaming_to_disk_ ? active_ocean_count_ : input.tokenized_data.size();
+	}
+
 	// ********************
 	// add to dictionaries
 	// ********************
@@ -118,7 +154,7 @@ private:
 			if constexpr (std::is_same_v<T, std::string>) {
 				if (next_id > vocab::TEXT_MAX_ID) {
 					dictionary[data] = vocab::UNK;
-					input.tokenized_data.push_back(vocab::UNK);
+					emit_token(input, vocab::UNK);
 					return;
 				}
 				dictionary[data] = next_id;
@@ -139,7 +175,7 @@ private:
 					dictionary[data] = vocab::UNK;
 			}
 		}
-		input.tokenized_data.push_back(dictionary[data]);
+		emit_token(input, dictionary[data]);
 	}
 
 	// ********************
@@ -291,9 +327,23 @@ public:
 	// Standalone parser, isolated from AI!
 	std::vector<uint32_t> tokenization(Input& input, Test& test);
 
-	// Bulk directory parser: scans and tokenizes all files in a folder (Text, PDF, Images, Video, Audio, 3D Models)
+	// Bulk directory parser: scans and tokenizes all files in a folder (Text, PDF, Images, Video, Audio, 3D Models).
+	// When ocean_path is non-empty, token IDs stream directly to disk in bounded 1 MiB chunks.
 	size_t bulk_tokenize_directory(const std::filesystem::path& dir_path, Input& input,
-								   size_t max_files = 0, uint32_t min_frequency = 1);
+								   size_t max_files = 0, uint32_t min_frequency = 1,
+								   const std::filesystem::path& ocean_path = {},
+								   bool shuffle_files = false,
+								   uint32_t shuffle_seed = config::random_seed,
+								   size_t* total_tokens = nullptr);
+
+	// Splits a streamed staging file into bounded validation tokens + globally block-shuffled Train Ocean
+	bool prepare_training_ocean(const std::filesystem::path& staging_path,
+								const std::filesystem::path& ocean_path,
+								size_t context_window,
+								size_t pool_capacity,
+								uint32_t shuffle_seed,
+								std::vector<uint32_t>& validation_tokens,
+								size_t& train_tokens_out) const;
 
 	// Writes flat uint32_t token IDs to disk in bounded chunks (the persistent Token Ocean)
 	bool save_token_ocean(const std::filesystem::path& target_path,

@@ -247,7 +247,7 @@ AppMode collect_user_input() {
 // *****************************************************************************
 // Live hardware telemetry
 // *****************************************************************************
-void print_hardware_telemetry(const Portion& portion) {
+void print_hardware_telemetry(const Portion& portion, const Optimizer& optimizer) {
 	double process_ram_mb = 0.0;
 	double sys_avail_gb = 0.0;
 	double sys_total_gb = 0.0;
@@ -278,15 +278,39 @@ void print_hardware_telemetry(const Portion& portion) {
 				  << "                LIVE HARDWARE TELEMETRY                 \n"
 				  << "========================================================\n"
 				  << std::fixed << std::setprecision(2)
-				  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n"
-				  << "[RAM] Engine Stream : "
-				  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0) << " MB\n"
-				  << "[RAM] Process Usage : " << process_ram_mb << " MB\n"
-				  << "[RAM] System Avail  : " << sys_avail_gb
-				  << " GB / " << sys_total_gb << " GB\n"
-				  << "[GPU] Context Window: "
-				  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n"
-				  << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
+				  << "[CPU] L1/L2/L3 Cache: BYPASSED (Pinned Write-Combining)\n";
+		if (optimizer.is_token_mode()) {
+			const double pool_mb =
+				(portion.ram_buffer_size * sizeof(uint32_t)) / 1024.0 / 1024.0;
+			const double active_mb =
+				(portion.ram_buffer_token_ids.size() * sizeof(uint32_t)) / 1024.0 / 1024.0;
+			if (optimizer.is_prefetch_running()) {
+				std::cout << "[RAM] Engine Stream : " << pool_mb << " MB Pool + "
+						  << (pool_mb * 4.0) << " MB Ring (" << (pool_mb * 5.0)
+						  << " MB max)\n";
+			} else {
+				std::cout << "[RAM] Engine Stream : " << active_mb
+						  << " MB Single-Pool (ring bypassed)\n";
+			}
+			std::cout << "[RAM] Process Usage : " << process_ram_mb << " MB\n"
+					  << "[RAM] System Avail  : " << sys_avail_gb << " GB / "
+					  << sys_total_gb << " GB\n"
+					  << "[GPU] Context Window: "
+					  << (portion.context_window_size * sizeof(uint32_t) / 1024.0)
+					  << " KB Token IDs (-> "
+					  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0)
+					  << " KB VRAM gather)\n";
+		} else {
+			std::cout << "[RAM] Engine Stream : "
+					  << (portion.ram_buffer_size * sizeof(std::bfloat16_t) / 1024.0 / 1024.0)
+					  << " MB\n"
+					  << "[RAM] Process Usage : " << process_ram_mb << " MB\n"
+					  << "[RAM] System Avail  : " << sys_avail_gb << " GB / "
+					  << sys_total_gb << " GB\n"
+					  << "[GPU] Context Window: "
+					  << (portion.all_elements * sizeof(std::bfloat16_t) / 1024.0) << " KB\n";
+		}
+		std::cout << "[GPU] VRAM Available: " << (gpu_free / 1024.0 / 1024.0) << " MB / "
 				  << (gpu_total / 1024.0 / 1024.0) << " MB\n"
 				  << "[DSK] Disk Free     : " << disk_free_gb << " GB\n"
 				  << "========================================================\n\n"
@@ -932,7 +956,14 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 			? std::min<size_t>(portion.context_window_size, 2048)
 			: 1;
 	const size_t steps_per_epoch =
-		(available_span > 0) ? ((available_span - 1) / window_stride + 1) : 0;
+		(available_span > 0)
+			? (1 + (available_span - 1 + window_stride - 1) / window_stride)
+			: 0;
+
+	const bool single_pool_in_ram =
+		optimizer.is_token_mode() && !optimizer.is_prefetch_running() &&
+		(total_dataset_tokens <= portion.ram_buffer_size) &&
+		(portion.ram_buffer_token_ids.size() >= portion.context_window_size + 1);
 
 	const size_t target_steps =
 		(max_steps > 0) ? max_steps : (steps_per_epoch * std::max<size_t>(1, epochs));
@@ -969,6 +1000,25 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 	auto session_start_time = std::chrono::steady_clock::now();
 	bool checkpoint_saved = false;
 
+	auto rewind_and_reset_brain = [&]() -> bool {
+		ai.reset_weights(elements, true);
+		if (!ai.upload_weights()) {
+			return false;
+		}
+		if (single_pool_in_ram) {
+			portion.offset = 0;
+			portion.window_order.clear();
+		} else {
+			optimizer.reset_stream(portion, optimizer.is_prefetch_running());
+		}
+		step = 0;
+		first_loss.reset();
+		has_rolling_loss = false;
+		rolling_loss = 0.0;
+		session_start_time = std::chrono::steady_clock::now();
+		return true;
+	};
+
 	while (true) {
 		// Check for interactive user commands without blocking
 		char ch = 0;
@@ -1000,13 +1050,9 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 
 		if (ch != 0) {
 			if (ch == 'r' || ch == 'R') {
-				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain...\n";
-				ai.reset_weights(elements, true);
-				if (ai.upload_weights()) { // push new chaotic weights to VRAM
-					step = 0;
-					first_loss.reset();
-					session_start_time = std::chrono::steady_clock::now();
-					std::cout << "[!] Brain wipe complete. Resuming training.\n\n";
+				std::cout << "\n[!] Manual Reset Triggered! Wiping Brain & Rewinding Ocean...\n";
+				if (rewind_and_reset_brain()) { // push new chaotic weights to VRAM & rewind stream
+					std::cout << "[!] Brain wipe and ocean rewind complete. Resuming training.\n\n";
 				} else {
 					std::cerr << "[!] Brain wipe failed: could not upload weights.\n\n";
 				}
@@ -1095,16 +1141,9 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 						std::cout << "\n[!] Divergence detected at Step " << step
 								  << " (Loss: " << current_loss
 								  << (has_validation ? ", Val: " + std::to_string(validation_loss) : "")
-								  << " > 16.0). Resetting brain to fresh state...\n"
+								  << " > 16.0). Resetting brain & rewinding ocean...\n"
 								  << std::flush;
-						ai.reset_weights(elements, true);
-						if (ai.upload_weights()) {
-							step = 0;
-							first_loss.reset();
-							has_rolling_loss = false;
-							rolling_loss = 0.0;
-							session_start_time = std::chrono::steady_clock::now();
-						}
+						rewind_and_reset_brain();
 						continue;
 					}
 
@@ -1215,6 +1254,12 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 		// When the RAM pool is exhausted, the offset resets to 0.
 		// Refill the RAM pool from the disk ocean or cycle to the next epoch.
 		if (portion.offset == 0) {
+			if (single_pool_in_ram) {
+				if (step < target_steps) {
+					continue;
+				}
+				break;
+			}
 			if (optimizer.is_token_mode()) {
 				optimizer.disk_to_ram(portion);
 				if (portion.ram_buffer_token_ids.size() < portion.context_window_size + 1) {
@@ -1342,6 +1387,7 @@ struct EmbeddedDataCleanup {
 		portion.ram_buffer_tokens.clear();
 		portion.ram_buffer_token_ids.clear();
 		portion.validation_token_ids.clear();
+		portion.window_order.clear();
 		portion.offset = 0;
 
 		std::error_code ec;
@@ -1349,6 +1395,8 @@ struct EmbeddedDataCleanup {
 			std::cout << "[OK] Temporary token ocean automatically removed: "
 					  << path.filename().string() << "\n";
 		}
+		std::filesystem::remove(path.string() + ".staging.tmp", ec);
+		std::filesystem::remove(path.string() + ".raw.tmp", ec);
 	}
 
 	~EmbeddedDataCleanup() { run(); }
@@ -1366,6 +1414,10 @@ bool execute_training_session(
 	ai.enable_transformer = true;
 	ai.release_legacy_weights();
 
+	EmbeddedDataCleanup embedded_cleanup {optimizer, portion, embedded_path};
+	const std::filesystem::path staging_path = embedded_path.string() + ".staging.tmp";
+	size_t ingested_tokens = 0;
+
 	{
 		std::error_code ec;
 		if (!std::filesystem::exists(asset_dir, ec)) {
@@ -1376,10 +1428,13 @@ bool execute_training_session(
 				  << "========================================================\n"
 				  << "Target Directory : " << asset_dir.string() << "\n\n";
 
-		std::cout << "[..] Scanning and tokenizing all assets in " << asset_dir.filename().string()
+		std::cout << "[..] Scanning and streaming assets directly to disk from "
+				  << asset_dir.filename().string()
 				  << " (min frequency >= " << min_frequency << ")...\n";
-		const size_t processed = parser.bulk_tokenize_directory(asset_dir, input, 0, min_frequency);
-		if (processed == 0 || input.tokenized_data.empty()) {
+		const size_t processed = parser.bulk_tokenize_directory(
+			asset_dir, input, 0, min_frequency, staging_path, true, portion.shuffle_seed,
+			&ingested_tokens);
+		if (processed == 0 || ingested_tokens == 0) {
 			std::cerr << "\n[!] No training files could be parsed from " << asset_dir.string()
 					  << "\n"
 					  << "[i] Instructions:\n"
@@ -1392,42 +1447,31 @@ bool execute_training_session(
 					  << "    2. Then run Bulk Training again.\n";
 			return false;
 		}
-		std::cout << "\n[OK] Bulk ingestion complete: " << input.tokenized_data.size()
-				  << " tokens collected across " << processed << " files.\n";
+		std::cout << "\n[OK] Bulk ingestion complete: " << ingested_tokens
+				  << " tokens streamed across " << processed << " files.\n";
 	}
 
-	// Repeat sequence if shorter than one full context window + target to enable continuous training
-	const bool has_validation_corpus =
-		(input.tokenized_data.size() >= config::context_window_size * 4);
-	const size_t min_training_tokens = config::context_window_size + 1;
-	if (input.tokenized_data.size() < min_training_tokens) {
-		std::cout
-			<< "[..] Dataset sequence (" << input.tokenized_data.size()
-			<< " tokens) is shorter than context window (" << config::context_window_size
-			<< " tokens). Repeating sequence to enable continuous autoregressive training...\n";
-		const size_t original_size = input.tokenized_data.size();
-		const size_t target_tokens = config::context_window_size * 8;
-		input.tokenized_data.reserve(target_tokens);
-		while (input.tokenized_data.size() < target_tokens) {
-			for (size_t i = 0; i < original_size && input.tokenized_data.size() < target_tokens;
-				 ++i) {
-				const uint32_t token_value = input.tokenized_data[i];
-				input.tokenized_data.push_back(token_value);
-			}
+	// Multimodal pipeline preview: read up to first 3 token IDs directly from staging file
+	std::vector<uint32_t> preview_tokens;
+	{
+		const size_t preview_count = std::min<size_t>(3, ingested_tokens);
+		std::ifstream preview_in(staging_path, std::ios::binary);
+		if (preview_in && preview_count > 0) {
+			preview_tokens.resize(preview_count);
+			preview_in.read(reinterpret_cast<char*>(preview_tokens.data()),
+					static_cast<std::streamsize>(preview_count * sizeof(uint32_t)));
+			const size_t read_count =
+				static_cast<size_t>(preview_in.gcount()) / sizeof(uint32_t);
+			preview_tokens.resize(read_count);
 		}
 	}
-
-	EmbeddedDataCleanup embedded_cleanup {optimizer, portion, embedded_path};
-
-	// Multimodal pipeline preview: demonstrate transformation of initial data items
-	const size_t preview_count = std::min<size_t>(3, input.tokenized_data.size());
-	if (preview_count > 0) {
+	if (!preview_tokens.empty()) {
 		if (ai.host_embeddings.empty()) {
 			parser.build_embedding_table(input);
 		}
 		std::cout << "\n--- Multimodal Tokenization & Embedding Pipeline Preview ---\n";
-		for (size_t i = 0; i < preview_count; ++i) {
-			const uint32_t token_id = input.tokenized_data[i];
+		for (size_t i = 0; i < preview_tokens.size(); ++i) {
+			const uint32_t token_id = preview_tokens[i];
 			const std::string raw_item = parser.token_to_string(input, token_id);
 
 			std::cout << "  \"" << raw_item << "\" assigned id: " << token_id
@@ -1470,66 +1514,20 @@ bool execute_training_session(
 		ai.active_vocab_size = input.next_text_id;
 	}
 
-	// Hold out a stratified ~10% validation split across evenly-spaced corpus blocks
-	portion.validation_token_ids.clear();
-	if (has_validation_corpus) {
-		const size_t min_val_tokens = config::context_window_size + 1;
-		const size_t total_tokens = input.tokenized_data.size();
-		const size_t val_budget = std::max(min_val_tokens, total_tokens / 10);
-		if (total_tokens > val_budget + min_val_tokens) {
-			const size_t max_blocks = total_tokens / (min_val_tokens * 2);
-			const size_t num_blocks = std::max<size_t>(1, std::min<size_t>(10, max_blocks));
-			const size_t seg_len = total_tokens / num_blocks;
-			const size_t block_val_len = std::min(
-				seg_len - min_val_tokens, std::max(min_val_tokens, val_budget / num_blocks));
-
-			std::vector<uint32_t> train_tokens;
-			train_tokens.reserve(total_tokens - val_budget);
-			portion.validation_token_ids.reserve(num_blocks * (block_val_len + 1));
-
-			for (size_t b = 0; b < num_blocks; ++b) {
-				const size_t seg_begin = b * seg_len;
-				const size_t seg_end = (b + 1 == num_blocks) ? total_tokens : (b + 1) * seg_len;
-				const size_t val_begin = seg_begin + (seg_end - seg_begin - block_val_len) / 2;
-				const size_t val_end = val_begin + block_val_len;
-
-				train_tokens.insert(
-					train_tokens.end(),
-					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(seg_begin),
-					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_begin));
-				train_tokens.push_back(vocab::PAD);
-				train_tokens.insert(
-					train_tokens.end(),
-					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_end),
-					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(seg_end));
-
-				if (!portion.validation_token_ids.empty()) {
-					portion.validation_token_ids.push_back(vocab::PAD);
-				}
-				portion.validation_token_ids.insert(
-					portion.validation_token_ids.end(),
-					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_begin),
-					input.tokenized_data.begin() + static_cast<std::ptrdiff_t>(val_end));
-			}
-
-			input.tokenized_data = std::move(train_tokens);
-			std::cout << "[OK] Stratified 10%-val split (" << num_blocks
-					  << " blocks): " << input.tokenized_data.size() << " train tokens | "
-					  << portion.validation_token_ids.size() << " held-out validation tokens.\n";
-		}
-	}
-
-	// Unified Ocean -> Pool -> Glass -> Engine streaming on uint32_t token IDs:
-	// Flush training tokens to disk (Ocean), release full-corpus RAM, and fill Pool 1.
-	optimizer.set_token_mode(true);
-	if (!parser.save_token_ocean(embedded_path, input.tokenized_data)) {
-		std::cerr << "[!] Failed to persist token ocean to disk.\n";
+	// Streamed stratified validation split + globally block-shuffled Train Ocean on disk
+	size_t train_tokens = 0;
+	if (!parser.prepare_training_ocean(
+			staging_path, embedded_path, config::context_window_size,
+			config::ram_buffer_size, portion.shuffle_seed, portion.validation_token_ids,
+			train_tokens)) {
+		std::cerr << "[!] Failed to prepare training ocean on disk.\n";
 		return false;
 	}
-	std::vector<uint32_t>().swap(input.tokenized_data);
 
+	optimizer.set_token_mode(true);
 	portion.ram_buffer_tokens.clear();
 	portion.ram_buffer_token_ids.clear();
+	portion.window_order.clear();
 	portion.offset = 0;
 	optimizer.disk_to_ram(portion);
 
@@ -1578,10 +1576,13 @@ bool execute_training_session(
 		}
 	}
 
-	print_hardware_telemetry(portion);
+	// Only activate 4-slot prefetch ring when the Ocean exceeds 1 Pool (> ram_buffer_size)
+	const bool is_multi_pool = (train_tokens > portion.ram_buffer_size);
+	if (is_multi_pool) {
+		optimizer.start_prefetch(portion);
+	}
 
-	// Overlap Ocean -> Pool disk reads with GPU Glass -> Engine execution
-	optimizer.start_prefetch(portion);
+	print_hardware_telemetry(portion, optimizer);
 
 	const bool training_ok =
 		run_training_loop(ai, optimizer, portion, ai_elements, parser, input, weights_path,

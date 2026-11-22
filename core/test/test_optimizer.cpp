@@ -275,6 +275,19 @@ bool test_optimizer() {
 			 "Pool 4 holds ocean tail with seam carry (468 tokens)");
 		check_eq(token_portion.ram_buffer_token_ids.back(), uint32_t {2499},
 			 "Pool 4 ends on final ocean token");
+		check(token_portion.pool_at_epoch_end, "Pool 4 flagged pool_at_epoch_end == true");
+		size_t pool4_glasses = 0;
+		bool tail_token_covered = false;
+		while (token_opt.load_context_window(token_portion)) {
+			++pool4_glasses;
+			const uint32_t target_id =
+				*reinterpret_cast<const uint32_t*>(token_portion.target_tokens[token_portion.buffer_index]);
+			if (target_id == uint32_t {2499}) {
+				tail_token_covered = true;
+			}
+		}
+		check_eq(pool4_glasses, size_t {2}, "Pool 4 yields 2 glasses including right-aligned EOF window");
+		check(tail_token_covered, "Final ocean token (2499) is explicitly covered at epoch EOF");
 
 		// Pool 5 (Epoch 2 wrap-around): clean restart at token 0 without cross-epoch seam
 		token_opt.disk_to_ram(token_portion);
@@ -283,7 +296,7 @@ bool test_optimizer() {
 		check_eq(token_portion.ram_buffer_token_ids.front(), uint32_t {1000},
 			 "Epoch 2 starts cleanly at token 0 (no cross-epoch seam bleed)");
 
-		// Async SPSC Prefetch in Token-ID mode
+		// Async SPSC Prefetch + reset_stream() mid-Ocean rewind check
 		token_opt.start_prefetch(token_portion);
 		check(token_opt.is_prefetch_running(), "Token prefetch worker started");
 		token_opt.disk_to_ram(token_portion);
@@ -291,8 +304,38 @@ bool test_optimizer() {
 			 "Async prefetched token Pool 2 consumed cleanly");
 		check_eq(token_portion.ram_buffer_token_ids[0], uint32_t {1344},
 			 "Async prefetched token Pool 2 preserved seam carry");
+		token_opt.reset_stream(token_portion, true);
+		check(token_opt.is_prefetch_running(), "reset_stream preserves prefetch state");
+		check_eq(token_portion.ram_buffer_token_ids.front(), uint32_t {1000},
+			 "reset_stream rewinds mid-Ocean stream cleanly to token 0");
 		token_opt.stop_prefetch();
 		token_opt.close_stream();
+
+		// Tiny ocean (< context_window + 1) repeat without EOF->BOF cursor leak
+		const std::filesystem::path tiny_ocean_path =
+			test_core_dir() / config::database_folder / "test_tiny_ocean.bin";
+		const std::vector<uint32_t> tiny_tokens = {11, 12, 13, 14, 15};
+		check(ocean_parser.save_token_ocean(tiny_ocean_path, tiny_tokens),
+		      "save_token_ocean() writes tiny (<257 token) ocean");
+		Optimizer tiny_opt(tiny_ocean_path, c.learning_rate);
+		tiny_opt.set_token_mode(true);
+		tiny_opt.disk_to_ram(token_portion);
+		check(token_portion.ram_buffer_token_ids.size() >= CONTEXT_WINDOW + 1,
+		      "Tiny ocean expanded to >= 1 full context window");
+		check(token_portion.pool_at_epoch_end, "Tiny ocean flagged pool_at_epoch_end == true");
+		bool has_eos_sep = false;
+		for (size_t i = 5; i < token_portion.ram_buffer_token_ids.size(); ++i) {
+			if (token_portion.ram_buffer_token_ids[i] == vocab::EOS) {
+				has_eos_sep = true;
+				break;
+			}
+		}
+		check(has_eos_sep, "Tiny ocean repeat inserts EOS delimiters between wraps");
+		tiny_opt.disk_to_ram(token_portion);
+		check_eq(token_portion.ram_buffer_token_ids.front(), uint32_t {11},
+			 "Tiny ocean Epoch 2 restarts cleanly at token 0");
+		tiny_opt.close_stream();
+		std::filesystem::remove(tiny_ocean_path, size_error);
 
 		// Exact chunk-size multiple Ocean wrap-around check
 		const std::vector<uint32_t> exact_tokens(source_tokens.begin(),
