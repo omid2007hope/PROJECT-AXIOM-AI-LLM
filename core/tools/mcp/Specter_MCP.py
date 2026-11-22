@@ -124,8 +124,11 @@ MAX_STORED_CHARACTERS = 100_000
 MIN_ARTICLE_CHARACTERS = 140
 DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".json", ".csv", ".xml"}
 ASSET_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".css", ".js",
-    ".mjs", ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm", ".zip", ".gz",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".avif", ".bmp", ".tiff",
+    ".css", ".js", ".mjs", ".map", ".woff", ".woff2", ".ttf", ".eot",
+    ".mp3", ".wav", ".ogg", ".mp4", ".webm", ".avi", ".mov", ".mkv",
+    ".zip", ".gz", ".tar", ".tgz", ".bz2", ".xz", ".7z", ".rar",
+    ".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm", ".apk", ".bin", ".iso", ".dll", ".so",
 }
 HIGH_VALUE_PATHS = (
     "/about", "/project", "/resume", "/cv", "/work", "/research",
@@ -133,12 +136,12 @@ HIGH_VALUE_PATHS = (
 )
 SKIP_LINK_SEGMENTS = (
     "privacy", "terms", "cookie", "login", "signin", "signup", "register",
-    "share?", "intent/tweet", "sharer.php", "wp-content", "cdn-cgi",
+    "share?", "intent/tweet", "sharer.php", "wp-content", "cdn-cgi", "{search_term_string}", "%7b",
 )
 SKIP_LINK_DOMAINS = (
     "fonts.googleapis.com", "fonts.gstatic.com", "w3.org", "schema.org",
     "creativecommons.org", "cloudflare.com", "google.com", "gstatic.com",
-    "apple.com", "microsoft.com", "adobe.com", "gravatar.com",
+    "apple.com", "microsoft.com", "adobe.com", "gravatar.com", "avatars.githubusercontent.com",
 )
 CORROBORATION_DOMAINS = (
     "github.com", "gitlab.com", "credly.com", "orcid.org", "wakatime.com",
@@ -187,7 +190,7 @@ CASES_DIRECTORY.mkdir(parents=True, exist_ok=True)
 # ==============================================================================
 SENSITIVE_PATTERNS = [
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[REDACTED-ID]"),
-    (re.compile(r"(?<!orcid\.org/)\b(?:\d{4}[ -]){3}\d{4}\b"), "[REDACTED-CARD]"),
+    (re.compile(r"(?<![Oo][Rr][Cc][Ii][Dd]\.org/)(?<![Oo][Rr][Cc][Ii][Dd]: )(?<![Oo][Rr][Cc][Ii][Dd] )\b(?:\d{4}[ -]){3}\d{4}\b"), "[REDACTED-CARD]"),
     (re.compile(r"\+\d{1,3}(?:[\s.-]?\(?\d{2,4}\)?){2,4}\d"), "[REDACTED-PHONE]"),
     (re.compile(r"(?<!\w)\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?!\w)"), "[REDACTED-PHONE]"),
 ]
@@ -204,18 +207,6 @@ def sha256_text(text: str) -> str:
 def strip_reasoning(text: str) -> str:
     """Removes <think>...</think> traces emitted by reasoning models."""
     return re.sub(r"<think>.*?</think>", "", text or "", flags=re.S).strip()
-
-
-def parse_json(raw_text: str) -> Dict[str, Any]:
-    cleaned = strip_reasoning(raw_text)
-    start, end = cleaned.find("{"), cleaned.rfind("}")
-    if start == -1 or end <= start:
-        return {}
-    try:
-        parsed = json.loads(cleaned[start : end + 1])
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
 
 
 def canonicalize_url(url: str) -> str:
@@ -252,6 +243,15 @@ def clean_strings(values: Any, limit: int) -> List[str]:
     return list(dict.fromkeys(cleaned))[:limit]
 
 
+def coerce_string_list(value: Any) -> List[str]:
+    """Converts a string or list of strings into a normalized string list."""
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if isinstance(item, str) and item.strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
 def parse_seed(
     seed: str,
     aliases: Optional[List[str]] = None,
@@ -263,10 +263,10 @@ def parse_seed(
     """Deterministic, zero-LLM seed parser (<1ms) preserving exact ground-truth qualifiers & hints."""
     raw = (seed or "").strip()
     hint_map = hints if isinstance(hints, dict) else {}
-    extracted_aliases = list(aliases or [])
-    extracted_handles = list(handles or []) + list(hint_map.get("handles", []))
-    extracted_domains = list(hint_map.get("domains", []))
-    extracted_emails = list(hint_map.get("emails", []))
+    extracted_aliases = list(aliases or []) + coerce_string_list(hint_map.get("aliases"))
+    extracted_handles = list(handles or []) + coerce_string_list(hint_map.get("handles"))
+    extracted_domains = coerce_string_list(hint_map.get("domains"))
+    extracted_emails = coerce_string_list(hint_map.get("emails"))
 
     # Extract parenthetical aliases: "Name (formerly Alias)" / "(aka Alias)"
     for match in re.findall(r"\((?:formerly|aka|also known as|né|nee|alias)\s+([^)]+)\)", raw, flags=re.I):
@@ -279,7 +279,7 @@ def parse_seed(
         extracted_emails.append(email.lower())
     for handle in re.findall(r"(?<![\w.])@[A-Za-z0-9_.-]{2,}", raw):
         extracted_handles.append(handle)
-    for domain in re.findall(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|dev|ai|app|at|ch|de|uk|edu|gov)\b", raw):
+    for domain in re.findall(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|dev|ai|app|at|ch|de|uk|edu|gov|me|co|eu)\b", raw):
         lowered = domain.lower()
         if not any(lowered in mail for mail in extracted_emails):
             extracted_domains.append(lowered)
@@ -290,7 +290,8 @@ def parse_seed(
     primary_name = parts[0] if parts else raw
     remainder = ", ".join(parts[1:]) if len(parts) > 1 else ""
 
-    origin_city = location.strip()
+    hint_location = hint_map.get("location")
+    origin_city = location.strip() or (hint_location.strip() if isinstance(hint_location, str) else "")
     if not origin_city:
         loc_match = re.search(r"\b(?:from|in|based in)\s+([A-Z][A-Za-z\s-]{2,30})", raw)
         if loc_match:
@@ -303,7 +304,12 @@ def parse_seed(
         if 1900 <= candidate <= datetime.now(timezone.utc).year:
             birth_year = candidate
 
-    core_profession = profession.strip() or remainder
+    hint_profession = hint_map.get("profession")
+    core_profession = (
+        profession.strip()
+        or (hint_profession.strip() if isinstance(hint_profession, str) else "")
+        or remainder
+    )
     entity_kind = "domain" if "." in primary_name and " " not in primary_name else "person"
     if re.search(r"\b(?:inc|llc|gmbh|ag|corp|ltd|foundation|university|institute)\b", raw, flags=re.I):
         entity_kind = "organization"
@@ -333,12 +339,14 @@ def parse_seed(
 
 
 def sanitize_query(raw_query: str) -> str:
-    """Collapses LLM-generated prose sentences into compact, search-engine-safe keyword queries."""
+    """Collapses LLM-generated prose or comma-stuffed queries into compact, search-engine-safe terms."""
     cleaned = re.sub(r"\s+", " ", (raw_query or "").strip())
-    words = cleaned.split()
-    if len(words) <= 9:
-        return cleaned
-    quoted = re.findall(r'["\']([^"\']{2,50})["\']', cleaned)
+    # Strip trailing/inline list commas outside quotes so search engines don't match literal punctuation
+    normalized = re.sub(r"(?<!\d)[,;]+(?=\s|$)", "", cleaned)
+    words = normalized.split()
+    if len(words) <= 6:
+        return normalized
+    quoted = re.findall(r'["\']([^"\']{2,50})["\']', normalized)
     tokens = [
         token.strip(".,;:()[]{}")
         for token in words
@@ -478,6 +486,35 @@ class HtmlTextExtractor(HTMLParser):
         return "\n".join(header_lines + (["", body] if body else [])).strip()
 
 
+def extract_linked_urls(blob: str) -> List[Dict[str, Any]]:
+    """Extracts profile/canonical URLs from a JSON-LD script block while ignoring templates and images."""
+    found: List[Dict[str, Any]] = []
+
+    def walk(node: Any, key_name: str = "") -> None:
+        if isinstance(node, dict):
+            if str(node.get("@type", "")).lower() in ("searchaction", "entrypoint", "imageobject"):
+                return
+            for k, v in node.items():
+                if k.lower() in ("image", "logo", "thumbnailurl", "urltemplate"):
+                    continue
+                walk(v, k.lower())
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, key_name)
+        elif isinstance(node, str) and node.startswith(("http://", "https://")) and "{" not in node:
+            if key_name in ("sameas", "url", "mainentityofpage"):
+                found.append({"url": canonicalize_url(node), "label": "json-ld", "rel_me": key_name == "sameas"})
+
+    try:
+        walk(json.loads(blob))
+        return found
+    except (json.JSONDecodeError, TypeError, ValueError):
+        for candidate in re.findall(r'https?://[^\s"<>]+', blob):
+            if "{" not in candidate and "%7b" not in candidate.lower():
+                found.append({"url": canonicalize_url(candidate), "label": "json-ld", "rel_me": False})
+        return found
+
+
 def extract_html_bundle(raw_html: str, url: str) -> Dict[str, Any]:
     """Extracts clean text, outbound links, and temporal metadata from HTML."""
     extracted = ""
@@ -508,8 +545,7 @@ def extract_html_bundle(raw_html: str, url: str) -> Dict[str, Any]:
     for blob in parser.json_ld:
         for date_match in re.findall(r'"date(?:Published|Modified|Created)"\s*:\s*"([^"]{8,32})"', blob):
             dates.append(date_match)
-        for same_as in re.findall(r'https?://[^\s"<>]+', blob):
-            links.append({"url": canonicalize_url(same_as), "label": "json-ld", "rel_me": True})
+        links.extend(extract_linked_urls(blob))
 
     # Deduplicate links while preserving order
     unique_links: List[Dict[str, Any]] = []
@@ -527,12 +563,10 @@ def extract_html_bundle(raw_html: str, url: str) -> Dict[str, Any]:
     }
 
 
-def extract_html_text(raw_html: str, url: str) -> str:
-    return extract_html_bundle(raw_html, url)["text"]
-
-
 def rank_link(url: str, label: str, source_url: str, anchor: Optional[Dict[str, Any]], rel_me: bool = False) -> int:
     """Scores discovered outbound links for the bounded `Links -> Open -> spy -> Data` loop (0 = skip)."""
+    if "{" in url or "%7b" in url.lower():
+        return 0
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return 0
@@ -638,7 +672,7 @@ class PolitenessGate:
         return parser.can_fetch(USER_AGENT, url) if parser else True
 
     def throttle(self, url: str) -> None:
-        domain = urlparse(url).netloc
+        domain = urlparse(url).netloc.lower()
         with self._lock:
             now = time.monotonic()
             slot = max(now, self._last_hit.get(domain, 0.0) + DOMAIN_INTERVAL_SECONDS)
@@ -772,7 +806,8 @@ class LanguageModelClient:
             )
             response.raise_for_status()
             choices = response.json().get("choices", [])
-            return strip_reasoning(choices[0]["message"]["content"]) if choices else ""
+            message_text = choices[0].get("message", {}).get("content") or "" if choices else ""
+            return strip_reasoning(message_text)
 
         model = self._resolve_ollama_model()
         if not model:
@@ -841,9 +876,16 @@ class CaseStore:
             )
 
     def has_url(self, url: str) -> bool:
+        clean_url = canonicalize_url(url)
         with closing(self._connect()) as connection:
-            row = connection.execute("SELECT 1 FROM evidence WHERE url = ? LIMIT 1", (url,)).fetchone()
+            row = connection.execute("SELECT 1 FROM evidence WHERE url = ? LIMIT 1", (clean_url,)).fetchone()
             return row is not None
+
+    def evidence_tag_for(self, url: str) -> str:
+        clean_url = canonicalize_url(url)
+        with closing(self._connect()) as connection:
+            row = connection.execute("SELECT content_hash FROM evidence WHERE url = ? LIMIT 1", (clean_url,)).fetchone()
+            return f"E:{row['content_hash'][:10]}" if row else ""
 
     def queue_links(
         self,
@@ -1020,23 +1062,30 @@ class CaseStore:
         cleaned = (content or "").strip()[:MAX_STORED_CHARACTERS]
         if not cleaned:
             return False
+        clean_url = canonicalize_url(url)
         with closing(self._connect()) as connection, connection:
             cursor = connection.execute(
                 "INSERT OR IGNORE INTO evidence VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (sha256_text(cleaned), url, urlparse(url).netloc.lower(), method, query, utc_now(), artifact_path, cleaned),
+                (sha256_text(cleaned), clean_url, urlparse(clean_url).netloc.lower(), method, query, utc_now(), artifact_path, cleaned),
             )
-            return cursor.rowcount > 0
+            inserted = cursor.rowcount > 0
+        if not inserted and artifact_path:
+            candidate = Path(artifact_path)
+            if candidate.parent == self.evidence_directory and candidate.exists():
+                candidate.unlink(missing_ok=True)
+        return inserted
 
     def evidence_rows(self) -> List[Dict[str, Any]]:
         with closing(self._connect()) as connection:
             return [dict(row) for row in connection.execute("SELECT * FROM evidence ORDER BY collected_utc, rowid")]
 
     def search_evidence(self, keyword: str, limit: int) -> List[Dict[str, Any]]:
-        pattern = f"%{keyword}%"
+        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         with closing(self._connect()) as connection:
             rows = connection.execute(
                 "SELECT content_hash, url, method, collected_utc, content FROM evidence "
-                "WHERE content LIKE ? OR url LIKE ? LIMIT ?",
+                "WHERE content LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\' LIMIT ?",
                 (pattern, pattern, limit),
             ).fetchall()
         results = []
@@ -1263,21 +1312,31 @@ class SourceCollector:
         attempts = [unquoted] if unquoted else []
         if clean_query and clean_query != unquoted:
             attempts.append(clean_query)
+        words = unquoted.split()
+        if len(words) > 3:
+            attempts.append(" ".join(words[:3]))
 
-        for candidate in attempts:
+        for candidate in dict.fromkeys(attempts):
             hits: List[Dict[str, str]] = []
             seen = set()
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", RuntimeWarning)
                     with DDGS() as search_client:
-                        try:
-                            raw_items = search_client.text(candidate, backend="duckduckgo", max_results=max_results)
-                        except TypeError:
-                            raw_items = search_client.text(candidate, max_results=max_results)
-                        if not raw_items:
-                            raw_items = search_client.text(candidate, max_results=max_results)
-                        for item in raw_items or []:
+                        raw_items: List[Dict[str, Any]] = []
+                        probes = [lambda: search_client.text(candidate, max_results=max_results)]
+                        if hasattr(search_client, "_text_html"):
+                            probes.append(lambda: search_client._text_html(candidate, None, None, max_results))
+                        else:
+                            probes.append(lambda: search_client.text(candidate, backend="html", max_results=max_results))
+                        for probe in probes:
+                            try:
+                                raw_items = probe() or []
+                            except Exception:
+                                raw_items = []
+                            if raw_items:
+                                break
+                        for item in raw_items:
                             canonical = canonicalize_url(item.get("href", ""))
                             if canonical and canonical not in seen:
                                 seen.add(canonical)
@@ -1325,14 +1384,17 @@ class SourceCollector:
                     pushed = str(repo.get("pushed_at") or "")
                     if pushed and pushed > latest_activity:
                         latest_activity = pushed
+                    is_fork = bool(repo.get("fork"))
                     homepage = str(repo.get("homepage") or "").strip()
-                    if homepage:
+                    # Forked repos inherit upstream project homepages unrelated to the target
+                    if homepage and not is_fork:
                         norm_hp = canonicalize_url(homepage if homepage.startswith(("http://", "https://")) else f"https://{homepage}")
                         discovered_links.append({"url": norm_hp, "label": f"project:{repo.get('name')}", "rel_me": True})
+                    fork_note = "fork, " if is_fork else ""
                     repo_lines.append(
-                        f"- {repo.get('name')} ({repo.get('language') or 'n/a'}, "
+                        f"- {repo.get('name')} ({fork_note}{repo.get('language') or 'n/a'}, "
                         f"stars={repo.get('stargazers_count', 0)}, pushed={pushed[:10]}): "
-                        f"{repo.get('description') or ''}" + (f" [app: {homepage}]" if homepage else "")
+                        f"{repo.get('description') or ''}" + (f" [app: {homepage}]" if homepage and not is_fork else "")
                     )
         except (requests.RequestException, ValueError):
             pass
@@ -1369,7 +1431,8 @@ class SourceCollector:
             summary += "\nRecent Public Activity:\n" + "\n".join(event_lines)
 
         profile_url = data.get("html_url", f"https://github.com/{login}")
-        if not matches_terms(summary, terms, profile_url) and not source_url:
+        src_host = urlparse(source_url).netloc.lower().removeprefix("www.") if source_url else ""
+        if not matches_terms(summary, terms, profile_url) and not (src_host and src_host in summary.lower()):
             return counts
 
         added = store.add_evidence(profile_url, summary, "github_api", f"github:{login}")
@@ -1384,8 +1447,7 @@ class SourceCollector:
             # GitHub profile links back to blog_host -> record directed edge (promotes to mutual if blog linked to GitHub!)
             store.add_connection(profile_url, blog_host, "links_to", "out", 0.88, tag)
             discovered_links.insert(0, {"url": blog_url, "label": f"github_blog:{login}", "rel_me": True})
-        if source_url:
-            src_host = urlparse(source_url).netloc.lower().removeprefix("www.")
+        if source_url and src_host:
             store.add_connection(src_host, profile_url, "links_to", "out", 0.85, tag)
         counts["links_queued"] += store.queue_links(discovered_links, profile_url, depth + 1, anchor)
         return counts
@@ -1398,8 +1460,9 @@ class SourceCollector:
         if not name:
             return counts
         headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+        fetched_logins = set()
 
-        # 1. GitHub public user search (free, unauthenticated)
+        # 1. GitHub public user search + explicit @handle lookup (free, unauthenticated)
         try:
             response = requests.get(
                 "https://api.github.com/search/users",
@@ -1410,12 +1473,21 @@ class SourceCollector:
             if response.ok:
                 for user in response.json().get("items", [])[:2]:
                     login = user.get("login", "")
-                    if login:
+                    if login and login.lower() not in fetched_logins:
+                        fetched_logins.add(login.lower())
                         gh = self.fetch_github_profile(login, store, anchor, depth=0)
                         counts["github_hits"] += gh["github_hits"]
                         counts["links_queued"] += gh["links_queued"]
         except (requests.RequestException, ValueError, KeyError) as error:
             logger.debug("[GitHub API] %s", error)
+
+        for handle in anchor.get("hints", {}).get("handles", [])[:2]:
+            login = str(handle).strip().lstrip("@")
+            if login and "." not in login and "/" not in login and login.lower() not in fetched_logins:
+                fetched_logins.add(login.lower())
+                gh = self.fetch_github_profile(login, store, anchor, depth=0)
+                counts["github_hits"] += gh["github_hits"]
+                counts["links_queued"] += gh["links_queued"]
 
         # 2. Wikipedia public REST summary lookup (keyless)
         try:
@@ -1465,13 +1537,20 @@ class SourceCollector:
         local_file = evidence_directory / f"doc_{uuid.uuid4().hex[:10]}{extension}"
         with requests.get(url, timeout=15, stream=True, headers={"User-Agent": USER_AGENT}) as response:
             response.raise_for_status()
+            declared_length = response.headers.get("Content-Length")
+            if declared_length and declared_length.isdigit() and int(declared_length) > MAX_DOWNLOAD_BYTES:
+                raise ValueError(f"Artifact exceeds {MAX_DOWNLOAD_BYTES} bytes")
             written = 0
-            with open(local_file, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=65536):
-                    written += len(chunk)
-                    if written > MAX_DOWNLOAD_BYTES:
-                        raise ValueError(f"Artifact exceeds {MAX_DOWNLOAD_BYTES} bytes")
-                    handle.write(chunk)
+            try:
+                with open(local_file, "wb") as handle:
+                    for chunk in response.iter_content(chunk_size=65536):
+                        written += len(chunk)
+                        if written > MAX_DOWNLOAD_BYTES:
+                            raise ValueError(f"Artifact exceeds {MAX_DOWNLOAD_BYTES} bytes")
+                        handle.write(chunk)
+            except Exception:
+                local_file.unlink(missing_ok=True)
+                raise
         return self.extractor.extract(local_file), str(local_file)
 
     def fetch_document(self, url: str, evidence_directory: Path) -> Tuple[str, str, str, str, List[Dict[str, Any]]]:
@@ -1489,6 +1568,8 @@ class SourceCollector:
                 return url, "", "access_blocked", "", []
             response.raise_for_status()
             content_type = response.headers.get("Content-Type", "").lower()
+            if any(ct in content_type for ct in ("image/", "video/", "audio/", "font/", "application/octet-stream", "application/zip", "application/x-msdownload")):
+                return url, "", "failed", "", []
             if "pdf" in content_type:
                 local_file = evidence_directory / f"doc_{uuid.uuid4().hex[:10]}.pdf"
                 local_file.write_bytes(response.content[:MAX_DOWNLOAD_BYTES])
@@ -1654,19 +1735,19 @@ class SourceCollector:
                     # Still record outbound platform reference if linked directly from a verified page
                     if source_url and any(urlparse(url).netloc.lower().endswith(dom) for dom in CORROBORATION_DOMAINS):
                         src_host = urlparse(source_url).netloc.lower().removeprefix("www.")
-                        outcome = store.add_connection(src_host, url, "links_to", "out", 0.72)
+                        src_tag = store.evidence_tag_for(source_url)
+                        outcome = store.add_connection(src_host, url, "links_to", "out", 0.72, src_tag)
                         report["connections_added"] += 1
                         if outcome == "promoted_two_directional":
                             report["mutual_promoted"] += 1
                     continue
 
                 store.mark_link(url, "visited")
-                # Accept same-origin subpages of verified domains OR pages matching target/project context
+                # Accept pages matching target identifiers OR verified same-origin subpages (/about, /projects, /resume)
                 src_host = urlparse(source_url).netloc.lower().removeprefix("www.") if source_url else ""
                 cur_host = urlparse(url).netloc.lower().removeprefix("www.")
-                is_same_origin = bool(src_host and cur_host == src_host)
-                is_corroboration = any(cur_host == dom or cur_host.endswith(f".{dom}") for dom in CORROBORATION_DOMAINS)
-                if not (is_same_origin or is_corroboration or matches_terms(text, terms, url) or entry["priority"] >= 75):
+                is_same_origin = bool(src_host and cur_host == src_host and store.has_url(source_url))
+                if not (matches_terms(text, terms, url) or is_same_origin):
                     continue
 
                 if store.add_evidence(url, text, method, f"link_crawl:d{depth}", artifact):
@@ -1751,13 +1832,37 @@ class IntelligenceCore:
         return list(dict.fromkeys(queries))
 
     @staticmethod
+    def is_profile_url(parsed_url: Any, platform: str) -> bool:
+        """Checks whether a social/platform URL looks like an account profile rather than an issue/video/post."""
+        segments = [seg for seg in parsed_url.path.strip("/").split("/") if seg]
+        if not segments:
+            return False
+        first = segments[0].lower()
+        if platform in ("github", "gitlab"):
+            return len(segments) == 1 and first not in (
+                "topics", "explore", "features", "pricing", "about", "login", "signup", "orgs", "marketplace", "search",
+            )
+        if platform == "linkedin":
+            return len(segments) >= 2 and first in ("in", "company", "pub")
+        if platform == "youtube":
+            return first.startswith("@") or (len(segments) >= 2 and first in ("c", "channel", "user"))
+        if platform == "x_twitter":
+            return len(segments) == 1 and first not in ("intent", "share", "search", "home", "explore", "i")
+        if platform in ("instagram", "twitch", "medium", "orcid"):
+            return len(segments) == 1
+        if platform == "substack":
+            host = parsed_url.netloc.lower()
+            return first.startswith("@") or (host.endswith(".substack.com") and host != "substack.com")
+        return True
+
+    @staticmethod
     def extract_latest_activity(rows: List[Dict[str, Any]]) -> str:
         """Extracts the most recent verified ISO timestamp (YYYY-MM-DD...) proving active vs. stale presence."""
         iso_dates: List[str] = []
-        current_year = datetime.now(timezone.utc).year
+        today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         for row in rows:
-            for match in re.findall(r"\b((?:20[0-2]\d)-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:T\d{2}:\d{2}:\d{2}Z?)?)\b", row["content"]):
-                if int(match[:4]) <= current_year:
+            for match in re.findall(r"\b(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:T\d{2}:\d{2}:\d{2}Z?)?)\b", row["content"]):
+                if match[:10] <= today_iso:
                     iso_dates.append(match)
         return max(iso_dates) if iso_dates else ""
 
@@ -1814,7 +1919,7 @@ class IntelligenceCore:
                 parsed = urlparse(cleaned_url)
                 host = parsed.netloc.lower().removeprefix("www.")
                 platform = next((label for key, label in SOCIAL_PLATFORMS.items() if host == key or host.endswith(f".{key}")), None)
-                if platform and len(parsed.path.strip("/")) >= 2:
+                if platform and self.is_profile_url(parsed, platform):
                     entities[(cleaned_url, platform)] = f"Linked profile in {tag}"
                     store.add_connection(name, cleaned_url, f"profile_{platform}", "out", 0.78, tag)
 
@@ -2124,7 +2229,7 @@ class GeoSensor:
         delta_phi = math.radians(latitude_b - latitude_a)
         delta_lambda = math.radians(longitude_b - longitude_a)
         haversine = math.sin(delta_phi / 2) ** 2 + math.cos(phi_a) * math.cos(phi_b) * math.sin(delta_lambda / 2) ** 2
-        return 2 * cls.EARTH_RADIUS_KM * math.asin(math.sqrt(haversine))
+        return 2 * cls.EARTH_RADIUS_KM * math.asin(math.sqrt(min(1.0, max(0.0, haversine))))
 
     @staticmethod
     def bounding_box(latitude: float, longitude: float, radius_km: float) -> Tuple[float, float, float, float]:
@@ -2195,8 +2300,10 @@ class GeoSensor:
             return {"status": "skipped"}
         query = f"{place_name} fire OR explosion OR earthquake OR outage OR strike"
         try:
-            with DDGS() as search_client:
-                items = search_client.news(query, max_results=max_results) or []
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                with DDGS() as search_client:
+                    items = search_client.news(query, max_results=max_results) or []
         except Exception as error:
             return {"status": "error", "reason": str(error)}
         return {"status": "ok", "query": query, "items": [
@@ -2208,7 +2315,15 @@ class GeoSensor:
 # ==============================================================================
 # 9. FASTMCP / MCPSERVER SURFACE (LLM-agnostic, fast, timeout-safe)
 # ==============================================================================
-mcp = FastMCP("Specter_Intel")
+mcp = FastMCP(
+    "Specter_Intel",
+    instructions=(
+        "All-source OSINT & Geo-Sensory MCP server. Always call anchor_target first to get a 12-hex case_id "
+        "(or run_full_cycle for a single-call workflow). Use short 2-6 keyword queries in harvest_sources "
+        "(no prose or comma lists), traverse_links to crawl discovered outbound links, run_analysis for grounded ACH, "
+        "and synthesize_dossier to emit the ICD-203 report."
+    ),
+)
 core = IntelligenceCore()
 
 
@@ -2249,7 +2364,7 @@ async def anchor_target(
     handles_or_domains: Optional[List[str]] = None,
     location: str = "",
     profession: str = "",
-    hints: Optional[Dict[str, List[str]]] = None,
+    hints: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Phase 1: Instantly (<10ms) locks an Immutable Context Anchor, Hints, and SQLite case.
@@ -2436,6 +2551,9 @@ async def run_full_cycle(
     context: Context,
     max_results: int = 6,
     max_seconds: float = DEFAULT_CYCLE_SECONDS,
+    aliases: Optional[List[str]] = None,
+    location: str = "",
+    profession: str = "",
 ) -> str:
     """
     End-to-end 4-phase OSINT cycle guaranteed to stay within `max_seconds` (default 42s,
@@ -2443,7 +2561,9 @@ async def run_full_cycle(
     Returns case summary, dossier path, grounded claims, and primary evidence excerpts.
     """
     started = time.monotonic()
-    deadline = started + max(12.0, min(float(max_seconds), 50.0))
+    budget = max(12.0, min(float(max_seconds), 50.0))
+    deadline = started + budget
+    harvest_reserve = min(14.0, budget * 0.4)
     loop = asyncio.get_running_loop()
 
     async def report_phase(step: int, message: str) -> None:
@@ -2460,14 +2580,16 @@ async def run_full_cycle(
             pass
 
     await report_phase(0, "Phase 1: locking Immutable Context Anchor...")
-    anchor = await asyncio.to_thread(core.build_anchor, seed, purpose)
+    anchor = await asyncio.to_thread(core.build_anchor, seed, purpose, aliases, None, location, profession)
     store = CaseStore(anchor["case_id"])
 
     await report_phase(1, f"Phase 2A: wide-net harvest + public API enrichment for {anchor['primary_name']}...")
     capped_results = max(1, min(max_results, 12))
     await asyncio.to_thread(core.collector.enrich_public_apis, store, anchor)
-    for query in core.wide_net_queries(anchor):
-        if time.monotonic() >= deadline - 18.0:
+    for index, query in enumerate(core.wide_net_queries(anchor)):
+        if index > 0 and time.monotonic() >= deadline - harvest_reserve:
+            break
+        if time.monotonic() >= deadline - 6.0:
             break
         await asyncio.to_thread(core.collector.harvest, store, query, capped_results, True, anchor)
 
