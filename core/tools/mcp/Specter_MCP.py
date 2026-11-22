@@ -2331,6 +2331,37 @@ def to_json(payload: Any) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
 
 
+def list_case_summaries() -> List[Dict[str, Any]]:
+    """Lists existing cases on disk for list_cases and error recovery."""
+    cases = []
+    for directory in sorted(CASES_DIRECTORY.iterdir()):
+        anchor_file = directory / "anchor.json"
+        if directory.is_dir() and CASE_ID_PATTERN.match(directory.name) and anchor_file.exists():
+            anchor = json.loads(anchor_file.read_text(encoding="utf-8"))
+            cases.append({
+                "case_id": directory.name,
+                "primary_name": anchor.get("primary_name"),
+                "created_utc": anchor.get("created_utc"),
+                "evidence_total": CaseStore(directory.name).statistics()["evidence_total"],
+                "dossier_ready": (directory / "dossier.md").exists(),
+            })
+    return cases
+
+
+def case_error_json(error: Exception, case_id: str = "") -> str:
+    """Returns explicit, unmasked recovery JSON (mcp 2.x masks raised exceptions)."""
+    return to_json({
+        "status": "ERROR",
+        "error": str(error),
+        "bad_case_id": case_id or None,
+        "existing_cases": list_case_summaries()[:10],
+        "action_required": (
+            "Call run_full_cycle(seed, purpose) to investigate a target and create a dossier in one call, "
+            "or call anchor_target(seed, purpose) first to obtain a valid 12-hex case_id."
+        ),
+    })
+
+
 @mcp.tool()
 async def system_health() -> str:
     """Reports runtime readiness (zero hard dependencies; lists optional modules and LLM mode)."""
@@ -2359,7 +2390,7 @@ async def system_health() -> str:
 @mcp.tool()
 async def anchor_target(
     seed: str,
-    purpose: str,
+    purpose: str = "Open-source public intelligence research",
     aliases: Optional[List[str]] = None,
     handles_or_domains: Optional[List[str]] = None,
     location: str = "",
@@ -2367,12 +2398,16 @@ async def anchor_target(
     hints: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    Phase 1: Instantly (<10ms) locks an Immutable Context Anchor, Hints, and SQLite case.
-    Works with any LLM; never requires Ollama or external APIs.
+    Create and start a new OSINT / spying / intelligence investigation case for a target
+    person, company, or domain and return a valid 12-hex case_id.
+    Required before calling harvest_sources, ingest_url, traverse_links, run_analysis, or synthesize_dossier.
     """
-    anchor = await asyncio.to_thread(
-        core.build_anchor, seed, purpose, aliases, handles_or_domains, location, profession, hints
-    )
+    try:
+        anchor = await asyncio.to_thread(
+            core.build_anchor, seed, purpose, aliases, handles_or_domains, location, profession, hints
+        )
+    except ValueError as error:
+        return to_json({"status": "ERROR", "error": str(error)})
     return to_json({
         "status": "ANCHOR_LOCKED",
         "case_id": anchor["case_id"],
@@ -2393,12 +2428,15 @@ async def harvest_sources(
     enrich_apis: bool = False,
 ) -> str:
     """
-    Phase 2: Searches public sources, honours robots.txt, rejects off-topic fallback noise,
-    queues outbound links for `traverse_links`, and ingests SHA-256 deduplicated evidence.
+    Phase 2: Searches public web sources for an existing 12-hex case_id, honours robots.txt,
+    queues outbound links for traverse_links, and ingests SHA-256 deduplicated evidence.
     """
     if not query.strip():
-        raise ValueError("query must not be empty.")
-    anchor, store = open_case(case_id)
+        return to_json({"status": "ERROR", "error": "query must not be empty (use 2-5 bare keywords)."})
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     report = await asyncio.to_thread(
         core.collector.harvest, store, query.strip(), max(1, min(max_results, 20)), strict_relevance, anchor
     )
@@ -2410,7 +2448,10 @@ async def harvest_sources(
 @mcp.tool()
 async def ingest_url(case_id: str, url: str) -> str:
     """Phase 2 (targeted): Fetches a single public URL (robots.txt honoured) and queues its outbound links."""
-    anchor, store = open_case(case_id)
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     canonical = canonicalize_url(url)
 
     def ingest() -> Dict[str, Any]:
@@ -2426,11 +2467,13 @@ async def ingest_url(case_id: str, url: str) -> str:
 @mcp.tool()
 async def traverse_links(case_id: str, max_depth: int = MAX_TRAVERSAL_DEPTH, max_pages: int = 8) -> str:
     """
-    Phase 2B (Page A `Links -> Open -> spy -> Data` + bounded `Repeate` loop):
-    Opens highest-priority discovered links (/projects, /resume, GitHub, Credly, ORCID,
+    Phase 2B: Opens queued outbound links (/projects, /resume, GitHub, Credly, ORCID,
     deployed apps), extracts temporal proof, and promotes reciprocal links to two_directional.
     """
-    anchor, store = open_case(case_id)
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     deadline = time.monotonic() + DEFAULT_CYCLE_SECONDS
     report = await asyncio.to_thread(core.collector.crawl_links, store, anchor, max_depth, max_pages, deadline)
     return to_json({**report, "case_id": store.case_id, "statistics": store.statistics()})
@@ -2438,8 +2481,11 @@ async def traverse_links(case_id: str, max_depth: int = MAX_TRAVERSAL_DEPTH, max
 
 @mcp.tool()
 async def get_connection_graph(case_id: str) -> str:
-    """Returns the Page B directional JSON connection graph (`one_directional` vs. `two_directional`)."""
-    anchor, store = open_case(case_id)
+    """Returns the directional JSON connection graph (`one_directional` vs. `two_directional`) for a 12-hex case_id."""
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     return to_json(store.connection_graph(anchor))
 
 
@@ -2458,7 +2504,10 @@ async def record_connection(
     If the reverse edge (`target_node -> source_node`) already exists, automatically promotes
     the pair to `two_directional` (`bidirectional`).
     """
-    anchor, store = open_case(case_id)
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     outcome = store.add_connection(source_node, target_node, relation, direction, confidence, evidence_tag)
     store.audit("CONNECTION_RECORDED", {
         "from": source_node, "to": target_node, "relation": relation, "outcome": outcome,
@@ -2469,11 +2518,13 @@ async def record_connection(
 @mcp.tool()
 async def run_analysis(case_id: str, max_passes: int = 1) -> str:
     """
-    Phase 3: Fast grounded ACH, NATO Admiralty claim rating, entity/timeline extraction,
-    and clean pivot generation. Returns structured findings + primary evidence excerpts
-    so ANY host LLM can synthesize or add findings via record_findings.
+    Phase 3: Grounded ACH, NATO Admiralty claim rating, entity/timeline extraction,
+    and pivot generation for an existing 12-hex case_id.
     """
-    anchor, store = open_case(case_id)
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     deadline = time.monotonic() + DEFAULT_CYCLE_SECONDS
     state = await asyncio.to_thread(core.run_analysis, anchor, store, max_passes, deadline)
     return to_json({
@@ -2502,10 +2553,13 @@ async def record_findings(
     confidence: Optional[float] = None,
 ) -> str:
     """
-    Lets ANY host LLM commit structured ACH claims/entities into SQLite with automatic
-    server-side verification against stored [E:<hash>] evidence tags.
+    Commits structured ACH claims/entities into an existing 12-hex case_id with server-side
+    verification against stored [E:<hash>] evidence tags.
     """
-    anchor, store = open_case(case_id)
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     current = store.analysis_state()
     merged = {
         "confidence": current["confidence"] if confidence is None else confidence,
@@ -2531,10 +2585,13 @@ async def record_findings(
 @mcp.tool()
 async def synthesize_dossier(case_id: str, analyst_narrative: str = "") -> str:
     """
-    Phase 4: Instantly compiles an ICD-203 Markdown Intelligence Dossier with optional
-    host-LLM `analyst_narrative` and deterministic SHA-256 chain-of-custody appendices.
+    Phase 4 (final step after anchor/harvest/analysis): Compiles an ICD-203 Markdown dossier
+    with SHA-256 chain-of-custody appendices for an existing 12-hex case_id.
     """
-    anchor, store = open_case(case_id)
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     path = await asyncio.to_thread(core.synthesize, anchor, store, analyst_narrative)
     return to_json({
         "status": "DOSSIER_READY",
@@ -2547,8 +2604,8 @@ async def synthesize_dossier(case_id: str, analyst_narrative: str = "") -> str:
 @mcp.tool()
 async def run_full_cycle(
     seed: str,
-    purpose: str,
-    context: Context,
+    purpose: str = "Open-source public intelligence investigation",
+    context: Context = None,
     max_results: int = 6,
     max_seconds: float = DEFAULT_CYCLE_SECONDS,
     aliases: Optional[List[str]] = None,
@@ -2556,9 +2613,9 @@ async def run_full_cycle(
     profession: str = "",
 ) -> str:
     """
-    End-to-end 4-phase OSINT cycle guaranteed to stay within `max_seconds` (default 42s,
-    safely under 60s MCP client timeouts). Works with ANY LLM, zero local LLM contention.
-    Returns case summary, dossier path, grounded claims, and primary evidence excerpts.
+    Investigate, spy on, research, or compile a full intelligence dossier on a target person,
+    organization, or domain in ONE call (<= 50s). Creates a 12-hex case_id, queries web search,
+    GitHub, and Wikipedia, crawls discovered links, evaluates hypotheses (ACH), and builds the dossier.
     """
     started = time.monotonic()
     budget = max(12.0, min(float(max_seconds), 50.0))
@@ -2567,6 +2624,8 @@ async def run_full_cycle(
     loop = asyncio.get_running_loop()
 
     async def report_phase(step: int, message: str) -> None:
+        if context is None:
+            return
         try:
             await context.info(message)
             await context.report_progress(step, 4)
@@ -2574,13 +2633,18 @@ async def run_full_cycle(
             pass
 
     def notify(message: str) -> None:
+        if context is None:
+            return
         try:
             asyncio.run_coroutine_threadsafe(context.info(message), loop)
         except Exception:
             pass
 
-    await report_phase(0, "Phase 1: locking Immutable Context Anchor...")
-    anchor = await asyncio.to_thread(core.build_anchor, seed, purpose, aliases, None, location, profession)
+    try:
+        await report_phase(0, "Phase 1: locking Immutable Context Anchor...")
+        anchor = await asyncio.to_thread(core.build_anchor, seed, purpose, aliases, None, location, profession)
+    except ValueError as error:
+        return to_json({"status": "ERROR", "error": str(error)})
     store = CaseStore(anchor["case_id"])
 
     await report_phase(1, f"Phase 2A: wide-net harvest + public API enrichment for {anchor['primary_name']}...")
@@ -2634,8 +2698,11 @@ async def run_full_cycle(
 
 @mcp.tool()
 async def case_status(case_id: str) -> str:
-    """Summarizes a case: anchor, evidence statistics, ACH confidence, gaps, dossier, and audit trail."""
-    anchor, store = open_case(case_id)
+    """Summarizes an existing 12-hex case_id: anchor, evidence stats, confidence, gaps, and audit log."""
+    try:
+        anchor, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     state = store.analysis_state()
     return to_json({
         "case_id": store.case_id,
@@ -2655,30 +2722,19 @@ async def case_status(case_id: str) -> str:
 
 @mcp.tool()
 async def list_cases() -> str:
-    """Lists all cases on disk with target name, creation time, evidence count, and dossier status."""
-    def collect() -> List[Dict[str, Any]]:
-        cases = []
-        for directory in sorted(CASES_DIRECTORY.iterdir()):
-            anchor_file = directory / "anchor.json"
-            if directory.is_dir() and CASE_ID_PATTERN.match(directory.name) and anchor_file.exists():
-                anchor = json.loads(anchor_file.read_text(encoding="utf-8"))
-                cases.append({
-                    "case_id": directory.name,
-                    "primary_name": anchor.get("primary_name"),
-                    "created_utc": anchor.get("created_utc"),
-                    "evidence_total": CaseStore(directory.name).statistics()["evidence_total"],
-                    "dossier_ready": (directory / "dossier.md").exists(),
-                })
-        return cases
-    return to_json(await asyncio.to_thread(collect))
+    """Lists all existing investigation cases on disk with their 12-hex case_id and target name."""
+    return to_json(await asyncio.to_thread(list_case_summaries))
 
 
 @mcp.tool()
 async def search_evidence(case_id: str, keyword: str, limit: int = 10) -> str:
-    """Keyword search across collected case evidence; returns tagged excerpts with source URLs."""
+    """Keyword search across collected case evidence for a 12-hex case_id; returns tagged excerpts."""
     if not keyword.strip():
-        raise ValueError("keyword must not be empty.")
-    _, store = open_case(case_id)
+        return to_json({"status": "ERROR", "error": "keyword must not be empty."})
+    try:
+        _, store = open_case(case_id)
+    except (ValueError, FileNotFoundError) as error:
+        return case_error_json(error, case_id)
     return to_json(await asyncio.to_thread(store.search_evidence, keyword.strip(), max(1, min(limit, 50))))
 
 
@@ -2695,7 +2751,7 @@ async def scan_geo_events(
     over the last `days`, optionally correlated with regional news for `place_name`.
     """
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
-        raise ValueError("Coordinates out of range.")
+        return to_json({"status": "ERROR", "error": "Coordinates out of range (-90..90, -180..180)."})
     radius_km, days = max(1.0, min(radius_km, 500.0)), max(1, min(days, 30))
 
     def scan() -> Dict[str, Any]:
