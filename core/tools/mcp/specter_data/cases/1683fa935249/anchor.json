@@ -1,0 +1,34 @@
+{
+  "primary_name": "Omid Teimory",
+  "entity_kind": "person",
+  "known_aliases": [],
+  "known_handles_or_domains": [],
+  "hints": {
+    "emails": [],
+    "phones": [],
+    "handles": [],
+    "domains": []
+  },
+  "anchor_demographics": {
+    "birth_year": null,
+    "origin_city": "Iran"
+  },
+  "core_profession": "Blockchain Architect",
+  "initial_hypotheses": [
+    {
+      "id": "H1",
+      "label": "Primary Target",
+      "description": "Subject matching seed qualifiers: Omid Teimory"
+    },
+    {
+      "id": "H2",
+      "label": "Namesake / Collision",
+      "description": "Distinct entity sharing name, alias, or handle"
+    }
+  ],
+  "case_id": "1683fa935249",
+  "seed": "Omid Teimory",
+  "purpose": "CIA and NSA Style spying on Omid Teimory",
+  "created_utc": "2026-11-21T07:22:38+00:00",
+  "immutable": true
+}
