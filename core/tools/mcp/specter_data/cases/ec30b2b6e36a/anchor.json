@@ -26,9 +26,9 @@
       "description": "Distinct entity sharing name, alias, or handle"
     }
   ],
-  "case_id": "51dcd6a9f2e8",
+  "case_id": "ec30b2b6e36a",
   "seed": "Omid Teimory",
-  "purpose": "Open-source public intelligence research",
-  "created_utc": "2026-11-22T05:41:10+00:00",
+  "purpose": "NSA/CIA quality OSINT dossier: compile all known identifiers, social media, addresses, email, phone numbers, and linked digital footprints for target Omid Teimory. Include verification of provided handles (x.com/Omid2007hope, omidteimory.com) and any additional discovered aliases or contact points.",
+  "created_utc": "2026-11-22T05:50:47+00:00",
   "immutable": true
 }

@@ -115,8 +115,8 @@ FIRMS_SOURCE = os.getenv("SPECTER_FIRMS_SOURCE", "VIIRS_SNPP_NRT").strip()
 
 USER_AGENT = "Mozilla/5.0 (compatible; SpecterOSINT/4.0; public-source research; honours robots.txt)"
 MAX_RESEARCH_PASSES = 2
-MAX_TRAVERSAL_DEPTH = 2
-MAX_TRAVERSAL_PAGES = 16
+MAX_TRAVERSAL_DEPTH = 3
+MAX_TRAVERSAL_PAGES = 18
 DEFAULT_CYCLE_SECONDS = float(os.getenv("SPECTER_CYCLE_SECONDS", "42"))
 DOMAIN_INTERVAL_SECONDS = float(os.getenv("SPECTER_DOMAIN_INTERVAL", "1.0"))
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
@@ -136,6 +136,7 @@ HIGH_VALUE_PATHS = (
 )
 SKIP_LINK_SEGMENTS = (
     "privacy", "terms", "cookie", "login", "signin", "signup", "register",
+    "public-chat", "/analytics", "/dashboard", "/auth/", "/marketplace", "/jobs/", "/challenges", "/schools", "/studios", "/tos",
     "share?", "intent/tweet", "sharer.php", "wp-content", "cdn-cgi", "{search_term_string}", "%7b", "/www.",
 )
 SKIP_LINK_DOMAINS = (
@@ -161,6 +162,7 @@ CORROBORATION_DOMAINS = (
     "committers.top", "npmjs.com", "pypi.org", "arxiv.org", "scholar.google.com",
     "huggingface.co", "kaggle.com", "stackoverflow.com", "dev.to", "substack.com",
     "medium.com", "linkedin.com", "x.com", "twitter.com", "youtube.com", "twitch.tv",
+    "artstation.com", "wonderful.dev", "behance.net", "instagram.com",
 )
 TRACKING_PARAMETERS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -203,7 +205,7 @@ CASES_DIRECTORY.mkdir(parents=True, exist_ok=True)
 # ==============================================================================
 SENSITIVE_PATTERNS = [
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[REDACTED-ID]"),
-    (re.compile(r"(?<![Oo][Rr][Cc][Ii][Dd]\.org/)(?<![Oo][Rr][Cc][Ii][Dd]: )(?<![Oo][Rr][Cc][Ii][Dd] )\b(?:\d{4}[ -]){3}\d{4}\b"), "[REDACTED-CARD]"),
+    (re.compile(r"(?<![Oo][Rr][Cc][Ii][Dd]\.org/)(?<![Oo][Rr][Cc][Ii][Dd]: )(?<![Oo][Rr][Cc][Ii][Dd] )\b(?!000\d-)(?:\d{4}[ -]){3}\d{4}\b"), "[REDACTED-CARD]"),
     (re.compile(r"\+\d{1,3}(?:[\s.-]?\(?\d{2,4}\)?){2,4}\d"), "[REDACTED-PHONE]"),
     (re.compile(r"(?<!\w)\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?!\w)"), "[REDACTED-PHONE]"),
 ]
@@ -230,7 +232,8 @@ def canonicalize_url(url: str) -> str:
             for key, value in parse_qsl(parsed.query)
             if key.lower() not in TRACKING_PARAMETERS
         ]
-        return urlunparse((parsed.scheme, parsed.netloc.lower(), parsed.path, parsed.params, urlencode(clean_query), ""))
+        clean_path = parsed.path.rstrip("/")
+        return urlunparse((parsed.scheme, parsed.netloc.lower(), clean_path, parsed.params, urlencode(clean_query), ""))
     except ValueError:
         return url.strip()
 
@@ -265,6 +268,36 @@ def coerce_string_list(value: Any) -> List[str]:
     return []
 
 
+def extract_text_hints(raw_text: str) -> Dict[str, List[str]]:
+    """Extracts explicit public emails, social handles, and non-platform personal domains."""
+    raw = (raw_text or "").strip()
+    emails = [email.lower() for email in re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", raw)]
+    handles = list(re.findall(r"(?<![\w.])@[A-Za-z0-9_.-]{2,}", raw))
+    skip_segments = {"share", "intent", "search", "explore", "topics", "login", "signin", "signup", "home"}
+    for match in re.findall(
+        r"(?:https?://)?(?:www\.)?(?:x\.com|twitter\.com|github\.com|gitlab\.com|instagram\.com|youtube\.com)/@?([A-Za-z0-9_.-]{2,40})",
+        raw,
+        flags=re.I,
+    ):
+        if match.lower() not in skip_segments:
+            handles.append(f"@{match.lstrip('@')}")
+    domains: List[str] = []
+    for domain in re.findall(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|dev|ai|app|at|ch|de|uk|edu|gov|me|co|eu)\b", raw):
+        lowered = domain.lower().removeprefix("www.")
+        if any(lowered in mail for mail in emails):
+            continue
+        if any(lowered == host or lowered.endswith(f".{host}") for host in SOCIAL_PLATFORMS):
+            continue
+        if lowered == "example.com":
+            continue
+        domains.append(lowered)
+    return {
+        "emails": clean_strings(emails, 10),
+        "handles": clean_strings(handles, 10),
+        "domains": clean_strings(domains, 10),
+    }
+
+
 def parse_seed(
     seed: str,
     aliases: Optional[List[str]] = None,
@@ -287,15 +320,10 @@ def parse_seed(
             if piece.strip():
                 extracted_aliases.append(piece.strip())
 
-    # Extract explicit public emails, @handles, and domains from seed
-    for email in re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", raw):
-        extracted_emails.append(email.lower())
-    for handle in re.findall(r"(?<![\w.])@[A-Za-z0-9_.-]{2,}", raw):
-        extracted_handles.append(handle)
-    for domain in re.findall(r"\b(?:[a-zA-Z0-9-]+\.)+(?:com|org|net|io|dev|ai|app|at|ch|de|uk|edu|gov|me|co|eu)\b", raw):
-        lowered = domain.lower()
-        if not any(lowered in mail for mail in extracted_emails):
-            extracted_domains.append(lowered)
+    text_hints = extract_text_hints(raw)
+    extracted_emails.extend(text_hints["emails"])
+    extracted_handles.extend(text_hints["handles"])
+    extracted_domains.extend(text_hints["domains"])
 
     # Strip parenthetical notes to isolate primary_name and qualifiers
     stripped = re.sub(r"\([^)]*\)", "", raw).strip()
@@ -639,7 +667,7 @@ def classify_reliability(url: str, method: str, anchor: Optional[Dict[str, Any]]
     """Deterministic NATO Admiralty source-reliability (A-F) and credibility baseline (1-6)."""
     if method == "search_snippet":
         return ("E", "5")
-    if method in ("github_api", "github_repo_api", "orcid_api", "wikipedia_api"):
+    if method in ("github_api", "github_repo_api", "orcid_api", "wikipedia_api", "npm_registry"):
         return ("A", "2")
     domain = urlparse(url).netloc.lower()
     if domain.startswith("www."):
@@ -1233,7 +1261,7 @@ class CaseStore:
                 "SELECT url, priority FROM links WHERE status = 'queued' ORDER BY priority DESC, depth ASC, rowid ASC"
             ).fetchall()
             blocked_rows = connection.execute(
-                "SELECT url, status FROM links WHERE status IN ('access_blocked', 'robots_denied')"
+                "SELECT url, status FROM links WHERE status IN ('access_blocked', 'robots_denied', 'js_or_gated')"
             ).fetchall()
         return {
             "queued_count": len(queued_rows),
@@ -1307,7 +1335,7 @@ class CaseStore:
                 "intelligence_gaps": json.dumps(clean_strings(grounded.get("intelligence_gaps"), 12)),
                 "key_assumptions": json.dumps(clean_strings(grounded.get("key_assumptions"), 12)),
                 "recommended_pivots": json.dumps(clean_strings(grounded.get("pivot_queries"), 5)),
-                "passes_completed": str(max(pass_number, prior.get("passes_completed", 0))),
+                "passes_completed": str(int(prior.get("passes_completed", 0)) + 1),
                 "analyzed_utc": utc_now(),
                 "last_evidence_total": str(prior_stats["evidence_total"]),
                 "last_mutual_edges": str(prior_stats["connections_mutual"]),
@@ -1332,7 +1360,7 @@ class CaseStore:
                 "last_primary_domains": json.loads(meta.get("last_primary_domains", "[]")),
                 "delta_vs_previous": json.loads(meta.get("delta_vs_previous", "{}")),
                 "hypotheses": [dict(row) for row in connection.execute("SELECT * FROM hypotheses")],
-                "claims": [dict(row) for row in connection.execute("SELECT * FROM claims")],
+                "claims": [{**dict(row), "rating": f"{row['source_reliability']}{row['info_credibility']}"} for row in connection.execute("SELECT * FROM claims")],
                 "entities": [dict(row) for row in connection.execute("SELECT * FROM entities")],
             }
 
@@ -1404,14 +1432,15 @@ class SourceCollector:
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", RuntimeWarning)
+                    raw_items: List[Dict[str, Any]] = []
                     with DDGS() as search_client:
-                        raw_items: List[Dict[str, Any]] = []
                         probes = [lambda: search_client.text(candidate, max_results=max_results)]
-                        if hasattr(search_client, "_text_html"):
-                            probes.append(lambda: search_client._text_html(candidate, None, None, max_results))
-                        else:
-                            probes.append(lambda: search_client.text(candidate, backend="html", max_results=max_results))
-                        for probe in probes:
+                        for method_name, reg in (("_text_bing", None), ("_text_lite", "wt-wt"), ("_text_html", "wt-wt")):
+                            if hasattr(search_client, method_name):
+                                probes.append(lambda fn=getattr(search_client, method_name), r=reg: fn(candidate, r, None, max_results))
+                        for attempt_index, probe in enumerate(probes):
+                            if attempt_index > 0:
+                                time.sleep(0.35)
                             try:
                                 raw_items = probe() or []
                             except Exception:
@@ -1570,6 +1599,27 @@ class SourceCollector:
                 gh = self.fetch_github_profile(login, store, anchor, depth=0)
                 counts["github_hits"] += gh["github_hits"]
                 counts["links_queued"] += gh["links_queued"]
+
+        # 1B. ORCID public expanded-search lookup (keyless)
+        if anchor.get("entity_kind", "person") == "person":
+            try:
+                orcid_resp = requests.get(
+                    "https://pub.orcid.org/v3.0/expanded-search/",
+                    params={"q": name, "rows": 3},
+                    headers=headers,
+                    timeout=5,
+                )
+                if orcid_resp.ok:
+                    lower_name = name.lower()
+                    for item in orcid_resp.json().get("expanded-result", []):
+                        orcid_id = (item.get("orcid-id") or "").strip()
+                        full_name = f"{item.get('given-names') or ''} {item.get('family-names') or ''}".strip().lower()
+                        credit_name = (item.get("credit-name") or "").strip().lower()
+                        if orcid_id and (full_name == lower_name or credit_name == lower_name):
+                            orcid_res = self.fetch_orcid_profile(orcid_id, store, anchor, depth=0)
+                            counts["links_queued"] += orcid_res["links_queued"]
+            except (requests.RequestException, ValueError, KeyError) as error:
+                logger.debug("[ORCID Search API] %s", error)
 
         # 2. Wikipedia public REST summary lookup (keyless)
         try:
@@ -1854,6 +1904,73 @@ class SourceCollector:
         counts["links_queued"] += store.queue_links(discovered_links, profile_url, depth + 1, anchor)
         return counts
 
+    def fetch_npm_package(
+        self,
+        package_name: str,
+        store: CaseStore,
+        anchor: Dict[str, Any],
+        source_url: str = "",
+        depth: int = 1,
+    ) -> Dict[str, int]:
+        """Fetches public npm registry metadata for a package (bypasses Cloudflare HTML gate)."""
+        result = {"hits": 0, "links_queued": 0}
+        clean_name = package_name.strip("/")
+        package_url = f"https://www.npmjs.com/package/{clean_name}"
+        if not clean_name or store.has_url(package_url):
+            return result
+        try:
+            response = requests.get(
+                f"https://registry.npmjs.org/{clean_name}",
+                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+                timeout=6,
+            )
+            if not response.ok:
+                return result
+            data = response.json()
+        except (requests.RequestException, ValueError, KeyError):
+            return result
+
+        latest = (data.get("dist-tags") or {}).get("latest", "")
+        modified = (data.get("time") or {}).get("modified", "")
+        created = (data.get("time") or {}).get("created", "")
+        description = str(data.get("description") or "").strip()
+        maintainers = ", ".join(
+            f"{m.get('name', '')} <{m.get('email', '')}>".strip()
+            for m in (data.get("maintainers") or [])[:5]
+            if isinstance(m, dict)
+        )
+        repo_raw = data.get("repository")
+        repo_url = repo_raw.get("url", "") if isinstance(repo_raw, dict) else str(repo_raw or "")
+        repo_url = re.sub(r"^git\+", "", repo_url).removesuffix(".git")
+        homepage = str(data.get("homepage") or "").strip()
+
+        lines = [
+            f"npm Package: {clean_name} (latest={latest})",
+            f"Description: {description}" if description else "",
+            f"Maintainers: {maintainers}" if maintainers else "",
+            f"License: {data.get('license', '')} | Created: {created} | Latest Verified Activity: {modified}",
+            f"Homepage: {homepage}" if homepage else "",
+            f"Repository: {repo_url}" if repo_url else "",
+        ]
+        summary = "\n".join(line for line in lines if line)
+        known_tokens = [h.lstrip("@").lower() for h in anchor.get("known_handles_or_domains", []) if len(h.lstrip("@")) >= 3]
+        if not (matches_terms(summary, anchor_terms(anchor), package_url) or any(tok in summary.lower() for tok in known_tokens)):
+            return result
+
+        if store.add_evidence(package_url, summary, "npm_registry", f"npm:{clean_name}"):
+            result["hits"] += 1
+        tag = store.evidence_tag_for(package_url)
+        if source_url:
+            src_host = urlparse(source_url).netloc.lower().removeprefix("www.")
+            store.add_connection(src_host, "npmjs.com", "links_to", "out", 0.85, tag)
+        candidate_links = []
+        for candidate_url in (homepage, repo_url):
+            if candidate_url.startswith(("http://", "https://")) and "npmjs.com" not in candidate_url:
+                candidate_links.append({"url": candidate_url, "label": f"npm:{clean_name}", "rel_me": True})
+        if candidate_links:
+            result["links_queued"] += store.queue_links(candidate_links, package_url, depth + 1, anchor)
+        return result
+
     def crawl_links(
         self,
         store: CaseStore,
@@ -1886,12 +2003,13 @@ class SourceCollector:
             if not candidates:
                 break
 
-            # Select up to 4 links while enforcing per-domain crawl diversity (max 5 per host)
+            # Select up to 4 links while enforcing per-domain crawl diversity (8 for target hosts, 4 for others)
             batch: List[Dict[str, Any]] = []
             batch_hosts = set()
             for entry in candidates:
                 host = urlparse(entry["url"]).netloc.lower().removeprefix("www.")
-                if domain_hits.get(host, 0) >= 5:
+                host_cap = 8 if matches_terms(host, terms) else 4
+                if domain_hits.get(host, 0) >= host_cap:
                     continue
                 if host not in batch_hosts or len(candidates) <= 4:
                     batch.append(entry)
@@ -1935,6 +2053,13 @@ class SourceCollector:
                     report["new_artifacts"] += orcid_res["hits"]
                     report["links_queued"] += orcid_res["links_queued"]
                     continue
+                if host == "npmjs.com" and len(segments) >= 2 and segments[0] == "package":
+                    store.mark_link(url, "visited")
+                    report["pages_opened"] += 1
+                    npm_res = self.fetch_npm_package("/".join(segments[1:]), store, anchor, source_url=source_url, depth=depth)
+                    report["new_artifacts"] += npm_res["hits"]
+                    report["links_queued"] += npm_res["links_queued"]
+                    continue
 
                 if store.has_url(url):
                     store.mark_link(url, "visited")
@@ -1967,13 +2092,19 @@ class SourceCollector:
                             report["mutual_promoted"] += 1
                     continue
 
-                store.mark_link(url, "visited")
                 # Accept pages matching target identifiers OR verified same-origin subpages (/about, /projects, /resume)
                 src_host = urlparse(source_url).netloc.lower().removeprefix("www.") if source_url else ""
                 cur_host = urlparse(url).netloc.lower().removeprefix("www.")
-                is_same_origin = bool(src_host and cur_host == src_host and store.has_url(source_url))
+                is_corroboration = any(cur_host == dom or cur_host.endswith(f".{dom}") for dom in CORROBORATION_DOMAINS)
+                is_same_origin = bool(src_host and cur_host == src_host and store.has_url(source_url) and not is_corroboration)
                 if not (matches_terms(text, terms, url) or is_same_origin):
+                    if is_gate_page(text, url) or is_corroboration:
+                        store.mark_link(url, "js_or_gated")
+                        report["skipped_or_blocked"] += 1
+                    else:
+                        store.mark_link(url, "off_topic")
                     continue
+                store.mark_link(url, "visited")
 
                 if store.add_evidence(url, text, method, f"link_crawl:d{depth}", artifact):
                     report["new_artifacts"] += 1
@@ -2004,7 +2135,12 @@ class SourceCollector:
                             report["mutual_promoted"] += 1
 
                 if depth < depth_cap and links:
-                    report["links_queued"] += store.queue_links(links, url, depth + 1, anchor)
+                    candidate_links = [
+                        item for item in links
+                        if not is_corroboration or urlparse(item["url"]).netloc.lower().removeprefix("www.") != cur_host
+                    ]
+                    if candidate_links:
+                        report["links_queued"] += store.queue_links(candidate_links, url, depth + 1, anchor)
 
         store.audit("LINK_TRAVERSAL", report)
         logger.info("[Traverse] %s", report)
@@ -2036,8 +2172,16 @@ class IntelligenceCore:
         if len(purpose) < 10:
             raise ValueError("purpose must state the lawful research objective (min 10 characters).")
         case_id = uuid.uuid4().hex[:12]
+        purpose_hints = extract_text_hints(purpose)
+        merged_hints: Dict[str, Any] = dict(hints) if isinstance(hints, dict) else {}
+        if purpose_hints["handles"]:
+            merged_hints["handles"] = clean_strings(coerce_string_list(merged_hints.get("handles")) + purpose_hints["handles"], 10)
+        if purpose_hints["domains"]:
+            merged_hints["domains"] = clean_strings(coerce_string_list(merged_hints.get("domains")) + purpose_hints["domains"], 10)
+        if purpose_hints["emails"]:
+            merged_hints["emails"] = clean_strings(coerce_string_list(merged_hints.get("emails")) + purpose_hints["emails"], 10)
         anchor = parse_seed(
-            seed, aliases=aliases, handles=handles, location=location, profession=profession, hints=hints
+            seed, aliases=aliases, handles=handles, location=location, profession=profession, hints=merged_hints
         )
         anchor.update({"case_id": case_id, "seed": seed, "purpose": purpose, "created_utc": utc_now(), "immutable": True})
         store = CaseStore(case_id)
@@ -2104,7 +2248,7 @@ class IntelligenceCore:
             if not is_gate_page(row["content"], row["url"])
             and (
                 matches_terms(row["content"], terms, row["url"])
-                or str(row.get("query", "")).startswith(("link_crawl:", "github:", "github_repo:", "orcid:"))
+                or str(row.get("query", "")).startswith(("link_crawl:", "github:", "github_repo:", "orcid:", "npm:"))
             )
         ]
         primary_rows = [row for row in matched_rows if row["method"] != "search_snippet"]
@@ -2132,7 +2276,7 @@ class IntelligenceCore:
             text = row["content"]
             lower_text = text.lower()
             reliability, credibility = classify_reliability(url, row["method"], anchor)
-            is_verified_crawl = str(row.get("query", "")).startswith(("link_crawl:", "github:", "github_repo:", "orcid:"))
+            is_verified_crawl = str(row.get("query", "")).startswith(("link_crawl:", "github:", "github_repo:", "orcid:", "npm:"))
 
             if domain:
                 clean_domain = domain.removeprefix("www.")
@@ -2178,10 +2322,15 @@ class IntelligenceCore:
                 lowered_clean = clean.lower()
                 if any(phrase in lowered_clean for phrase in BOILERPLATE_PHRASES):
                     continue
+                if any(stub in lowered_clean for stub in (
+                    "sign up to comment", "you need an account", "private dashboard", "analytics dashboard",
+                    "loading discussion", "total events recorded", "unique visitors", "[sign up",
+                )):
+                    continue
                 has_iso_date = bool(re.search(r"\b20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b", clean))
                 is_repo_or_project = (
-                    row["method"] in ("github_api", "github_repo_api", "orcid_api")
-                    and ("pushed=" in clean or "Latest Verified Activity" in clean or "PushEvent" in clean or "ORCID" in clean or "Language:" in clean)
+                    row["method"] in ("github_api", "github_repo_api", "orcid_api", "npm_registry")
+                    and ("pushed=" in clean or "Latest Verified Activity" in clean or "PushEvent" in clean or "ORCID" in clean or "Language:" in clean or "npm Package:" in clean or "Maintainers:" in clean or "Description:" in clean)
                 ) or (is_verified_crawl and any(k in lowered_clean for k in ("project", "built", "engine", "simulator", "platform", "app", "c++", "cuda", "research", "location", "innsbruck", "austria", "orcid")))
                 if not (matches_terms(clean, terms) or is_repo_or_project or (is_verified_crawl and has_iso_date)):
                     continue
@@ -2198,6 +2347,7 @@ class IntelligenceCore:
                     "source_url": url,
                     "source_reliability": reliability,
                     "info_credibility": credibility,
+                    "rating": f"{reliability}{credibility}",
                     "hypothesis_alignment": "PRIMARY",
                 })
                 added_from_row += 1
@@ -2214,6 +2364,7 @@ class IntelligenceCore:
 
         # Rigorous confidence calibration: 2 first-party sources cap at MODERATE (<= 0.74);
         # 3+ independent primary domains (including third-party) are required for HIGH (>= 0.78).
+        links_info = store.link_summary()
         graph = store.connection_graph(anchor)
         mutual_count = len(graph["connections"]["two_directional"])
         has_authority = any(c["source_reliability"] == "A" for c in claims)
@@ -2235,7 +2386,9 @@ class IntelligenceCore:
             mutual_bonus = 0.05 if mutual_count > 0 else 0.0
             third_party_bonus = 0.05 if third_party_domains else 0.0
             collision_penalty = 0.04 if collision_candidates else 0.0
-            confidence = min(0.94, max(0.40, round(base + bonus + authority_bonus + mutual_bonus + third_party_bonus - collision_penalty, 2)))
+            blocked_penalty = 0.03 if len(links_info["blocked"]) >= 3 else (0.01 if links_info["blocked"] else 0.0)
+            max_ceiling = 0.90 if links_info["blocked"] else 0.94
+            confidence = min(max_ceiling, max(0.40, round(base + bonus + authority_bonus + mutual_bonus + third_party_bonus - collision_penalty - blocked_penalty, 2)))
 
         h1_status = "LEADING" if confidence >= 0.50 else ("ACTIVE" if matched_rows else "UNVERIFIED")
         h2_score = round(max(0.08, 1.0 - confidence), 2)
@@ -2258,7 +2411,6 @@ class IntelligenceCore:
             if query.strip() and query.strip().lower() not in executed
         ][:3]
 
-        links_info = store.link_summary()
         gaps: List[str] = []
         if not matched_rows:
             gaps.append("Zero collected evidence artifacts mention the target identifiers.")
@@ -2399,7 +2551,14 @@ class IntelligenceCore:
             f"- **Evidence Base:** {stats['evidence_total']} unique SHA-256 artifacts across {stats['unique_domains']} domain(s); "
             f"{len(state['claims'])} grounded claims; {stats['connections_mutual']} mutual / {stats['connections_one_way']} one-way connections.",
         ]
-        if delta:
+        has_delta_change = bool(
+            delta.get("new_artifacts_delta")
+            or delta.get("confidence_delta")
+            or delta.get("mutual_edges_delta")
+            or delta.get("new_primary_domains")
+            or delta.get("resolved_gaps")
+        )
+        if delta and (has_delta_change or state["passes_completed"] > 2):
             lines.append(
                 f"- **Verification Delta (Pass {state['passes_completed']} vs. Previous):** "
                 f"Confidence `{delta.get('previous_confidence', 0.0):.2f}` -> `{delta.get('current_confidence', confidence):.2f}` "
@@ -2407,6 +2566,10 @@ class IntelligenceCore:
                 f"New Artifacts `+{delta.get('new_artifacts_delta', 0)}`; "
                 f"New Mutual Edges `+{delta.get('mutual_edges_delta', 0)}`; "
                 f"New Primary Domains: `{', '.join(delta.get('new_primary_domains') or []) or 'None'}`."
+            )
+        elif delta:
+            lines.append(
+                f"- **Verification Pass:** Pass {state['passes_completed']} refinement completed with no additional delta over previous pass."
             )
         if narrative:
             lines += ["", "### Analyst Executive Assessment", narrative]
@@ -2977,6 +3140,17 @@ async def run_full_cycle(
         "one_directional_total": len(graph["connections"]["one_directional"]),
     }
 
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    for claim in state["claims"]:
+        buckets.setdefault(claim.get("source_url", ""), []).append(claim)
+    diverse_claims: List[Dict[str, Any]] = []
+    while len(diverse_claims) < 12 and any(buckets.values()):
+        for source_key in list(buckets.keys()):
+            if buckets[source_key]:
+                diverse_claims.append(buckets[source_key].pop(0))
+                if len(diverse_claims) >= 12:
+                    break
+
     return to_json({
         "status": "COMPLETE",
         "elapsed_seconds": round(time.monotonic() - started, 2),
@@ -2984,6 +3158,7 @@ async def run_full_cycle(
         "primary_name": anchor["primary_name"],
         "analytic_confidence": state["confidence"],
         "confidence_band": core.confidence_label(state["confidence"]),
+        "verification_mode": "initial_sweep",
         "delta_vs_previous": state.get("delta_vs_previous", {}),
         "latest_activity_utc": latest_activity or None,
         "traversal": traversal,
@@ -2993,7 +3168,7 @@ async def run_full_cycle(
         "graph_resource": f"specter://cases/{store.case_id}/graph",
         "connection_graph": compact_graph,
         "entities": state["entities"][:15],
-        "top_claims": state["claims"][:12],
+        "top_claims": diverse_claims,
         "intelligence_gaps": state["intelligence_gaps"],
         "recommended_pivots": state["recommended_pivots"],
         "evidence_excerpts": store.evidence_excerpts(anchor, limit=4, excerpt_chars=450),
