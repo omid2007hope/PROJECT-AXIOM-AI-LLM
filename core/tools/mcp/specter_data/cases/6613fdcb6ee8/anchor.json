@@ -1,0 +1,33 @@
+{
+  "primary_name": "Omid Teimory",
+  "entity_kind": "person",
+  "known_aliases": [],
+  "known_handles_or_domains": [],
+  "hints": {
+    "emails": [],
+    "phones": [],
+    "handles": [],
+    "domains": []
+  },
+  "anchor_demographics": {
+    "birth_year": null,
+    "origin_city": ""
+  },
+  "core_profession": "",
+  "initial_hypotheses": [
+    {
+      "id": "H1",
+      "label": "Primary Target",
+      "description": "Subject matching seed qualifiers: Omid Teimory"
+    },
+    {
+      "id": "H2",
+      "label": "Namesake / Collision",
+      "description": "Distinct entity sharing name, alias, or handle"
+    }
+  ],
+  "case_id": "6613fdcb6ee8",
+  "seed": "Omid Teimory",
+  "purpose": "NSA/CIA quality spying investigation - compile complete intelligence dossier on target Omid Teimory with full web search, GitHub queries, Wikipedia lookups, link crawling, ACH hypothesis evaluation, and dossier synthesis.",
+  "created_utc": "2026-11-22T05:06:54+00:00",
+  "immutable": true
