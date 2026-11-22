@@ -3289,3 +3289,67 @@ def read_graph(case_id: str) -> str:
 
 if __name__ == "__main__":
     mcp.run()
+
+
+"""
+Here is the complete technical knowledge, architectural history, root-cause discoveries, and operational playbook from building, debugging, and evaluating [Specter_MCP.py](file:///C:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/tools/mcp/Specter_MCP.py), [Specter_System_Prompt.md](file:///C:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/tools/mcp/Specter_System_Prompt.md), and AnythingLLM MCP integration—structured cleanly for future sessions.
+
+---
+
+### 1. Architecture & Components Built
+- **Server Identity:** `Specter_MCP.py` (`axiom_spy`) is a host-LLM-agnostic FastMCP stdio server providing **15 MCP tools** (`system_health`, `anchor_target`, `harvest_sources`, `ingest_url`, `traverse_links`, `get_connection_graph`, `record_connection`, `run_analysis`, `record_findings`, `synthesize_dossier`, `run_full_cycle`, `case_status`, `list_cases`, `search_evidence`, `scan_geo_events`) and 4 case resources (`specter://cases/{case_id}/anchor|dossier|audit|graph`).
+- **Four-Layer Design:**
+  1. **Immutable Context Anchor (`anchor.json`):** Locks a 12-hex `case_id`, `primary_name`, `entity_kind`, `known_aliases`, `known_handles_or_domains`, `hints`, demographics, and initial `H1` (Primary Target) / `H2` (Namesake / Collision) hypotheses.
+  2. **Polite Collection (`PolitenessGate`, `SourceCollector`):** Enforces RFC 9309 `robots.txt` rules, per-domain rate limits, no login/CAPTCHA bypass, SHA-256 deduplicated SQLite evidence storage (`[E:<10-char-hash>]`), and bounded link traversal (`MAX_TRAVERSAL_DEPTH = 3`, `MAX_TRAVERSAL_PAGES = 18`).
+  3. **Deterministic ACH & Grounding (`IntelligenceCore`, `CaseStore`):** Computes calibrated confidence, NATO Admiralty reliability/credibility ratings (`A1`–`F6`), temporal grounding, `one_directional` (`->`) vs `two_directional` (`<->`) graph promotion, and cumulative pass deltas (`delta_vs_previous`).
+  4. **ICD-203 Dossier Compilation (`synthesize`):** Generates verifiable Markdown dossiers with BLUF, ACH table, dated timeline, mutual vs one-way graph tables, gaps, and SHA-256 chain of custody.
+
+---
+
+### 2. Evolution & Fixes Across Cases (`6613fdcb6ee8` -> `ec30b2b6e36a` -> Latest)
+- **AnythingLLM & Runtime Fixes ([anythingllm_mcp_servers.json](file:///C:/Users/Omid/AppData/Roaming/anythingllm-desktop/storage/plugins/anythingllm_mcp_servers.json)):**
+  - Pinned `axiom_spy` to `We_Know\.venv\Scripts\python.exe` with `PYTHONIOENCODING=utf-8` and `PYTHONUNBUFFERED=1`.
+  - Fixed `sqlite` MCP server incompatibility by pinning `mcp<2`.
+  - Fixed browser MCP servers (`playwright`, `chrome-devtools`) on Windows by routing to Microsoft Edge (`msedge.exe`).
+  - Added `case_error_json(...)` handling because `mcp 2.3.0` masks raised Python exceptions behind a generic `"Error executing tool <name>"`.
+- **From Case `6613fdcb6ee8` to `ec30b2b6e36a`:**
+  - Stopped host agent from hallucinating Wikipedia URLs with `playwright-browser_navigate`.
+  - Added consent-wall filtering (`is_gate_page`), GitHub repo & ORCID profile API routing (`fetch_github_repo`, `fetch_orcid_profile`), confidence calibration caps (2 first-party sources cap at `MODERATE <= 0.74`; 3+ independent primary domains required for `HIGH`), and `delta_vs_previous` tracking.
+- **Root Causes Found in `ec30b2b6e36a` & Resolved Subsequently (commits `5a0858e0`, `800d6f13`, `0df98353`, `18554ccd`, plus working-tree guard):**
+  1. **ORCID False-Positive Redaction:** `"ORCID Profile: 0009-0006-2568-5853"` previously bypassed regex lookbehinds and printed `[REDACTED-CARD]`; fixed via negative lookahead `(?!000\d-)` in `SENSITIVE_PATTERNS` while keeping real 16-digit card numbers redacted.
+  2. **Depth-3 Portfolio & Repo Drop + Stub Pollution:** Raised `MAX_TRAVERSAL_DEPTH` (`2 -> 3`) and `MAX_TRAVERSAL_PAGES` (`16 -> 18`) with per-host budget (`8` for target-matching domains, `4` otherwise), added `/public-chat`, `/analytics`, `/dashboard`, `/auth/`, `/marketplace`, `/jobs/`, `/challenges`, `/schools`, `/studios`, `/tos` to `SKIP_LINK_SEGMENTS`, and filtered stub auth/dashboard sentences (`"sign up to comment"`, `"private dashboard"`, `"total events recorded"`) out of `deterministic_analysis`.
+  3. **Trailing-Slash URL Duplicates:** Updated `canonicalize_url` (`parsed.path.rstrip("/")`) so `https://omidteimory.com/` and `https://omidteimory.com` collapse to one canonical artifact/link.
+  4. **Purpose Hint Extraction (`extract_text_hints`):** Shared pure helper across `parse_seed` and `build_anchor` so handles (`@Omid2007hope` from `x.com/Omid2007hope`) and personal domains (`omidteimory.com`) written in `purpose` auto-populate anchor hints while excluding bare social hosts (`x.com`, `github.com`).
+  5. **Keyless API Coverage & Rate-Limit Resilience:**
+     - Added keyless ORCID expanded-search (`https://pub.orcid.org/v3.0/expanded-search/`) in `enrich_public_apis`.
+     - Added `fetch_npm_package` (`https://registry.npmjs.org/<pkg>`, rated `A2`) to bypass Cloudflare HTML blocking on `www.npmjs.com/package/...`.
+     - Guarded `fetch_github_profile`, `fetch_github_repo`, `fetch_orcid_profile`, and `fetch_npm_package` in `crawl_links` with `if store.has_url(url): ... continue` so unauthenticated REST API exhaustion (e.g., GitHub's `60/hr` core limit hitting `remaining=0`) cleanly falls through to `fetch_document` HTML collection (`github.com/robots.txt` allows profile/repo HTML) instead of falsely marking uncollected links `"visited"`.
+  6. **SPA / JS-Shell Gap Reporting & Shared-Platform Isolation:** Marked empty JS/consent shells on external `CORROBORATION_DOMAINS` (such as Credly's 42,278-byte OneTrust HTML shell) as `js_or_gated` instead of `visited` and included them in `CaseStore.link_summary()`, surfacing `credly.com` in `intelligence_gaps`. Prevented `CORROBORATION_DOMAINS` (`artstation.com`, `wonderful.dev`, etc.) from matching `is_same_origin` or queueing same-host navigation links (`/about`, `/jobs/all`, `@ArtStationHQ`).
+  7. **Malformed Bracketed URL Crash (`urlparse` IPv6 Bug):** Excluded `\[\]` from the inline URL extractor regex in `deterministic_analysis` and added `try/except ValueError` after hitting `ValueError: Invalid IPv6 URL` during GitHub HTML fallback when a page contained `?tab=[projects`.
+  8. **Confidence Ceiling & Pass Tracking:** Lowered the ceiling to `0.90` when `links_info["blocked"]` is non-empty; added explicit `"rating"` strings (`A2`, `B2`, etc.) to claims, round-robin `diverse_claims` to `run_full_cycle`, and cumulative `passes_completed` in `CaseStore.replace_analysis`.
+
+---
+
+### 3. Deep Technical Lessons Gained (Hard-Won Quirks)
+
+#### A. Search Engines & `duckduckgo_search==8.1.1`
+- Inside `duckduckgo_search==8.1.1`, `DDGS.text()` overrides `backends` with `backends = ["bing"]` regardless of `backend="html"`/`"auto"`.
+- Passing DuckDuckGo's `region="wt-wt"` to `_text_bing` sets `_EDGE_CD` / `_EDGE_S` cookies (`mkt=wt-wt`), causing Bing to return completely unrelated trending fallback pages (e.g., `"Humpback whale - Wikipedia"`, DeFi articles). Always keep `region=None` on Bing calls and use `"wt-wt"` only on DuckDuckGo `_text_lite`/`_text_html` probes (`lite`/`html` also intermittently return HTTP `202 Ratelimit` / `403`).
+- Keyless official JSON APIs (`api.github.com`, `pub.orcid.org`, `registry.npmjs.org`, `en.wikipedia.org/w/api.php`) are orders of magnitude cleaner and more reliable than HTML search scraping; strict `matches_terms` filtering is essential to reject noisy Bing candidates without polluting SQLite evidence.
+
+#### B. Host LLM Behavior (`eriktonon/qwen3.8-uncensored:9b` in AnythingLLM)
+- **Tool Reranker (`IntelligentSkillSelector`):** AnythingLLM reranks 54+ tools down to top **15** using `Xenova/ms-marco-MiniLM-L-6-v2` matched solely against the **user's current message** (ignoring the system prompt). Consequence: pasting a markdown BLUF/dossier fragment back into chat causes management tools (`record_findings`, `case_status`) to outrank collection tools (`harvest_sources`, `run_full_cycle`).
+- **Template Completion Trap on Follow-Up Turns:** Once Turn 1 outputs a full structured dossier in chat history, small 9B models frequently bypass tool calling altogether on Turn 2 (`Chats 86–87` in `backend-2026-11-22.log`) and hallucinate updated numbers (`New artifacts added: 4`, fake ISO timestamps) to match the output template.
+- **Field Copying vs Inference:** Without an explicit pre-formatted `"rating": "A2"` field directly on claim JSON, the 9B model guessed `"A1"` across all claims; seeing `Verification Delta (+0.00)` on an initial run caused it to copy `traversal` counts (`8` artifacts, `1` mutual) into the delta section; it also ignored `recommended_pivots` and invented unavailable methods like reverse image search.
+- **Prompt Mitigations Applied ([Specter_System_Prompt.md](file:///C:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/tools/mcp/Specter_System_Prompt.md)):** Mandatory tool execution before emitting any heading or prose, automatic `list_cases()` lookup when `case_id` is omitted on follow-ups, strict `"rating"` / `delta_vs_previous` / `intelligence_gaps` / `recommended_pivots` verbatim rules, and explicit acknowledgement when a requested pivot (like reverse image search) is unsupported or blocked.
+
+#### C. Windows / SQLite Resource Hygiene
+- In Python `sqlite3`, `with conn:` only commits/rolls back transactions—it does **not** close the file descriptor. Only `with closing(conn):` releases `case.db` deterministically on Windows (otherwise cleanup raises `PermissionError [WinError 32]`).
+
+---
+
+### 4. Known Remaining Caveats for Future Sessions
+1. **Unverified Live Re-Run Inside AnythingLLM UI:** While `Specter_MCP.py` passed unit tests, isolated live `run_full_cycle` (`26.13s`, `14` artifacts across `6` domains, `50` claims, `0.90` `HIGH` confidence), follow-up `run_analysis` (`passes_completed=4`), and stdio MCP handshake (`15` tools, `READY`) after the final edit, `qwen3.8-uncensored:9b` in AnythingLLM (`New Thread`) has not yet been re-tested interactively against the updated prompt.
+2. **GitHub HTML Fallback Noise:** When GitHub REST API falls back to raw GitHub HTML scraping, GitHub page footers introduce help links (`docs.github.com`, `learn.github.com`); adding those two domains to `SKIP_LINK_DOMAINS` in future will keep the link queue clean.
+3. **DuckDuckGo/Bing Reliability:** Long-term search quality would benefit from migrating `duckduckgo_search` -> `ddgs` (or adding an optional API-keyed search provider fallback like Brave/Serper) when running high-volume sweeps.
+"""
