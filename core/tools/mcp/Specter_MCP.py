@@ -2029,37 +2029,41 @@ class SourceCollector:
                 segments = [seg for seg in parsed.path.strip("/").split("/") if seg]
                 domain_hits[host] = domain_hits.get(host, 0) + 1
 
-                # Route GitHub profile/repo and ORCID links via public keyless REST APIs
+                # Route GitHub profile/repo, ORCID, and npm links via public keyless REST APIs (falling back cleanly if rate-limited)
                 if host == "github.com" and len(segments) == 1 and segments[0].lower() not in (
                     "topics", "explore", "features", "pricing", "about", "login", "signup", "orgs", "marketplace"
                 ):
-                    store.mark_link(url, "visited")
-                    report["pages_opened"] += 1
                     gh = self.fetch_github_profile(segments[0], store, anchor, source_url=source_url, depth=depth)
-                    report["new_artifacts"] += gh["github_hits"]
-                    report["links_queued"] += gh["links_queued"]
-                    continue
+                    if store.has_url(url):
+                        store.mark_link(url, "visited")
+                        report["pages_opened"] += 1
+                        report["new_artifacts"] += gh["github_hits"]
+                        report["links_queued"] += gh["links_queued"]
+                        continue
                 if host == "github.com" and len(segments) == 2 and segments[0].lower() not in ("topics", "orgs", "marketplace", "settings"):
-                    store.mark_link(url, "visited")
-                    report["pages_opened"] += 1
                     repo_res = self.fetch_github_repo(segments[0], segments[1], store, anchor, source_url=source_url, depth=depth)
-                    report["new_artifacts"] += repo_res["hits"]
-                    report["links_queued"] += repo_res["links_queued"]
-                    continue
+                    if store.has_url(url):
+                        store.mark_link(url, "visited")
+                        report["pages_opened"] += 1
+                        report["new_artifacts"] += repo_res["hits"]
+                        report["links_queued"] += repo_res["links_queued"]
+                        continue
                 if host == "orcid.org" and len(segments) == 1 and re.match(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$", segments[0]):
-                    store.mark_link(url, "visited")
-                    report["pages_opened"] += 1
                     orcid_res = self.fetch_orcid_profile(segments[0], store, anchor, source_url=source_url, depth=depth)
-                    report["new_artifacts"] += orcid_res["hits"]
-                    report["links_queued"] += orcid_res["links_queued"]
-                    continue
+                    if store.has_url(url):
+                        store.mark_link(url, "visited")
+                        report["pages_opened"] += 1
+                        report["new_artifacts"] += orcid_res["hits"]
+                        report["links_queued"] += orcid_res["links_queued"]
+                        continue
                 if host == "npmjs.com" and len(segments) >= 2 and segments[0] == "package":
-                    store.mark_link(url, "visited")
-                    report["pages_opened"] += 1
                     npm_res = self.fetch_npm_package("/".join(segments[1:]), store, anchor, source_url=source_url, depth=depth)
-                    report["new_artifacts"] += npm_res["hits"]
-                    report["links_queued"] += npm_res["links_queued"]
-                    continue
+                    if store.has_url(url):
+                        store.mark_link(url, "visited")
+                        report["pages_opened"] += 1
+                        report["new_artifacts"] += npm_res["hits"]
+                        report["links_queued"] += npm_res["links_queued"]
+                        continue
 
                 if store.has_url(url):
                     store.mark_link(url, "visited")
