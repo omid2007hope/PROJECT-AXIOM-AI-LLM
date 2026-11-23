@@ -134,9 +134,7 @@ __global__ static void compute_loss_and_dz_kernel(
 				}
 				float target_embedding =
 					__bfloat162float(emb_table[target_tok_id * emb_dim + row]);
-				float inverse_scale =
-					1.0f / sqrtf(static_cast<float>(emb_dim > 0 ? emb_dim : 1));
-				dz_val = inv_temp * (expected_embedding - target_embedding) * inverse_scale;
+				dz_val = inv_temp * (expected_embedding - target_embedding);
 			} else {
 				if (row < vocab_size) {
 					dz_val = probs[row] - (row == target_tok_id ? 1.0f : 0.0f);
@@ -836,8 +834,8 @@ __global__ static void fused_matrix_adamw_kernel(
 		float m_hat = m / (bc1 > 1e-7f ? bc1 : 1.0f);
 		float v_hat = v / (bc2 > 1e-7f ? bc2 : 1.0f);
 
-		float in_dim_f = static_cast<float>(in_dim > 0 ? in_dim : 1);
-		float eff_lr = learning_rate * rsqrtf(in_dim_f);
+		(void)in_dim;
+		float eff_lr = learning_rate;
 
 		float update = m_hat / (sqrtf(v_hat) + eps);
 		float w_val = W_master[idx] - eff_lr * (update + weight_decay * W_master[idx]);
@@ -974,16 +972,19 @@ extern "C" CUDA_API bool backward_scatter_embeddings(
 				gpu_activations->d_loss
 					? (static_cast<float*>(gpu_activations->d_loss) + telemetry_gradient_square)
 					: nullptr;
-			return apply_embedding_optimizer(
-				gpu_embeddings,
-				static_cast<const float*>(gpu_activations->d_grad_table),
-				vocab_sz,
-				embedding_dim,
-				learning_rate,
-				gpu_weights->step_count,
-				true,
-				grad_sq_slot,
-				s);
+			if (!apply_embedding_optimizer(
+					gpu_embeddings,
+					static_cast<const float*>(gpu_activations->d_grad_table),
+					vocab_sz,
+					embedding_dim,
+					learning_rate,
+					gpu_weights->step_count,
+					true,
+					grad_sq_slot,
+					s)) {
+				return false;
+			}
+			return record_loss_event(gpu_activations, s);
 		}
 	}
 
@@ -999,7 +1000,10 @@ extern "C" CUDA_API bool backward_scatter_embeddings(
 		static_cast<__nv_bfloat16*>(gpu_embeddings->d_table), num_tokens, embedding_dim,
 		gpu_embeddings->vocab_size);
 
-	return CUDA_CHECK(cudaGetLastError());
+	if (!CUDA_CHECK(cudaGetLastError())) {
+		return false;
+	}
+	return record_loss_event(gpu_activations, s);
 }
 
 __device__ __forceinline__ float grad_to_float(float v) {
@@ -1154,7 +1158,7 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 			return false;
 		}
 
-		float logit_scale = inv_temp / sqrtf(static_cast<float>(emb_dim > 0 ? emb_dim : 1));
+		float logit_scale = inv_temp;
 		int grid_s = static_cast<int>(sequence_length);
 		int threads_v = 1024;
 		compute_cross_entropy_and_dz_kernel<<<grid_s, threads_v, 0, stream>>>(
@@ -1241,10 +1245,6 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 				output_dim * sizeof(float), cudaMemcpyDeviceToDevice, stream))) {
 			return false;
 		}
-
-		if (!record_loss_event(non_const_act, stream)) {
-			return false;
-		}
 	} else {
 		int dz_threads = 256;
 		int dz_blocks = static_cast<int>((output_dim + dz_threads - 1) / dz_threads);
@@ -1257,10 +1257,6 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 
 		if (!CUDA_CHECK(cudaGetLastError()))
 			return false;
-
-		if (!record_loss_event(non_const_act, stream)) {
-			return false;
-		}
 
 		if (is_transformer_readout) {
 			if (!non_const_gpu->d_dx[buffer_index]) {
@@ -1377,6 +1373,10 @@ extern "C" CUDA_API bool backward_pass_with_embeddings(
 		}
 	}
 
+	if (!record_loss_event(non_const_act, stream)) {
+		return false;
+	}
+
 	// Releases the next step's forward pass (see forward_pass)
 	if (!is_stream_capturing(stream) && gpu_portion->compute_done[buffer_index]) {
 		const_cast<GpuPortion*>(gpu_portion)->compute_done_recorded[buffer_index] = true;
@@ -1430,7 +1430,7 @@ extern "C" CUDA_API bool evaluate_sequence_loss(const GpuPortion* gpu_portion,
 
 	float inv_temp =
 		(gpu_embeddings->temperature > 1e-4f) ? (1.0f / gpu_embeddings->temperature) : 1.0f;
-	float logit_scale = inv_temp / sqrtf(static_cast<float>(embedding_dim));
+	float logit_scale = inv_temp;
 
 	float* d_accum = static_cast<float*>(allocate_vram(2U * sizeof(float), stream));
 	if (!d_accum) {
@@ -2001,5 +2001,8 @@ extern "C" CUDA_API bool transformer_backward_block(
 		}
 	}
 
-	return CUDA_CHECK(cudaGetLastError());
+	if (!CUDA_CHECK(cudaGetLastError())) {
+		return false;
+	}
+	return record_loss_event(const_cast<GpuActivations*>(gpu_activations), s);
 }

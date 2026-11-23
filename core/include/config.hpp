@@ -60,7 +60,7 @@ struct Config {
 	static constexpr size_t ram_buffer_size = 4194304;
 	static constexpr size_t token_dim = axiom::TOKEN_DIM;
 	static constexpr size_t context_window_size = axiom::CONTEXT_WINDOW;
-	static constexpr float learning_rate = 0.006f;
+	static constexpr float learning_rate = 0.0006f;
 	static constexpr size_t loss_report_interval = 1000;
 
 	static constexpr float weight_min = -0.0033854167f;
@@ -69,7 +69,7 @@ struct Config {
 
 	// Training & CLI defaults
 	static constexpr size_t default_training_epochs = 4;
-	static constexpr uint32_t default_min_frequency = 1;
+	static constexpr uint32_t default_min_frequency = 3;
 	static constexpr double default_target_stop_loss = 2.8;
 
 	// Optimization for test
@@ -131,7 +131,7 @@ static_assert(ram_buffer_size % context_window_size == 0,
 
 // AdamW Optimizer Settings
 constexpr float learning_rate =
-	Config::learning_rate; // Base AdamW rate (fan-in scaled inside CUDA kernels)
+	Config::learning_rate; // Base AdamW rate (direct step size)
 
 // How many training steps pass between two loss reports
 constexpr size_t loss_report_interval =

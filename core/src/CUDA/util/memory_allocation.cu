@@ -523,7 +523,9 @@ extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
 
 	std::mt19937 gen(42);
 	float bound = 1.0f / sqrtf(static_cast<float>(hidden_dim));
+	float down_bound = 1.0f / sqrtf(static_cast<float>(feedforward_network_dimension));
 	std::uniform_real_distribution<float> dis(-bound, bound);
+	std::uniform_real_distribution<float> down_distribution(-down_bound, down_bound);
 
 	const size_t dd_elems = hidden_dim * hidden_dim;
 	const size_t df_elems = hidden_dim * feedforward_network_dimension;
@@ -535,7 +537,7 @@ extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu,
 		init_weight_matrix(&gpu->d_output_weights, &gpu->d_output_master, &gpu->d_output_m, &gpu->d_output_v, dd_elems, gen, dis) &&
 		init_weight_matrix(&gpu->d_gate_weights, &gpu->d_gate_master, &gpu->d_gate_m, &gpu->d_gate_v, df_elems, gen, dis) &&
 		init_weight_matrix(&gpu->d_up_weights, &gpu->d_up_master, &gpu->d_up_m, &gpu->d_up_v, df_elems, gen, dis) &&
-		init_weight_matrix(&gpu->d_down_weights, &gpu->d_down_master, &gpu->d_down_m, &gpu->d_down_v, df_elems, gen, dis);
+		init_weight_matrix(&gpu->d_down_weights, &gpu->d_down_master, &gpu->d_down_m, &gpu->d_down_v, df_elems, gen, down_distribution);
 
 	return ok && CUDA_CHECK(cudaDeviceSynchronize());
 }

@@ -469,7 +469,7 @@ const bool test_transpose_a = false;
 const bool test_transpose_b = false;
 const bool test_use_adamw = true;
 const bool test_scatter_embeddings = true;
-const float test_learning_rate = 0.006f;
+const float test_learning_rate = 0.0006f;
 
 // Populated const test struct instances (created first so closed-loop pointers can alias them)
 static TestGpuEmbeddings make_test_gpu_embeddings() {

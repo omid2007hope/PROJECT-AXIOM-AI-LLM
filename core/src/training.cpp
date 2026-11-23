@@ -232,7 +232,7 @@ bool AI::save_weights(const std::string& path) {
 	synchronize_stream(&gpu_portion, 1);
 
 	// 2. Download latest trained weights and embeddings from GPU if allocated
-	if (gpu_weights.d_weights_master != nullptr) {
+	if (gpu_weights.d_weights_master != nullptr || gpu_embeddings.d_table_master != nullptr) {
 		if (!download_weights()) {
 			std::cerr << "[AI Brain] Failed to download weights from GPU before saving.\n";
 			return false;
@@ -420,6 +420,9 @@ bool AI::read_loss(double& mean_loss, size_t& steps) {
 bool AI::read_telemetry(TrainingTelemetry& telemetry) {
 	// index:  0 1 2 3 4
 	float slots[telemetry_slot_count] = {};
+
+	synchronize_stream(&gpu_portion, 0);
+	synchronize_stream(&gpu_portion, 1);
 
 	// unable to download data from GPU
 	if (!download_telemetry(&gpu_activations, slots)) {

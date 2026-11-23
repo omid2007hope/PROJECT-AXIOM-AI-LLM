@@ -986,7 +986,7 @@ bool run_training_loop(AI& ai, Optimizer& optimizer, Portion& portion, Elements&
 			  << std::flush;
 
 	const float peak_learning_rate =
-		(optimizer.learning_rate > 0.0f) ? optimizer.learning_rate : 0.006f;
+		(optimizer.learning_rate > 0.0f) ? optimizer.learning_rate : config::learning_rate;
 	const float minimum_learning_rate = peak_learning_rate * 0.10f;
 	const float initial_learning_rate = peak_learning_rate * 0.10f;
 	const size_t warmup_steps =
@@ -1511,7 +1511,8 @@ bool execute_training_session(
 			  << std::flush;
 
 	if (input.next_text_id > 4) {
-		ai.active_vocab_size = input.next_text_id;
+		const size_t aligned_vocab = (static_cast<size_t>(input.next_text_id) + 7ULL) & ~7ULL;
+		ai.active_vocab_size = (aligned_vocab < ai.vocab_size) ? aligned_vocab : ai.vocab_size;
 	}
 
 	// Streamed stratified validation split + globally block-shuffled Train Ocean on disk
@@ -1787,10 +1788,10 @@ int main(int argc, char* argv[]) {
 				<< "Configuration Flags:\n"
 				<< "  --weights <path>    Specify custom neural weights checkpoint (default: weights.axiom)\n"
 				<< "  --vocab <path>      Specify custom vocabulary dictionary (default: vocab.axiom)\n"
-				<< "  --lr <rate>         Set optimizer learning rate (default: 0.006)\n"
+				<< "  --lr <rate>         Set optimizer learning rate (default: 0.0006)\n"
 				<< "  --epochs <N>        Set number of training epochs across corpus (default: 4)\n"
 				<< "  --data <dir>        Set custom bulk training directory (default: asset_sample)\n"
-				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 1)\n"
+				<< "  --min-count <N>     Set minimum token frequency threshold for bulk ingestion (default: 3)\n"
 				<< "  --target-loss <L>   Set target stopping loss (default: 2.8, range: 1.5 - 3.0)\n"
 				<< "  --archive           Automatically archive processed files after bulk training\n"
 				<< "  --purge             Automatically purge processed files after bulk training\n\n";

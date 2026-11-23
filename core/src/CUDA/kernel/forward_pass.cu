@@ -480,8 +480,7 @@ __global__ static void compute_tied_logits_kernel(const __nv_bfloat16* __restric
 			dot += __bfloat162float(y[d]) * __bfloat162float(emb_row[d]);
 		}
 
-		float inverse_scale = 1.0f / sqrtf(static_cast<float>(emb_dim > 0 ? emb_dim : 1));
-		logits[v] = dot * inv_temp * inverse_scale;
+		logits[v] = dot * inv_temp;
 	}
 }
 
