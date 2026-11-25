@@ -24,7 +24,7 @@
 class FormatGuard {
 public:
 	explicit FormatGuard(std::ostream& stream)
-	    : stream_(stream), flags_(stream.flags()), precision_(stream.precision()) {}
+		: stream_(stream), flags_(stream.flags()), precision_(stream.precision()) {}
 	~FormatGuard() {
 		stream_.flags(flags_);
 		stream_.precision(precision_);
@@ -86,6 +86,7 @@ struct Config {
 	static constexpr int progress_bar_width = 24;
 
 	// Transformer, MoE, PagedAttention & Generation defaults
+	static constexpr size_t default_training_layers = 4;
 	static constexpr uint32_t axiom_model_magic = 0x4D4F4958U; // "XIOM"
 	static constexpr uint32_t axiom_model_version = 2U;
 	static constexpr size_t axiom_model_header_bytes = 64;
@@ -103,6 +104,12 @@ struct Config {
 	static constexpr float default_top_p = 0.9f;
 	static constexpr size_t default_num_experts = 8;
 	static constexpr int default_graph_benchmark_iterations = 100;
+
+	// Transformer weights and  memory allocation in memory_allocation.cu
+	// Brings back Transformer weights to initial random state
+	static constexpr uint32_t randomizer_seed = axiom::RANDOMIZER_SEED;
+	// number of layers for Transformer weights random state
+	static constexpr size_t transformer_weight_layers = axiom::TRANSFORMER_WEIGHT_LAYER;
 
 	// Folder layout & files
 	static constexpr const char* database_folder = "database";
@@ -127,11 +134,10 @@ constexpr size_t context_window_size =
 	Config::context_window_size; // Doubled to capture paragraph-level context
 
 static_assert(ram_buffer_size % context_window_size == 0,
-	      "ram_buffer_size must be an exact multiple of context_window_size");
+			  "ram_buffer_size must be an exact multiple of context_window_size");
 
 // AdamW Optimizer Settings
-constexpr float learning_rate =
-	Config::learning_rate; // Base AdamW rate (direct step size)
+constexpr float learning_rate = Config::learning_rate; // Base AdamW rate (direct step size)
 
 // How many training steps pass between two loss reports
 constexpr size_t loss_report_interval =
@@ -146,6 +152,8 @@ constexpr float weight_max = Config::weight_max;
 constexpr uint32_t random_seed = Config::random_seed;
 
 // Training & CLI defaults
+// Temporary for testing (original: Config::num_layers = 28)
+constexpr size_t default_training_layers = Config::default_training_layers;
 constexpr size_t default_training_epochs = Config::default_training_epochs;
 constexpr uint32_t default_min_frequency = Config::default_min_frequency;
 constexpr double default_target_stop_loss = Config::default_target_stop_loss;
@@ -176,6 +184,12 @@ constexpr int default_top_k = Config::default_top_k;
 constexpr float default_top_p = Config::default_top_p;
 constexpr size_t default_num_experts = Config::default_num_experts;
 constexpr int default_graph_benchmark_iterations = Config::default_graph_benchmark_iterations;
+
+// Transformer weights and  memory allocation in memory_allocation.cu
+// Brings back Transformer weights to initial random state
+constexpr uint32_t default_randomizer_seed = axiom::RANDOMIZER_SEED;
+// number of layers for Transformer weights random state
+constexpr size_t default_weight_layers = axiom::TRANSFORMER_WEIGHT_LAYER;
 
 // Folder layout
 constexpr const char* database_folder = Config::database_folder;

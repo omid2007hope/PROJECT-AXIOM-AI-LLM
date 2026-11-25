@@ -47,10 +47,18 @@
 // Rotary Position Embedding Base Frequency
 #define AXIOM_ROPE_THETA 1000000.0f
 
+// Memory allocation params "core\src\CUDA\util\memory_allocation.cuh" for "allocate_transformer_weights"
+// Randomizer Seed (Transformer weight initialization) for reproducible training results
+#define AXIOM_RANDOMIZER_SEED 42U
+
+// Number of layers in the Transformer
+#define AXIOM_Weight_LAYERS 1U
+
 #ifdef __cplusplus
 namespace axiom {
 
 constexpr uint32_t VOCAB_SIZE = AXIOM_VOCAB_SIZE;
+constexpr uint32_t RANDOMIZER_SEED = AXIOM_RANDOMIZER_SEED;
 constexpr size_t TOKEN_DIM = AXIOM_TOKEN_DIM;
 constexpr size_t CONTEXT_WINDOW = AXIOM_CONTEXT_WINDOW;
 constexpr size_t NUM_HEADS = AXIOM_NUM_HEADS;
@@ -60,14 +68,15 @@ constexpr size_t FFN_DIM = AXIOM_FFN_DIM;
 constexpr size_t FAN_IN_DIM = AXIOM_FAN_IN_DIM;
 constexpr size_t PAGED_TOTAL_BLOCKS = AXIOM_PAGED_TOTAL_BLOCKS;
 constexpr size_t PAGED_BLOCK_SIZE = AXIOM_PAGED_BLOCK_SIZE;
+constexpr size_t TRANSFORMER_WEIGHT_LAYER = AXIOM_Weight_LAYERS;
 
 static_assert(TOKEN_DIM % NUM_HEADS == 0, "TOKEN_DIM must be evenly divisible by NUM_HEADS");
 static_assert(HEAD_DIM <= MAX_HEAD_DIM, "HEAD_DIM cannot exceed MAX_HEAD_DIM (64)");
 static_assert(HEAD_DIM * NUM_HEADS == TOKEN_DIM, "HEAD_DIM * NUM_HEADS must equal TOKEN_DIM");
-static_assert(FAN_IN_DIM == CONTEXT_WINDOW * TOKEN_DIM, "FAN_IN_DIM must equal CONTEXT_WINDOW * TOKEN_DIM");
+static_assert(FAN_IN_DIM == CONTEXT_WINDOW * TOKEN_DIM,
+			  "FAN_IN_DIM must equal CONTEXT_WINDOW * TOKEN_DIM");
 
 } // namespace axiom
 #endif
 
 #endif // CORE_INCLUDE_SHARED_PARAMS_H
-
