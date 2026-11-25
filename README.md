@@ -2,7 +2,8 @@
 
 **Copyright © 2026 Omid Teimory. All Rights Reserved.**
 
-This repository is **source-available and proprietary**, NOT open source. 
+This repository is **source-available and proprietary**, NOT open source.
+
 - **Permitted:** You may view the code, download the repository, and build/run the unmodified application for your own use.
 - **Strictly Prohibited:** You may **not** copy, paste, modify, redistribute, extract snippets, create derivative works, offer this software as a commercial/hosted service, or use any part of this codebase in your own projects or AI training.
 
@@ -43,7 +44,7 @@ See the [LICENSE](./LICENSE) file for the full legally binding agreement. Unauth
 [![Precision](https://img.shields.io/badge/Precision-Hardware_bfloat16-orange?style=for-the-badge)](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format)
 [![DMA](https://img.shields.io/badge/PCIe-Direct_DMA_Zero--Copy-purple?style=for-the-badge)]()
 [![Status](https://img.shields.io/badge/Status-Phases_0--6_Complete_•_All_Gates_Passed-success?style=for-the-badge)]()
-[![Tests](https://img.shields.io/badge/Tests-431%20Passing%20(100%25%20Green)-brightgreen?style=for-the-badge)]()
+[![Tests](<https://img.shields.io/badge/Tests-431%20Passing%20(100%25%20Green)-brightgreen?style=for-the-badge>)]()
 
 _Project Axiom is not a Python wrapper. It is not an abstraction layer. It is a hardcore, bare-metal rewrite of deep learning mechanics engineered directly in C++23 and NVIDIA CUDA. By stripping away garbage collectors, runtime interpreters, and framework bloat, Axiom achieves absolute mastery over modern silicon: 100% Tensor Core saturation, zero-latency PCIe DMA streaming, PagedAttention with Copy-on-Write (COW) memory reuse, sub-millisecond prefill latency, and seamless continuous learning._
 
@@ -80,9 +81,72 @@ Modern Artificial Intelligence is drowning in software bloat. Enterprise workflo
 
 ---
 
+## System Configuration Architecture
+
+```mermaid
+flowchart TB
+    subgraph SP["shared_params.h (C / C++ / CUDA Shared Macros)"]
+        M_VOCAB["AXIOM_VOCAB_SIZE = 65536U"]
+        M_DIM["AXIOM_TOKEN_DIM = 1024U<br/>AXIOM_CONTEXT_WINDOW = 256U<br/>AXIOM_FAN_IN_DIM = S * D"]
+        M_ATTN["AXIOM_NUM_HEADS = 16U<br/>AXIOM_HEAD_DIM = 64U<br/>AXIOM_FFN_DIM = 4096U"]
+        M_PAGED["AXIOM_PAGED_TOTAL_BLOCKS = 256U<br/>AXIOM_PAGED_BLOCK_SIZE = 16U"]
+        M_LAYERS["AXIOM_Weight_LAYERS = 1U<br/>AXIOM_RANDOMIZER_SEED = 42U"]
+    end
+
+    subgraph NS_AXIOM["namespace axiom (__cplusplus)"]
+        C_CONST["constexpr VOCAB_SIZE, TOKEN_DIM,<br/>CONTEXT_WINDOW, NUM_HEADS,<br/>HEAD_DIM, FFN_DIM, FAN_IN_DIM,<br/>PAGED_*, TRANSFORMER_WEIGHT_LAYER"]
+        C_ASSERT["static_assert invariants<br/>(divisibility, head_dim <= 64, fan_in)"]
+    end
+
+    subgraph CFG_HPP["Config.hpp"]
+        F_GUARD["FormatGuard (RAII stream state)"]
+        W_HDR["AxiomWeightHeader (56B, #pragma pack(1))"]
+        MODE_ENUM["enum class AppMode"]
+
+        subgraph STRUCT_CFG["struct Config (static constexpr)"]
+            SC_TRAIN["default_training_layers = 4<br/>lr, weight_min/max, seed"]
+            SC_ARCH["num_layers = 28U<br/>rms_norm_eps, rope_theta,<br/>max_seq_len_cap, experts"]
+            SC_ALLOC["randomizer_seed = 1U (via macro)<br/>transformer_weight_layers = 1U"]
+            SC_IO["ram_buffer_size, io_buffer_bytes,<br/>paths & *.axiom filenames"]
+        end
+
+        subgraph NS_CFG["namespace config (duplicate aliases)"]
+            NC_ALIAS["Mirrors most Config::* constants<br/>+ static_assert(ram_buffer_size % context_window_size == 0)"]
+        end
+
+        subgraph NS_VOCAB["namespace vocab"]
+            V_SLOTS["0..3 Special | 4..64511 Text<br/>64512..64767 Visual | 64768..65023 Acoustic<br/>65024..65535 Expansion + BPE IDs"]
+        end
+
+        RUNTIME_S["TrainStatus, TrainingTelemetry,<br/>SamplingConfig, AxiomModelConfig,<br/>TransformerLayerWeights"]
+    end
+
+    subgraph CONSUMERS["Downstream C++ / CUDA Translation Units"]
+        CU_ALLOC["memory_allocation.cuh<br/>allocate_transformer_weights()"]
+        ENGINE["Training / Inference / Server / CLI"]
+    end
+
+    SP --> NS_AXIOM
+    NS_AXIOM --> C_ASSERT
+    SP --> STRUCT_CFG
+    NS_AXIOM --> STRUCT_CFG
+    STRUCT_CFG -->|"re-exports"| NS_CFG
+    NS_AXIOM --> NS_VOCAB
+    STRUCT_CFG --> RUNTIME_S
+    NS_AXIOM --> RUNTIME_S
+
+    M_LAYERS -.->|"1U"| SC_ALLOC
+    SC_TRAIN -.->|"4"| ENGINE
+    SC_ARCH -.->|"28U"| ENGINE
+    SC_ALLOC --> CU_ALLOC
+    NS_CFG --> ENGINE
+    NS_VOCAB --> ENGINE
+    RUNTIME_S --> ENGINE
+```
+
 ## 🏛️ System Architecture
 
-Axiom operates as a synchronized, 4-tier memory conveyor belt that moves multimodal data across the PCIe bus without ever stalling the GPU:
+Axiom operates as a synchronized, 4-tier memory conveyor belt that moves multimodal data across the PCIe bus without stalling the GPU:
 
 ```mermaid
 graph TB
@@ -213,8 +277,8 @@ struct Config {
 };
 ```
 
-* **Zero-Drift Guarantees:** Both instance access (`Config c; c.token_dim`) and namespace/type lookups (`Config::token_dim` / `config::token_dim`) evaluate to identical compile-time values, eliminating drift between production and testing harnesses.
-* **Fan-In Scaling ($K = 262,144$):** With fan-in $K = \text{context\_window\_size} \times \text{token\_dim} = 256 \times 1024 = 262,144$, weights are bounded by $\pm\sqrt{3/K} = \pm 0.0033854$. This prevents half-precision (`bfloat16`) activation explosion ($> 65,504$) and guarantees stable convergence without numerical divergence (`inf` loss).
+- **Zero-Drift Guarantees:** Both instance access (`Config c; c.token_dim`) and namespace/type lookups (`Config::token_dim` / `config::token_dim`) evaluate to identical compile-time values, eliminating drift between production and testing harnesses.
+- **Fan-In Scaling ($K = 262,144$):** With fan-in $K = \text{context\_window\_size} \times \text{token\_dim} = 256 \times 1024 = 262,144$, weights are bounded by $\pm\sqrt{3/K} = \pm 0.0033854$. This prevents half-precision (`bfloat16`) activation explosion ($> 65,504$) and guarantees stable convergence without numerical divergence (`inf` loss).
 
 ---
 
@@ -237,6 +301,7 @@ Unlike traditional architectures that treat text as primary and bolt on foreign 
 Reading raw compressed bytes directly into a tokenizer is a fatal architectural trap. Compressed files (`.pdf`, `.docx`, `.mp4`, `.png`) maximize Shannon entropy ($H \approx 8.0\text{ bits/byte}$). To a neural network, raw compressed bytes are indistinguishable from cryptographic white noise. The network burns its finite capacity reverse-engineering DEFLATE and Huffman algorithms rather than learning geometry, physics, and language semantics.
 
 Axiom restores low-dimensional semantic manifolds via hardened decompressors:
+
 - **Documents (`decompress_document`):** Extracts clean UTF-8 text, handles kerned `TJ` glyph runs, parses octal escape sequences, and rejects non-linguistic DCTDecode/JBIG2 image streams.
 - **Images (`decompress_image`):** Decodes compressed containers (BMP, JPEG, PNG) into raw uncompressed RGB pixel matrices.
 - **Audio (`decompress_audio`):** Strips RIFF/OGG/MP3 metadata into raw linear PCM waveforms.
@@ -246,36 +311,40 @@ Axiom restores low-dimensional semantic manifolds via hardened decompressors:
 
 Project Axiom eliminates sparse multi-billion index offsets, unifying text and numerical quantities into a single `main_dictionary` so physical co-occurrence semantics (e.g., `"gravity"` and `"9.8"`) are directly preserved:
 
-| Codebook Slot Range | Modality / Data Representation | Semantic Ingestion Source |
-| :--- | :--- | :--- |
-| **`[0 .. 3]`** | Special Reserved Tokens (`<PAD>`, `<UNK>`, `<BOS>`, `<EOS>`) | Engine Control Primitives |
-| **`[4 .. 64,511]`** | Unified Text Words, Subwords, Numbers, & Math | Decompressed Documents, Code, Raw Text |
-| **`[64,512 .. 64,767]`** | Discrete Quantized Visual Tokens (`0x00 .. 0xFF`) | Decompressed Raw RGB Pixel Frames |
-| **`[64,768 .. 65,023]`** | Discrete Acoustic Waveform Tokens (`0x00 .. 0xFF`) | Decompressed Linear PCM Audio |
-| **`[65,024 .. 65,535]`** | Reserved Expansion Slots | Future Multimodal Codebooks |
+| Codebook Slot Range      | Modality / Data Representation                               | Semantic Ingestion Source              |
+| :----------------------- | :----------------------------------------------------------- | :------------------------------------- |
+| **`[0 .. 3]`**           | Special Reserved Tokens (`<PAD>`, `<UNK>`, `<BOS>`, `<EOS>`) | Engine Control Primitives              |
+| **`[4 .. 64,511]`**      | Unified Text Words, Subwords, Numbers, & Math                | Decompressed Documents, Code, Raw Text |
+| **`[64,512 .. 64,767]`** | Discrete Quantized Visual Tokens (`0x00 .. 0xFF`)            | Decompressed Raw RGB Pixel Frames      |
+| **`[64,768 .. 65,023]`** | Discrete Acoustic Waveform Tokens (`0x00 .. 0xFF`)           | Decompressed Linear PCM Audio          |
+| **`[65,024 .. 65,535]`** | Reserved Expansion Slots                                     | Future Multimodal Codebooks            |
 
 ---
 
 ## ⚡ Compute & Kernel Architecture
 
 ### 1. Fused Causal Self-Attention & Strict Causality
-* **Causal Masking:** Implemented in `fused_causal_attention` on GPU, enforcing strict causal masking ($t \ge \tau$ cannot alter past representations $t < \tau$).
-* **Mathematical Invariant:** Perturbing future tokens verifies 100% bit-exact invariance on past token representations ($|out_1 - out_2| < 10^{-4}$).
+
+- **Causal Masking:** Implemented in `fused_causal_attention` on GPU, enforcing strict causal masking ($t \ge \tau$ cannot alter past representations $t < \tau$).
+- **Mathematical Invariant:** Perturbing future tokens verifies 100% bit-exact invariance on past token representations ($|out_1 - out_2| < 10^{-4}$).
 
 ### 2. SwiGLU Non-Linearity Forward & Backward Parity
-* **Forward Pass:** Evaluates $\text{SwiGLU}(G, U) = \text{Swish}(G) \cdot U = \left( G \cdot \sigma(G) \right) \cdot U$.
-* **Backward Pass:** Computes exact analytical gradients:
+
+- **Forward Pass:** Evaluates $\text{SwiGLU}(G, U) = \text{Swish}(G) \cdot U = \left( G \cdot \sigma(G) \right) \cdot U$.
+- **Backward Pass:** Computes exact analytical gradients:
   $$\frac{\partial \mathcal{L}}{\partial U} = \delta \cdot \text{Swish}(G)$$
   $$\frac{\partial \mathcal{L}}{\partial G} = \delta \cdot U \cdot \left[ \sigma(G) + G \cdot \sigma(G)(1 - \sigma(G)) \right]$$
-* **Numerical Safety:** Gradients are guaranteed finite with zero overflow under `bfloat16`.
+- **Numerical Safety:** Gradients are guaranteed finite with zero overflow under `bfloat16`.
 
 ### 3. Sparse Mixture of Experts (MoE) 8-Expert Balanced Routing
-* **Balanced Dispatch:** Features an 8-expert sparse architecture routing active token tokens through top-performing feedforward specialists.
-* **Routing Uniformity:** Hardware telemetry confirms tight balanced dispatches across all 8 experts (e.g., 64, 61, 65, 73, 66, 62, 63, 58) with zero expert starvation.
+
+- **Balanced Dispatch:** Features an 8-expert sparse architecture routing active token tokens through top-performing feedforward specialists.
+- **Routing Uniformity:** Hardware telemetry confirms tight balanced dispatches across all 8 experts (e.g., 64, 61, 65, 73, 66, 62, 63, 58) with zero expert starvation.
 
 ### 4. CUTLASS v4.8.0 Fused Epilogue Visitor Trees (EVT)
-* **Tensor Core GEMM:** Hardware matrix multiplication targeting Ada Lovelace `sm_89` using `mma.sync` instructions.
-* **Linear Identity Epilogue:** Fuses bias addition directly in register spaces ($Y = XW^T + b$), eliminating intermediate VRAM roundtrips and permanently preventing dead activation collapse.
+
+- **Tensor Core GEMM:** Hardware matrix multiplication targeting Ada Lovelace `sm_89` using `mma.sync` instructions.
+- **Linear Identity Epilogue:** Fuses bias addition directly in register spaces ($Y = XW^T + b$), eliminating intermediate VRAM roundtrips and permanently preventing dead activation collapse.
 
 ---
 
@@ -322,6 +391,7 @@ Project Axiom was engineered from first principles to serve as the **closed-loop
 ```
 
 ### Sensory Telemetry Streams
+
 1. **NASA FIRMS & Kanari API:** Real-time thermal anomalies (VIIRS/MODIS) detecting kinetic strikes, pipeline disruptions, and industrial explosions.
 2. **ESA Copernicus Sentinel-1 (C-band SAR):** All-weather synthetic aperture radar cutting through dense clouds, smoke, and total nighttime darkness to monitor infrastructure damage and troop/vessel deployments.
 3. **Copernicus Sentinel-2 & SkyFi Open Data:** 10m multispectral optical imagery for surface physical verification.
@@ -391,6 +461,7 @@ VRAM Footprint  : 8629 MB Free / 12281 MB Total
 ```
 
 The benchmark profiles the GPU across three rigorous hardware validation stages:
+
 1. **Stage 1 (Micro-Dispatch Latency & Decode Throughput Profile):** Evaluates real-time autoregressive token generation, recording 100 hardware-timed inference passes. Achieves **5.0 ms prefill latency (TTFT)**, **249.7 tokens/sec decode throughput** (4.00 ms/token), and **134.1 GB/s memory bus streaming** (31.0% of physical peak).
 2. **Stage 2 (High-Capacity VRAM Allocation & Memory Bus Saturation):** Stress-tests dynamic VRAM allocation and vectorized GDDR6 streaming throughput, dynamically staging **6.00 GB** of tensor buffers (preserving 2.00 GB safe OS headroom) at **329.0 GB/s (76.2% of physical bus bandwidth)** with 100% data integrity verified.
 3. **Stage 3 (Ada Lovelace Tensor Core Saturation Sweep):** Locks the GPU into maximum P0 boost clock and executes 1,000 sustained sweeps across all 58 Ada Lovelace Streaming Multiprocessors ($M=2048, N=4096, K=4096$, 68.7 GFLOPs/sweep). Achieves **68.1 sustained dense TFLOPs at 100.6% Model FLOPs Utilization (MFU)**, saturating the bus at 329.0 GB/s with a steady-state fused EVT sweep time of **1.01 ms** and 100% hardware stability.
@@ -400,7 +471,9 @@ The benchmark profiles the GPU across three rigorous hardware validation stages:
 ## 🛡️ Defensive Systems Engineering
 
 ### 1. The Strict Three-Step Pointer Lifecycle
+
 To guarantee zero VRAM leaks, every GPU resource adheres to the **Null Guard $\rightarrow$ Free $\rightarrow$ Neutralize** protocol:
+
 ```cpp
 if (gpu->d_context_window[i]) {
     cudaFree(gpu->d_context_window[i]);
@@ -409,7 +482,9 @@ if (gpu->d_context_window[i]) {
 ```
 
 ### 2. Universal C-ABI Encapsulation (`axiom_c_api.cpp`)
+
 The entire CUDA backend compiles into a standalone dynamic link library (`cuda_transfer.dll`). All GPU internals, `__nv_bfloat16` types, and CUTLASS templates are encapsulated behind a clean `extern "C"` ABI with opaque pointers:
+
 - **Zero Header Leakage:** The CPU application compiles cleanly with GCC 14+ (`g++ -std=c++23`) without requiring CUDA headers or MSVC compiler extensions.
 - **Universal Interoperability:** Can be hooked dynamically by Python (via `ctypes`), Node.js (via `ffi-napi`), C#, or Rust.
 
@@ -517,6 +592,7 @@ mingw32-make all
 ```
 
 This compiles:
+
 1. `nvcc` targeting `sm_89` to compile `core/src/CUDA/**/*.cu` into `cuda_transfer.dll`.
 2. `g++ -std=c++23` linking `src/*.cpp`, `util/*.cpp`, and codecs against `cuda_transfer.dll`, producing `app.exe` and `test.exe`.
 
@@ -533,26 +609,26 @@ cd core
 
 ```text
 ============================================
-  ALL TEST SUITES PASSED (100% GREEN)       
+  ALL TEST SUITES PASSED (100% GREEN)
 ============================================
 ```
 
 **Comprehensive Test Suite Breakdown (As of November 9, 2026):**
 
-| Suite | Focus & Verified Invariants | Tests Passed | Status |
-| :--- | :--- | :---: | :---: |
-| **`test_path`** | Dynamic filesystem directory resolution via `Config` paths | **5 / 5** | **PASSED** |
-| **`test_ifstream`** | Zero-syscall streaming binary descriptor validation | **6 / 6** | **PASSED** |
-| **`test_embeddings`** | Deterministic BF16 embedding tables & codebook integrity | **12 / 12** | **PASSED** |
-| **`test_tokenization`** | Multimodal namespace offsets, bulk parsing, frequency filtering | **30 / 30** | **PASSED** |
-| **`test_ai`** | CUTLASS GEMMs, Causal Attention, SwiGLU, Batched GEMM, Loss Convergence | **105 / 105** | **PASSED** |
-| **`test_optimizer`** | 4M token RAM buffer, 256K window elements, Seam carry-forward, SPSC prefetch | **49 / 49** | **PASSED** |
-| **`test_cuda_transfer`**| DMA transfers, CUTLASS EVT forward/backprop, BFC caching allocator | **57 / 57** | **PASSED** |
-| **`test_transfer`** | Host-to-GPU master parameter upload/download roundtrips | **7 / 7** | **PASSED** |
-| **`test_inference`** | Platinum inference, Top-K/Top-P sampling, PagedAttention COW prefix sharing | **75 / 75** | **PASSED** |
-| **`test_identifier`** | File format switchboard, magic bytes, multi-asset directory scanning | **32 / 32** | **PASSED** |
-| **`test_decompressor`**| Hardened document decompressors (PDF/DOCX) & 100% bit-accurate BMP/WAV codecs | **53 / 53** | **PASSED** |
-| **TOTAL** | **Full Automated Verification Harness** | **431 / 431** | **100% GREEN** |
+| Suite                    | Focus & Verified Invariants                                                   | Tests Passed  |     Status     |
+| :----------------------- | :---------------------------------------------------------------------------- | :-----------: | :------------: |
+| **`test_path`**          | Dynamic filesystem directory resolution via `Config` paths                    |   **5 / 5**   |   **PASSED**   |
+| **`test_ifstream`**      | Zero-syscall streaming binary descriptor validation                           |   **6 / 6**   |   **PASSED**   |
+| **`test_embeddings`**    | Deterministic BF16 embedding tables & codebook integrity                      |  **12 / 12**  |   **PASSED**   |
+| **`test_tokenization`**  | Multimodal namespace offsets, bulk parsing, frequency filtering               |  **30 / 30**  |   **PASSED**   |
+| **`test_ai`**            | CUTLASS GEMMs, Causal Attention, SwiGLU, Batched GEMM, Loss Convergence       | **105 / 105** |   **PASSED**   |
+| **`test_optimizer`**     | 4M token RAM buffer, 256K window elements, Seam carry-forward, SPSC prefetch  |  **49 / 49**  |   **PASSED**   |
+| **`test_cuda_transfer`** | DMA transfers, CUTLASS EVT forward/backprop, BFC caching allocator            |  **57 / 57**  |   **PASSED**   |
+| **`test_transfer`**      | Host-to-GPU master parameter upload/download roundtrips                       |   **7 / 7**   |   **PASSED**   |
+| **`test_inference`**     | Platinum inference, Top-K/Top-P sampling, PagedAttention COW prefix sharing   |  **75 / 75**  |   **PASSED**   |
+| **`test_identifier`**    | File format switchboard, magic bytes, multi-asset directory scanning          |  **32 / 32**  |   **PASSED**   |
+| **`test_decompressor`**  | Hardened document decompressors (PDF/DOCX) & 100% bit-accurate BMP/WAV codecs |  **53 / 53**  |   **PASSED**   |
+| **TOTAL**                | **Full Automated Verification Harness**                                       | **431 / 431** | **100% GREEN** |
 
 ---
 
@@ -577,6 +653,7 @@ cd core
 ```
 
 Querying via HTTP `curl`:
+
 ```powershell
 curl http://127.0.0.1:8080/v1/chat/completions `
   -H "Content-Type: application/json" `
@@ -613,6 +690,7 @@ cd core
 ```
 
 **Interactive Runtime Keyboard Controls:**
+
 - **`[S]`**: Atomically checkpoints weights and AdamW optimizer states directly to disk.
 - **`[R]`**: Hard weight reset: re-breaks symmetry with chaotic Mersenne Twister distribution in $<1\text{ ms}$.
 - **`[Q]`**: Atomically saves checkpoints and cleanly exits the application.
@@ -623,16 +701,16 @@ cd core
 
 ### 🐣 The Quick-Start Cookbook
 
-| Scenario | Objective | Exact PowerShell Command |
-| :--- | :--- | :--- |
-| **1. Direct Terminal Chat** | Talk with Axiom in console with full context memory | `cd core; .\app.exe --chat` |
-| **2. Local OpenAI Server** | Serve standard OpenAI REST endpoints for local tools | `cd core; .\app.exe --serve 8080` |
-| **3. Concurrent Chat + Server** | Chat in console while background thread handles HTTP | `cd core; .\app.exe` $\to$ Option `[6]` $\to$ `[1]` $\to$ Option `[1]` |
-| **4. Train Custom Data** | Ingest custom text/code and update weights | `cd core; .\app.exe --train` |
-| **5. Bulk Folder Training** | Ingest all documents/media dropped into `asset_sample/` | `cd core; .\app.exe --bulk` |
-| **6. Hardware Profiling** | Measure FLOPs, decode tok/s, VRAM bus saturation | `cd core; .\app.exe --benchmark` |
-| **7. Automated Verification** | Run the complete 431-test verification harness | `cd core; .\test.exe --test` |
-| **8. Surgical Rebuild** | Recompile modified C++ or CUDA kernels | `cd core; mingw32-make app.exe` |
+| Scenario                        | Objective                                               | Exact PowerShell Command                                               |
+| :------------------------------ | :------------------------------------------------------ | :--------------------------------------------------------------------- |
+| **1. Direct Terminal Chat**     | Talk with Axiom in console with full context memory     | `cd core; .\app.exe --chat`                                            |
+| **2. Local OpenAI Server**      | Serve standard OpenAI REST endpoints for local tools    | `cd core; .\app.exe --serve 8080`                                      |
+| **3. Concurrent Chat + Server** | Chat in console while background thread handles HTTP    | `cd core; .\app.exe` $\to$ Option `[6]` $\to$ `[1]` $\to$ Option `[1]` |
+| **4. Train Custom Data**        | Ingest custom text/code and update weights              | `cd core; .\app.exe --train`                                           |
+| **5. Bulk Folder Training**     | Ingest all documents/media dropped into `asset_sample/` | `cd core; .\app.exe --bulk`                                            |
+| **6. Hardware Profiling**       | Measure FLOPs, decode tok/s, VRAM bus saturation        | `cd core; .\app.exe --benchmark`                                       |
+| **7. Automated Verification**   | Run the complete 431-test verification harness          | `cd core; .\test.exe --test`                                           |
+| **8. Surgical Rebuild**         | Recompile modified C++ or CUDA kernels                  | `cd core; mingw32-make app.exe`                                        |
 
 ---
 
