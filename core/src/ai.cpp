@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -36,12 +37,16 @@
 #include "CUDA/kernel/swiglu.cuh"
 #include "CUDA/util/memory_allocation.cuh"
 
+
 // Forensic Canary Trap: Cryptographic provenance watermark (0x5445494D4F5259 = "TEIMORY")
 [[maybe_unused]] static volatile const char canary_forensic_fingerprint[] =
-    "AXIOM-CANARY-0x5445494D4F5259-2026-OMID-TEIMORY";
+	"AXIOM-CANARY-0x5445494D4F5259-2026-OMID-TEIMORY";
 
 AI::AI()
-    : input_elements_x_total(axiom::FAN_IN_DIM), target_elements_y_total(axiom::TOKEN_DIM), weight_min(-0.1f), weight_max(0.1f) {
+	: input_elements_x_total(axiom::FAN_IN_DIM),
+	  target_elements_y_total(axiom::TOKEN_DIM),
+	  weight_min(-0.1f),
+	  weight_max(0.1f) {
 	vocab_size = axiom::VOCAB_SIZE;
 	embedding_dim = axiom::TOKEN_DIM;
 	num_heads = axiom::NUM_HEADS;
@@ -50,16 +55,12 @@ AI::AI()
 }
 
 
-AI::AI(size_t input_elements_x_total,
-       size_t target_elements_y_total,
-       float weight_min,
-       float weight_max,
-       Elements& elements,
-       bool allocate_legacy_flat)
-    : input_elements_x_total(input_elements_x_total),
-      target_elements_y_total(target_elements_y_total),
-      weight_min(weight_min),
-      weight_max(weight_max) {
+AI::AI(size_t input_elements_x_total, size_t target_elements_y_total, float weight_min,
+	   float weight_max, Elements& elements, bool allocate_legacy_flat)
+	: input_elements_x_total(input_elements_x_total),
+	  target_elements_y_total(target_elements_y_total),
+	  weight_min(weight_min),
+	  weight_max(weight_max) {
 	// input_elements_x_total = token * dim = 262144
 	// target_elements_y_total = target * dim = 1024
 
@@ -84,7 +85,7 @@ AI::AI(size_t input_elements_x_total,
 
 	reset_weights(elements);
 	if (!allocate_gpu_embeddings(&gpu_embeddings, vocab_size, embedding_dim) ||
-	    !upload_embeddings(host_embeddings.data(), &gpu_embeddings)) {
+		!upload_embeddings(host_embeddings.data(), &gpu_embeddings)) {
 		std::cerr << "[AI Brain] Warning: failed to initialize or upload GPU embeddings.\n";
 	}
 	compute_stream_ = create_cuda_stream();
@@ -117,8 +118,8 @@ void AI::reset_weights(Elements& elements, bool verbose) {
 			val = dis_emb(gen);
 		}
 		std::fill(host_embeddings.begin(),
-			  host_embeddings.begin() + std::min(embedding_dim, host_embeddings.size()),
-			  0.0f); // PAD row
+				  host_embeddings.begin() + std::min(embedding_dim, host_embeddings.size()),
+				  0.0f); // PAD row
 	}
 
 	if (gpu_embeddings.d_table_master != nullptr && !host_embeddings.empty()) {
@@ -129,7 +130,8 @@ void AI::reset_weights(Elements& elements, bool verbose) {
 
 	if (enable_transformer && gpu_weights.d_query_weights != nullptr) {
 		if (!allocate_transformer_weights(
-			    &gpu_weights, gpu_weights.transformer_dim, gpu_weights.transformer_ffn)) {
+				&gpu_weights, gpu_weights.transformer_dim, gpu_weights.transformer_ffn,
+				config::default_weight_layers, config::default_randomizer_seed)) {
 			std::cerr << "[AI Brain] Warning: failed to reset transformer weights.\n";
 		}
 		gpu_weights.step_count = 0;
@@ -231,8 +233,8 @@ AI::~AI() {
 
 bool AI::upload_weights() {
 	if (!host_weights.empty() && !host_bias.empty()) {
-		if (!Transfer::upload_weights(
-			    host_weights, host_bias, pending_steps, gpu_weights, gpu_activations)) {
+		if (!Transfer::upload_weights(host_weights, host_bias, pending_steps, gpu_weights,
+									  gpu_activations)) {
 			return false;
 		}
 	} else {
@@ -280,40 +282,37 @@ bool AI::load_weights(const std::string& path) {
 	AxiomWeightHeader header {};
 	in.read(reinterpret_cast<char*>(&header), sizeof(header));
 	if (in.gcount() != static_cast<std::streamsize>(sizeof(header))) {
-		std::cerr << "[AI Brain] Incomplete or corrupt header in weight file: " << path
-			  << "\n";
+		std::cerr << "[AI Brain] Incomplete or corrupt header in weight file: " << path << "\n";
 		return false;
 	}
 
 	// Validate magic bytes
 	if (std::memcmp(header.magic, "AXIOM_V1", 8) != 0) {
-		std::cerr << "[AI Brain] Invalid magic header in " << path
-			  << " (expected 'AXIOM_V1')\n";
+		std::cerr << "[AI Brain] Invalid magic header in " << path << " (expected 'AXIOM_V1')\n";
 		return false;
 	}
 
 	// Validate model dimensions
 	if (header.input_elements_x_total != input_elements_x_total ||
-	    header.target_elements_y_total != target_elements_y_total) {
+		header.target_elements_y_total != target_elements_y_total) {
 		std::cerr << "[AI Brain] Dimension mismatch in " << path << ": file has ("
-			  << header.input_elements_x_total << " -> "
-			  << header.target_elements_y_total << "), model expects ("
-			  << input_elements_x_total << " -> " << target_elements_y_total << ")\n";
+				  << header.input_elements_x_total << " -> " << header.target_elements_y_total
+				  << "), model expects (" << input_elements_x_total << " -> "
+				  << target_elements_y_total << ")\n";
 		return false;
 	}
 
 	const bool has_legacy_payload = (header.weight_count != 0 || header.bias_count != 0);
 	if (has_legacy_payload &&
-	    (header.weight_count != input_elements_x_total * target_elements_y_total ||
-	     header.bias_count != target_elements_y_total)) {
+		(header.weight_count != input_elements_x_total * target_elements_y_total ||
+		 header.bias_count != target_elements_y_total)) {
 		std::cerr << "[AI Brain] Element count mismatch in " << path << "\n";
 		return false;
 	}
 
 	if (header.embedding_dim != 0 && header.embedding_dim != target_elements_y_total) {
 		std::cerr << "[AI Brain] Embedding dimension mismatch in " << path << ": file has "
-			  << header.embedding_dim << ", model expects " << target_elements_y_total
-			  << "\n";
+				  << header.embedding_dim << ", model expects " << target_elements_y_total << "\n";
 		return false;
 	}
 
@@ -323,7 +322,7 @@ bool AI::load_weights(const std::string& path) {
 
 	if (header.weight_count > 0) {
 		in.read(reinterpret_cast<char*>(loaded_weights.data()),
-			header.weight_count * sizeof(float));
+				header.weight_count * sizeof(float));
 		if (in.gcount() != static_cast<std::streamsize>(header.weight_count * sizeof(float))) {
 			std::cerr << "[AI Brain] Incomplete weight data in " << path << "\n";
 			return false;
@@ -331,8 +330,7 @@ bool AI::load_weights(const std::string& path) {
 	}
 
 	if (header.bias_count > 0) {
-		in.read(reinterpret_cast<char*>(loaded_bias.data()),
-			header.bias_count * sizeof(float));
+		in.read(reinterpret_cast<char*>(loaded_bias.data()), header.bias_count * sizeof(float));
 		if (in.gcount() != static_cast<std::streamsize>(header.bias_count * sizeof(float))) {
 			std::cerr << "[AI Brain] Incomplete bias data in " << path << "\n";
 			return false;
@@ -342,8 +340,7 @@ bool AI::load_weights(const std::string& path) {
 	if (header.vocab_size > 0 && header.embedding_dim > 0) {
 		size_t embedding_count = header.vocab_size * header.embedding_dim;
 		loaded_embeddings.resize(embedding_count);
-		in.read(reinterpret_cast<char*>(loaded_embeddings.data()),
-			embedding_count * sizeof(float));
+		in.read(reinterpret_cast<char*>(loaded_embeddings.data()), embedding_count * sizeof(float));
 		if (in.gcount() != static_cast<std::streamsize>(embedding_count * sizeof(float))) {
 			std::cerr << "[AI Brain] Incomplete embedding data in " << path << "\n";
 			return false;
@@ -360,17 +357,17 @@ bool AI::load_weights(const std::string& path) {
 
 	if (!check_finite(loaded_weights)) {
 		std::cerr << "[AI Brain] Corrupt weights in " << path
-			  << ": contains NaN or Inf. Rejecting load.\n";
+				  << ": contains NaN or Inf. Rejecting load.\n";
 		return false;
 	}
 	if (!check_finite(loaded_bias)) {
 		std::cerr << "[AI Brain] Corrupt biases in " << path
-			  << ": contains NaN or Inf. Rejecting load.\n";
+				  << ": contains NaN or Inf. Rejecting load.\n";
 		return false;
 	}
 	if (!check_finite(loaded_embeddings)) {
 		std::cerr << "[AI Brain] Corrupt embeddings in " << path
-			  << ": contains NaN or Inf. Rejecting load.\n";
+				  << ": contains NaN or Inf. Rejecting load.\n";
 		return false;
 	}
 
@@ -388,8 +385,8 @@ bool AI::load_weights(const std::string& path) {
 			return false;
 		}
 		if (!in.read(reinterpret_cast<char*>(&xform_dim), sizeof(xform_dim)) ||
-		    !in.read(reinterpret_cast<char*>(&xform_ffn), sizeof(xform_ffn)) ||
-		    xform_dim == 0 || xform_ffn == 0) {
+			!in.read(reinterpret_cast<char*>(&xform_ffn), sizeof(xform_ffn)) || xform_dim == 0 ||
+			xform_ffn == 0) {
 			std::cerr << "[AI Brain] Corrupt transformer header in " << path << "\n";
 			return false;
 		}
@@ -405,31 +402,30 @@ bool AI::load_weights(const std::string& path) {
 		loaded_down.resize(df_elements);
 
 		auto read_vec = [&](std::vector<float>& vec) -> bool {
-			const std::streamsize bytes =
-				static_cast<std::streamsize>(vec.size() * sizeof(float));
+			const std::streamsize bytes = static_cast<std::streamsize>(vec.size() * sizeof(float));
 			in.read(reinterpret_cast<char*>(vec.data()), bytes);
 			return in.gcount() == bytes;
 		};
 
 		if (!read_vec(loaded_q) || !read_vec(loaded_k) || !read_vec(loaded_v) ||
-		    !read_vec(loaded_o) || !read_vec(loaded_gate) || !read_vec(loaded_up) ||
-		    !read_vec(loaded_down)) {
+			!read_vec(loaded_o) || !read_vec(loaded_gate) || !read_vec(loaded_up) ||
+			!read_vec(loaded_down)) {
 			std::cerr << "[AI Brain] Incomplete transformer payload in " << path << "\n";
 			return false;
 		}
 		if (!check_finite(loaded_q) || !check_finite(loaded_k) || !check_finite(loaded_v) ||
-		    !check_finite(loaded_o) || !check_finite(loaded_gate) || !check_finite(loaded_up) ||
-		    !check_finite(loaded_down)) {
+			!check_finite(loaded_o) || !check_finite(loaded_gate) || !check_finite(loaded_up) ||
+			!check_finite(loaded_down)) {
 			std::cerr << "[AI Brain] Corrupt transformer weights in " << path
-				  << ": contains NaN or Inf. Rejecting load.\n";
+					  << ": contains NaN or Inf. Rejecting load.\n";
 			return false;
 		}
 		has_xform_payload = true;
 	}
 
 	if (!has_legacy_payload && !has_xform_payload) {
-		std::cerr << "[AI Brain] Checkpoint contains neither flat nor transformer weights: "
-			  << path << "\n";
+		std::cerr << "[AI Brain] Checkpoint contains neither flat nor transformer weights: " << path
+				  << "\n";
 		return false;
 	}
 
@@ -446,7 +442,7 @@ bool AI::load_weights(const std::string& path) {
 		embedding_dim = header.embedding_dim;
 		host_embeddings = std::move(loaded_embeddings);
 		if (gpu_embeddings.d_table == nullptr || gpu_embeddings.vocab_size != vocab_size ||
-		    gpu_embeddings.embedding_dim != embedding_dim) {
+			gpu_embeddings.embedding_dim != embedding_dim) {
 			if (!allocate_gpu_embeddings(&gpu_embeddings, vocab_size, embedding_dim)) {
 				std::cerr << "[AI Brain] Failed to allocate GPU embeddings for checkpoint.\n";
 				return false;
@@ -462,22 +458,15 @@ bool AI::load_weights(const std::string& path) {
 
 	if (has_xform_payload) {
 		if (gpu_weights.d_query_weights == nullptr || gpu_weights.transformer_dim != xform_dim ||
-		    gpu_weights.transformer_ffn != xform_ffn) {
+			gpu_weights.transformer_ffn != xform_ffn) {
 			if (!build_transformer_block(xform_dim, num_heads, xform_ffn)) {
 				std::cerr << "[AI Brain] Failed to allocate transformer block for checkpoint.\n";
 				return false;
 			}
 		}
-		if (!upload_transformer_weights(&gpu_weights,
-						loaded_q.data(),
-						loaded_k.data(),
-						loaded_v.data(),
-						loaded_o.data(),
-						loaded_gate.data(),
-						loaded_up.data(),
-						loaded_down.data(),
-						xform_dim,
-						xform_ffn)) {
+		if (!upload_transformer_weights(
+				&gpu_weights, loaded_q.data(), loaded_k.data(), loaded_v.data(), loaded_o.data(),
+				loaded_gate.data(), loaded_up.data(), loaded_down.data(), xform_dim, xform_ffn)) {
 			std::cerr << "[AI Brain] Failed to upload transformer weights from checkpoint.\n";
 			return false;
 		}
@@ -485,23 +474,26 @@ bool AI::load_weights(const std::string& path) {
 	}
 
 	std::cout << "[AI Brain] Successfully loaded weights and embeddings from " << path
-		  << " and synced to GPU.\n"
-		  << std::flush;
+			  << " and synced to GPU.\n"
+			  << std::flush;
 	return true;
 }
 
 
-bool AI::build_transformer_block(size_t hidden_dim,
-				 size_t heads,
-				 size_t feedforward_network_dimension) {
-	if (hidden_dim == 0 || heads == 0 || feedforward_network_dimension == 0)
+bool AI::build_transformer_block(size_t hidden_dim, size_t heads,
+								 size_t feedforward_network_dimension,
+								 size_t training_layers_count) {
+
+	if (hidden_dim == 0 || heads == 0 || feedforward_network_dimension == 0 ||
+		training_layers_count == 0)
 		return false;
+
 	this->num_heads = heads;
 	this->ffn_dimension = feedforward_network_dimension;
 	this->enable_transformer = true;
 
-	return allocate_transformer_weights(
-		&gpu_weights, hidden_dim, feedforward_network_dimension);
+	return allocate_transformer_weights(&gpu_weights, hidden_dim, feedforward_network_dimension,
+										training_layers_count);
 }
 
 bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length) {
@@ -515,14 +507,8 @@ bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t
 		return false;
 	upload_device_buffer(d_temp, hidden_states.data(), bytes);
 
-	bool ok = transformer_forward_block(d_temp,
-					    &gpu_weights,
-					    &gpu_activations,
-					    sequence_length,
-					    hidden_dim,
-					    num_heads,
-					    ffn_dimension,
-					    0);
+	bool ok = transformer_forward_block(d_temp, &gpu_weights, &gpu_activations, sequence_length,
+										hidden_dim, num_heads, ffn_dimension, 0);
 	if (ok) {
 		download_device_buffer(hidden_states.data(), d_temp, bytes);
 	}
@@ -530,11 +516,9 @@ bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t
 	return ok;
 }
 
-bool AI::backward_transformer(const std::vector<float>& grad_output,
-			      std::vector<float>& grad_input,
-			      const std::vector<std::bfloat16_t>& hidden_states,
-			      size_t sequence_length,
-			      float learning_rate) {
+bool AI::backward_transformer(const std::vector<float>& grad_output, std::vector<float>& grad_input,
+							  const std::vector<std::bfloat16_t>& hidden_states,
+							  size_t sequence_length, float learning_rate) {
 	if (grad_output.empty() || sequence_length == 0 || gpu_weights.d_query_weights == nullptr)
 		return false;
 	size_t hidden_dim = grad_output.size() / sequence_length;
@@ -560,17 +544,9 @@ bool AI::backward_transformer(const std::vector<float>& grad_output,
 	upload_device_buffer(d_grad_out, grad_output.data(), f_bytes);
 	upload_device_buffer(d_hidden, hidden_states.data(), bf_bytes);
 
-	bool ok = transformer_backward_block(d_grad_out,
-					     d_grad_in,
-					     d_hidden,
-					     &gpu_weights,
-					     &gpu_activations,
-					     sequence_length,
-					     hidden_dim,
-					     num_heads,
-					     ffn_dimension,
-					     learning_rate,
-					     0);
+	bool ok = transformer_backward_block(d_grad_out, d_grad_in, d_hidden, &gpu_weights,
+										 &gpu_activations, sequence_length, hidden_dim, num_heads,
+										 ffn_dimension, learning_rate, 0);
 	if (ok) {
 		download_device_buffer(grad_input.data(), d_grad_in, f_bytes);
 	}
@@ -580,21 +556,18 @@ bool AI::backward_transformer(const std::vector<float>& grad_output,
 	return ok;
 }
 
-bool AI::build_expert_layers(size_t hidden_dim,
-			     size_t feedforward_network_dimension,
-			     size_t num_experts) {
+bool AI::build_expert_layers(size_t hidden_dim, size_t feedforward_network_dimension,
+							 size_t num_experts) {
 	if (hidden_dim == 0 || feedforward_network_dimension == 0 || num_experts == 0)
 		return false;
 	this->ffn_dimension = feedforward_network_dimension;
-	return allocate_expert_weights(
-		&gpu_weights, hidden_dim, feedforward_network_dimension, num_experts);
+	return allocate_expert_weights(&gpu_weights, hidden_dim, feedforward_network_dimension,
+								   num_experts);
 }
 
 bool AI::forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
-				 size_t sequence_length,
-				 std::vector<int>& routing_histogram) {
-	if (hidden_states.empty() || sequence_length == 0 ||
-	    gpu_weights.d_router_weights == nullptr)
+								 size_t sequence_length, std::vector<int>& routing_histogram) {
+	if (hidden_states.empty() || sequence_length == 0 || gpu_weights.d_router_weights == nullptr)
 		return false;
 
 	size_t hidden_dim = hidden_states.size() / sequence_length;
@@ -605,26 +578,20 @@ bool AI::forward_mixture_experts(std::vector<std::bfloat16_t>& hidden_states,
 		return false;
 	upload_device_buffer(d_temp, hidden_states.data(), bytes);
 
-	bool ok = ::forward_mixture_experts(d_temp,
-					    &gpu_weights,
-					    &gpu_activations,
-					    sequence_length,
-					    hidden_dim,
-					    ffn_dimension,
-					    0);
+	bool ok = ::forward_mixture_experts(d_temp, &gpu_weights, &gpu_activations, sequence_length,
+										hidden_dim, ffn_dimension, 0);
 	if (ok) {
 		download_device_buffer(hidden_states.data(), d_temp, bytes);
 		routing_histogram.resize(gpu_weights.expert_count, 0);
-		download_expert_counts(
-			&gpu_activations, routing_histogram.data(), gpu_weights.expert_count);
+		download_expert_counts(&gpu_activations, routing_histogram.data(),
+							   gpu_weights.expert_count);
 	}
 	free_device_memory(d_temp);
 	return ok;
 }
 
-bool AI::verify_routing_balance(const std::vector<int>& routing_histogram,
-				size_t total_tokens,
-				size_t num_experts) {
+bool AI::verify_routing_balance(const std::vector<int>& routing_histogram, size_t total_tokens,
+								size_t num_experts) {
 	if (routing_histogram.size() != num_experts || total_tokens == 0 || num_experts == 0)
 		return false;
 
@@ -675,8 +642,7 @@ bool AI::load_vocabulary(const std::string& vocab_path) {
 		uint32_t str_len = 0;
 		if (!file.read(reinterpret_cast<char*>(&token_id), sizeof(uint32_t)))
 			break;
-		if (!file.read(reinterpret_cast<char*>(&str_len), sizeof(uint32_t)) ||
-		    str_len > 1048576U)
+		if (!file.read(reinterpret_cast<char*>(&str_len), sizeof(uint32_t)) || str_len > 1048576U)
 			break;
 		std::string token_str(str_len, '\0');
 		if (str_len > 0) {
@@ -687,18 +653,13 @@ bool AI::load_vocabulary(const std::string& vocab_path) {
 		axiom_reverse_vocab_[token_id] = token_str;
 	}
 	std::cout << "[Axiom Engine] Successfully loaded " << axiom_vocab_.size()
-		  << " vocabulary entries.\n";
+			  << " vocabulary entries.\n";
 	return !axiom_vocab_.empty();
 }
 
 bool AI::load_axiom_model_mmap(const char* filepath) {
-	HANDLE hFile = CreateFileA(filepath,
-				   GENERIC_READ,
-				   FILE_SHARE_READ,
-				   nullptr,
-				   OPEN_EXISTING,
-				   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-				   nullptr);
+	HANDLE hFile = CreateFileA(filepath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+							   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
 	if (hFile == INVALID_HANDLE_VALUE) {
 		std::cerr << "[Axiom Engine] Cannot open model file: " << filepath << "\n";
 		return false;
@@ -727,8 +688,9 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	}
 
 	if (std::memcmp(mapped_base, "AXIOM_V1", 8) == 0) {
-		std::cerr << "[Axiom Engine] Checkpoint " << filepath
-			  << " is an AXIOM_V1 Multimodal Perceptron model (GQA Transformer expects 0x4D4F4958).\n";
+		std::cerr
+			<< "[Axiom Engine] Checkpoint " << filepath
+			<< " is an AXIOM_V1 Multimodal Perceptron model (GQA Transformer expects 0x4D4F4958).\n";
 		UnmapViewOfFile(mapped_base);
 		CloseHandle(hMap);
 		CloseHandle(hFile);
@@ -736,10 +698,10 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	}
 
 	std::memcpy(&config_, mapped_base, sizeof(AxiomModelConfig));
-	if (config_.magic != config::axiom_model_magic || config_.num_layers == 0 || config_.hidden_dim == 0 ||
-	    config_.head_dim == 0 || config_.num_q_heads == 0 || config_.num_kv_heads == 0 ||
-	    config_.feedforward_network_dimension == 0 || config_.vocab_size == 0 ||
-	    config_.max_seq_len == 0) {
+	if (config_.magic != config::axiom_model_magic || config_.num_layers == 0 ||
+		config_.hidden_dim == 0 || config_.head_dim == 0 || config_.num_q_heads == 0 ||
+		config_.num_kv_heads == 0 || config_.feedforward_network_dimension == 0 ||
+		config_.vocab_size == 0 || config_.max_seq_len == 0) {
 		std::cerr << "[Axiom Engine] Invalid .axiom model header in: " << filepath << "\n";
 		UnmapViewOfFile(mapped_base);
 		CloseHandle(hMap);
@@ -758,12 +720,11 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	const size_t FFN = config_.feedforward_network_dimension;
 	const size_t V = config_.vocab_size;
 	const size_t per_layer_elements = D + (Qd * D) + Qd + (KVd * D) + KVd + (KVd * D) + KVd +
-					  (D * Qd) + D + (FFN * D) + (FFN * D) + (D * FFN);
+									  (D * Qd) + D + (FFN * D) + (FFN * D) + (D * FFN);
 	const size_t min_required_elements =
 		(V * D) + (static_cast<size_t>(config_.num_layers) * per_layer_elements) + D;
 	if (weights_bytes < min_required_elements * sizeof(uint16_t)) {
-		std::cerr << "[Axiom Engine] Truncated .axiom weights payload in: " << filepath
-			  << "\n";
+		std::cerr << "[Axiom Engine] Truncated .axiom weights payload in: " << filepath << "\n";
 		UnmapViewOfFile(mapped_base);
 		CloseHandle(hMap);
 		CloseHandle(hFile);
@@ -778,7 +739,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	d_weights_arena_ = allocate_device_memory(weights_bytes);
 	if (!d_weights_arena_) {
 		std::cerr << "[Axiom Engine] Failed to allocate device memory for weights arena ("
-			  << (weights_bytes >> 20) << " MB)\n";
+				  << (weights_bytes >> 20) << " MB)\n";
 		UnmapViewOfFile(mapped_base);
 		CloseHandle(hMap);
 		CloseHandle(hFile);
@@ -789,11 +750,9 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	for (size_t offset = 0; offset < weights_bytes; offset += chunk_bytes) {
 		size_t to_copy = std::min(chunk_bytes, weights_bytes - offset);
 		if (!upload_device_buffer(static_cast<uint8_t*>(d_weights_arena_) + offset,
-					  host_weights_ptr + offset,
-					  to_copy)) {
-			std::cerr
-				<< "[Axiom Engine] Failed to upload weights chunk to VRAM at offset "
-				<< (offset >> 20) << " MB.\n";
+								  host_weights_ptr + offset, to_copy)) {
+			std::cerr << "[Axiom Engine] Failed to upload weights chunk to VRAM at offset "
+					  << (offset >> 20) << " MB.\n";
 			UnmapViewOfFile(mapped_base);
 			CloseHandle(hMap);
 			CloseHandle(hFile);
@@ -891,7 +850,7 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 
 	// Allocate Paged KV Cache and physical block table
 	int num_blocks = static_cast<int>((config_.max_seq_len + config::paged_block_size - 1) /
-					config::paged_block_size);
+									  config::paged_block_size);
 	if (num_blocks <= 0)
 		num_blocks = 512;
 	std::vector<int32_t> h_block_table(num_blocks);
@@ -913,21 +872,20 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	d_v_cache_.resize(config_.num_layers, nullptr);
 
 	if (!d_curr_token_ || !d_curr_pos_ || !d_pred_id_ || !d_logits_ || !d_residual_stream_ ||
-	    !d_normed_x_ || !d_q_ || !d_k_ || !d_v_ || !d_attn_out_ || !d_proj_tmp_ ||
-	    !d_gate_buf_ || !d_up_buf_ || !d_act_buf_ || !d_block_table_) {
+		!d_normed_x_ || !d_q_ || !d_k_ || !d_v_ || !d_attn_out_ || !d_proj_tmp_ || !d_gate_buf_ ||
+		!d_up_buf_ || !d_act_buf_ || !d_block_table_) {
 		std::cerr << "[Axiom Engine] Out of VRAM: Activation buffer allocation failed.\n";
 		return false;
 	}
 
 	size_t kv_cache_bytes = static_cast<size_t>(config_.max_seq_len) * config_.num_kv_heads *
-				config_.head_dim * sizeof(uint16_t);
+							config_.head_dim * sizeof(uint16_t);
 	for (uint32_t l = 0; l < config_.num_layers; ++l) {
 		d_k_cache_[l] = allocate_device_memory(kv_cache_bytes);
 		d_v_cache_[l] = allocate_device_memory(kv_cache_bytes);
 		if (!d_k_cache_[l] || !d_v_cache_[l]) {
-			std::cerr
-				<< "[Axiom Engine] Out of VRAM: KV cache allocation failed at layer "
-				<< l << "\n";
+			std::cerr << "[Axiom Engine] Out of VRAM: KV cache allocation failed at layer " << l
+					  << "\n";
 			return false;
 		}
 	}
@@ -935,9 +893,9 @@ bool AI::load_axiom_model_mmap(const char* filepath) {
 	cached_tokens_.clear();
 
 	std::cout << "[Axiom Engine] Loaded model: " << config_.num_layers
-		  << " layers, hidden_dim=" << config_.hidden_dim
-		  << ", feedforward_network_dimension=" << config_.feedforward_network_dimension
-		  << " (" << (weights_bytes >> 20) << " MB VRAM)\n";
+			  << " layers, hidden_dim=" << config_.hidden_dim
+			  << ", feedforward_network_dimension=" << config_.feedforward_network_dimension << " ("
+			  << (weights_bytes >> 20) << " MB VRAM)\n";
 	return true;
 }
 
@@ -952,111 +910,63 @@ void AI::forward_transformer_step(int token_id, int token_pos, float* d_out_logi
 	upload_device_buffer(d_curr_token_, &u_token_id, sizeof(uint32_t));
 	upload_device_buffer(d_curr_pos_, &s_token_pos, sizeof(int32_t));
 
-	launch_gather_embeddings_batched(static_cast<const uint32_t*>(d_curr_token_),
-					 d_embed_tokens_,
-					 d_residual_stream_,
-					 1,
-					 D,
-					 config_.vocab_size,
-					 stream);
+	launch_gather_embeddings_batched(static_cast<const uint32_t*>(d_curr_token_), d_embed_tokens_,
+									 d_residual_stream_, 1, D, config_.vocab_size, stream);
 
 	for (uint32_t l = 0; l < config_.num_layers; ++l) {
 		const auto& w = layers_[l];
 
-		launch_rmsnorm_bf16(d_residual_stream_,
-				    w.d_input_layernorm,
-				    d_normed_x_,
-				    1,
-				    D,
-				    config_.rms_norm_eps,
-				    stream);
+		launch_rmsnorm_bf16(d_residual_stream_, w.d_input_layernorm, d_normed_x_, 1, D,
+							config_.rms_norm_eps, stream);
 
-		launch_cutlass_gemm_bf16(
-			1, Qd, D, d_normed_x_, w.d_q_proj_weight, w.d_q_proj_bias, d_q_, stream);
-		launch_cutlass_gemm_bf16(
-			1, KVd, D, d_normed_x_, w.d_k_proj_weight, w.d_k_proj_bias, d_k_, stream);
-		launch_cutlass_gemm_bf16(
-			1, KVd, D, d_normed_x_, w.d_v_proj_weight, w.d_v_proj_bias, d_v_, stream);
+		launch_cutlass_gemm_bf16(1, Qd, D, d_normed_x_, w.d_q_proj_weight, w.d_q_proj_bias, d_q_,
+								 stream);
+		launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_k_proj_weight, w.d_k_proj_bias, d_k_,
+								 stream);
+		launch_cutlass_gemm_bf16(1, KVd, D, d_normed_x_, w.d_v_proj_weight, w.d_v_proj_bias, d_v_,
+								 stream);
 
-		launch_rope_inplace_bf16(d_q_,
-					 d_k_,
-					 static_cast<const int32_t*>(d_curr_pos_),
-					 1,
-					 config_.num_q_heads,
-					 config_.num_kv_heads,
-					 config_.head_dim,
-					 config_.rope_theta,
-					 stream);
+		launch_rope_inplace_bf16(d_q_, d_k_, static_cast<const int32_t*>(d_curr_pos_), 1,
+								 config_.num_q_heads, config_.num_kv_heads, config_.head_dim,
+								 config_.rope_theta, stream);
 
-		launch_append_paged_kv(d_k_,
-				       d_v_,
-				       d_k_cache_[l],
-				       d_v_cache_[l],
-				       static_cast<const int32_t*>(d_block_table_),
-				       token_pos,
-				       config_.num_kv_heads,
-				       config_.head_dim,
-				       stream);
+		launch_append_paged_kv(d_k_, d_v_, d_k_cache_[l], d_v_cache_[l],
+							   static_cast<const int32_t*>(d_block_table_), token_pos,
+							   config_.num_kv_heads, config_.head_dim, stream);
 
 		float scale = 1.0f / std::sqrt(static_cast<float>(config_.head_dim));
-		launch_paged_gqa_decode(d_q_,
-					d_k_cache_[l],
-					d_v_cache_[l],
-					static_cast<const int32_t*>(d_block_table_),
-					d_attn_out_,
-					token_pos + 1,
-					config_.num_q_heads,
-					config_.num_kv_heads,
-					config_.head_dim,
-					scale,
-					stream);
+		launch_paged_gqa_decode(d_q_, d_k_cache_[l], d_v_cache_[l],
+								static_cast<const int32_t*>(d_block_table_), d_attn_out_,
+								token_pos + 1, config_.num_q_heads, config_.num_kv_heads,
+								config_.head_dim, scale, stream);
 
-		launch_cutlass_gemm_bf16(
-			1, D, Qd, d_attn_out_, w.d_o_proj_weight, nullptr, d_proj_tmp_, stream);
+		launch_cutlass_gemm_bf16(1, D, Qd, d_attn_out_, w.d_o_proj_weight, nullptr, d_proj_tmp_,
+								 stream);
 		launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
 
-		launch_rmsnorm_bf16(d_residual_stream_,
-				    w.d_post_attn_layernorm,
-				    d_normed_x_,
-				    1,
-				    D,
-				    config_.rms_norm_eps,
-				    stream);
+		launch_rmsnorm_bf16(d_residual_stream_, w.d_post_attn_layernorm, d_normed_x_, 1, D,
+							config_.rms_norm_eps, stream);
 
-		launch_cutlass_gemm_bf16(
-			1, FFN, D, d_normed_x_, w.d_gate_proj_weight, nullptr, d_gate_buf_, stream);
-		launch_cutlass_gemm_bf16(
-			1, FFN, D, d_normed_x_, w.d_up_proj_weight, nullptr, d_up_buf_, stream);
+		launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_gate_proj_weight, nullptr, d_gate_buf_,
+								 stream);
+		launch_cutlass_gemm_bf16(1, FFN, D, d_normed_x_, w.d_up_proj_weight, nullptr, d_up_buf_,
+								 stream);
 		launch_swiglu_bf16(d_gate_buf_, d_up_buf_, d_act_buf_, FFN, stream);
-		launch_cutlass_gemm_bf16(
-			1, D, FFN, d_act_buf_, w.d_down_proj_weight, nullptr, d_proj_tmp_, stream);
+		launch_cutlass_gemm_bf16(1, D, FFN, d_act_buf_, w.d_down_proj_weight, nullptr, d_proj_tmp_,
+								 stream);
 		launch_residual_add_bf16(d_residual_stream_, d_proj_tmp_, D, stream);
 	}
 
-	launch_rmsnorm_bf16(d_residual_stream_,
-			    d_final_norm_weight_,
-			    d_normed_x_,
-			    1,
-			    D,
-			    config_.rms_norm_eps,
-			    stream);
+	launch_rmsnorm_bf16(d_residual_stream_, d_final_norm_weight_, d_normed_x_, 1, D,
+						config_.rms_norm_eps, stream);
 	if (d_out_logits) {
-		launch_tied_logits_bf16(d_normed_x_,
-					d_lm_head_weight_,
-					d_out_logits,
-					1,
-					config_.vocab_size,
-					D,
-					stream);
+		launch_tied_logits_bf16(d_normed_x_, d_lm_head_weight_, d_out_logits, 1, config_.vocab_size,
+								D, stream);
 	}
 }
 
-bool AI::generate(const std::string& prompt,
-		  size_t max_new_tokens,
-		  float temperature,
-		  int top_k,
-		  float top_p,
-		  std::function<void(const std::string&)> token_callback) {
+bool AI::generate(const std::string& prompt, size_t max_new_tokens, float temperature, int top_k,
+				  float top_p, std::function<void(const std::string&)> token_callback) {
 	std::lock_guard<std::mutex> lock(inference_mutex_);
 	if (!d_weights_arena_ || axiom_vocab_.empty()) {
 		std::cerr << "[Axiom Engine] Cannot generate: model or vocabulary not loaded.\n";
@@ -1069,18 +979,17 @@ bool AI::generate(const std::string& prompt,
 	}
 
 	// Reserve room for generation while allowing full VRAM context window (up to max_seq_len)
-	const size_t reserve_tokens =
-		std::min<size_t>(max_new_tokens + 64, config_.max_seq_len / 2);
+	const size_t reserve_tokens = std::min<size_t>(max_new_tokens + 64, config_.max_seq_len / 2);
 	const size_t max_allowed_prompt = (config_.max_seq_len > reserve_tokens)
-						  ? (config_.max_seq_len - reserve_tokens)
-						  : (config_.max_seq_len / 2);
+										  ? (config_.max_seq_len - reserve_tokens)
+										  : (config_.max_seq_len / 2);
 
 	if (prompt_tokens.size() > max_allowed_prompt) {
 		size_t excess = prompt_tokens.size() - max_allowed_prompt;
 		// Keep the head (system instructions + tool schema) and the tail (active file context + user query)
 		const size_t head_keep = max_allowed_prompt / 3;
 		prompt_tokens.erase(prompt_tokens.begin() + head_keep,
-				    prompt_tokens.begin() + head_keep + excess);
+							prompt_tokens.begin() + head_keep + excess);
 	}
 
 	size_t logits_bytes = config_.vocab_size * sizeof(float);
@@ -1099,7 +1008,7 @@ bool AI::generate(const std::string& prompt,
 	size_t prefix_match = 0;
 	const size_t max_prefix = std::min(cached_tokens_.size(), prompt_tokens.size());
 	while (prefix_match < max_prefix &&
-	       cached_tokens_[prefix_match] == prompt_tokens[prefix_match]) {
+		   cached_tokens_[prefix_match] == prompt_tokens[prefix_match]) {
 		++prefix_match;
 	}
 	// Always re-run at least the final prompt token to produce fresh d_logits
@@ -1110,8 +1019,8 @@ bool AI::generate(const std::string& prompt,
 	// 1. Prefill only the uncached suffix of the prompt
 	for (size_t i = prefix_match; i < prompt_tokens.size(); ++i) {
 		float* target_logits = (i + 1 == prompt_tokens.size()) ? d_logits : nullptr;
-		forward_transformer_step(
-			prompt_tokens[i], static_cast<int>(i), target_logits, compute_stream_);
+		forward_transformer_step(prompt_tokens[i], static_cast<int>(i), target_logits,
+								 compute_stream_);
 	}
 	sync_cuda_stream(compute_stream_);
 
@@ -1130,16 +1039,14 @@ bool AI::generate(const std::string& prompt,
 
 		uint32_t next_token = 0;
 		if (temperature <= 0.01f && d_pred_id_) {
-			launch_softmax_argmax(d_logits,
-					      static_cast<uint32_t*>(d_pred_id_),
-					      config_.vocab_size,
-					      compute_stream_);
+			launch_softmax_argmax(d_logits, static_cast<uint32_t*>(d_pred_id_), config_.vocab_size,
+								  compute_stream_);
 			sync_cuda_stream(compute_stream_);
 			download_device_buffer(&h_pred_id_, d_pred_id_, sizeof(uint32_t));
 			next_token = h_pred_id_;
-			if (step == 0 && (next_token == vocab::ENDOFTEXT_TOKEN_ID ||
-					  next_token == vocab::IM_START_TOKEN_ID ||
-					  next_token == vocab::IM_END_TOKEN_ID)) {
+			if (step == 0 &&
+				(next_token == vocab::ENDOFTEXT_TOKEN_ID ||
+				 next_token == vocab::IM_START_TOKEN_ID || next_token == vocab::IM_END_TOKEN_ID)) {
 				download_device_buffer(h_logits.data(), d_logits, logits_bytes);
 				float best_val = -1e30f;
 				for (uint32_t v = 0; v < config_.vocab_size; ++v) {
@@ -1185,23 +1092,16 @@ bool AI::generate(const std::string& prompt,
 				next_token = 0;
 			} else {
 				const size_t effective_k =
-					(top_k > 0) ? std::min(static_cast<size_t>(top_k),
-							       candidates.size())
-						    : std::min<size_t>(64, candidates.size());
+					(top_k > 0) ? std::min(static_cast<size_t>(top_k), candidates.size())
+								: std::min<size_t>(64, candidates.size());
 				if (effective_k < candidates.size()) {
-					std::partial_sort(candidates.begin(),
-							  candidates.begin() + effective_k,
-							  candidates.end(),
-							  [](const auto& a, const auto& b) {
-								  return a.first > b.first;
-							  });
+					std::partial_sort(
+						candidates.begin(), candidates.begin() + effective_k, candidates.end(),
+						[](const auto& a, const auto& b) { return a.first > b.first; });
 					candidates.resize(effective_k);
 				} else {
-					std::sort(candidates.begin(),
-						  candidates.end(),
-						  [](const auto& a, const auto& b) {
-							  return a.first > b.first;
-						  });
+					std::sort(candidates.begin(), candidates.end(),
+							  [](const auto& a, const auto& b) { return a.first > b.first; });
 				}
 
 				float max_val = candidates[0].first;
@@ -1241,9 +1141,8 @@ bool AI::generate(const std::string& prompt,
 		}
 
 		// Check EOS (<|endoftext|>, <|im_start|>, <|im_end|>)
-		if (next_token == vocab::ENDOFTEXT_TOKEN_ID ||
-		    next_token == vocab::IM_START_TOKEN_ID ||
-		    next_token == vocab::IM_END_TOKEN_ID) {
+		if (next_token == vocab::ENDOFTEXT_TOKEN_ID || next_token == vocab::IM_START_TOKEN_ID ||
+			next_token == vocab::IM_END_TOKEN_ID) {
 			break;
 		}
 
