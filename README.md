@@ -106,7 +106,7 @@ flowchart TB
         subgraph STRUCT_CFG["struct Config (static constexpr)"]
             SC_TRAIN["default_training_layers = 4<br/>lr, weight_min/max, seed"]
             SC_ARCH["num_layers = 28U<br/>rms_norm_eps, rope_theta,<br/>max_seq_len_cap, experts"]
-            SC_ALLOC["randomizer_seed = 1U (via macro)<br/>transformer_weight_layers = 1U"]
+            SC_ALLOC["randomizer_seed = 42U (via macro)<br/>transformer_weight_layers = 1U"]
             SC_IO["ram_buffer_size, io_buffer_bytes,<br/>paths & *.axiom filenames"]
         end
 
