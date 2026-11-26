@@ -43,11 +43,11 @@ bool test_ai() {
 	std::cout << "\n[1] AI Initialization & Dimensions\n";
 	AI ai(in_dim, out_dim, w_min, w_max, e);
 
-	test_check_eq(e.weight_elements, in_dim * out_dim, "Elements weight_elements == in_dim * out_dim", s_pass,
-				  s_fail);
+	test_check_eq(e.weight_elements, in_dim * out_dim,
+				  "Elements weight_elements == in_dim * out_dim", s_pass, s_fail);
 	test_check_eq(e.bias_elements, out_dim, "Elements bias_elements == out_dim", s_pass, s_fail);
-	test_check_eq(ai.host_weights.size(), in_dim * out_dim, "h_weights size == in_dim * out_dim", s_pass,
-				  s_fail);
+	test_check_eq(ai.host_weights.size(), in_dim * out_dim, "h_weights size == in_dim * out_dim",
+				  s_pass, s_fail);
 	test_check_eq(ai.host_bias.size(), out_dim, "h_bias size == out_dim", s_pass, s_fail);
 
 	// â”€â”€ [2] Chaos / Symmetry Breaking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -148,7 +148,8 @@ bool test_ai() {
 	ai.upload_weights();
 
 	auto refill = [&]() {
-		conv_portion.ram_buffer_tokens.resize(conv_portion.all_elements + conv_portion.target_elements);
+		conv_portion.ram_buffer_tokens.resize(conv_portion.all_elements +
+											  conv_portion.target_elements);
 		for (size_t i = 0; i < conv_portion.ram_buffer_tokens.size(); ++i) {
 			conv_portion.ram_buffer_tokens[i] = static_cast<std::bfloat16_t>(0.01f * ((i % 4) + 1));
 		}
@@ -291,12 +292,15 @@ bool test_ai() {
 		const size_t test_heads = axiom::NUM_HEADS;
 		const size_t test_ffn = axiom::FFN_DIM;
 
-		test_check(ai.build_transformer_block(test_dim, test_heads, test_ffn),
+		test_check(ai.build_transformer_block(test_dim, test_heads, test_ffn,
+											  config::default_weight_layers,
+											  config::default_randomizer_seed),
 				   "build_transformer_block allocates GPU attention & FFN weights", s_pass, s_fail);
 		test_check(ai.save_weights(xform_path),
-				   "ai.save_weights() serializes model including transformer block", s_pass, s_fail);
-		test_check(std::filesystem::exists(xform_path),
-				   "Transformer weight file exists on disk", s_pass, s_fail);
+				   "ai.save_weights() serializes model including transformer block", s_pass,
+				   s_fail);
+		test_check(std::filesystem::exists(xform_path), "Transformer weight file exists on disk",
+				   s_pass, s_fail);
 
 		const size_t expected_xform_file_size =
 			sizeof(AxiomWeightHeader) + (in_dim * out_dim * sizeof(float)) +
@@ -396,7 +400,8 @@ bool test_ai() {
 	std::vector<float> prompt_pred;
 	test_check(ai.predict(prompt_context, prompt_pred),
 			   "ai.predict(prompt_context) succeeds on user prompt context", s_pass, s_fail);
-	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == out_dim", s_pass, s_fail);
+	test_check_eq(prompt_pred.size(), out_dim, "Prompt prediction dimension == out_dim", s_pass,
+				  s_fail);
 
 	// â”€â”€ [10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning â”€â”€
 	std::cout << "\n[10] Dense Early-Fusion Token Training, CUDA Gather & Scatter Learning\n";
@@ -622,7 +627,7 @@ bool test_ai() {
 
 		// 11.4 Full Transformer Block Convergence (Gate 3 Verification)
 		AI xform_ai(in_dim, out_dim, w_min, w_max, e);
-		test_check(xform_ai.build_transformer_block(out_dim, axiom::NUM_HEADS, 16),
+		test_check(xform_ai.build_transformer_block(out_dim, axiom::NUM_HEADS, 16, 4, 42),
 				   "build_transformer_block initializes projection weights in VRAM", s_pass,
 				   s_fail);
 
@@ -695,9 +700,9 @@ bool test_ai() {
 		test_check(step1_loss > 0.0 && std::isfinite(step1_loss),
 				   "Gate 3: Transformer initial loss is valid positive number", s_pass, s_fail);
 		test_check(std::isfinite(final_xform_loss) && final_xform_loss > 0.0 &&
-				   final_xform_loss < step1_loss,
-			   "Gate 3: Monotonic loss reduction verified on causal sequence modeling", s_pass,
-			   s_fail);
+					   final_xform_loss < step1_loss,
+				   "Gate 3: Monotonic loss reduction verified on causal sequence modeling", s_pass,
+				   s_fail);
 
 		xform_portion.free_pinned();
 	}

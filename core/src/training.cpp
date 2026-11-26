@@ -51,8 +51,12 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 		if (enable_transformer) {
 			synchronize_stream(&gpu_portion, 1 - buffer_index);
 
-			const size_t model_dim = (embedding_dim > 0) ? embedding_dim : ((target_elements_y_total > 0) ? target_elements_y_total : axiom::TOKEN_DIM);
-			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : axiom::NUM_HEADS;
+			const size_t model_dim =
+				(embedding_dim > 0)
+					? embedding_dim
+					: ((target_elements_y_total > 0) ? target_elements_y_total : axiom::TOKEN_DIM);
+			size_t heads =
+				(num_heads > 0 && model_dim % num_heads == 0) ? num_heads : axiom::NUM_HEADS;
 			if (model_dim / heads > axiom::MAX_HEAD_DIM && model_dim % axiom::MAX_HEAD_DIM == 0) {
 				heads = model_dim / axiom::MAX_HEAD_DIM;
 			}
@@ -62,7 +66,10 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 
 			if (gpu_weights.d_query_weights == nullptr ||
 				gpu_weights.transformer_dim != model_dim) {
-				if (!build_transformer_block(model_dim, heads, feedforward_network_dimension)) {
+				if (!build_transformer_block(model_dim, heads, feedforward_network_dimension,
+											 config::default_weight_layers,
+											 config::default_randomizer_seed)) {
+
 					std::cerr << "[AI Brain] Failed to build transformer block.\n";
 					return TrainStatus::Failed;
 				}
@@ -122,12 +129,15 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 					std::cout << host_tokens[i] << " ";
 				}
 				std::cout << "\nContext Window (Last 8 tokens):  ";
-				for (size_t i = (sequence_length > 8 ? sequence_length - 8 : 0); i < sequence_length; ++i) {
+				for (size_t i = (sequence_length > 8 ? sequence_length - 8 : 0);
+					 i < sequence_length; ++i) {
 					std::cout << host_tokens[i] << " ";
 				}
-				uint32_t target_tok = *reinterpret_cast<const uint32_t*>(portion.target_tokens[buffer_index]);
+				uint32_t target_tok =
+					*reinterpret_cast<const uint32_t*>(portion.target_tokens[buffer_index]);
 				std::cout << "\nTarget Token Y (Sequence + 1):   " << target_tok << "\n";
-				std::cout << "========================================================\n" << std::flush;
+				std::cout << "========================================================\n"
+						  << std::flush;
 			}
 #endif
 
@@ -161,21 +171,20 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 
 			// Sequence-parallel Transformer Backward Block (M = S)
 			// Backpropagates d_dx (readout gradient) through SwiGLU and Attention into d_dx (input embedding gradient)
-			if (!transformer_backward_block(gpu_portion.d_dx[buffer_index],
-											gpu_portion.d_dx[buffer_index],
-											gpu_portion.d_hidden_state[buffer_index], &gpu_weights,
-											&gpu_activations, sequence_length, model_dim, heads,
-											feedforward_network_dimension, learning_rate, stream,
-											false /* advance_step */)) {
+			if (!transformer_backward_block(
+					gpu_portion.d_dx[buffer_index], gpu_portion.d_dx[buffer_index],
+					gpu_portion.d_hidden_state[buffer_index], &gpu_weights, &gpu_activations,
+					sequence_length, model_dim, heads, feedforward_network_dimension, learning_rate,
+					stream, false /* advance_step */)) {
 				std::cerr << "[AI Brain] Transformer backward block failed.\n";
 				return TrainStatus::Failed;
 			}
 
 			// Accumulate post-transformer input gradient onto output-head gradient and run one unified AdamW step
-			if (!backward_scatter_embeddings(&gpu_portion, &gpu_embeddings,
-											 gpu_portion.d_dx[buffer_index], sequence_length,
-											 model_dim, learning_rate, buffer_index, stream,
-											 &gpu_activations, &gpu_weights, true /* apply_adamw */)) {
+			if (!backward_scatter_embeddings(
+					&gpu_portion, &gpu_embeddings, gpu_portion.d_dx[buffer_index], sequence_length,
+					model_dim, learning_rate, buffer_index, stream, &gpu_activations, &gpu_weights,
+					true /* apply_adamw */)) {
 				std::cerr << "[AI Brain] Backward scatter embeddings failed.\n";
 				return TrainStatus::Failed;
 			}
@@ -302,8 +311,9 @@ bool AI::save_weights(const std::string& path) {
 			  header.vocab_size * header.embedding_dim * sizeof(float));
 
 	// If transformer block is allocated, serialize transformer attention & SwiGLU weights
-	const bool has_transformer = (enable_transformer && gpu_weights.d_query_weights != nullptr &&
-								  gpu_weights.transformer_dim > 0 && gpu_weights.transformer_ffn > 0);
+	const bool has_transformer =
+		(enable_transformer && gpu_weights.d_query_weights != nullptr &&
+		 gpu_weights.transformer_dim > 0 && gpu_weights.transformer_ffn > 0);
 	if (has_transformer) {
 		const size_t xform_dim = gpu_weights.transformer_dim;
 		const size_t xform_ffn = gpu_weights.transformer_ffn;
@@ -318,10 +328,9 @@ bool AI::save_weights(const std::string& path) {
 		std::vector<float> host_up(df_elements);
 		std::vector<float> host_down(df_elements);
 
-		if (!download_transformer_weights(&gpu_weights,
-										  host_q.data(), host_k.data(), host_v.data(), host_o.data(),
-										  host_gate.data(), host_up.data(), host_down.data(),
-										  xform_dim, xform_ffn)) {
+		if (!download_transformer_weights(&gpu_weights, host_q.data(), host_k.data(), host_v.data(),
+										  host_o.data(), host_gate.data(), host_up.data(),
+										  host_down.data(), xform_dim, xform_ffn)) {
 			std::cerr << "[AI Brain] Failed to download transformer weights from GPU.\n";
 			out.close();
 			std::error_code ec;
@@ -331,7 +340,8 @@ bool AI::save_weights(const std::string& path) {
 
 		auto check_finite = [](const std::vector<float>& vec) {
 			for (float val : vec) {
-				if (!std::isfinite(val)) return false;
+				if (!std::isfinite(val))
+					return false;
 			}
 			return true;
 		};
@@ -339,7 +349,8 @@ bool AI::save_weights(const std::string& path) {
 		if (!check_finite(host_q) || !check_finite(host_k) || !check_finite(host_v) ||
 			!check_finite(host_o) || !check_finite(host_gate) || !check_finite(host_up) ||
 			!check_finite(host_down)) {
-			std::cerr << "[AI Brain] Refusing to save corrupt checkpoint: transformer weights contain NaN or Inf.\n";
+			std::cerr
+				<< "[AI Brain] Refusing to save corrupt checkpoint: transformer weights contain NaN or Inf.\n";
 			out.close();
 			std::error_code ec;
 			std::filesystem::remove(temp_path, ec);
@@ -395,13 +406,14 @@ bool AI::save_weights(const std::string& path) {
 		const size_t xform_total = 4 * (gpu_weights.transformer_dim * gpu_weights.transformer_dim) +
 								   3 * (gpu_weights.transformer_dim * gpu_weights.transformer_ffn);
 		std::cout << "[AI Brain] Saved " << header.weight_count << " weights, " << header.bias_count
-				  << " biases, " << (header.vocab_size * header.embedding_dim) << " embeddings, and "
-				  << xform_total << " transformer weights to " << path << "\n"
+				  << " biases, " << (header.vocab_size * header.embedding_dim)
+				  << " embeddings, and " << xform_total << " transformer weights to " << path
+				  << "\n"
 				  << std::flush;
 	} else {
 		std::cout << "[AI Brain] Saved " << header.weight_count << " weights, " << header.bias_count
-				  << " biases, and " << (header.vocab_size * header.embedding_dim) << " embeddings to "
-				  << path << "\n"
+				  << " biases, and " << (header.vocab_size * header.embedding_dim)
+				  << " embeddings to " << path << "\n"
 				  << std::flush;
 	}
 	return true;
@@ -490,7 +502,9 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 
 		if (gpu_weights.d_query_weights == nullptr || gpu_weights.transformer_dim != model_dim ||
 			gpu_weights.transformer_ffn != feedforward_network_dimension) {
-			if (!build_transformer_block(model_dim, heads, feedforward_network_dimension)) {
+			if (!build_transformer_block(model_dim, heads, feedforward_network_dimension,
+										 config::default_weight_layers,
+										 config::default_randomizer_seed)) {
 				return false;
 			}
 		}
@@ -529,8 +543,12 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 
 		if (enable_transformer && gpu_weights.d_query_weights != nullptr &&
 			gpu_portion.d_context_window[0] != nullptr) {
-			const size_t model_dim = (embedding_dim > 0) ? embedding_dim : ((target_elements_y_total > 0) ? target_elements_y_total : axiom::TOKEN_DIM);
-			size_t heads = (num_heads > 0 && model_dim % num_heads == 0) ? num_heads : axiom::NUM_HEADS;
+			const size_t model_dim =
+				(embedding_dim > 0)
+					? embedding_dim
+					: ((target_elements_y_total > 0) ? target_elements_y_total : axiom::TOKEN_DIM);
+			size_t heads =
+				(num_heads > 0 && model_dim % num_heads == 0) ? num_heads : axiom::NUM_HEADS;
 			if (model_dim / heads > axiom::MAX_HEAD_DIM && model_dim % axiom::MAX_HEAD_DIM == 0) {
 				heads = model_dim / axiom::MAX_HEAD_DIM;
 			}
@@ -552,8 +570,8 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 
 			const bool fwd_ok = forward_pass_with_embeddings(
 				&gpu_portion, &gpu_embeddings, &gpu_weights, &gpu_activations,
-				input_elements_x_total, target_elements_y_total, 0,
-				false /* gather_embeddings */, false /* compute_output_probs */);
+				input_elements_x_total, target_elements_y_total, 0, false /* gather_embeddings */,
+				false /* compute_output_probs */);
 			if (!fwd_ok) {
 				return false;
 			}

@@ -17,8 +17,10 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "shared_params.h"
 #include "gpu_kernel.cuh"
+#include "shared_params.h"
+
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,11 +30,10 @@ extern "C" {
 // All pointers are device memory — do NOT dereference on the CPU.
 // Uses void* to hide __nv_bfloat16 from the CPU compiler.
 struct GpuPortion {
-	void* d_token_ids[2] = {nullptr,
-				nullptr}; // device ptr: uint32_t (128 token IDs across PCIe)
+	void* d_token_ids[2] = {nullptr, nullptr}; // device ptr: uint32_t (128 token IDs across PCIe)
 	void* d_context_window[2] = {nullptr, nullptr}; // device ptr: X  (128 tokens * dim)
-	void* d_target[2] = {nullptr, nullptr};		// device ptr: Y  (1  token  * dim)
-	void* d_dx[2] = {nullptr, nullptr}; // device ptr: float (dL/dx for input backprop)
+	void* d_target[2] = {nullptr, nullptr};			// device ptr: Y  (1  token  * dim)
+	void* d_dx[2] = {nullptr, nullptr};				// device ptr: float (dL/dx for input backprop)
 
 	size_t context_ptr = sizeof(d_context_window) / sizeof(d_context_window[0]);
 	size_t target_ptr = sizeof(d_target) / sizeof(d_target[0]);
@@ -48,9 +49,9 @@ struct GpuPortion {
 	// true only while d_token_ids[i] holds the IDs of the step currently uploaded to buffer i
 	bool token_ids_active[2] = {false, false};
 
-	size_t token_count = axiom::CONTEXT_WINDOW;     // total token count in context window (e.g. 256)
+	size_t token_count = axiom::CONTEXT_WINDOW;	 // total token count in context window (e.g. 256)
 	size_t context_elements = axiom::FAN_IN_DIM; // total bfloat16 elements in X
-	size_t target_elements = axiom::TOKEN_DIM;  // total bfloat16 elements in Y
+	size_t target_elements = axiom::TOKEN_DIM;	 // total bfloat16 elements in Y
 
 	// Pre-allocated persistent device buffers & events per stream
 	void* d_hidden_state[2] = {nullptr, nullptr};
@@ -64,7 +65,7 @@ struct GpuPortion {
 
 // GPU-side mirror of the learnable embedding matrix.
 struct GpuEmbeddings {
-	void* d_table = nullptr;	// device ptr to __nv_bfloat16 (vocab_size * embedding_dim)
+	void* d_table = nullptr;		// device ptr to __nv_bfloat16 (vocab_size * embedding_dim)
 	void* d_table_master = nullptr; // device ptr to float (vocab_size * embedding_dim)
 	size_t vocab_size = axiom::VOCAB_SIZE;
 	size_t embedding_dim = axiom::TOKEN_DIM;
@@ -81,6 +82,8 @@ struct GpuEmbeddings {
 
 // GPU-side mirror of the AI weights and biases.
 struct GpuWeights {
+	void* d_layer_input = nullptr; // device ptr to ? ' '
+
 	void* d_weights = nullptr; // device ptr to __nv_bfloat16 (read by the Tensor Cores)
 	void* d_bias = nullptr;	   // device ptr to __nv_bfloat16
 
@@ -93,8 +96,8 @@ struct GpuWeights {
 	// AdamW first and second moment tensors for weights and biases
 	void* d_weights_m = nullptr; // device ptr to float (weight_elements)
 	void* d_weights_v = nullptr; // device ptr to float (weight_elements)
-	void* d_bias_m = nullptr;    // device ptr to float (bias_elements)
-	void* d_bias_v = nullptr;    // device ptr to float (bias_elements)
+	void* d_bias_m = nullptr;	 // device ptr to float (bias_elements)
+	void* d_bias_v = nullptr;	 // device ptr to float (bias_elements)
 
 	size_t weight_elements = 0;
 	size_t bias_elements = 0;
@@ -146,8 +149,8 @@ struct GpuWeights {
 	size_t expert_count = 8;
 	void* d_router_weights = nullptr; // device ptr to __nv_bfloat16 (dim * expert_count)
 	void* d_router_master = nullptr;  // device ptr to float (dim * expert_count)
-	void* d_router_m = nullptr;	  // device ptr to float (dim * expert_count)
-	void* d_router_v = nullptr;	  // device ptr to float (dim * expert_count)
+	void* d_router_m = nullptr;		  // device ptr to float (dim * expert_count)
+	void* d_router_v = nullptr;		  // device ptr to float (dim * expert_count)
 
 	void* d_expert_gate =
 		nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * feedforward_network_dimension)
@@ -171,10 +174,10 @@ struct GpuWeights {
 // Layout of the d_loss telemetry block (floats, summed over the steps since the
 // last download). Slot 0 stays the loss so existing single-float readers keep working.
 enum TelemetrySlot {
-	telemetry_loss = 0,		 // sum of per-step loss
+	telemetry_loss = 0,				 // sum of per-step loss
 	telemetry_gradient_square = 1,	 // sum of ||dz||^2 measured before clipping
-	telemetry_nonfinite = 2,	 // count of NaN/Inf seen in loss, dz or activations
-	telemetry_dead_output = 3,	 // count of output activations with |y| < 1e-6
+	telemetry_nonfinite = 2,		 // count of NaN/Inf seen in loss, dz or activations
+	telemetry_dead_output = 3,		 // count of output activations with |y| < 1e-6
 	telemetry_activation_square = 4, // sum of y^2 over output activations
 	telemetry_slot_count = 5
 };
@@ -198,13 +201,13 @@ struct GpuActivations {
 
 	// Phase 2: Non-blocking loss telemetry
 	void* h_pinned_loss = nullptr; // pinned host float slot
-	void* loss_event = nullptr;    // cudaEvent_t for async telemetry
-	bool loss_pending = false;     // async transfer in flight flag
+	void* loss_event = nullptr;	   // cudaEvent_t for async telemetry
+	bool loss_pending = false;	   // async transfer in flight flag
 
 	// Phase 3: Transformer Block Intermediate Activations
-	void* d_query = nullptr;	    // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_key = nullptr;		    // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_value = nullptr;	    // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_query = nullptr;			// device ptr to __nv_bfloat16 (seq * dim)
+	void* d_key = nullptr;				// device ptr to __nv_bfloat16 (seq * dim)
+	void* d_value = nullptr;			// device ptr to __nv_bfloat16 (seq * dim)
 	void* d_attention_output = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
 	void* d_intermediate_gate =
 		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
@@ -212,24 +215,23 @@ struct GpuActivations {
 		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
 	void* d_intermediate_swiglu =
 		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
-	void* d_ffn_output = nullptr;	// device ptr to __nv_bfloat16 (seq * dim)
-	void* d_residual_mid = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_residual_out = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_normalized_attention = nullptr;   // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_ffn_output = nullptr;			  // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_residual_mid = nullptr;			  // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_residual_out = nullptr;			  // device ptr to __nv_bfloat16 (seq * dim)
+	void* d_normalized_attention = nullptr;	  // device ptr to __nv_bfloat16 (seq * dim)
 	void* d_normalized_feedforward = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_attention_scale = nullptr;	  // device ptr to float (RMS normalization factor)
+	void* d_attention_scale = nullptr;		  // device ptr to float (RMS normalization factor)
 	void* d_feedforward_scale = nullptr;	  // device ptr to float (RMS normalization factor)
 	size_t xform_seq_elements = 0;
 	size_t xform_ffn_elements = 0;
 
 	// Phase 6: Sparse Mixture of Experts Routing State
-	void* d_router_logits = nullptr; // device ptr to float (seq_len * expert_count)
-	void* d_expert_first = nullptr;	 // device ptr to int32_t (seq_len): top-1 expert ID
-	void* d_expert_second = nullptr; // device ptr to int32_t (seq_len): top-2 expert ID
-	void* d_weight_first = nullptr;	 // device ptr to float (seq_len): top-1 normalized weight
-	void* d_weight_second = nullptr; // device ptr to float (seq_len): top-2 normalized weight
-	void* d_expert_histogram =
-		nullptr; // device ptr to int32_t (expert_count): token load counts
+	void* d_router_logits = nullptr;	// device ptr to float (seq_len * expert_count)
+	void* d_expert_first = nullptr;		// device ptr to int32_t (seq_len): top-1 expert ID
+	void* d_expert_second = nullptr;	// device ptr to int32_t (seq_len): top-2 expert ID
+	void* d_weight_first = nullptr;		// device ptr to float (seq_len): top-1 normalized weight
+	void* d_weight_second = nullptr;	// device ptr to float (seq_len): top-2 normalized weight
+	void* d_expert_histogram = nullptr; // device ptr to int32_t (expert_count): token load counts
 
 	// Persistent backward scratchpads (eliminates per-step allocation thrashing)
 	void* d_seq_logits = nullptr;
@@ -257,9 +259,9 @@ struct GpuPagedCache {
 
 // Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
 struct GpuGraphExecution {
-	void* graph = nullptr;	    // cudaGraph_t
+	void* graph = nullptr;		// cudaGraph_t
 	void* graph_exec = nullptr; // cudaGraphExec_t
-	void* stream = nullptr;	    // cudaStream_t
+	void* stream = nullptr;		// cudaStream_t
 	bool is_instantiated = false;
 	float launch_latency_ms = 0.0f;
 };

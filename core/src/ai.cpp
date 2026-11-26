@@ -129,6 +129,7 @@ void AI::reset_weights(Elements& elements, bool verbose) {
 	}
 
 	if (enable_transformer && gpu_weights.d_query_weights != nullptr) {
+
 		if (!allocate_transformer_weights(
 				&gpu_weights, gpu_weights.transformer_dim, gpu_weights.transformer_ffn,
 				config::default_weight_layers, config::default_randomizer_seed)) {
@@ -274,6 +275,7 @@ void AI::release_legacy_weights() {
 
 bool AI::load_weights(const std::string& path) {
 	std::ifstream in(path, std::ios::binary);
+
 	if (!in.is_open()) {
 		std::cerr << "[AI Brain] Failed to open weight file: " << path << "\n";
 		return false;
@@ -303,6 +305,7 @@ bool AI::load_weights(const std::string& path) {
 	}
 
 	const bool has_legacy_payload = (header.weight_count != 0 || header.bias_count != 0);
+
 	if (has_legacy_payload &&
 		(header.weight_count != input_elements_x_total * target_elements_y_total ||
 		 header.bias_count != target_elements_y_total)) {
@@ -311,8 +314,10 @@ bool AI::load_weights(const std::string& path) {
 	}
 
 	if (header.embedding_dim != 0 && header.embedding_dim != target_elements_y_total) {
+
 		std::cerr << "[AI Brain] Embedding dimension mismatch in " << path << ": file has "
 				  << header.embedding_dim << ", model expects " << target_elements_y_total << "\n";
+
 		return false;
 	}
 
@@ -323,6 +328,7 @@ bool AI::load_weights(const std::string& path) {
 	if (header.weight_count > 0) {
 		in.read(reinterpret_cast<char*>(loaded_weights.data()),
 				header.weight_count * sizeof(float));
+
 		if (in.gcount() != static_cast<std::streamsize>(header.weight_count * sizeof(float))) {
 			std::cerr << "[AI Brain] Incomplete weight data in " << path << "\n";
 			return false;
@@ -331,8 +337,10 @@ bool AI::load_weights(const std::string& path) {
 
 	if (header.bias_count > 0) {
 		in.read(reinterpret_cast<char*>(loaded_bias.data()), header.bias_count * sizeof(float));
+
 		if (in.gcount() != static_cast<std::streamsize>(header.bias_count * sizeof(float))) {
 			std::cerr << "[AI Brain] Incomplete bias data in " << path << "\n";
+
 			return false;
 		}
 	}
@@ -341,7 +349,9 @@ bool AI::load_weights(const std::string& path) {
 		size_t embedding_count = header.vocab_size * header.embedding_dim;
 		loaded_embeddings.resize(embedding_count);
 		in.read(reinterpret_cast<char*>(loaded_embeddings.data()), embedding_count * sizeof(float));
+
 		if (in.gcount() != static_cast<std::streamsize>(embedding_count * sizeof(float))) {
+
 			std::cerr << "[AI Brain] Incomplete embedding data in " << path << "\n";
 			return false;
 		}
@@ -457,13 +467,20 @@ bool AI::load_weights(const std::string& path) {
 	}
 
 	if (has_xform_payload) {
+
 		if (gpu_weights.d_query_weights == nullptr || gpu_weights.transformer_dim != xform_dim ||
 			gpu_weights.transformer_ffn != xform_ffn) {
-			if (!build_transformer_block(xform_dim, num_heads, xform_ffn)) {
+
+			if (!build_transformer_block(xform_dim, num_heads, xform_ffn,
+										 config::default_weight_layers,
+										 config::default_randomizer_seed)) {
+
 				std::cerr << "[AI Brain] Failed to allocate transformer block for checkpoint.\n";
+
 				return false;
 			}
 		}
+
 		if (!upload_transformer_weights(
 				&gpu_weights, loaded_q.data(), loaded_k.data(), loaded_v.data(), loaded_o.data(),
 				loaded_gate.data(), loaded_up.data(), loaded_down.data(), xform_dim, xform_ffn)) {
@@ -481,8 +498,8 @@ bool AI::load_weights(const std::string& path) {
 
 
 bool AI::build_transformer_block(size_t hidden_dim, size_t heads,
-								 size_t feedforward_network_dimension,
-								 size_t training_layers_count) {
+								 size_t feedforward_network_dimension, size_t training_layers_count,
+								 uint32_t randomizer_seed) {
 
 	if (hidden_dim == 0 || heads == 0 || feedforward_network_dimension == 0 ||
 		training_layers_count == 0)
@@ -493,7 +510,7 @@ bool AI::build_transformer_block(size_t hidden_dim, size_t heads,
 	this->enable_transformer = true;
 
 	return allocate_transformer_weights(&gpu_weights, hidden_dim, feedforward_network_dimension,
-										training_layers_count);
+										training_layers_count, randomizer_seed);
 }
 
 bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length) {
@@ -512,7 +529,9 @@ bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t
 	if (ok) {
 		download_device_buffer(hidden_states.data(), d_temp, bytes);
 	}
+
 	free_device_memory(d_temp);
+
 	return ok;
 }
 
