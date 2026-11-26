@@ -130,9 +130,10 @@ void AI::reset_weights(Elements& elements, bool verbose) {
 
 	if (enable_transformer && gpu_weights.d_query_weights != nullptr) {
 
-		if (!allocate_transformer_weights(
-				&gpu_weights, gpu_weights.transformer_dim, gpu_weights.transformer_ffn,
-				config::default_weight_layers, config::default_randomizer_seed)) {
+		if (!allocate_transformer_weights(&gpu_weights, gpu_weights.transformer_dim,
+										  gpu_weights.transformer_ffn,
+										  config::default_transformer_layer_count,
+										  config::default_transformer_randomizer_seed)) {
 			std::cerr << "[AI Brain] Warning: failed to reset transformer weights.\n";
 		}
 		gpu_weights.step_count = 0;
@@ -472,8 +473,8 @@ bool AI::load_weights(const std::string& path) {
 			gpu_weights.transformer_ffn != xform_ffn) {
 
 			if (!build_transformer_block(xform_dim, num_heads, xform_ffn,
-										 config::default_weight_layers,
-										 config::default_randomizer_seed)) {
+										 config::default_transformer_layer_count,
+										 config::default_transformer_randomizer_seed)) {
 
 				std::cerr << "[AI Brain] Failed to allocate transformer block for checkpoint.\n";
 
@@ -503,7 +504,7 @@ bool AI::build_transformer_block(size_t hidden_dim, size_t heads,
 								 uint32_t transformer_randomizer_seed) {
 
 	if (hidden_dim == 0 || heads == 0 || feedforward_network_dimension == 0 ||
-		transformer_layer_count == 0)
+		transformer_layer_count == 0 || transformer_randomizer_seed == 0)
 		return false;
 
 	this->num_heads = heads;

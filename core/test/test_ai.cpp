@@ -293,8 +293,8 @@ bool test_ai() {
 		const size_t test_ffn = axiom::FFN_DIM;
 
 		test_check(ai.build_transformer_block(test_dim, test_heads, test_ffn,
-											  config::default_weight_layers,
-											  config::default_randomizer_seed),
+											  config::default_transformer_layer_count,
+											  config::default_transformer_randomizer_seed),
 				   "build_transformer_block allocates GPU attention & FFN weights", s_pass, s_fail);
 		test_check(ai.save_weights(xform_path),
 				   "ai.save_weights() serializes model including transformer block", s_pass,

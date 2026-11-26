@@ -67,8 +67,8 @@ TrainStatus AI::train(Optimizer& optimizer, Portion& portion) {
 			if (gpu_weights.d_query_weights == nullptr ||
 				gpu_weights.transformer_dim != model_dim) {
 				if (!build_transformer_block(model_dim, heads, feedforward_network_dimension,
-											 config::default_weight_layers,
-											 config::default_randomizer_seed)) {
+											 config::default_transformer_layer_count,
+											 config::default_transformer_randomizer_seed)) {
 
 					std::cerr << "[AI Brain] Failed to build transformer block.\n";
 					return TrainStatus::Failed;
@@ -503,8 +503,8 @@ bool AI::evaluate_validation(const std::vector<uint32_t>& validation_tokens, siz
 		if (gpu_weights.d_query_weights == nullptr || gpu_weights.transformer_dim != model_dim ||
 			gpu_weights.transformer_ffn != feedforward_network_dimension) {
 			if (!build_transformer_block(model_dim, heads, feedforward_network_dimension,
-										 config::default_weight_layers,
-										 config::default_randomizer_seed)) {
+										 config::default_transformer_layer_count,
+										 config::default_transformer_randomizer_seed)) {
 				return false;
 			}
 		}

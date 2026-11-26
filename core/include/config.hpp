@@ -187,9 +187,9 @@ constexpr int default_graph_benchmark_iterations = Config::default_graph_benchma
 
 // Transformer weights and  memory allocation in memory_allocation.cu
 // Brings back Transformer weights to initial random state
-constexpr uint32_t default_randomizer_seed = axiom::TRANSFORMER_RANDOMIZER_SEED;
+constexpr uint32_t default_transformer_randomizer_seed = axiom::TRANSFORMER_RANDOMIZER_SEED;
 // number of layers for Transformer weights random state
-constexpr size_t default_weight_layers = axiom::TRANSFORMER_LAYER_COUNT;
+constexpr size_t default_transformer_layer_count = axiom::TRANSFORMER_LAYER_COUNT;
 
 // Folder layout
 constexpr const char* database_folder = Config::database_folder;

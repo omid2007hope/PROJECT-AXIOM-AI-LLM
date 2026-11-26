@@ -156,7 +156,7 @@ public:
 		size_t hidden_dim, size_t heads = axiom::NUM_HEADS,
 		size_t feedforward_network_dimension = axiom::FFN_DIM,
 		size_t transformer_layer_count = config::default_training_layers,
-		uint32_t transformer_randomizer_seed = config::default_randomizer_seed);
+		uint32_t transformer_randomizer_seed = config::default_transformer_randomizer_seed);
 
 	bool forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length);
 
