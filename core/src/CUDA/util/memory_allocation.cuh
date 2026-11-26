@@ -74,11 +74,10 @@ CUDA_API bool upload_device_buffer_async(void* dst, const void* src, size_t byte
 CUDA_API bool download_device_buffer_async(void* dst, const void* src, size_t bytes, void* stream);
 
 
-CUDA_API bool allocate_transformer_weights(GpuWeights* gpu, size_t hidden_dim,
-										   size_t feedforward_network_dimension,
-										   size_t training_layers_count,
-										   size_t weight_layers = axiom::TRANSFORMER_WEIGHT_LAYER,
-										   uint32_t randomizer_seed = axiom::RANDOMIZER_SEED);
+CUDA_API bool allocate_transformer_weights(
+	GpuWeights* gpu, size_t hidden_dim, size_t feedforward_network_dimension,
+	size_t transformer_layer_count = axiom::TRANSFORMER_LAYER_COUNT,
+	uint32_t transformer_randomizer_seed = axiom::TRANSFORMER_RANDOMIZER_SEED);
 
 CUDA_API bool allocate_expert_weights(GpuWeights* gpu, size_t hidden_dim,
 									  size_t feedforward_network_dimension, size_t num_experts);

@@ -94,7 +94,7 @@ flowchart TB
     end
 
     subgraph NS_AXIOM["namespace axiom (__cplusplus)"]
-        C_CONST["constexpr VOCAB_SIZE, TOKEN_DIM,<br/>CONTEXT_WINDOW, NUM_HEADS,<br/>HEAD_DIM, FFN_DIM, FAN_IN_DIM,<br/>PAGED_*, TRANSFORMER_WEIGHT_LAYER"]
+        C_CONST["constexpr VOCAB_SIZE, TOKEN_DIM,<br/>CONTEXT_WINDOW, NUM_HEADS,<br/>HEAD_DIM, FFN_DIM, FAN_IN_DIM,<br/>PAGED_*, TRANSFORMER_LAYER_COUNT"]
         C_ASSERT["static_assert invariants<br/>(divisibility, head_dim <= 64, fan_in)"]
     end
 
@@ -106,7 +106,7 @@ flowchart TB
         subgraph STRUCT_CFG["struct Config (static constexpr)"]
             SC_TRAIN["default_training_layers = 4<br/>lr, weight_min/max, seed"]
             SC_ARCH["num_layers = 28U<br/>rms_norm_eps, rope_theta,<br/>max_seq_len_cap, experts"]
-            SC_ALLOC["randomizer_seed = 42U (via macro)<br/>transformer_weight_layers = 1U"]
+            SC_ALLOC["transformer_randomizer_seed = 42U (via macro)<br/>transformer_weight_layers = 1U"]
             SC_IO["ram_buffer_size, io_buffer_bytes,<br/>paths & *.axiom filenames"]
         end
 

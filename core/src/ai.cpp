@@ -498,11 +498,12 @@ bool AI::load_weights(const std::string& path) {
 
 
 bool AI::build_transformer_block(size_t hidden_dim, size_t heads,
-								 size_t feedforward_network_dimension, size_t training_layers_count,
-								 uint32_t randomizer_seed) {
+								 size_t feedforward_network_dimension,
+								 size_t transformer_layer_count,
+								 uint32_t transformer_randomizer_seed) {
 
 	if (hidden_dim == 0 || heads == 0 || feedforward_network_dimension == 0 ||
-		training_layers_count == 0)
+		transformer_layer_count == 0)
 		return false;
 
 	this->num_heads = heads;
@@ -510,7 +511,7 @@ bool AI::build_transformer_block(size_t hidden_dim, size_t heads,
 	this->enable_transformer = true;
 
 	return allocate_transformer_weights(&gpu_weights, hidden_dim, feedforward_network_dimension,
-										training_layers_count, randomizer_seed);
+										transformer_layer_count, transformer_randomizer_seed);
 }
 
 bool AI::forward_transformer(std::vector<std::bfloat16_t>& hidden_states, size_t sequence_length) {
