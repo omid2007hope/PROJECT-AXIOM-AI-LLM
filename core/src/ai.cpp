@@ -588,6 +588,8 @@ bool AI::load_weights(const std::string& path)
 	return true;
 }
 
+void AI::free_training_layers(w& layer_weights, a& layer_activations) {};
+
 bool AI::build_transformer_block(size_t hidden_dim,
                                  size_t heads,
                                  size_t feedforward_network_dimension,

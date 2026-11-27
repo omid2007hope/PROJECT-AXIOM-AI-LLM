@@ -123,6 +123,9 @@ public:
 	void reset_weights(Elements& elements);
 	void reset_weights(Elements& elements, bool verbose);
 
+	// Method to free transformer training layers
+	void free_training_layers();
+
 	// The Training Loop Orchestrator
 	TrainStatus train(Optimizer& optimizer, Portion& portion);
 
