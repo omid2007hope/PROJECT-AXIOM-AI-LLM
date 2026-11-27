@@ -20,251 +20,259 @@
 #include "gpu_kernel.cuh"
 #include "shared_params.h"
 
-
-
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-// GPU-side mirror of the context window and target that live in Portion.
-// All pointers are device memory — do NOT dereference on the CPU.
-// Uses void* to hide __nv_bfloat16 from the CPU compiler.
-struct GpuPortion {
-	void* d_token_ids[2] = {nullptr, nullptr}; // device ptr: uint32_t (128 token IDs across PCIe)
-	void* d_context_window[2] = {nullptr, nullptr}; // device ptr: X  (128 tokens * dim)
-	void* d_target[2] = {nullptr, nullptr};			// device ptr: Y  (1  token  * dim)
-	void* d_dx[2] = {nullptr, nullptr};				// device ptr: float (dL/dx for input backprop)
+	// GPU-side mirror of the context window and target that live in Portion.
+	// All pointers are device memory — do NOT dereference on the CPU.
+	// Uses void* to hide __nv_bfloat16 from the CPU compiler.
+	struct GpuPortion
+	{
+		void* d_token_ids[2] = {nullptr,
+		                        nullptr}; // device ptr: uint32_t (128 token IDs across PCIe)
+		void* d_context_window[2] = {nullptr, nullptr}; // device ptr: X  (128 tokens * dim)
+		void* d_target[2] = {nullptr, nullptr};         // device ptr: Y  (1  token  * dim)
+		void* d_dx[2] = {nullptr, nullptr}; // device ptr: float (dL/dx for input backprop)
 
-	size_t context_ptr = sizeof(d_context_window) / sizeof(d_context_window[0]);
-	size_t target_ptr = sizeof(d_target) / sizeof(d_target[0]);
+		size_t context_ptr = sizeof(d_context_window) / sizeof(d_context_window[0]);
+		size_t target_ptr = sizeof(d_target) / sizeof(d_target[0]);
 
-	void* stream[2] = {nullptr, nullptr};
+		void* stream[2] = {nullptr, nullptr};
 
-	// cudaEvent_t recorded when the backward pass of a buffer finishes. The next
-	// step's forward pass waits on it, so the shared weights are updated strictly
-	// in order while the PCIe uploads of the two buffers still overlap.
-	void* compute_done[2] = {nullptr, nullptr};
-	bool compute_done_recorded[2] = {false, false};
+		// cudaEvent_t recorded when the backward pass of a buffer finishes. The next
+		// step's forward pass waits on it, so the shared weights are updated strictly
+		// in order while the PCIe uploads of the two buffers still overlap.
+		void* compute_done[2] = {nullptr, nullptr};
+		bool compute_done_recorded[2] = {false, false};
 
-	// true only while d_token_ids[i] holds the IDs of the step currently uploaded to buffer i
-	bool token_ids_active[2] = {false, false};
+		// true only while d_token_ids[i] holds the IDs of the step currently uploaded to buffer i
+		bool token_ids_active[2] = {false, false};
 
-	size_t token_count = axiom::CONTEXT_WINDOW;	 // total token count in context window (e.g. 256)
-	size_t context_elements = axiom::FAN_IN_DIM; // total bfloat16 elements in X
-	size_t target_elements = axiom::TOKEN_DIM;	 // total bfloat16 elements in Y
+		size_t token_count =
+		    axiom::CONTEXT_WINDOW; // total token count in context window (e.g. 256)
+		size_t context_elements = axiom::FAN_IN_DIM; // total bfloat16 elements in X
+		size_t target_elements = axiom::TOKEN_DIM;   // total bfloat16 elements in Y
 
-	// Pre-allocated persistent device buffers & events per stream
-	void* d_hidden_state[2] = {nullptr, nullptr};
-	void* d_loss_scalar[2] = {nullptr, nullptr};
-	float* h_pinned_loss[2] = {nullptr, nullptr};
-	void* loss_ready_event[2] = {nullptr, nullptr};
+		// Pre-allocated persistent device buffers & events per stream
+		void* d_hidden_state[2] = {nullptr, nullptr};
+		void* d_loss_scalar[2] = {nullptr, nullptr};
+		float* h_pinned_loss[2] = {nullptr, nullptr};
+		void* loss_ready_event[2] = {nullptr, nullptr};
 
-	size_t max_batch_tokens = 0;
-	bool is_allocated = false;
-};
+		size_t max_batch_tokens = 0;
+		bool is_allocated = false;
+	};
 
-// GPU-side mirror of the learnable embedding matrix.
-struct GpuEmbeddings {
-	void* d_table = nullptr;		// device ptr to __nv_bfloat16 (vocab_size * embedding_dim)
-	void* d_table_master = nullptr; // device ptr to float (vocab_size * embedding_dim)
-	size_t vocab_size = axiom::VOCAB_SIZE;
-	size_t embedding_dim = axiom::TOKEN_DIM;
-	size_t active_vocab_size =
-		0; // Milestone 3: Dynamic bound for active vocabulary in tied logits/softmax
+	// GPU-side mirror of the learnable embedding matrix.
+	struct GpuEmbeddings
+	{
+		void* d_table = nullptr;        // device ptr to __nv_bfloat16 (vocab_size * embedding_dim)
+		void* d_table_master = nullptr; // device ptr to float (vocab_size * embedding_dim)
+		size_t vocab_size = axiom::VOCAB_SIZE;
+		size_t embedding_dim = axiom::TOKEN_DIM;
+		size_t active_vocab_size =
+		    0; // Milestone 3: Dynamic bound for active vocabulary in tied logits/softmax
 
-	// AdamW first moment (m_t) and second moment (v_t) tensors
-	void* d_m = nullptr; // device ptr to float (vocab_size * embedding_dim)
-	void* d_v = nullptr; // device ptr to float (vocab_size * embedding_dim)
+		// AdamW first moment (m_t) and second moment (v_t) tensors
+		void* d_m = nullptr; // device ptr to float (vocab_size * embedding_dim)
+		void* d_v = nullptr; // device ptr to float (vocab_size * embedding_dim)
 
-	float temperature = 1.0;
-};
+		float temperature = 1.0;
+	};
 
+	// GPU-side mirror of the AI weights and biases.
+	struct GpuWeights
+	{
+		void* d_layer_input = nullptr; // device ptr to ? ' '
 
-// GPU-side mirror of the AI weights and biases.
-struct GpuWeights {
-	void* d_layer_input = nullptr; // device ptr to ? ' '
+		void* d_weights = nullptr; // device ptr to __nv_bfloat16 (read by the Tensor Cores)
+		void* d_bias = nullptr;    // device ptr to __nv_bfloat16
 
-	void* d_weights = nullptr; // device ptr to __nv_bfloat16 (read by the Tensor Cores)
-	void* d_bias = nullptr;	   // device ptr to __nv_bfloat16
+		// FP32 master copies: the optimizer updates these and rounds the result into
+		// d_weights / d_bias. A bf16-only update would lose steps smaller than its
+		// 8-bit mantissa, which stalls learning.
+		void* d_weights_master = nullptr; // device ptr to float
+		void* d_bias_master = nullptr;    // device ptr to float
 
-	// FP32 master copies: the optimizer updates these and rounds the result into
-	// d_weights / d_bias. A bf16-only update would lose steps smaller than its
-	// 8-bit mantissa, which stalls learning.
-	void* d_weights_master = nullptr; // device ptr to float
-	void* d_bias_master = nullptr;	  // device ptr to float
+		// AdamW first and second moment tensors for weights and biases
+		void* d_weights_m = nullptr; // device ptr to float (weight_elements)
+		void* d_weights_v = nullptr; // device ptr to float (weight_elements)
+		void* d_bias_m = nullptr;    // device ptr to float (bias_elements)
+		void* d_bias_v = nullptr;    // device ptr to float (bias_elements)
 
-	// AdamW first and second moment tensors for weights and biases
-	void* d_weights_m = nullptr; // device ptr to float (weight_elements)
-	void* d_weights_v = nullptr; // device ptr to float (weight_elements)
-	void* d_bias_m = nullptr;	 // device ptr to float (bias_elements)
-	void* d_bias_v = nullptr;	 // device ptr to float (bias_elements)
+		size_t weight_elements = 0;
+		size_t bias_elements = 0;
+		uint64_t step_count = 0;
 
-	size_t weight_elements = 0;
-	size_t bias_elements = 0;
-	uint64_t step_count = 0;
+		// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN Weights
+		void* d_query_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
+		void* d_key_weights = nullptr;    // device ptr to __nv_bfloat16 (dim * dim)
+		void* d_value_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
+		void* d_output_weights = nullptr; // device ptr to __nv_bfloat16 (dim * dim)
 
-	// Phase 3: Transformer Multi-Head Attention & SwiGLU FFN Weights
-	void* d_query_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
-	void* d_key_weights = nullptr;	  // device ptr to __nv_bfloat16 (dim * dim)
-	void* d_value_weights = nullptr;  // device ptr to __nv_bfloat16 (dim * dim)
-	void* d_output_weights = nullptr; // device ptr to __nv_bfloat16 (dim * dim)
+		void* d_gate_weights =
+		    nullptr; // device ptr to __nv_bfloat16 (dim * feedforward_network_dimension)
+		void* d_up_weights =
+		    nullptr; // device ptr to __nv_bfloat16 (dim * feedforward_network_dimension)
+		void* d_down_weights =
+		    nullptr; // device ptr to __nv_bfloat16 (feedforward_network_dimension * dim)
 
-	void* d_gate_weights =
-		nullptr; // device ptr to __nv_bfloat16 (dim * feedforward_network_dimension)
-	void* d_up_weights =
-		nullptr; // device ptr to __nv_bfloat16 (dim * feedforward_network_dimension)
-	void* d_down_weights =
-		nullptr; // device ptr to __nv_bfloat16 (feedforward_network_dimension * dim)
+		// FP32 Master copies for transformer weights
+		void* d_query_master = nullptr;
+		void* d_key_master = nullptr;
+		void* d_value_master = nullptr;
+		void* d_output_master = nullptr;
+		void* d_gate_master = nullptr;
+		void* d_up_master = nullptr;
+		void* d_down_master = nullptr;
 
-	// FP32 Master copies for transformer weights
-	void* d_query_master = nullptr;
-	void* d_key_master = nullptr;
-	void* d_value_master = nullptr;
-	void* d_output_master = nullptr;
-	void* d_gate_master = nullptr;
-	void* d_up_master = nullptr;
-	void* d_down_master = nullptr;
+		// AdamW moment buffers for transformer weights
+		void* d_query_m = nullptr;
+		void* d_query_v = nullptr;
+		void* d_key_m = nullptr;
+		void* d_key_v = nullptr;
+		void* d_value_m = nullptr;
+		void* d_value_v = nullptr;
+		void* d_output_m = nullptr;
+		void* d_output_v = nullptr;
+		void* d_gate_m = nullptr;
+		void* d_gate_v = nullptr;
+		void* d_up_m = nullptr;
+		void* d_up_v = nullptr;
+		void* d_down_m = nullptr;
+		void* d_down_v = nullptr;
 
-	// AdamW moment buffers for transformer weights
-	void* d_query_m = nullptr;
-	void* d_query_v = nullptr;
-	void* d_key_m = nullptr;
-	void* d_key_v = nullptr;
-	void* d_value_m = nullptr;
-	void* d_value_v = nullptr;
-	void* d_output_m = nullptr;
-	void* d_output_v = nullptr;
-	void* d_gate_m = nullptr;
-	void* d_gate_v = nullptr;
-	void* d_up_m = nullptr;
-	void* d_up_v = nullptr;
-	void* d_down_m = nullptr;
-	void* d_down_v = nullptr;
+		size_t transformer_dim = axiom::TOKEN_DIM;
+		size_t transformer_ffn = axiom::FFN_DIM;
 
-	size_t transformer_dim = axiom::TOKEN_DIM;
-	size_t transformer_ffn = axiom::FFN_DIM;
+		// Phase 6: Sparse Mixture of Experts (MoE) Weights
+		bool enable_moe = false;
+		size_t expert_count = 8;
+		void* d_router_weights = nullptr; // device ptr to __nv_bfloat16 (dim * expert_count)
+		void* d_router_master = nullptr;  // device ptr to float (dim * expert_count)
+		void* d_router_m = nullptr;       // device ptr to float (dim * expert_count)
+		void* d_router_v = nullptr;       // device ptr to float (dim * expert_count)
 
-	// Phase 6: Sparse Mixture of Experts (MoE) Weights
-	bool enable_moe = false;
-	size_t expert_count = 8;
-	void* d_router_weights = nullptr; // device ptr to __nv_bfloat16 (dim * expert_count)
-	void* d_router_master = nullptr;  // device ptr to float (dim * expert_count)
-	void* d_router_m = nullptr;		  // device ptr to float (dim * expert_count)
-	void* d_router_v = nullptr;		  // device ptr to float (dim * expert_count)
+		void* d_expert_gate =
+		    nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * feedforward_network_dimension)
+		void* d_expert_up =
+		    nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * feedforward_network_dimension)
+		void* d_expert_down =
+		    nullptr; // device ptr to __nv_bfloat16 (expert_count * feedforward_network_dimension * dim)
 
-	void* d_expert_gate =
-		nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * feedforward_network_dimension)
-	void* d_expert_up =
-		nullptr; // device ptr to __nv_bfloat16 (expert_count * dim * feedforward_network_dimension)
-	void* d_expert_down =
-		nullptr; // device ptr to __nv_bfloat16 (expert_count * feedforward_network_dimension * dim)
+		void* d_expert_gate_master = nullptr;
+		void* d_expert_up_master = nullptr;
+		void* d_expert_down_master = nullptr;
 
-	void* d_expert_gate_master = nullptr;
-	void* d_expert_up_master = nullptr;
-	void* d_expert_down_master = nullptr;
+		void* d_expert_gate_m = nullptr;
+		void* d_expert_gate_v = nullptr;
+		void* d_expert_up_m = nullptr;
+		void* d_expert_up_v = nullptr;
+		void* d_expert_down_m = nullptr;
+		void* d_expert_down_v = nullptr;
+	};
 
-	void* d_expert_gate_m = nullptr;
-	void* d_expert_gate_v = nullptr;
-	void* d_expert_up_m = nullptr;
-	void* d_expert_up_v = nullptr;
-	void* d_expert_down_m = nullptr;
-	void* d_expert_down_v = nullptr;
-};
+	// Layout of the d_loss telemetry block (floats, summed over the steps since the
+	// last download). Slot 0 stays the loss so existing single-float readers keep working.
+	enum TelemetrySlot
+	{
+		telemetry_loss = 0,              // sum of per-step loss
+		telemetry_gradient_square = 1,   // sum of ||dz||^2 measured before clipping
+		telemetry_nonfinite = 2,         // count of NaN/Inf seen in loss, dz or activations
+		telemetry_dead_output = 3,       // count of output activations with |y| < 1e-6
+		telemetry_activation_square = 4, // sum of y^2 over output activations
+		telemetry_slot_count = 5
+	};
 
-// Layout of the d_loss telemetry block (floats, summed over the steps since the
-// last download). Slot 0 stays the loss so existing single-float readers keep working.
-enum TelemetrySlot {
-	telemetry_loss = 0,				 // sum of per-step loss
-	telemetry_gradient_square = 1,	 // sum of ||dz||^2 measured before clipping
-	telemetry_nonfinite = 2,		 // count of NaN/Inf seen in loss, dz or activations
-	telemetry_dead_output = 3,		 // count of output activations with |y| < 1e-6
-	telemetry_activation_square = 4, // sum of y^2 over output activations
-	telemetry_slot_count = 5
-};
+	// GPU-side activations buffer
+	struct GpuActivations
+	{
+		void* d_output = nullptr; // device ptr to __nv_bfloat16
+		size_t output_elements = 0;
 
-// GPU-side activations buffer
-struct GpuActivations {
-	void* d_output = nullptr; // device ptr to __nv_bfloat16
-	size_t output_elements = 0;
+		// device ptr to float[telemetry_slot_count]: running sums over the steps since
+		// the last download. Slot 0 is the loss, measured before each update, so it is
+		// the loss on a sample the network has not trained on yet.
+		void* d_loss = nullptr;
 
-	// device ptr to float[telemetry_slot_count]: running sums over the steps since
-	// the last download. Slot 0 is the loss, measured before each update, so it is
-	// the loss on a sample the network has not trained on yet.
-	void* d_loss = nullptr;
+		// Milestone 3: Discrete Autoregressive Token Classification
+		void* d_inv_rms = nullptr; // device ptr to float (RMS normalization factor)
+		void* d_probs = nullptr;   // device ptr to float (Softmax probability distribution)
+		size_t vocab_elements = 0; // capacity of d_probs
+		void* d_pred_id = nullptr; // device ptr to uint32_t (GPU Argmax winning token ID)
+		void* d_dz = nullptr;      // device ptr to float (loss gradient dz across output neurons)
 
-	// Milestone 3: Discrete Autoregressive Token Classification
-	void* d_inv_rms = nullptr; // device ptr to float (RMS normalization factor)
-	void* d_probs = nullptr;   // device ptr to float (Softmax probability distribution)
-	size_t vocab_elements = 0; // capacity of d_probs
-	void* d_pred_id = nullptr; // device ptr to uint32_t (GPU Argmax winning token ID)
-	void* d_dz = nullptr;	   // device ptr to float (loss gradient dz across output neurons)
+		// Phase 2: Non-blocking loss telemetry
+		void* h_pinned_loss = nullptr; // pinned host float slot
+		void* loss_event = nullptr;    // cudaEvent_t for async telemetry
+		bool loss_pending = false;     // async transfer in flight flag
 
-	// Phase 2: Non-blocking loss telemetry
-	void* h_pinned_loss = nullptr; // pinned host float slot
-	void* loss_event = nullptr;	   // cudaEvent_t for async telemetry
-	bool loss_pending = false;	   // async transfer in flight flag
+		// Phase 3: Transformer Block Intermediate Activations
+		void* d_query = nullptr;            // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_key = nullptr;              // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_value = nullptr;            // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_attention_output = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_intermediate_gate =
+		    nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
+		void* d_intermediate_up =
+		    nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
+		void* d_intermediate_swiglu =
+		    nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
+		void* d_ffn_output = nullptr;             // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_residual_mid = nullptr;           // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_residual_out = nullptr;           // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_normalized_attention = nullptr;   // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_normalized_feedforward = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
+		void* d_attention_scale = nullptr;        // device ptr to float (RMS normalization factor)
+		void* d_feedforward_scale = nullptr;      // device ptr to float (RMS normalization factor)
+		size_t xform_seq_elements = 0;
+		size_t xform_ffn_elements = 0;
 
-	// Phase 3: Transformer Block Intermediate Activations
-	void* d_query = nullptr;			// device ptr to __nv_bfloat16 (seq * dim)
-	void* d_key = nullptr;				// device ptr to __nv_bfloat16 (seq * dim)
-	void* d_value = nullptr;			// device ptr to __nv_bfloat16 (seq * dim)
-	void* d_attention_output = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_intermediate_gate =
-		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
-	void* d_intermediate_up =
-		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
-	void* d_intermediate_swiglu =
-		nullptr; // device ptr to __nv_bfloat16 (seq * feedforward_network_dimension)
-	void* d_ffn_output = nullptr;			  // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_residual_mid = nullptr;			  // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_residual_out = nullptr;			  // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_normalized_attention = nullptr;	  // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_normalized_feedforward = nullptr; // device ptr to __nv_bfloat16 (seq * dim)
-	void* d_attention_scale = nullptr;		  // device ptr to float (RMS normalization factor)
-	void* d_feedforward_scale = nullptr;	  // device ptr to float (RMS normalization factor)
-	size_t xform_seq_elements = 0;
-	size_t xform_ffn_elements = 0;
+		// Phase 6: Sparse Mixture of Experts Routing State
+		void* d_router_logits = nullptr; // device ptr to float (seq_len * expert_count)
+		void* d_expert_first = nullptr;  // device ptr to int32_t (seq_len): top-1 expert ID
+		void* d_expert_second = nullptr; // device ptr to int32_t (seq_len): top-2 expert ID
+		void* d_weight_first = nullptr;  // device ptr to float (seq_len): top-1 normalized weight
+		void* d_weight_second = nullptr; // device ptr to float (seq_len): top-2 normalized weight
+		void* d_expert_histogram =
+		    nullptr; // device ptr to int32_t (expert_count): token load counts
 
-	// Phase 6: Sparse Mixture of Experts Routing State
-	void* d_router_logits = nullptr;	// device ptr to float (seq_len * expert_count)
-	void* d_expert_first = nullptr;		// device ptr to int32_t (seq_len): top-1 expert ID
-	void* d_expert_second = nullptr;	// device ptr to int32_t (seq_len): top-2 expert ID
-	void* d_weight_first = nullptr;		// device ptr to float (seq_len): top-1 normalized weight
-	void* d_weight_second = nullptr;	// device ptr to float (seq_len): top-2 normalized weight
-	void* d_expert_histogram = nullptr; // device ptr to int32_t (expert_count): token load counts
+		// Persistent backward scratchpads (eliminates per-step allocation thrashing)
+		void* d_seq_logits = nullptr;
+		size_t logits_capacity = 0;
+		void* d_dh_bf16 = nullptr;
+		size_t dh_capacity = 0;
+		void* d_grad_table = nullptr;
+		size_t grad_table_capacity = 0;
+		void* d_bwd_scratch = nullptr;
+		size_t bwd_scratch_bytes = 0;
+	};
 
-	// Persistent backward scratchpads (eliminates per-step allocation thrashing)
-	void* d_seq_logits = nullptr;
-	size_t logits_capacity = 0;
-	void* d_dh_bf16 = nullptr;
-	size_t dh_capacity = 0;
-	void* d_grad_table = nullptr;
-	size_t grad_table_capacity = 0;
-	void* d_bwd_scratch = nullptr;
-	size_t bwd_scratch_bytes = 0;
-};
+	// Phase 4: PagedAttention KV-Cache Physical Page Pool
+	struct GpuPagedCache
+	{
+		void* d_key_blocks =
+		    nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
+		void* d_value_blocks =
+		    nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
+		void* d_block_table = nullptr; // device ptr to int (staged sequence block table)
+		size_t total_blocks = 0;
+		size_t block_size = axiom::PAGED_BLOCK_SIZE;
+		size_t hidden_dimension = axiom::TOKEN_DIM;
+		size_t num_heads = axiom::NUM_HEADS;
+	};
 
-// Phase 4: PagedAttention KV-Cache Physical Page Pool
-struct GpuPagedCache {
-	void* d_key_blocks =
-		nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
-	void* d_value_blocks =
-		nullptr; // device ptr to __nv_bfloat16 (total_blocks * block_size * hidden_dim)
-	void* d_block_table = nullptr; // device ptr to int (staged sequence block table)
-	size_t total_blocks = 0;
-	size_t block_size = axiom::PAGED_BLOCK_SIZE;
-	size_t hidden_dimension = axiom::TOKEN_DIM;
-	size_t num_heads = axiom::NUM_HEADS;
-};
-
-// Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
-struct GpuGraphExecution {
-	void* graph = nullptr;		// cudaGraph_t
-	void* graph_exec = nullptr; // cudaGraphExec_t
-	void* stream = nullptr;		// cudaStream_t
-	bool is_instantiated = false;
-	float launch_latency_ms = 0.0f;
-};
+	// Phase 5: Zero-Overhead Hardware Saturation via CUDA Graphs
+	struct GpuGraphExecution
+	{
+		void* graph = nullptr;      // cudaGraph_t
+		void* graph_exec = nullptr; // cudaGraphExec_t
+		void* stream = nullptr;     // cudaStream_t
+		bool is_instantiated = false;
+		float launch_latency_ms = 0.0f;
+	};
 
 #ifdef BUILDING_CUDA_DLL
 #define CUDA_API __declspec(dllexport)

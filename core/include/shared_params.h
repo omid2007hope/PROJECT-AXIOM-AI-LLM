@@ -55,7 +55,8 @@
 #define AXIOM_Weight_LAYERS 1U
 
 #ifdef __cplusplus
-namespace axiom {
+namespace axiom
+{
 
 constexpr uint32_t VOCAB_SIZE = AXIOM_VOCAB_SIZE;
 constexpr uint32_t TRANSFORMER_RANDOMIZER_SEED = AXIOM_RANDOMIZER_SEED;
@@ -74,7 +75,7 @@ static_assert(TOKEN_DIM % NUM_HEADS == 0, "TOKEN_DIM must be evenly divisible by
 static_assert(HEAD_DIM <= MAX_HEAD_DIM, "HEAD_DIM cannot exceed MAX_HEAD_DIM (64)");
 static_assert(HEAD_DIM * NUM_HEADS == TOKEN_DIM, "HEAD_DIM * NUM_HEADS must equal TOKEN_DIM");
 static_assert(FAN_IN_DIM == CONTEXT_WINDOW * TOKEN_DIM,
-			  "FAN_IN_DIM must equal CONTEXT_WINDOW * TOKEN_DIM");
+              "FAN_IN_DIM must equal CONTEXT_WINDOW * TOKEN_DIM");
 
 } // namespace axiom
 #endif

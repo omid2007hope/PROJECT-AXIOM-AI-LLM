@@ -21,11 +21,15 @@
 
 #include "shared_params.h"
 
-class FormatGuard {
+class FormatGuard
+{
 public:
 	explicit FormatGuard(std::ostream& stream)
-		: stream_(stream), flags_(stream.flags()), precision_(stream.precision()) {}
-	~FormatGuard() {
+	    : stream_(stream), flags_(stream.flags()), precision_(stream.precision())
+	{
+	}
+	~FormatGuard()
+	{
 		stream_.flags(flags_);
 		stream_.precision(precision_);
 	}
@@ -40,7 +44,8 @@ private:
 
 #pragma pack(push, 1)
 
-struct AxiomWeightHeader {
+struct AxiomWeightHeader
+{
 	char magic[8] = {'A', 'X', 'I', 'O', 'M', '_', 'V', '1'};
 	uint64_t input_elements_x_total = 0;
 	uint64_t target_elements_y_total = 0;
@@ -54,9 +59,19 @@ struct AxiomWeightHeader {
 
 static_assert(sizeof(AxiomWeightHeader) == 56, "AxiomWeightHeader must be exactly 56 bytes");
 
-enum class AppMode { Chat, Use, BulkTrain, Test, Benchmark, Server, Exit };
+enum class AppMode
+{
+	Chat,
+	Use,
+	BulkTrain,
+	Test,
+	Benchmark,
+	Server,
+	Exit
+};
 
-struct Config {
+struct Config
+{
 	static constexpr size_t ram_buffer_size = 4194304;
 	static constexpr size_t token_dim = axiom::TOKEN_DIM;
 	static constexpr size_t context_window_size = axiom::CONTEXT_WINDOW;
@@ -125,23 +140,24 @@ struct Config {
 	static constexpr const char* llm_vocab_file = "axiom_vocab.axiom";
 };
 
-namespace config {
+namespace config
+{
 
 // Hyperparameters
 constexpr size_t ram_buffer_size = Config::ram_buffer_size; // 4M tokens (~16.7 MB in RAM)
-constexpr size_t token_dim = Config::token_dim;				// GPT-2 scale (Must be multiple of 64)
+constexpr size_t token_dim = Config::token_dim;             // GPT-2 scale (Must be multiple of 64)
 constexpr size_t context_window_size =
-	Config::context_window_size; // Doubled to capture paragraph-level context
+    Config::context_window_size; // Doubled to capture paragraph-level context
 
 static_assert(ram_buffer_size % context_window_size == 0,
-			  "ram_buffer_size must be an exact multiple of context_window_size");
+              "ram_buffer_size must be an exact multiple of context_window_size");
 
 // AdamW Optimizer Settings
 constexpr float learning_rate = Config::learning_rate; // Base AdamW rate (direct step size)
 
 // How many training steps pass between two loss reports
 constexpr size_t loss_report_interval =
-	Config::loss_report_interval; // Increased to prevent CPU/GPU synchronization stalls
+    Config::loss_report_interval; // Increased to prevent CPU/GPU synchronization stalls
 
 // Initial weights are drawn uniformly from [-sqrt(3/K), +sqrt(3/K)], K = fan-in =
 // context_window_size * token_dim = 262144. That gives std 1/sqrt(K) = 1/512, so the
@@ -206,8 +222,8 @@ constexpr const char* llm_vocab_file = Config::llm_vocab_file;
 
 } // namespace config
 
-
-namespace vocab {
+namespace vocab
+{
 constexpr uint32_t VOCAB_SIZE = axiom::VOCAB_SIZE;
 
 // Slots [0 .. 3]: Special reserved tokens
@@ -238,19 +254,22 @@ constexpr uint32_t IM_START_TOKEN_ID = 151644;
 constexpr uint32_t IM_END_TOKEN_ID = 151645;
 } // namespace vocab
 
-struct Elements {
+struct Elements
+{
 	size_t weight_elements = 0;
 	size_t bias_elements = 0;
 };
 
 // What one AI::train() call did
-enum class TrainStatus {
+enum class TrainStatus
+{
 	Trained, // one full forward + backward step ran
-	NoData,	 // the RAM buffer is exhausted: the caller must refill it
-	Failed	 // a CUDA step failed (already reported on stderr)
+	NoData,  // the RAM buffer is exhausted: the caller must refill it
+	Failed   // a CUDA step failed (already reported on stderr)
 };
 
-struct TrainingTelemetry {
+struct TrainingTelemetry
+{
 	double mean_loss = 0.0;
 	double gradient_norm = 0.0;
 	double activation_magnitude = 0.0;
@@ -259,14 +278,16 @@ struct TrainingTelemetry {
 	size_t steps = 0;
 };
 
-struct SamplingConfig {
+struct SamplingConfig
+{
 	float temperature = Config::default_temperature;
 	int top_k = Config::default_top_k;
 	float top_p = Config::default_top_p;
 	uint64_t seed = 0;
 };
 
-struct AxiomModelConfig {
+struct AxiomModelConfig
+{
 	uint32_t magic = Config::axiom_model_magic;
 	uint32_t version = Config::axiom_model_version;
 	uint32_t num_layers = Config::num_layers;
@@ -281,7 +302,8 @@ struct AxiomModelConfig {
 	float rope_theta = Config::rope_theta;
 };
 
-struct TransformerLayerWeights {
+struct TransformerLayerWeights
+{
 	const void* d_input_layernorm = nullptr;
 	const void* d_q_proj_weight = nullptr;
 	const void* d_q_proj_bias = nullptr;
@@ -295,6 +317,5 @@ struct TransformerLayerWeights {
 	const void* d_up_proj_weight = nullptr;
 	const void* d_down_proj_weight = nullptr;
 };
-
 
 #endif // INCLUDE_CONFIG_HPP
