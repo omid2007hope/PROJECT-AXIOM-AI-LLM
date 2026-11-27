@@ -50,6 +50,7 @@ import os
 import re
 import sqlite3
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -107,6 +108,7 @@ LLM_URL = os.getenv("SPECTER_LLM_URL", "").strip().rstrip("/")
 LLM_MODEL = os.getenv("SPECTER_LLM_MODEL", "").strip()
 LLM_API_KEY = os.getenv("SPECTER_LLM_API_KEY", "").strip()
 LLM_CONTEXT_TOKENS = int(os.getenv("SPECTER_NUM_CTX", "32768"))
+TOOL_PROFILE = os.getenv("SPECTER_TOOL_PROFILE", "full").strip().lower()  # full | research
 
 # Optional external plugins (never required)
 NATIVE_DLL_PATH = Path(os.getenv("SPECTER_NATIVE_DLL", "")) if os.getenv("SPECTER_NATIVE_DLL") else None
@@ -144,6 +146,7 @@ SKIP_LINK_DOMAINS = (
     "creativecommons.org", "cloudflare.com", "google.com", "gstatic.com",
     "apple.com", "microsoft.com", "adobe.com", "gravatar.com", "avatars.githubusercontent.com",
     "consent.youtube.com", "consent.google.com",
+    "docs.github.com", "learn.github.com", "support.github.com", "githubstatus.com",
 )
 CONSENT_MARKERS = (
     "before you continue to youtube", "bevor sie zu youtube weitergehen",
@@ -1282,7 +1285,6 @@ class CaseStore:
         confidence = float(grounded.get("confidence", 0.0) or 0.0)
 
         current_primary = sorted({r["domain"] for r in prior_rows if r["domain"] and r["method"] != "search_snippet"})
-        new_domains = [d for d in current_primary if d not in prior_primary]
         delta_vs_previous: Dict[str, Any] = {}
         if prior.get("analyzed_utc"):
             prev_artifacts = int(prior.get("last_evidence_total", prior_stats["evidence_total"]))
@@ -1448,7 +1450,7 @@ class SourceCollector:
                             if raw_items:
                                 break
                         for item in raw_items:
-                            canonical = canonicalize_url(item.get("href", ""))
+                            canonical = canonicalize_url(item.get("href") or item.get("url") or "")
                             if canonical and canonical not in seen:
                                 seen.add(canonical)
                                 title = str(item.get("title", "")).strip()
@@ -1695,28 +1697,42 @@ class SourceCollector:
             if extension in DOCUMENT_EXTENSIONS:
                 text, artifact = self._download_document(url, extension, evidence_directory)
                 return url, text, ("native_document" if text else "failed"), artifact, []
-            response = requests.get(url, timeout=10, headers={"User-Agent": USER_AGENT})
-            if response.status_code in (401, 403, 429, 503):
-                return url, "", "access_blocked", "", []
-            response.raise_for_status()
-            content_type = response.headers.get("Content-Type", "").lower()
-            if any(ct in content_type for ct in ("image/", "video/", "audio/", "font/", "application/octet-stream", "application/zip", "application/x-msdownload")):
-                return url, "", "failed", "", []
+            with requests.get(url, timeout=10, stream=True, headers={"User-Agent": USER_AGENT}) as response:
+                if response.status_code in (401, 403, 429, 503):
+                    return url, "", "access_blocked", "", []
+                response.raise_for_status()
+                content_type = response.headers.get("Content-Type", "").lower()
+                if any(media_type in content_type for media_type in ("image/", "video/", "audio/", "font/", "application/octet-stream", "application/zip", "application/x-msdownload")):
+                    return url, "", "failed", "", []
+                declared_length = response.headers.get("Content-Length")
+                if declared_length and declared_length.isdigit() and int(declared_length) > MAX_DOWNLOAD_BYTES:
+                    return url, "", "failed", "", []
+                chunks: List[bytes] = []
+                received = 0
+                for chunk in response.iter_content(chunk_size=65536):
+                    received += len(chunk)
+                    if received > MAX_DOWNLOAD_BYTES:
+                        return url, "", "failed", "", []
+                    chunks.append(chunk)
+                raw_bytes = b"".join(chunks)
+                final_url = response.url or url
+                last_modified = response.headers.get("Last-Modified", "").strip()
+                encoding = response.encoding or "utf-8"
             if "pdf" in content_type:
                 local_file = evidence_directory / f"doc_{uuid.uuid4().hex[:10]}.pdf"
-                local_file.write_bytes(response.content[:MAX_DOWNLOAD_BYTES])
+                local_file.write_bytes(raw_bytes)
                 text = self.extractor.extract(local_file)
                 return url, text, ("native_document" if text else "failed"), str(local_file), []
+            decoded_text = raw_bytes.decode(encoding, errors="replace")
             if "text/plain" in content_type or "application/json" in content_type:
-                return url, response.text[:MAX_STORED_CHARACTERS], "markdown", "", []
-            bundle = extract_html_bundle(response.text, url)
+                return url, decoded_text[:MAX_STORED_CHARACTERS], "markdown", "", []
+            bundle = extract_html_bundle(decoded_text, url)
             text = bundle["text"]
-            if is_gate_page(text, response.url or url):
+            if is_gate_page(text, final_url):
                 return url, "", "access_blocked", "", []
             dates = list(bundle["dates"])
-            last_mod = response.headers.get("Last-Modified", "").strip()
-            if last_mod:
-                dates.append(last_mod)
+            if last_modified:
+                dates.append(last_modified)
             if dates and text:
                 text = f"Temporal Metadata: {', '.join(list(dict.fromkeys(dates))[:4])}\n\n{text}"
             if text and len(text.strip()) >= 60:
@@ -2784,13 +2800,20 @@ class GeoSensor:
 mcp = FastMCP(
     "Specter_Intel",
     instructions=(
-        "All-source OSINT & Geo-Sensory MCP server. Always call anchor_target first to get a 12-hex case_id "
-        "(or run_full_cycle for a single-call workflow). Use short 2-6 keyword queries in harvest_sources "
-        "(no prose or comma lists), traverse_links to crawl discovered outbound links, run_analysis for grounded ACH, "
-        "and synthesize_dossier to emit the ICD-203 report."
+        "Tier-1 HTTP search, page extraction, OSINT & Geo-Sensory MCP server. "
+        "Use web_search and fetch_page for fast stateless web research. "
+        "For structured entity/OSINT dossiers, call run_full_cycle (one-shot) or anchor_target -> "
+        "harvest_sources -> traverse_links -> run_analysis -> synthesize_dossier."
     ),
 )
 core = IntelligenceCore()
+
+
+def full_tool() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Exposes granular case-graph tools in 'full' mode; hides them in 'research' mode to stay under local LLM tool caps."""
+    if TOOL_PROFILE == "research":
+        return lambda function: function
+    return mcp.tool()
 
 
 def to_json(payload: Any) -> str:
@@ -2828,7 +2851,7 @@ def case_error_json(error: Exception, case_id: str = "") -> str:
     })
 
 
-@mcp.tool()
+@full_tool()
 async def system_health() -> str:
     """Reports runtime readiness (zero hard dependencies; lists optional modules and LLM mode)."""
     def probe() -> Dict[str, Any]:
@@ -2839,6 +2862,7 @@ async def system_health() -> str:
             has_pypdf = False
         return {
             "status": "READY",
+            "tool_profile": TOOL_PROFILE,
             "mode": "host_llm_agnostic" if not core.llm.enabled else f"external_llm:{core.llm.provider}",
             "specter_home": str(SPECTER_HOME),
             "web_search": DDGS is not None,
@@ -2854,6 +2878,65 @@ async def system_health() -> str:
 
 
 @mcp.tool()
+async def web_search(query: str, max_results: int = 6) -> str:
+    """Fast Tier-1 stateless web search returning compact titles, URLs, and snippets (no case_id needed)."""
+    clean_query = sanitize_query(query)
+    if not clean_query:
+        return "Error: query must not be empty (pass 2-6 keywords)."
+    if DDGS is None:
+        return "Error: search backend (ddgs / duckduckgo_search) is not installed."
+    capped = max(1, min(int(max_results), 15))
+    hits = await asyncio.to_thread(core.collector.search_web, clean_query, capped)
+    if not hits:
+        return f"No public search results found for '{clean_query}'."
+    lines = [f"Search query: {clean_query} ({len(hits)} results)"]
+    for index, hit in enumerate(hits, 1):
+        snippet = re.sub(r"\s+", " ", hit.get("snippet", "")).strip()[:280]
+        lines.append(f"[{index}] {hit['url']}\n    {snippet}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def fetch_page(url: str, max_chars: int = 4000) -> str:
+    """Fast Tier-1 stateless HTTP page/PDF extractor (honours robots.txt; flags JS shells for browser escalation)."""
+    raw_url = (url or "").strip()
+    if not raw_url:
+        return "Error: url must not be empty."
+    if not raw_url.startswith(("http://", "https://")):
+        if "://" in raw_url or raw_url.lower().startswith(("javascript:", "data:", "file:")):
+            return "Error: only http:// and https:// URLs are permitted."
+        raw_url = f"https://{raw_url}"
+    canonical = canonicalize_url(raw_url)
+    character_limit = max(200, min(int(max_chars), 20000))
+
+    def fetch_stateless() -> str:
+        with tempfile.TemporaryDirectory(prefix="specter_fetch_") as temporary_directory:
+            _, text, method, _, links = core.collector.fetch_document(canonical, Path(temporary_directory))
+        if method == "robots_denied":
+            return f"Status: ROBOTS_DENIED\nURL: {canonical}\nReason: Disallowed by site robots.txt (do not bypass)."
+        if method == "access_blocked":
+            return (
+                f"Status: ACCESS_BLOCKED\nURL: {canonical}\n"
+                "Reason: Site returned HTTP 401/403/429/503 or a consent/verification gate. "
+                "Do not bypass anti-bot gates; use browser-live only if manual user login/consent is appropriate."
+            )
+        if not text:
+            return (
+                f"Status: EMPTY_OR_JS_REQUIRED\nURL: {canonical}\n"
+                "Hint: Static HTTP fetch returned no readable article body. "
+                "Escalate to browser-sandbox open_url + read_text if the page requires JavaScript rendering."
+            )
+        cleaned = redact_sensitive(re.sub(r"\n{3,}", "\n\n", text).strip())
+        if len(cleaned) > character_limit:
+            cleaned = cleaned[:character_limit] + "\n...[truncated]"
+        sample_links = [item["url"] for item in links[:8]] if links else []
+        footer = ("\n\nOutbound Links:\n" + "\n".join(f"- {href}" for href in sample_links)) if sample_links else ""
+        return f"Status: OK ({method})\nURL: {canonical}\n\n{cleaned}{footer}"
+
+    return await asyncio.to_thread(fetch_stateless)
+
+
+@full_tool()
 async def anchor_target(
     seed: str,
     purpose: str = "Open-source public intelligence research",
@@ -2885,7 +2968,7 @@ async def anchor_target(
     })
 
 
-@mcp.tool()
+@full_tool()
 async def harvest_sources(
     case_id: str,
     query: str,
@@ -2911,7 +2994,7 @@ async def harvest_sources(
     return to_json({**report, "case_id": store.case_id, "total_artifacts": store.statistics()["evidence_total"]})
 
 
-@mcp.tool()
+@full_tool()
 async def ingest_url(case_id: str, url: str) -> str:
     """Phase 2 (targeted): Fetches a single public URL (robots.txt honoured) and queues its outbound links."""
     try:
@@ -2930,7 +3013,7 @@ async def ingest_url(case_id: str, url: str) -> str:
     return to_json(await asyncio.to_thread(ingest))
 
 
-@mcp.tool()
+@full_tool()
 async def traverse_links(case_id: str, max_depth: int = MAX_TRAVERSAL_DEPTH, max_pages: int = MAX_TRAVERSAL_PAGES) -> str:
     """
     Phase 2B: Opens queued outbound links (/projects, /resume, GitHub, ORCID, Credly,
@@ -2945,7 +3028,7 @@ async def traverse_links(case_id: str, max_depth: int = MAX_TRAVERSAL_DEPTH, max
     return to_json({**report, "case_id": store.case_id, "statistics": store.statistics()})
 
 
-@mcp.tool()
+@full_tool()
 async def get_connection_graph(case_id: str) -> str:
     """Returns the directional JSON connection graph (`one_directional` vs. `two_directional`) for a 12-hex case_id."""
     try:
@@ -2955,7 +3038,7 @@ async def get_connection_graph(case_id: str) -> str:
     return to_json(store.connection_graph(anchor))
 
 
-@mcp.tool()
+@full_tool()
 async def record_connection(
     case_id: str,
     source_node: str,
@@ -2981,7 +3064,7 @@ async def record_connection(
     return to_json({"status": outcome, "graph": store.connection_graph(anchor)})
 
 
-@mcp.tool()
+@full_tool()
 async def run_analysis(case_id: str, max_passes: int = 1) -> str:
     """
     Phase 3: Grounded ACH, NATO Admiralty claim rating, entity/timeline extraction,
@@ -3009,7 +3092,7 @@ async def run_analysis(case_id: str, max_passes: int = 1) -> str:
     })
 
 
-@mcp.tool()
+@full_tool()
 async def record_findings(
     case_id: str,
     claims: Optional[List[Dict[str, Any]]] = None,
@@ -3050,7 +3133,7 @@ async def record_findings(
     })
 
 
-@mcp.tool()
+@full_tool()
 async def synthesize_dossier(case_id: str, analyst_narrative: str = "") -> str:
     """
     Phase 4 (final step after anchor/harvest/analysis): Compiles an ICD-203 Markdown dossier
@@ -3207,13 +3290,13 @@ async def case_status(case_id: str) -> str:
     })
 
 
-@mcp.tool()
+@full_tool()
 async def list_cases() -> str:
     """Lists all existing investigation cases on disk with their 12-hex case_id and target name."""
     return to_json(await asyncio.to_thread(list_case_summaries))
 
 
-@mcp.tool()
+@full_tool()
 async def search_evidence(case_id: str, keyword: str, limit: int = 10) -> str:
     """Keyword search across collected case evidence for a 12-hex case_id; returns tagged excerpts."""
     if not keyword.strip():
@@ -3288,10 +3371,12 @@ def read_graph(case_id: str) -> str:
 
 
 if __name__ == "__main__":
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     mcp.run()
 
 
-"""
+r"""
 Here is the complete technical knowledge, architectural history, root-cause discoveries, and operational playbook from building, debugging, and evaluating [Specter_MCP.py](file:///C:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/tools/mcp/Specter_MCP.py), [Specter_System_Prompt.md](file:///C:/Users/Omid/My Work Place/Programming/PROJECT-AXIOM/core/tools/mcp/Specter_System_Prompt.md), and AnythingLLM MCP integration—structured cleanly for future sessions.
 
 ---

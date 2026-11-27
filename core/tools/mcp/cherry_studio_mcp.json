@@ -1,0 +1,43 @@
+{
+  "mcpServers": {
+    "specter": {
+      "command": "C:\\Users\\Omid\\My Work Place\\Programming\\PROJECT-AXIOM\\We_Know\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\Omid\\My Work Place\\Programming\\PROJECT-AXIOM\\core\\tools\\mcp\\Specter_MCP.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUNBUFFERED": "1",
+        "SPECTER_TOOL_PROFILE": "research"
+      }
+    },
+    "browser-sandbox": {
+      "command": "C:\\Users\\Omid\\My Work Place\\Programming\\PROJECT-AXIOM\\We_Know\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\Omid\\My Work Place\\Programming\\PROJECT-AXIOM\\core\\tools\\mcp\\Browser_Sandbox_MCP.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUNBUFFERED": "1",
+        "SANDBOX_HEADLESS": "false",
+        "NAV_TIMEOUT_MS": "25000"
+      }
+    },
+    "browser-live": {
+      "command": "C:\\Users\\Omid\\My Work Place\\Programming\\PROJECT-AXIOM\\We_Know\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\Omid\\My Work Place\\Programming\\PROJECT-AXIOM\\core\\tools\\mcp\\Browser_Live_MCP.py"
+      ],
+      "env": {
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUNBUFFERED": "1",
+        "CDP_URL": "http://127.0.0.1:9222",
+        "LIVE_AUTO_LAUNCH": "true",
+        "NAV_TIMEOUT_MS": "25000"
+      }
+    }
+  }
+}
