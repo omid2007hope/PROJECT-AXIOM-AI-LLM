@@ -523,44 +523,37 @@ extern "C" CUDA_API bool allocate_transformer_weights(GpuWeights* gpu, size_t hi
 
 	std::mt19937 gen(transformer_randomizer_seed);
 
-	float bound = 1.0f / sqrtf(static_cast<float>(hidden_dim));
-	float down_bound = 1.0f / sqrtf(static_cast<float>(feedforward_network_dimension));
+	float residual_scale = (transformer_layer_count > 1)
+		? (1.0f / sqrt(2.0f * static_cast<float>(transformer_layer_count)) : 1.0f);
 
-	std::uniform_real_distribution<float> dis(-bound, bound);
+	float bound = 1.0f / sqrtf(static_cast<float>(hidden_dim));
+
+
+	float output_bound = bound * residual_scale;
+
+	float down_bound =
+		(1.0f / sqrtf(static_cast<float>(feedforward_network_dimension))) * residual_scale;
+
+	std::uniform_real_distribution<float> dis(-output_bound, output_bound);
 	std::uniform_real_distribution<float> down_distribution(-down_bound, down_bound);
 
 	const size_t dd_elems = hidden_dim * hidden_dim;
 	const size_t df_elems = hidden_dim * feedforward_network_dimension;
 
-	bool ok = init_weight_matrix(&gpu->d_query_weights[transformer_layer_count],
-								 &gpu->d_query_master[transformer_layer_count],
-								 &gpu->d_query_m[transformer_layer_count],
-								 &gpu->d_query_v[transformer_layer_count], dd_elems, gen, dis) &&
-			  init_weight_matrix(&gpu->d_key_weights[transformer_layer_count],
-								 &gpu->d_key_master[transformer_layer_count],
-								 &gpu->d_key_m[transformer_layer_count],
-								 &gpu->d_key_v[transformer_layer_count], dd_elems, gen, dis) &&
-			  init_weight_matrix(&gpu->d_value_weights[transformer_layer_count],
-								 &gpu->d_value_master[transformer_layer_count],
-								 &gpu->d_value_m[transformer_layer_count],
-								 &gpu->d_value_v[transformer_layer_count], dd_elems, gen, dis) &&
-			  init_weight_matrix(&gpu->d_output_weights[transformer_layer_count],
-								 &gpu->d_output_master[transformer_layer_count],
-								 &gpu->d_output_m[transformer_layer_count],
-								 &gpu->d_output_v[transformer_layer_count], dd_elems, gen, dis) &&
-			  init_weight_matrix(&gpu->d_gate_weights[transformer_layer_count],
-								 &gpu->d_gate_master[transformer_layer_count],
-								 &gpu->d_gate_m[transformer_layer_count],
-								 &gpu->d_gate_v[transformer_layer_count], df_elems, gen, dis) &&
-			  init_weight_matrix(&gpu->d_up_weights[transformer_layer_count],
-								 &gpu->d_up_master[transformer_layer_count],
-								 &gpu->d_up_m[transformer_layer_count],
-								 &gpu->d_up_v[transformer_layer_count], df_elems, gen, dis) &&
-			  init_weight_matrix(&gpu->d_down_weights[transformer_layer_count],
-								 &gpu->d_down_master[transformer_layer_count],
-								 &gpu->d_down_m[transformer_layer_count],
-								 &gpu->d_down_v[transformer_layer_count], df_elems, gen,
-								 down_distribution);
+	bool ok = init_weight_matrix(&gpu->d_query_weights, &gpu->d_query_master, &gpu->d_query_m,
+								 &gpu->d_query_v, dd_elems, gen, dis) &&
+			  init_weight_matrix(&gpu->d_key_weights, &gpu->d_key_master, &gpu->d_key_m,
+								 &gpu->d_key_v, dd_elems, gen, dis) &&
+			  init_weight_matrix(&gpu->d_value_weights, &gpu->d_value_master, &gpu->d_value_m,
+								 &gpu->d_value_v, dd_elems, gen, dis) &&
+			  init_weight_matrix(&gpu->d_output_weights, &gpu->d_output_master, &gpu->d_output_m,
+								 &gpu->d_output_v, dd_elems, gen, dis) &&
+			  init_weight_matrix(&gpu->d_gate_weights, &gpu->d_gate_master, &gpu->d_gate_m,
+								 &gpu->d_gate_v, df_elems, gen, dis) &&
+			  init_weight_matrix(&gpu->d_up_weights, &gpu->d_up_master, &gpu->d_up_m, &gpu->d_up_v,
+								 df_elems, gen, dis) &&
+			  init_weight_matrix(&gpu->d_down_weights, &gpu->d_down_master, &gpu->d_down_m,
+								 &gpu->d_down_v, df_elems, gen, down_distribution);
 
 	return ok && CUDA_CHECK(cudaDeviceSynchronize());
 }
