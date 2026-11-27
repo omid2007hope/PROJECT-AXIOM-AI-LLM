@@ -2902,10 +2902,15 @@ async def fetch_page(url: str, max_chars: int = 4000) -> str:
     raw_url = (url or "").strip()
     if not raw_url:
         return "Error: url must not be empty."
+    if any(character.isspace() for character in raw_url):
+        return f"Error: invalid URL containing whitespace: '{raw_url}'."
     if not raw_url.startswith(("http://", "https://")):
-        if "://" in raw_url or raw_url.lower().startswith(("javascript:", "data:", "file:")):
+        if "://" in raw_url or raw_url.lower().startswith(("javascript:", "data:", "file:", "about:", "chrome:", "edge:")):
             return "Error: only http:// and https:// URLs are permitted."
         raw_url = f"https://{raw_url}"
+    parsed_target = urlparse(raw_url)
+    if parsed_target.scheme not in ("http", "https") or not parsed_target.netloc:
+        return f"Error: invalid URL '{url}'."
     canonical = canonicalize_url(raw_url)
     character_limit = max(200, min(int(max_chars), 20000))
 
@@ -2924,7 +2929,7 @@ async def fetch_page(url: str, max_chars: int = 4000) -> str:
             return (
                 f"Status: EMPTY_OR_JS_REQUIRED\nURL: {canonical}\n"
                 "Hint: Static HTTP fetch returned no readable article body. "
-                "Escalate to browser-sandbox open_url + read_text if the page requires JavaScript rendering."
+                "Escalate to browser-sandbox (sandbox_open_url + sandbox_read_text) if JavaScript rendering is needed."
             )
         cleaned = redact_sensitive(re.sub(r"\n{3,}", "\n\n", text).strip())
         if len(cleaned) > character_limit:

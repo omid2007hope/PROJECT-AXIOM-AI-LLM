@@ -11,8 +11,8 @@ All files live in `core\tools\mcp\`:
 | Tier | Server / File | Active Tools | Role |
 |---|---|---|---|
 | **Tier 1** | `Specter_MCP.py` (`specter`) | **5** (`research`) / **17** (`full`) | Fast stateless web search (`web_search`), HTTP/PDF extraction (`fetch_page`), one-shot OSINT dossiers (`run_full_cycle`), geo-events (`scan_geo_events`). |
-| **Tier 2** | `Browser_Sandbox_MCP.py` (`browser-sandbox`) | **7** | Clean isolated Playwright Chromium/Edge session for JS-rendered SPAs, clicking, typing, `<select>` dropdowns, and popup tabs. No personal cookies. |
-| **Tier 3** | `Browser_Live_MCP.py` (`browser-live`) | **9** | Attaches over loopback CDP (`127.0.0.1:9222`) to a docked visible Chrome/Edge window (`AXIOM_LiveBrowser`). **Never touches your Windows mouse or keyboard focus.** |
+| **Tier 2** | `Browser_Sandbox_MCP.py` (`browser-sandbox`) | **7** (`sandbox_*`) | Clean isolated Playwright Chromium/Edge session for JS-rendered SPAs, clicking, typing, `<select>` dropdowns, and popup tabs. No personal cookies. |
+| **Tier 3** | `Browser_Live_MCP.py` (`browser-live`) | **9** (`live_*`) | Attaches over loopback CDP (`127.0.0.1:9222`) to a docked visible Chrome/Edge window (`AXIOM_LiveBrowser`). **Never touches your Windows mouse or keyboard focus.** |
 
 Supporting files:
 - `cherry_studio_mcp.json` — Ready-to-import Cherry Studio `mcpServers` config (pinned to `We_Know\.venv\Scripts\python.exe`).
@@ -82,15 +82,15 @@ PARAMETER num_ctx 16384
 Just ask normally in Cherry Studio:
 - *"Search the web for CUDA Blackwell shared memory limits."* → Calls `specter` (`web_search` + `fetch_page`).
 - *"Compile an OSINT dossier on `<target>`."* → Calls `specter` (`run_full_cycle`).
-- *"Open `<SPA URL>`, click the pricing tab, and summarize it."* → Escalates to `browser-sandbox` (`open_url` → `get_elements` → `click_element` → `read_text` → `close_session`).
+- *"Open `<SPA URL>`, click the pricing tab, and summarize it."* → Escalates to `browser-sandbox` (`sandbox_open_url` → `sandbox_get_elements` → `sandbox_click_element` → `sandbox_read_text` → `sandbox_close_session`).
 
 ### Tier 3 — Side-by-Side Live Browser (`browser-live`)
-- **Auto-launch (default):** Because `LIVE_AUTO_LAUNCH=true` is set in `cherry_studio_mcp.json`, calling any `browser-live` tool automatically opens a docked Chrome/Edge window on the right half of your screen using profile `%LOCALAPPDATA%\AXIOM_LiveBrowser` on `127.0.0.1:9222`.
-- **Manual launch:** Double-click `launch_live_browser.bat` anytime to open the docked browser first (e.g., to sign into a site manually before asking the AI to research in it).
+- **Auto-launch (default):** Because `LIVE_AUTO_LAUNCH=true` is set in `cherry_studio_mcp.json`, calling any `live_*` tool automatically opens a docked Chrome/Edge window on the right half of your screen using profile `%LOCALAPPDATA%\AXIOM_LiveBrowser` on `127.0.0.1:9222`.
+- **Manual launch:** Double-click `launch_live_browser.bat` anytime to open the docked browser first (e.g., to sign into a site manually before asking the AI to research in it). It safely skips spawning duplicates if `127.0.0.1:9222` is already listening.
 - **Verify CDP is alive:** Open `http://127.0.0.1:9222/json/version` in any browser; it should return JSON containing `webSocketDebuggerUrl`.
 - **Adjust window docking:** Edit `LIVE_WINDOW_POSITION` / `LIVE_WINDOW_SIZE` in `cherry_studio_mcp.json` (and `--window-position` / `--window-size` in `launch_live_browser.bat`) if your screen is not `1920x1080` at 100% scaling.
 - **Keep working side-by-side:** Because `browser-live` sends events over CDP instead of Windows `SendInput`, you can keep using your mouse and keyboard on the other half of the screen.
-- **Disconnecting:** Calling `disconnect_session` detaches the MCP client **without closing your docked Chrome/Edge window**.
+- **Disconnecting:** Calling `live_disconnect_session` detaches the MCP client **without closing your docked Chrome/Edge window**.
 
 ---
 

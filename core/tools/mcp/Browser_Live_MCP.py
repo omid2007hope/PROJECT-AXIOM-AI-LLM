@@ -19,10 +19,11 @@ Browser Live MCP — Tier-3 Side-by-Side Visible Browser Server over CDP.
 Attaches over loopback Chrome DevTools Protocol (`CDP_URL`, default `http://127.0.0.1:9222`)
 to a dedicated visible Chrome or Microsoft Edge window (`AXIOM_LiveBrowser`):
 - Zero interference with Windows' global physical mouse cursor or keyboard focus.
+- Uses globally unique `live_*` tool names so local models never collide with `browser-sandbox`.
 - Preserves dedicated research logins/cookies across sessions via `--user-data-dir`.
 - Uses `connect_over_cdp(..., is_local=True, no_defaults=True)` so existing profile settings stay intact.
 - Auto-launches the docked browser window if port 9222 is closed (when `LIVE_AUTO_LAUNCH=true`).
-- Drops the local Playwright driver cleanly on `disconnect_session()` without closing the user's browser.
+- Drops the local Playwright driver cleanly on `live_disconnect_session()` without closing the user's browser.
 - Never attempts to solve or bypass CAPTCHAs/anti-bot challenges; yields to the user if gated.
 """
 
@@ -191,6 +192,8 @@ def normalize_url(raw_url: str) -> str:
     candidate = (raw_url or "").strip()
     if not candidate:
         raise ValueError("URL must not be empty.")
+    if any(character.isspace() for character in candidate):
+        raise ValueError(f"Invalid URL containing whitespace: {raw_url}")
     if not candidate.startswith(("http://", "https://")):
         if "://" in candidate or candidate.lower().startswith(("javascript:", "data:", "file:", "about:", "chrome:", "edge:")):
             raise ValueError("Only http:// and https:// URLs are permitted.")
@@ -204,6 +207,20 @@ def normalize_url(raw_url: str) -> str:
 def detect_gate(title: str, sample_text: str) -> bool:
     haystack = f"{title}\n{sample_text[:2000]}".lower()
     return any(marker in haystack for marker in GATE_MARKERS)
+
+
+async def safe_title(page: Page) -> str:
+    try:
+        return await page.title()
+    except Exception:
+        return "(loading)"
+
+
+async def safe_sample(page: Page) -> str:
+    try:
+        return await page.evaluate(EXTRACT_SCRIPT)
+    except Exception:
+        return ""
 
 
 def probe_endpoint(endpoint_url: str, timeout_seconds: float = 1.5) -> bool:
@@ -324,14 +341,18 @@ class LiveBrowserSession:
             return self.browser
 
         await self.disconnect()
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.connect_over_cdp(
-            endpoint,
-            is_local=True,
-            no_defaults=True,
-            timeout=10000,
-        )
-        return self.browser
+        try:
+            self.playwright = await async_playwright().start()
+            self.browser = await self.playwright.chromium.connect_over_cdp(
+                endpoint,
+                is_local=True,
+                no_defaults=True,
+                timeout=10000,
+            )
+            return self.browser
+        except Exception:
+            await self.disconnect()
+            raise
 
     async def collect_pages(self) -> list[Page]:
         browser = await self.connect_browser()
@@ -386,15 +407,16 @@ mcp = FastMCP(
     "browser-live",
     instructions=(
         "Tier-3 side-by-side visible Chrome/Edge controller over CDP (never touches your physical mouse "
-        "or keyboard). Call list_tabs first, get_elements before click_element or type_text, and read_text "
-        "for page text. Never bypass CAPTCHAs or anti-bot gates; ask the user to handle logins/verification manually."
+        "or keyboard). Call live_list_tabs first, live_get_elements before live_click_element or "
+        "live_type_text, and live_read_text for page text. Never bypass CAPTCHAs or anti-bot gates; "
+        "ask the user to handle logins/verification manually in the docked window."
     ),
 )
 session = LiveBrowserSession()
 
 
 @mcp.tool()
-async def list_tabs() -> str:
+async def live_list_tabs() -> str:
     """List open tabs in the live side-by-side browser (marks active tab with '*')."""
     async with session.lock:
         try:
@@ -404,14 +426,14 @@ async def list_tabs() -> str:
             lines = []
             for index, page in enumerate(pages):
                 marker = "*" if index == session.tab_index else " "
-                lines.append(f"{marker}[{index}] {await page.title()} — {page.url}")
+                lines.append(f"{marker}[{index}] {await safe_title(page)} — {page.url}")
             return "\n".join(lines)
         except Exception as error:
             return f"Cannot connect to live browser at {CDP_URL}. Details: {error}"
 
 
 @mcp.tool()
-async def switch_tab(tab_index: int) -> str:
+async def live_switch_tab(tab_index: int) -> str:
     """Select which tab index the agent controls in the live side-by-side browser."""
     async with session.lock:
         try:
@@ -421,13 +443,13 @@ async def switch_tab(tab_index: int) -> str:
                 return f"Invalid tab_index {target}. Open tabs: 0 to {len(pages) - 1}."
             session.tab_index = target
             chosen = pages[target]
-            return f"Switched to tab [{target}]: {await chosen.title()} ({chosen.url})"
+            return f"Switched to tab [{target}]: {await safe_title(chosen)} ({chosen.url})"
         except Exception as error:
             return f"Error switching tab: {error}"
 
 
 @mcp.tool()
-async def open_url(url: str, new_tab: bool = False) -> str:
+async def live_open_url(url: str, new_tab: bool = False) -> str:
     """Navigate the live side-by-side browser to an http/https URL without touching your mouse or keyboard."""
     async with session.lock:
         try:
@@ -443,8 +465,8 @@ async def open_url(url: str, new_tab: bool = False) -> str:
                 page = await session.active_page()
             await page.goto(target_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT)
             await page.wait_for_timeout(800)
-            title = await page.title()
-            sample = await page.evaluate(EXTRACT_SCRIPT)
+            title = await safe_title(page)
+            sample = await safe_sample(page)
             if detect_gate(title, sample):
                 return (
                     f"Verification/CAPTCHA gate detected on {page.url} ({title}). "
@@ -456,14 +478,14 @@ async def open_url(url: str, new_tab: bool = False) -> str:
 
 
 @mcp.tool()
-async def get_elements(max_elements: int = 40) -> str:
+async def live_get_elements(max_elements: int = 40) -> str:
     """Return a compact numbered list of visible interactive elements in the active live tab."""
     async with session.lock:
         try:
             limit = max(1, min(int(max_elements), 80))
             page = await session.active_page()
-            title = await page.title()
-            sample = await page.evaluate(EXTRACT_SCRIPT)
+            title = await safe_title(page)
+            sample = await safe_sample(page)
             if detect_gate(title, sample):
                 return (
                     f"Verification/CAPTCHA gate active on {page.url}. "
@@ -478,13 +500,15 @@ async def get_elements(max_elements: int = 40) -> str:
 
 
 @mcp.tool()
-async def click_element(element_id: int) -> str:
+async def live_click_element(element_id: int) -> str:
     """Dispatch a click directly to element_id in the live browser without moving your physical mouse."""
     async with session.lock:
         try:
             pages_before = set(await session.collect_pages())
             page = await session.active_page()
             locator = page.locator(f'[data-axiom-id="{int(element_id)}"]').first
+            if await locator.count() == 0:
+                return f"Element [{element_id}] not found on {page.url}. Call live_get_elements() first."
             await locator.click(timeout=ACTION_TIMEOUT)
             await page.wait_for_timeout(900)
             switched = await session.adopt_popup(pages_before)
@@ -493,33 +517,49 @@ async def click_element(element_id: int) -> str:
                 await active.wait_for_load_state("domcontentloaded", timeout=4000)
             except Exception:
                 pass
+            title = await safe_title(active)
+            sample = await safe_sample(active)
+            if detect_gate(title, sample):
+                return (
+                    f"Clicked [{element_id}], but landed on a verification/CAPTCHA gate at {active.url} ({title}). "
+                    "Please complete verification manually in the docked browser window."
+                )
             note = f" (followed new tab [{session.tab_index}])" if switched else ""
-            return f"Clicked [{element_id}]{note}. Page: {await active.title()} ({active.url})"
+            return f"Clicked [{element_id}]{note}. Page: {title} ({active.url})"
         except Exception as error:
             return f"Error clicking [{element_id}]: {error}"
 
 
 @mcp.tool()
-async def type_text(element_id: int, text: str, press_enter: bool = False) -> str:
+async def live_type_text(element_id: int, text: str, press_enter: bool = False) -> str:
     """Type into element_id (or select a dropdown option) in the live browser without stealing keyboard focus."""
     async with session.lock:
         try:
             pages_before = set(await session.collect_pages())
             page = await session.active_page()
             locator = page.locator(f'[data-axiom-id="{int(element_id)}"]').first
+            if await locator.count() == 0:
+                return f"Element [{element_id}] not found on {page.url}. Call live_get_elements() first."
             action_label = await perform_typing(locator, text)
             if press_enter:
                 await locator.press("Enter")
                 await page.wait_for_timeout(1100)
                 await session.adopt_popup(pages_before)
             active = await session.active_page()
+            title = await safe_title(active)
+            sample = await safe_sample(active)
+            if detect_gate(title, sample):
+                return (
+                    f"{action_label} [{element_id}], but landed on a verification/CAPTCHA gate at {active.url} ({title}). "
+                    "Please complete verification manually in the docked browser window."
+                )
             return f"{action_label} [{element_id}]. URL: {active.url}"
         except Exception as error:
             return f"Error typing into [{element_id}]: {error}"
 
 
 @mcp.tool()
-async def scroll_page(direction: str = "down", pixels: int = 700) -> str:
+async def live_scroll_page(direction: str = "down", pixels: int = 700) -> str:
     """Scroll the active live browser tab 'up' or 'down' without affecting your physical mouse."""
     async with session.lock:
         try:
@@ -534,14 +574,14 @@ async def scroll_page(direction: str = "down", pixels: int = 700) -> str:
 
 
 @mcp.tool()
-async def read_text(max_chars: int = 4000) -> str:
+async def live_read_text(max_chars: int = 4000) -> str:
     """Extract cleaned visible text from the active live tab, truncated to max_chars."""
     async with session.lock:
         try:
             character_limit = max(200, min(int(max_chars), 16000))
             page = await session.active_page()
-            title = await page.title()
-            raw_text = await page.evaluate(EXTRACT_SCRIPT)
+            title = await safe_title(page)
+            raw_text = await safe_sample(page)
             if detect_gate(title, raw_text):
                 return (
                     f"Verification/CAPTCHA gate detected on {page.url} ({title}). "
@@ -556,7 +596,7 @@ async def read_text(max_chars: int = 4000) -> str:
 
 
 @mcp.tool()
-async def disconnect_session() -> str:
+async def live_disconnect_session() -> str:
     """Detach MCP from the live browser while keeping your side-by-side Chrome/Edge window open."""
     async with session.lock:
         await session.disconnect()
@@ -564,4 +604,11 @@ async def disconnect_session() -> str:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    try:
+        mcp.run()
+    finally:
+        if session.playwright is not None:
+            try:
+                asyncio.run(session.disconnect())
+            except Exception:
+                pass

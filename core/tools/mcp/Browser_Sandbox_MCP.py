@@ -19,6 +19,7 @@ Browser Sandbox MCP — Tier-2 Isolated Playwright Chromium Server for Local LLM
 Designed for Ollama + Cherry Studio (and any stdio MCP host):
 - Launches an isolated, ephemeral browser context (zero personal cookies or logins).
 - Dispatches all events inside Chromium without touching the Windows cursor or focus.
+- Uses globally unique `sandbox_*` tool names so local models never collide with `browser-live`.
 - Returns token-capped, numbered element lists (`[1]`, `[2]`, ...) and cleaned text.
 - Handles `<select>` dropdowns, rich-text `[contenteditable]` composers, and `target="_blank"` popups.
 - Stops and reports cleanly if gated by CAPTCHA or anti-bot verification challenges.
@@ -168,6 +169,8 @@ def normalize_url(raw_url: str) -> str:
     candidate = (raw_url or "").strip()
     if not candidate:
         raise ValueError("URL must not be empty.")
+    if any(character.isspace() for character in candidate):
+        raise ValueError(f"Invalid URL containing whitespace: {raw_url}")
     if not candidate.startswith(("http://", "https://")):
         if "://" in candidate or candidate.lower().startswith(("javascript:", "data:", "file:", "about:", "chrome:", "edge:")):
             raise ValueError("Only http:// and https:// URLs are permitted.")
@@ -181,6 +184,20 @@ def normalize_url(raw_url: str) -> str:
 def detect_gate(title: str, sample_text: str) -> bool:
     haystack = f"{title}\n{sample_text[:2000]}".lower()
     return any(marker in haystack for marker in GATE_MARKERS)
+
+
+async def safe_title(page: Page) -> str:
+    try:
+        return await page.title()
+    except Exception:
+        return "(loading)"
+
+
+async def safe_sample(page: Page) -> str:
+    try:
+        return await page.evaluate(EXTRACT_SCRIPT)
+    except Exception:
+        return ""
 
 
 async def perform_typing(locator: Locator, text: str) -> str:
@@ -243,17 +260,21 @@ class SandboxSession:
         ):
             return self.active_page
 
-        if self.playwright is None:
-            self.playwright = await async_playwright().start()
-        if self.browser is None or not self.browser.is_connected():
-            self.browser = await self._launch_browser(self.playwright)
-            self.context = None
-        if self.context is None:
-            self.context = await self.browser.new_context(viewport={"width": 1280, "height": 800})
-        open_pages = [page for page in self.context.pages if not page.is_closed()]
-        self.active_page = open_pages[-1] if open_pages else await self.context.new_page()
-        self.active_page.set_default_timeout(NAVIGATION_TIMEOUT)
-        return self.active_page
+        try:
+            if self.playwright is None:
+                self.playwright = await async_playwright().start()
+            if self.browser is None or not self.browser.is_connected():
+                self.browser = await self._launch_browser(self.playwright)
+                self.context = None
+            if self.context is None:
+                self.context = await self.browser.new_context(viewport={"width": 1280, "height": 800})
+            open_pages = [page for page in self.context.pages if not page.is_closed()]
+            self.active_page = open_pages[-1] if open_pages else await self.context.new_page()
+            self.active_page.set_default_timeout(NAVIGATION_TIMEOUT)
+            return self.active_page
+        except Exception:
+            await self.close()
+            raise
 
     async def adopt_popup(self, previous_pages: set[Page]) -> bool:
         if self.context is None:
@@ -297,16 +318,16 @@ class SandboxSession:
 mcp = FastMCP(
     "browser-sandbox",
     instructions=(
-        "Tier-2 isolated Playwright sandbox browser. Call open_url first, get_elements to list "
-        "interactive [id] controls before click_element or type_text, read_text for clean page text, "
-        "and close_session when finished. Never attempt to solve or bypass CAPTCHAs or anti-bot gates."
+        "Tier-2 isolated Playwright sandbox browser. Call sandbox_open_url first, sandbox_get_elements to list "
+        "interactive [id] controls before sandbox_click_element or sandbox_type_text, sandbox_read_text for clean "
+        "page text, and sandbox_close_session when finished. Never attempt to solve or bypass CAPTCHAs."
     ),
 )
 session = SandboxSession()
 
 
 @mcp.tool()
-async def open_url(url: str) -> str:
+async def sandbox_open_url(url: str) -> str:
     """Open an http/https URL in the isolated sandbox browser and return title and final URL."""
     async with session.lock:
         try:
@@ -314,8 +335,8 @@ async def open_url(url: str) -> str:
             page = await session.ensure_page()
             await page.goto(target_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT)
             await page.wait_for_timeout(800)
-            title = await page.title()
-            sample = await page.evaluate(EXTRACT_SCRIPT)
+            title = await safe_title(page)
+            sample = await safe_sample(page)
             if detect_gate(title, sample):
                 return (
                     f"Blocked by verification/CAPTCHA gate on {page.url} ({title}). "
@@ -327,14 +348,16 @@ async def open_url(url: str) -> str:
 
 
 @mcp.tool()
-async def get_elements(max_elements: int = 40) -> str:
+async def sandbox_get_elements(max_elements: int = 40) -> str:
     """Return a compact numbered list of visible interactive elements on the current sandbox page."""
     async with session.lock:
         try:
             limit = max(1, min(int(max_elements), 80))
             page = await session.ensure_page()
-            title = await page.title()
-            sample = await page.evaluate(EXTRACT_SCRIPT)
+            if page.url == "about:blank":
+                return "Current sandbox page is about:blank. Call sandbox_open_url(url) first."
+            title = await safe_title(page)
+            sample = await safe_sample(page)
             if detect_gate(title, sample):
                 return f"Blocked by verification/CAPTCHA gate on {page.url}. Do not click or bypass."
             items = await page.evaluate(ELEMENT_SCRIPT, limit)
@@ -346,13 +369,15 @@ async def get_elements(max_elements: int = 40) -> str:
 
 
 @mcp.tool()
-async def click_element(element_id: int) -> str:
-    """Click a numbered element from get_elements() by its integer ID (follows popup tabs automatically)."""
+async def sandbox_click_element(element_id: int) -> str:
+    """Click a numbered element from sandbox_get_elements() by integer ID (follows popup tabs automatically)."""
     async with session.lock:
         try:
             page = await session.ensure_page()
-            previous_pages = set(session.context.pages) if session.context else {page}
             locator = page.locator(f'[data-axiom-id="{int(element_id)}"]').first
+            if await locator.count() == 0:
+                return f"Element [{element_id}] not found on {page.url}. Call sandbox_get_elements() first."
+            previous_pages = set(session.context.pages) if session.context else {page}
             await locator.click(timeout=ACTION_TIMEOUT)
             await page.wait_for_timeout(900)
             switched = await session.adopt_popup(previous_pages)
@@ -361,33 +386,49 @@ async def click_element(element_id: int) -> str:
                 await active.wait_for_load_state("domcontentloaded", timeout=4000)
             except Exception:
                 pass
+            title = await safe_title(active)
+            sample = await safe_sample(active)
+            if detect_gate(title, sample):
+                return (
+                    f"Clicked [{element_id}], but landed on a verification/CAPTCHA gate at {active.url} ({title}). "
+                    "Stopped cleanly without attempting bypass."
+                )
             note = " (switched to new popup tab)" if switched else ""
-            return f"Clicked [{element_id}]{note}. Current page: {await active.title()} ({active.url})"
+            return f"Clicked [{element_id}]{note}. Current page: {title} ({active.url})"
         except Exception as error:
             return f"Error clicking element [{element_id}]: {error}"
 
 
 @mcp.tool()
-async def type_text(element_id: int, text: str, press_enter: bool = False) -> str:
-    """Type into an input/textarea/editable element or choose a <select> option by ID from get_elements()."""
+async def sandbox_type_text(element_id: int, text: str, press_enter: bool = False) -> str:
+    """Type into an input/textarea/editable element or choose a <select> option by ID from sandbox_get_elements()."""
     async with session.lock:
         try:
             page = await session.ensure_page()
-            previous_pages = set(session.context.pages) if session.context else {page}
             locator = page.locator(f'[data-axiom-id="{int(element_id)}"]').first
+            if await locator.count() == 0:
+                return f"Element [{element_id}] not found on {page.url}. Call sandbox_get_elements() first."
+            previous_pages = set(session.context.pages) if session.context else {page}
             action_label = await perform_typing(locator, text)
             if press_enter:
                 await locator.press("Enter")
                 await page.wait_for_timeout(1100)
                 await session.adopt_popup(previous_pages)
             active = await session.ensure_page()
+            title = await safe_title(active)
+            sample = await safe_sample(active)
+            if detect_gate(title, sample):
+                return (
+                    f"{action_label} [{element_id}], but landed on a verification/CAPTCHA gate at {active.url} ({title}). "
+                    "Stopped cleanly without attempting bypass."
+                )
             return f"{action_label} [{element_id}]. Current URL: {active.url}"
         except Exception as error:
             return f"Error typing into element [{element_id}]: {error}"
 
 
 @mcp.tool()
-async def scroll_page(direction: str = "down", pixels: int = 700) -> str:
+async def sandbox_scroll_page(direction: str = "down", pixels: int = 700) -> str:
     """Scroll the sandbox page 'up' or 'down' by a pixel delta."""
     async with session.lock:
         try:
@@ -402,14 +443,16 @@ async def scroll_page(direction: str = "down", pixels: int = 700) -> str:
 
 
 @mcp.tool()
-async def read_text(max_chars: int = 4000) -> str:
+async def sandbox_read_text(max_chars: int = 4000) -> str:
     """Extract cleaned visible text from the current sandbox page, truncated to max_chars."""
     async with session.lock:
         try:
             character_limit = max(200, min(int(max_chars), 16000))
             page = await session.ensure_page()
-            title = await page.title()
-            raw_text = await page.evaluate(EXTRACT_SCRIPT)
+            if page.url == "about:blank":
+                return "Current sandbox page is about:blank. Call sandbox_open_url(url) first."
+            title = await safe_title(page)
+            raw_text = await safe_sample(page)
             if detect_gate(title, raw_text):
                 return (
                     f"Blocked by verification/CAPTCHA gate on {page.url} ({title}). "
@@ -424,7 +467,7 @@ async def read_text(max_chars: int = 4000) -> str:
 
 
 @mcp.tool()
-async def close_session() -> str:
+async def sandbox_close_session() -> str:
     """Close the sandbox browser deterministically and discard all ephemeral session state."""
     async with session.lock:
         await session.close()
@@ -432,4 +475,11 @@ async def close_session() -> str:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    try:
+        mcp.run()
+    finally:
+        if session.browser is not None or session.playwright is not None:
+            try:
+                asyncio.run(session.close())
+            except Exception:
+                pass

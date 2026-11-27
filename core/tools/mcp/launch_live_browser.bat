@@ -1,6 +1,13 @@
 @echo off
 setlocal
 
+netstat -ano | findstr "127.0.0.1:9222" | findstr "LISTENING" >nul 2>&1
+if %errorlevel%==0 (
+    echo [INFO] Live browser CDP endpoint is already listening on http://127.0.0.1:9222
+    endlocal
+    exit /b 0
+)
+
 set "PROFILE_DIR=%LOCALAPPDATA%\AXIOM_LiveBrowser"
 set "CHROME_PF=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 set "CHROME_LOCAL=%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
@@ -20,6 +27,7 @@ if exist "%CHROME_PF%" (
 
 if "%BROWSER_EXE%"=="" (
     echo [ERROR] Neither Google Chrome nor Microsoft Edge was found.
+    endlocal
     exit /b 1
 )
 
