@@ -1,56 +1,70 @@
 ---
-# Based on Project Readiness & Coding Guidelines (Readness.md)
+# Based on Project Readiness and Coding Guidelines (Readiness.md)
+# Encoding: Strict 7-bit ASCII | Line Endings: LF | Target: clang-format 19+
 BasedOnStyle: Google
 Language: Cpp
 Standard: c++20
+LineEnding: LF
+InsertNewlineAtEOF: true
 
-# --- Indentation & Tabs (4-Space Standard) ---
+# --- Indentation and Tabs ---
+# Uses tabs for structural indentation and spaces for mid-line alignment.
+# For pure 4-space (no tabs), set UseTab: Never.
+# For Linus Torvalds 8-char tabs, change 4 -> 8 and -4 -> -8 below.
 IndentWidth: 4
 TabWidth: 4
-UseTab: Always
+UseTab: ForIndentation
 ContinuationIndentWidth: 4
 AccessModifierOffset: -4
 IndentCaseLabels: true
+NamespaceIndentation: None
+FixNamespaceComments: true
 
-# --- Braces & Control Structures ---
-BreakBeforeBraces: Attach
-KeepEmptyLinesAtTheStartOfBlocks: true
+# --- Braces and Control Structures ---
+# Use 'Allman' for ANSI brace style; use 'Attach' for K&R / Google style.
+BreakBeforeBraces: Allman
+KeepEmptyLines:
+  AtEndOfFile: false
+  AtStartOfBlock: false
+  AtStartOfFile: false
 
-# --- Line & Spacing Management ---
-MaxEmptyLinesToKeep: 4
+# --- Line and Spacing Management ---
+MaxEmptyLinesToKeep: 1
 ColumnLimit: 100
 ReflowComments: false
 BreakStringLiterals: false
-SortUsingDeclarations: true
+SortUsingDeclarations: LexicographicNumeric
 
-# --- Includes & Header Grouping ---
+# --- Includes and Header Grouping ---
 SortIncludes: CaseInsensitive
 IncludeBlocks: Regroup
 IncludeCategories:
-  - Regex: '^<.*>'
+  - Regex: "^<.*>"
     Priority: 1
-  - Regex: '.*'
+  - Regex: ".*"
     Priority: 2
 
-# --- Pointers & References ---
+# --- Pointers and References ---
 PointerAlignment: Left
 ReferenceAlignment: Left
 
-# --- Alignment & Spacing ---
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
+# --- Alignment and Spacing ---
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
 AlignEscapedNewlines: Right
 AlignOperands: Align
-AlignTrailingComments: true
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
 
-# --- Functions & Arguments ---
-AllowShortFunctionsOnASingleLine: Inline
-AllowShortIfStatementsOnASingleLine: false
+# --- Functions and Arguments ---
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
-BinPackArguments: true
-BinPackParameters: true
+BinPackArguments: false
+BinPackParameters: false
 AllowAllParametersOfDeclarationOnNextLine: true
-AlwaysBreakTemplateDeclarations: Yes
+BreakTemplateDeclarations: Yes
 
 # --- Specific Formatting Rules ---
 SpaceAfterCStyleCast: false
@@ -62,10 +76,8 @@ SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
 SpaceBeforeRangeBasedForLoopColon: true
-SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 1
-SpacesInAngles: false
-SpacesInContainerLiterals: true
-SpacesInCStyleCastParentheses: false
-SpacesInParentheses: false
+SpacesInAngles: Never
+SpacesInParens: Never
 SpacesInSquareBrackets: false
+...
